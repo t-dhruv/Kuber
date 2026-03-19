@@ -1,0 +1,51 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kuber_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kuber
+      POSTGRES_PASSWORD: kuber_dev
+      POSTGRES_DB: kuber_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - kuber_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kuber -d kuber_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: ./server
+    container_name: kuber_server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://kuber:kuber_dev@postgres:5432/kuber_db
+      JWT_SECRET: dev_jwt_secret_change_in_prod
+      JWT_REFRESH_SECRET: dev_refresh_secret_change_in_prod
+      NODE_ENV: development
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./server/src:/app/src
+
+  client:
+    build: ./client
+    container_name: kuber_client
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:4000
+    depends_on:
+      - server
+
+volumes:
+  kuber_pgdata:
