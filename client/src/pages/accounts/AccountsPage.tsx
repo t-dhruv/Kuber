@@ -679,7 +679,7 @@ function AccountDetailModal({
 }) {
   const { data, isLoading } = useQuery<Account>({
     queryKey: ['accounts', account?.id],
-    queryFn: () => api.get(`/accounts/${account!.id}`).then((r) => r.data.data ?? r.data),
+    queryFn: () => api.get(`/accounts/${account!.id}`).then((r) => r.data),
     enabled: !!account,
   });
 
@@ -842,7 +842,7 @@ export default function AccountsPage() {
 
   const { data, isLoading, isError } = useQuery<AccountsData>({
     queryKey: ['accounts'],
-    queryFn: () => api.get('/accounts').then((r) => r.data.data ?? r.data),
+    queryFn: () => api.get('/accounts').then((r) => r.data),
   });
 
   const [showAdd, setShowAdd] = useState(false);

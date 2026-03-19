@@ -102,13 +102,11 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
       : 0;
 
     return res.json({
-      data: {
-        totalValue: Math.round(totalValue * 100) / 100,
-        totalCostBasis: Math.round(totalCostBasis * 100) / 100,
-        totalGain,
-        totalGainPercent,
-        holdings,
-      },
+      totalValue: Math.round(totalValue * 100) / 100,
+      totalCostBasis: Math.round(totalCostBasis * 100) / 100,
+      totalGain,
+      totalGainPercent,
+      holdings,
     });
   } catch (err) {
     console.error('[investments/holdings GET]', err);
@@ -175,12 +173,10 @@ router.get('/allocation', async (req: AuthRequest, res: Response) => {
     }));
 
     return res.json({
-      data: {
-        totalValue: Math.round(totalValue * 100) / 100,
-        byAssetClass,
-        byAccount,
-        holdings: holdingsList,
-      },
+      totalValue: Math.round(totalValue * 100) / 100,
+      byAssetClass,
+      byAccount,
+      holdings: holdingsList,
     });
   } catch (err) {
     console.error('[investments/allocation]', err);
@@ -252,13 +248,11 @@ router.get('/performance', async (req: AuthRequest, res: Response) => {
     }
 
     return res.json({
-      data: {
-        period,
-        portfolioReturn,
-        portfolioReturnValue,
-        benchmarks: benchmarks[period] ?? benchmarks['1Y'],
-        history,
-      },
+      period,
+      portfolioReturn,
+      portfolioReturnValue,
+      benchmarks: benchmarks[period] ?? benchmarks['1Y'],
+      history,
     });
   } catch (err) {
     console.error('[investments/performance]', err);
@@ -301,7 +295,7 @@ router.post('/holdings', async (req: AuthRequest, res: Response) => {
       include: { account: { select: { name: true } } },
     });
 
-    return res.status(201).json({ data: buildHoldingWithSimulatedPrices(holding) });
+    return res.status(201).json(buildHoldingWithSimulatedPrices(holding));
   } catch (err) {
     console.error('[investments/holdings POST]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -338,7 +332,7 @@ router.put('/holdings/:id', async (req: AuthRequest, res: Response) => {
       include: { account: { select: { name: true } } },
     });
 
-    return res.json({ data: buildHoldingWithSimulatedPrices(updated) });
+    return res.json(buildHoldingWithSimulatedPrices(updated));
   } catch (err) {
     console.error('[investments/holdings PUT]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -361,7 +355,7 @@ router.delete('/holdings/:id', async (req: AuthRequest, res: Response) => {
 
     await prisma.investmentHolding.delete({ where: { id } });
 
-    return res.json({ data: { success: true } });
+    return res.json({ success: true });
   } catch (err) {
     console.error('[investments/holdings DELETE]', err);
     return res.status(500).json({ error: 'Internal server error' });

@@ -692,43 +692,43 @@ export default function DashboardPage() {
   const { data: summaryData, isLoading: summaryLoading, isError: summaryError } =
     useQuery<SummaryData>({
       queryKey: ['dashboard', 'summary'],
-      queryFn: () => api.get('/dashboard/summary').then((r) => r.data.data),
+      queryFn: () => api.get('/dashboard/summary').then((r) => r.data),
     });
 
   const { data: netWorthChart, isLoading: nwChartLoading, isError: nwChartError } =
     useQuery<NetWorthPoint[]>({
       queryKey: ['dashboard', 'net-worth-chart'],
-      queryFn: () => api.get('/dashboard/net-worth-chart').then((r) => r.data.data),
+      queryFn: () => api.get('/dashboard/net-worth-chart').then((r) => r.data),
     });
 
   const { data: budgetData, isLoading: budgetLoading, isError: budgetError } =
     useQuery<BudgetData>({
       queryKey: ['dashboard', 'budget-summary'],
-      queryFn: () => api.get('/dashboard/budget-summary').then((r) => r.data.data),
+      queryFn: () => api.get('/dashboard/budget-summary').then((r) => r.data),
     });
 
   const { data: spendingChart, isLoading: spendingLoading, isError: spendingError } =
     useQuery<SpendingChart>({
       queryKey: ['dashboard', 'spending-chart'],
-      queryFn: () => api.get('/dashboard/spending-chart').then((r) => r.data.data),
+      queryFn: () => api.get('/dashboard/spending-chart').then((r) => r.data),
     });
 
   const { data: recentTxns, isLoading: txnsLoading, isError: txnsError } =
     useQuery<RecentTxns>({
       queryKey: ['dashboard', 'recent-transactions'],
-      queryFn: () => api.get('/dashboard/recent-transactions').then((r) => r.data.data),
+      queryFn: () => api.get('/dashboard/recent-transactions').then((r) => r.data),
     });
 
   const { data: recurringData, isLoading: recurringLoading, isError: recurringError } =
     useQuery<RecurringData>({
       queryKey: ['dashboard', 'recurring-summary'],
-      queryFn: () => api.get('/dashboard/recurring-summary').then((r) => r.data.data),
+      queryFn: () => api.get('/dashboard/recurring-summary').then((r) => r.data),
     });
 
   const { data: goalsData, isLoading: goalsLoading, isError: goalsError } =
     useQuery<GoalsData>({
       queryKey: ['dashboard', 'goals-summary'],
-      queryFn: () => api.get('/dashboard/goals-summary').then((r) => r.data.data),
+      queryFn: () => api.get('/dashboard/goals-summary').then((r) => r.data),
     });
 
   return (

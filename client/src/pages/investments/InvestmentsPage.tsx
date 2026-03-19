@@ -775,24 +775,24 @@ export default function InvestmentsPage() {
     queryFn: () =>
       api
         .get(`/investments/holdings${accountId ? `?accountId=${accountId}` : ''}`)
-        .then((r) => r.data.data),
+        .then((r) => r.data),
   });
 
   const { data: allocationData, isLoading: allocationLoading } = useQuery<AllocationData>({
     queryKey: ['investments-allocation'],
-    queryFn: () => api.get('/investments/allocation').then((r) => r.data.data),
+    queryFn: () => api.get('/investments/allocation').then((r) => r.data),
     enabled: tab === 'allocation',
   });
 
   const { data: performanceData, isLoading: performanceLoading } = useQuery<PerformanceData>({
     queryKey: ['investments-performance', period],
     queryFn: () =>
-      api.get(`/investments/performance?period=${period}`).then((r) => r.data.data),
+      api.get(`/investments/performance?period=${period}`).then((r) => r.data),
   });
 
   const { data: accountsData } = useQuery<{ accounts: InvestmentAccount[] }>({
     queryKey: ['investments-accounts'],
-    queryFn: () => api.get('/accounts?type=investment').then((r) => r.data.data),
+    queryFn: () => api.get('/accounts?type=investment').then((r) => r.data),
   });
 
   const accounts = accountsData?.accounts ?? [];

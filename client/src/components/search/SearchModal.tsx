@@ -97,7 +97,7 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
     queryFn: () =>
       api
         .get(`/transactions?search=${encodeURIComponent(debouncedQuery)}&limit=5`)
-        .then((r) => r.data.data ?? r.data.transactions ?? r.data),
+        .then((r) => r.data.transactions ?? []),
     enabled: debouncedQuery.length > 1,
     staleTime: 30_000,
   });

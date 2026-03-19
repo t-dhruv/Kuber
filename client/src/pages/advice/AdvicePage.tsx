@@ -222,7 +222,7 @@ export default function AdvicePage() {
 
   const { data: conversations } = useQuery<Conversation[]>({
     queryKey: ['advisor', 'conversations'],
-    queryFn: () => api.get('/advisor/conversations').then((r) => r.data.data ?? r.data),
+    queryFn: () => api.get('/advisor/conversations').then((r) => r.data),
     retry: false,
   });
 
@@ -252,7 +252,7 @@ export default function AdvicePage() {
           message: trimmed,
           conversationId,
         });
-        const body = resp.data.data ?? resp.data;
+        const body = resp.data;
         const assistantMsg: Message = {
           id: genId(),
           role: 'assistant',

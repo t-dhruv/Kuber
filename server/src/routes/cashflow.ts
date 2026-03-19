@@ -80,16 +80,14 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const averageMonthlyExpenses = ytdExpenses / divisor;
 
     return res.json({
-      data: {
-        year,
-        months,
-        ytdIncome,
-        ytdExpenses,
-        ytdNet,
-        ytdSavingsRate,
-        averageMonthlyIncome,
-        averageMonthlyExpenses,
-      },
+      year,
+      months,
+      ytdIncome,
+      ytdExpenses,
+      ytdNet,
+      ytdSavingsRate,
+      averageMonthlyIncome,
+      averageMonthlyExpenses,
     });
   } catch (err) {
     console.error('[cashflow/GET]', err);
@@ -250,23 +248,21 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
       : 0;
 
     return res.json({
-      data: {
-        month,
-        year,
-        income: {
-          total: totalIncome,
-          byCategory: incomeBycat,
-        },
-        expenses: {
-          total: totalExpenses,
-          byCategory: expenseByCat,
-          byGroup,
-        },
-        net,
-        savingsRate,
-        topExpenseCategories,
-        dailyFlow,
+      month,
+      year,
+      income: {
+        total: totalIncome,
+        byCategory: incomeBycat,
       },
+      expenses: {
+        total: totalExpenses,
+        byCategory: expenseByCat,
+        byGroup,
+      },
+      net,
+      savingsRate,
+      topExpenseCategories,
+      dailyFlow,
     });
   } catch (err) {
     console.error('[cashflow/month]', err);
@@ -409,7 +405,7 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    return res.json({ data: { nodes, links } });
+    return res.json({ nodes, links });
   } catch (err) {
     console.error('[cashflow/sankey]', err);
     return res.status(500).json({ error: 'Internal server error' });

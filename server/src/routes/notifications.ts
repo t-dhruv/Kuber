@@ -30,7 +30,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       actionUrl: (n.metadata as Record<string, unknown> | null)?.actionUrl as string | null ?? null,
     }));
 
-    return res.json({ data });
+    return res.json(data);
   } catch (err) {
     console.error('[notifications/list]', err);
     return res.status(500).json({ error: 'Internal server error' });

@@ -119,7 +119,7 @@ function ProfileSection() {
   const { user, setAuth } = useAuthStore();
   const { data, isLoading } = useQuery<ProfileData>({
     queryKey: ['settings', 'profile'],
-    queryFn: () => api.get('/settings/profile').then((r) => r.data.data),
+    queryFn: () => api.get('/settings/profile').then((r) => r.data),
   });
 
   const [firstName, setFirstName] = useState('');
@@ -137,7 +137,7 @@ function ProfileSection() {
   const mutation = useMutation({
     mutationFn: () => api.put('/settings/profile', { firstName, lastName, timezone }),
     onSuccess: (res) => {
-      const updated = res.data.data as ProfileData;
+      const updated = res.data as ProfileData;
       // Update auth store display name
       if (user) {
         setAuth(
@@ -341,7 +341,7 @@ function NotificationsSection() {
 
   const { data, isLoading } = useQuery<NotificationPrefs>({
     queryKey: ['settings', 'notifications'],
-    queryFn: () => api.get('/settings/notifications').then((r) => r.data.data),
+    queryFn: () => api.get('/settings/notifications').then((r) => r.data),
   });
 
   useEffect(() => {
@@ -616,7 +616,7 @@ function SecuritySection() {
 function HouseholdSection() {
   const { data, isLoading, refetch } = useQuery<HouseholdData>({
     queryKey: ['settings', 'household'],
-    queryFn: () => api.get('/settings/household').then((r) => r.data.data),
+    queryFn: () => api.get('/settings/household').then((r) => r.data),
   });
 
   const [householdName, setHouseholdName] = useState('');
@@ -829,7 +829,7 @@ function CategoriesSection() {
 
   const { data, isLoading } = useQuery<CategoriesData>({
     queryKey: ['settings', 'categories'],
-    queryFn: () => api.get('/settings/categories').then((r) => r.data.data),
+    queryFn: () => api.get('/settings/categories').then((r) => r.data),
   });
 
   function openAdd(group?: string) {

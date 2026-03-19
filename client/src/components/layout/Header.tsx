@@ -67,7 +67,7 @@ function NotificationsDropdown({ onClose }: { onClose: () => void }) {
   const { data: notifData } = useQuery<Notification[]>({
     queryKey: ['notifications'],
     queryFn: () =>
-      api.get('/notifications?limit=10').then((r) => r.data.data ?? r.data),
+      api.get('/notifications?limit=10').then((r) => r.data),
     refetchInterval: 30_000,
   });
 
@@ -281,7 +281,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   // Fetch unread count (poll every 30s)
   const { data: countData } = useQuery<NotificationCount>({
     queryKey: ['notifications-count'],
-    queryFn: () => api.get('/notifications/count').then((r) => r.data.data ?? r.data),
+    queryFn: () => api.get('/notifications/count').then((r) => r.data),
     refetchInterval: 30_000,
   });
 

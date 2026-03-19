@@ -91,7 +91,7 @@ router.get('/categories', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    return res.json({ data: result });
+    return res.json(result);
   } catch (err) {
     console.error('[budgets/categories]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -248,22 +248,20 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       : 0;
 
     return res.json({
-      data: {
-        month,
-        year,
-        income: {
-          budgeted: incomeBudgeted,
-          actual: incomeActual,
-          categories: incomeCategories,
-        },
-        expenses: {
-          budgeted: expensesBudgeted,
-          actual: expensesActual,
-          groups: expenseGroups,
-        },
-        leftToBudget,
-        savingsRate,
+      month,
+      year,
+      income: {
+        budgeted: incomeBudgeted,
+        actual: incomeActual,
+        categories: incomeCategories,
       },
+      expenses: {
+        budgeted: expensesBudgeted,
+        actual: expensesActual,
+        groups: expenseGroups,
+      },
+      leftToBudget,
+      savingsRate,
     });
   } catch (err) {
     console.error('[budgets/GET]', err);
@@ -317,7 +315,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    return res.json({ data: budget });
+    return res.json(budget);
   } catch (err) {
     console.error('[budgets/POST]', err);
     return res.status(500).json({ error: 'Internal server error' });

@@ -39,15 +39,13 @@ router.get('/profile', async (req: AuthRequest, res: Response) => {
     });
 
     return res.json({
-      data: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        avatarUrl: user.avatar ?? null,
-        timezone: user.timezone ?? null,
-        currency: member?.household.currency ?? 'USD',
-      },
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatarUrl: user.avatar ?? null,
+      timezone: user.timezone ?? null,
+      currency: member?.household.currency ?? 'USD',
     });
   } catch (err) {
     console.error('[settings/profile GET]', err);
@@ -85,15 +83,13 @@ router.put('/profile', async (req: AuthRequest, res: Response) => {
     });
 
     return res.json({
-      data: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        avatarUrl: user.avatar ?? null,
-        timezone: user.timezone ?? null,
-        currency: member?.household.currency ?? 'USD',
-      },
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatarUrl: user.avatar ?? null,
+      timezone: user.timezone ?? null,
+      currency: member?.household.currency ?? 'USD',
     });
   } catch (err) {
     console.error('[settings/profile PUT]', err);
@@ -130,12 +126,10 @@ router.get('/household', async (req: AuthRequest, res: Response) => {
     }));
 
     return res.json({
-      data: {
-        id: household.id,
-        name: household.name,
-        currency: household.currency,
-        members,
-      },
+      id: household.id,
+      name: household.name,
+      currency: household.currency,
+      members,
     });
   } catch (err) {
     console.error('[settings/household GET]', err);
@@ -186,12 +180,10 @@ router.put('/household', async (req: AuthRequest, res: Response) => {
     }));
 
     return res.json({
-      data: {
-        id: household.id,
-        name: household.name,
-        currency: household.currency,
-        members,
-      },
+      id: household.id,
+      name: household.name,
+      currency: household.currency,
+      members,
     });
   } catch (err) {
     console.error('[settings/household PUT]', err);
@@ -230,10 +222,8 @@ router.post('/household/invite', async (req: AuthRequest, res: Response) => {
     });
 
     return res.json({
-      data: {
-        success: true,
-        message: 'Invitation sent (email not implemented in dev)',
-      },
+      success: true,
+      message: 'Invitation sent (email not implemented in dev)',
     });
   } catch (err) {
     console.error('[settings/household/invite POST]', err);
@@ -252,7 +242,7 @@ router.get('/categories', async (req: AuthRequest, res: Response) => {
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
 
-    return res.json({ data: categories });
+    return res.json(categories);
   } catch (err) {
     console.error('[settings/categories GET]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -290,7 +280,7 @@ router.post('/categories', async (req: AuthRequest, res: Response) => {
       include: { group: { select: { id: true, name: true } } },
     });
 
-    return res.status(201).json({ data: category });
+    return res.status(201).json(category);
   } catch (err) {
     console.error('[settings/categories POST]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -322,7 +312,7 @@ router.put('/categories/:id', async (req: AuthRequest, res: Response) => {
       include: { group: { select: { id: true, name: true } } },
     });
 
-    return res.json({ data: category });
+    return res.json(category);
   } catch (err) {
     console.error('[settings/categories PUT]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -354,7 +344,7 @@ router.delete('/categories/:id', async (req: AuthRequest, res: Response) => {
 
     await prisma.category.delete({ where: { id } });
 
-    return res.json({ data: { success: true } });
+    return res.json({ success: true });
   } catch (err) {
     console.error('[settings/categories DELETE]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -381,7 +371,7 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
       preferences = DEFAULT_NOTIFICATION_PREFERENCES;
     }
 
-    return res.json({ data: { preferences } });
+    return res.json({ preferences });
   } catch (err) {
     console.error('[settings/notifications GET]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -404,7 +394,7 @@ router.put('/notifications', async (req: AuthRequest, res: Response) => {
       create: { userId, key: 'notification_preferences', value: JSON.stringify(preferences) },
     });
 
-    return res.json({ data: { preferences } });
+    return res.json({ preferences });
   } catch (err) {
     console.error('[settings/notifications PUT]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -441,7 +431,7 @@ router.put('/password', async (req: AuthRequest, res: Response) => {
       data: { passwordHash: newHash },
     });
 
-    return res.json({ data: { success: true } });
+    return res.json({ success: true });
   } catch (err) {
     console.error('[settings/password PUT]', err);
     return res.status(500).json({ error: 'Internal server error' });

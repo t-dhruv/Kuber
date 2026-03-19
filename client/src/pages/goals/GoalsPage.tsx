@@ -599,7 +599,7 @@ export default function GoalsPage() {
 
   const { data: goals, isLoading, isError } = useQuery<Goal[]>({
     queryKey: ['goals'],
-    queryFn: () => api.get('/goals').then((r) => r.data.goals ?? r.data ?? []),
+    queryFn: () => api.get('/goals').then((r) => r.data),
   });
 
   function openAdd() {

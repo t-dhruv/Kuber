@@ -71,25 +71,23 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
       : 0;
 
     return res.json({
-      data: {
-        netWorth: {
-          current: netWorthCurrent,
-          changeAmount: netWorthChangeAmount,
-          changePercent: netWorthChangePercent,
-        },
-        spending: {
-          thisMonth: expensesThisMonth,
-          lastMonth: expensesLastMonth,
-          changePercent: spendingChangePercent,
-        },
-        income: {
-          thisMonth: incomeThisMonth,
-          lastMonth: incomeLastMonth,
-        },
-        savings: {
-          rate: savingsRate,
-          amount: savingsAmount,
-        },
+      netWorth: {
+        current: netWorthCurrent,
+        changeAmount: netWorthChangeAmount,
+        changePercent: netWorthChangePercent,
+      },
+      spending: {
+        thisMonth: expensesThisMonth,
+        lastMonth: expensesLastMonth,
+        changePercent: spendingChangePercent,
+      },
+      income: {
+        thisMonth: incomeThisMonth,
+        lastMonth: incomeLastMonth,
+      },
+      savings: {
+        rate: savingsRate,
+        amount: savingsAmount,
       },
     });
   } catch (err) {
@@ -140,10 +138,8 @@ router.get('/spending-chart', async (req: AuthRequest, res: Response) => {
     };
 
     return res.json({
-      data: {
-        thisMonth: groupByDay(thisMonthTxns),
-        lastMonth: groupByDay(lastMonthTxns),
-      },
+      thisMonth: groupByDay(thisMonthTxns),
+      lastMonth: groupByDay(lastMonthTxns),
     });
   } catch (err) {
     console.error('[dashboard/spending-chart]', err);
@@ -168,9 +164,7 @@ router.get('/budget-summary', async (req: AuthRequest, res: Response) => {
     });
 
     if (budgets.length === 0) {
-      return res.json({
-        data: { totalBudget: 0, totalSpent: 0, categories: [] },
-      });
+      return res.json({ totalBudget: 0, totalSpent: 0, categories: [] });
     }
 
     const categoryIds = budgets.map(b => b.categoryId);
@@ -216,9 +210,7 @@ router.get('/budget-summary', async (req: AuthRequest, res: Response) => {
       };
     });
 
-    return res.json({
-      data: { totalBudget, totalSpent, categories },
-    });
+    return res.json({ totalBudget, totalSpent, categories });
   } catch (err) {
     console.error('[dashboard/budget-summary]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -252,7 +244,7 @@ router.get('/recent-transactions', async (req: AuthRequest, res: Response) => {
       accountName: t.account.name,
     }));
 
-    return res.json({ data });
+    return res.json(data);
   } catch (err) {
     console.error('[dashboard/recent-transactions]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -301,9 +293,7 @@ router.get('/recurring-summary', async (req: AuthRequest, res: Response) => {
     const totalUpcoming = upcoming.reduce((s, i) => s + i.amount, 0);
     const totalMonthly = items.reduce((s, i) => s + Math.abs(i.amount), 0);
 
-    return res.json({
-      data: { paid, upcoming, totalPaid, totalUpcoming, totalMonthly },
-    });
+    return res.json({ paid, upcoming, totalPaid, totalUpcoming, totalMonthly });
   } catch (err) {
     console.error('[dashboard/recurring-summary]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -350,7 +340,7 @@ router.get('/net-worth-chart', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    return res.json({ data: dataPoints });
+    return res.json(dataPoints);
   } catch (err) {
     console.error('[dashboard/net-worth-chart]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -408,7 +398,7 @@ router.get('/goals-summary', async (req: AuthRequest, res: Response) => {
       };
     });
 
-    return res.json({ data });
+    return res.json(data);
   } catch (err) {
     console.error('[dashboard/goals-summary]', err);
     return res.status(500).json({ error: 'Internal server error' });
