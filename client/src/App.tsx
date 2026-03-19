@@ -1,20 +1,35 @@
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { AppShell } from '@/components/layout';
-import LoginPage from '@/pages/LoginPage';
-import SignupPage from '@/pages/SignupPage';
-import ForgotPasswordPage from '@/pages/ForgotPasswordPage';
-import ResetPasswordPage from '@/pages/ResetPasswordPage';
-import DashboardPage from '@/pages/dashboard';
-import AccountsPage from '@/pages/accounts';
-import TransactionsPage from '@/pages/transactions';
-import BudgetPage from '@/pages/budget';
-import CashFlowPage from '@/pages/cashflow';
-import ReportsPage from '@/pages/reports';
-import RecurringPage from '@/pages/recurring';
-import GoalsPage from '@/pages/goals';
-import InvestmentsPage from '@/pages/investments';
-import SettingsPage from '@/pages/settings';
+
+// ─── Lazy page imports ────────────────────────────────────────────────────────
+
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const SignupPage = lazy(() => import('@/pages/SignupPage'));
+const ForgotPasswordPage = lazy(() => import('@/pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'));
+const DashboardPage = lazy(() => import('@/pages/dashboard'));
+const AccountsPage = lazy(() => import('@/pages/accounts'));
+const TransactionsPage = lazy(() => import('@/pages/transactions'));
+const BudgetPage = lazy(() => import('@/pages/budget'));
+const CashFlowPage = lazy(() => import('@/pages/cashflow'));
+const ReportsPage = lazy(() => import('@/pages/reports'));
+const RecurringPage = lazy(() => import('@/pages/recurring'));
+const GoalsPage = lazy(() => import('@/pages/goals'));
+const InvestmentsPage = lazy(() => import('@/pages/investments'));
+const AdvicePage = lazy(() => import('@/pages/advice'));
+const SettingsPage = lazy(() => import('@/pages/settings'));
+
+// ─── Loading fallback ─────────────────────────────────────────────────────────
+
+function PageLoader() {
+  return (
+    <div style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Loading...</div>
+  );
+}
+
+// ─── Guards ───────────────────────────────────────────────────────────────────
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
@@ -22,23 +37,49 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div style={{ padding: '2rem' }}>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-text)' }}>{title}</h1>
-      <p style={{ color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>Coming soon...</p>
-    </div>
-  );
-}
+// ─── Global Cmd+K search trigger ─────────────────────────────────────────────
+// The Cmd+K listener is also registered in Header; App.tsx re-exports the
+// setShowSearch toggle to ensure it works when the header hasn't mounted yet.
+// (Header handles this directly via its own useEffect — no duplication needed.)
+
+// ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/signup" element={<SignupPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route
+        path="/login"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <LoginPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/signup"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <SignupPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ForgotPasswordPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <ResetPasswordPage />
+          </Suspense>
+        }
+      />
 
       {/* Protected routes — nested under AppShell layout */}
       <Route
@@ -48,17 +89,94 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/accounts" element={<AccountsPage />} />
-        <Route path="/transactions" element={<TransactionsPage />} />
-        <Route path="/cash-flow" element={<CashFlowPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/budget" element={<BudgetPage />} />
-        <Route path="/recurring" element={<RecurringPage />} />
-        <Route path="/goals" element={<GoalsPage />} />
-        <Route path="/investments" element={<InvestmentsPage />} />
-        <Route path="/advice" element={<PlaceholderPage title="Advice — Coming Soon" />} />
-        <Route path="/settings/*" element={<SettingsPage />} />
+        <Route
+          path="/"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <DashboardPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/accounts"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <AccountsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/transactions"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <TransactionsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/cash-flow"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <CashFlowPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <ReportsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/budget"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <BudgetPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/recurring"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <RecurringPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/goals"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <GoalsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/investments"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <InvestmentsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/advice"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <AdvicePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/settings/*"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <SettingsPage />
+            </Suspense>
+          }
+        />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
