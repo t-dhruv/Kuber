@@ -1,6 +1,7 @@
 {
   "name": "kuber",
   "private": true,
+  "packageManager": "npm@11.6.2",
   "workspaces": ["client", "server", "shared"],
   "scripts": {
     "dev": "turbo dev",
