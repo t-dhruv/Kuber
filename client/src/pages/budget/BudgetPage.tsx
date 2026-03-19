@@ -16,30 +16,38 @@ const MONTH_NAMES = [
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface BudgetLineItem {
-  id: string;
-  categoryId: string;
-  categoryName: string;
-  categoryIcon?: string;
-  budgetAmount: number;
-  actualAmount: number;
-}
-
-interface BudgetGroup {
+interface ServerCategoryRow {
   id: string;
   name: string;
-  type: 'income' | 'expense';
-  items: BudgetLineItem[];
+  icon: string | null;
+  budgeted: number;
+  actual: number;
+  remaining: number;
+  percent: number;
+}
+
+interface ServerExpenseGroup {
+  name: string;
+  budgeted: number;
+  actual: number;
+  categories: ServerCategoryRow[];
 }
 
 interface BudgetData {
   year: number;
   month: number;
-  groups: BudgetGroup[];
-  totalIncomeBudget: number;
-  totalIncomeActual: number;
-  totalExpenseBudget: number;
-  totalExpenseActual: number;
+  income: {
+    budgeted: number;
+    actual: number;
+    categories: ServerCategoryRow[];
+  };
+  expenses: {
+    budgeted: number;
+    actual: number;
+    groups: ServerExpenseGroup[];
+  };
+  leftToBudget: number;
+  savingsRate: number;
 }
 
 interface CategoryOption {
@@ -49,8 +57,11 @@ interface CategoryOption {
   group?: string;
 }
 
-interface CategoriesData {
-  categories: CategoryOption[];
+interface CategoryGroup {
+  groupId: string;
+  groupName: string;
+  type: string;
+  categories: Array<{ id: string; name: string; icon: string | null; color: string | null }>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -256,14 +267,12 @@ function AddCategoryModal({
           <Select
             value={selectedCategoryId}
             onChange={(e) => setSelectedCategoryId(e.target.value)}
-          >
-            <option value="">Select a category...</option>
-            {availableCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.icon ? `${c.icon} ` : ''}{c.name}
-              </option>
-            ))}
-          </Select>
+            placeholder="Select a category..."
+            options={availableCategories.map((c) => ({
+              value: c.id,
+              label: c.icon ? `${c.icon} ${c.name}` : c.name,
+            }))}
+          />
         </div>
 
         <div>
@@ -307,19 +316,18 @@ function BudgetRow({
   month,
   onNavigateToTransactions,
 }: {
-  item: BudgetLineItem;
+  item: ServerCategoryRow;
   year: number;
   month: number;
   onNavigateToTransactions?: (categoryId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [hovered, setHovered] = useState(false);
-  const remaining = item.budgetAmount - item.actualAmount;
 
   const saveMutation = useMutation({
     mutationFn: (newAmount: number) =>
       api.post('/budgets', {
-        categoryId: item.categoryId,
+        categoryId: item.id,
         amount: newAmount,
         month,
         year,
@@ -350,7 +358,7 @@ function BudgetRow({
       }}>
         {/* Name */}
         <div
-          onClick={() => onNavigateToTransactions?.(item.categoryId)}
+          onClick={() => onNavigateToTransactions?.(item.id)}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -359,8 +367,8 @@ function BudgetRow({
             overflow: 'hidden',
           }}
         >
-          {item.categoryIcon && (
-            <span style={{ fontSize: '1rem', flexShrink: 0 }}>{item.categoryIcon}</span>
+          {item.icon && (
+            <span style={{ fontSize: '1rem', flexShrink: 0 }}>{item.icon}</span>
           )}
           <span style={{
             fontSize: '0.875rem',
@@ -370,32 +378,32 @@ function BudgetRow({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
           }}>
-            {item.categoryName}
+            {item.name}
           </span>
         </div>
 
         {/* Budget (editable) */}
         <div style={{ textAlign: 'right' }}>
           <EditableBudgetCell
-            value={item.budgetAmount}
+            value={item.budgeted}
             onSave={(v) => saveMutation.mutate(v)}
           />
         </div>
 
         {/* Actual */}
         <div style={{ textAlign: 'right', fontSize: '0.875rem', color: 'var(--color-text)' }}>
-          {fmtCurrency(item.actualAmount)}
+          {fmtCurrency(item.actual)}
         </div>
 
         {/* Remaining */}
-        <div style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, color: remainingColor(remaining) }}>
-          {fmtCurrency(remaining)}
+        <div style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, color: remainingColor(item.remaining) }}>
+          {fmtCurrency(item.remaining)}
         </div>
       </div>
 
       {/* Progress bar row */}
       <div style={{ paddingBottom: '4px' }}>
-        <ProgressBar actual={item.actualAmount} budget={item.budgetAmount} />
+        <ProgressBar actual={item.actual} budget={item.budgeted} />
       </div>
     </div>
   );
@@ -410,7 +418,7 @@ function BudgetGroupSection({
   allCategories,
   onNavigateToTransactions,
 }: {
-  group: BudgetGroup;
+  group: ServerExpenseGroup;
   year: number;
   month: number;
   allCategories: CategoryOption[];
@@ -419,10 +427,10 @@ function BudgetGroupSection({
   const [addModalOpen, setAddModalOpen] = useState(false);
   const queryClient = useQueryClient();
 
-  const totalBudget = group.items.reduce((sum, i) => sum + i.budgetAmount, 0);
-  const totalActual = group.items.reduce((sum, i) => sum + i.actualAmount, 0);
+  const totalBudget = group.budgeted;
+  const totalActual = group.actual;
   const totalRemaining = totalBudget - totalActual;
-  const existingIds = group.items.map((i) => i.categoryId);
+  const existingIds = group.categories.map((c) => c.id);
 
   return (
     <div style={{ marginBottom: '1.5rem' }}>
@@ -469,12 +477,12 @@ function BudgetGroupSection({
       <div style={{ height: 1, backgroundColor: 'var(--color-border)', marginBottom: '0.25rem' }} />
 
       {/* Rows */}
-      {group.items.length === 0 ? (
+      {group.categories.length === 0 ? (
         <div style={{ padding: '0.75rem 0.5rem', fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
           No categories yet.
         </div>
       ) : (
-        group.items.map((item) => (
+        group.categories.map((item) => (
           <BudgetRow
             key={item.id}
             item={item}
@@ -560,22 +568,19 @@ function SummaryPanel({ data }: { data?: BudgetData }) {
     );
   }
 
-  const incomeGroups = data.groups.filter((g) => g.type === 'income');
-  const expenseGroups = data.groups.filter((g) => g.type === 'expense');
-
   // Compute per-group totals for expense groups
-  const expenseGroupTotals = expenseGroups.map((g) => ({
+  const expenseGroupTotals = data.expenses.groups.map((g) => ({
     name: g.name,
-    budget: g.items.reduce((s, i) => s + i.budgetAmount, 0),
-    actual: g.items.reduce((s, i) => s + i.actualAmount, 0),
+    budget: g.budgeted,
+    actual: g.actual,
   }));
 
-  const leftToBudget = data.totalIncomeBudget - data.totalExpenseBudget;
+  const leftToBudget = data.income.budgeted - data.expenses.budgeted;
   const leftToBudgetPositive = leftToBudget >= 0;
 
   const savingsRate =
-    data.totalIncomeBudget > 0
-      ? Math.round(((data.totalIncomeBudget - data.totalExpenseBudget) / data.totalIncomeBudget) * 100)
+    data.income.budgeted > 0
+      ? Math.round(((data.income.budgeted - data.expenses.budgeted) / data.income.budgeted) * 100)
       : 0;
 
   const srStyle = savingsRateStyle(savingsRate);
@@ -619,8 +624,8 @@ function SummaryPanel({ data }: { data?: BudgetData }) {
         {/* Income row */}
         <SummaryRow
           label="Income"
-          budget={data.totalIncomeBudget}
-          actual={data.totalIncomeActual}
+          budget={data.income.budgeted}
+          actual={data.income.actual}
         />
 
         {/* Each expense group */}
@@ -639,8 +644,8 @@ function SummaryPanel({ data }: { data?: BudgetData }) {
         {/* Total row */}
         <SummaryRow
           label="Total"
-          budget={data.totalExpenseBudget}
-          actual={data.totalExpenseActual}
+          budget={data.expenses.budgeted}
+          actual={data.expenses.actual}
           bold
         />
       </div>
@@ -723,12 +728,15 @@ export default function BudgetPage() {
     queryFn: () => api.get(`/budgets?year=${year}&month=${month}`).then((r) => r.data),
   });
 
-  const { data: categoriesData } = useQuery<CategoriesData>({
+  const { data: categoriesData } = useQuery<CategoryGroup[]>({
     queryKey: ['budget-categories'],
     queryFn: () => api.get('/budgets/categories').then((r) => r.data),
   });
 
-  const allCategories = categoriesData?.categories ?? [];
+  // Flatten all category groups into a single list of CategoryOption for dropdowns
+  const allCategories: CategoryOption[] = (categoriesData ?? []).flatMap((g) =>
+    g.categories.map((c) => ({ id: c.id, name: c.name, icon: c.icon ?? undefined, group: g.groupName }))
+  );
 
   function goToPrev() {
     if (month === 1) {
@@ -756,8 +764,16 @@ export default function BudgetPage() {
   const isCurrentMonth =
     year === today.getFullYear() && month === today.getMonth() + 1;
 
-  const incomeGroups = budgetData?.groups.filter((g) => g.type === 'income') ?? [];
-  const expenseGroups = budgetData?.groups.filter((g) => g.type === 'expense') ?? [];
+  // Synthesize an income group from the flat income.categories list so BudgetGroupSection can render it
+  const incomeGroups: ServerExpenseGroup[] = budgetData?.income.categories.length
+    ? [{
+        name: 'Income',
+        budgeted: budgetData.income.budgeted,
+        actual: budgetData.income.actual,
+        categories: budgetData.income.categories,
+      }]
+    : [];
+  const expenseGroups: ServerExpenseGroup[] = budgetData?.expenses.groups ?? [];
 
   return (
     <div style={{ padding: '1rem 0' }}>
@@ -911,7 +927,7 @@ export default function BudgetPage() {
               {/* Income groups */}
               {incomeGroups.map((group) => (
                 <BudgetGroupSection
-                  key={group.id}
+                  key={group.name}
                   group={group}
                   year={year}
                   month={month}
@@ -922,7 +938,7 @@ export default function BudgetPage() {
               {/* Expense groups */}
               {expenseGroups.map((group) => (
                 <BudgetGroupSection
-                  key={group.id}
+                  key={group.name}
                   group={group}
                   year={year}
                   month={month}

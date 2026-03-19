@@ -18,30 +18,46 @@ interface Account {
   id: string;
   name: string;
   type: AccountType;
-  institution?: string;
-  lastFour?: string;
+  institution?: string | null;
+  lastFour?: string | null;
   balance: number;
   currency: string;
   excludeFromNetWorth?: boolean;
-  hidden?: boolean;
-  oneMonthChange?: number;
-  balanceHistory?: { date: string; value: number }[];
-  recentTransactions?: Transaction[];
+  isHidden?: boolean;
+  lastSyncedAt?: string | null;
+  createdAt?: string;
+}
+
+interface AccountGroup {
+  type: string;
+  totalBalance: number;
+  accounts: Account[];
+}
+
+interface NetWorth {
+  assets: number;
+  liabilities: number;
+  total: number;
 }
 
 interface AccountsData {
-  accounts: Account[];
-  totalAssets: number;
-  totalLiabilities: number;
-  netWorth: number;
+  groups: AccountGroup[];
+  netWorth: NetWorth;
 }
 
 interface Transaction {
   id: string;
-  merchant: string;
-  category: string;
+  merchantName: string;
+  categoryName: string | null;
+  categoryIcon?: string | null;
   amount: number;
   date: string;
+}
+
+interface AccountDetail {
+  account: Account;
+  balanceHistory: { date: string; balance: number }[];
+  recentTransactions: Transaction[];
 }
 
 interface AccountFormValues {
@@ -132,13 +148,15 @@ function balanceColor(balance: number, type: AccountType): string {
   return 'var(--color-text)';
 }
 
-function groupAccounts(accounts: Account[]): Map<AccountType, Account[]> {
+// Build a Map<AccountType, Account[]> from the server's groups array.
+// Server returns type in uppercase (e.g. 'CHECKING'); normalise to lowercase.
+function buildGroupMap(groups: AccountGroup[]): Map<AccountType, Account[]> {
   const map = new Map<AccountType, Account[]>();
   for (const type of GROUP_ORDER) map.set(type, []);
-  for (const acc of accounts) {
-    const key = acc.type as AccountType;
+  for (const group of groups) {
+    const key = group.type.toLowerCase() as AccountType;
     if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(acc);
+    map.get(key)!.push(...group.accounts);
   }
   return map;
 }
@@ -147,8 +165,9 @@ function groupTotal(accounts: Account[]): number {
   return accounts.reduce((sum, a) => sum + a.balance, 0);
 }
 
-function groupMonthChange(accounts: Account[]): number {
-  return accounts.reduce((sum, a) => sum + (a.oneMonthChange ?? 0), 0);
+// Server no longer provides oneMonthChange; return 0 so the UI still renders.
+function groupMonthChange(_accounts: Account[]): number {
+  return 0;
 }
 
 // ─── Overflow Menu ────────────────────────────────────────────────────────────
@@ -677,15 +696,15 @@ function AccountDetailModal({
   onClose: () => void;
   onEdit: () => void;
 }) {
-  const { data, isLoading } = useQuery<Account>({
+  const { data, isLoading } = useQuery<AccountDetail>({
     queryKey: ['accounts', account?.id],
     queryFn: () => api.get(`/accounts/${account!.id}`).then((r) => r.data),
     enabled: !!account,
   });
 
-  const detail = data ?? account;
-  const history = detail?.balanceHistory ?? [];
-  const txns = detail?.recentTransactions ?? [];
+  const detail = data?.account ?? account;
+  const history = data?.balanceHistory ?? [];
+  const txns = data?.recentTransactions ?? [];
 
   return (
     <Modal open={!!account} onClose={onClose} title={account?.name ?? ''} size="lg">
@@ -743,7 +762,7 @@ function AccountDetailModal({
                       fontSize: '0.8125rem',
                     }}
                   />
-                  <Area type="monotone" dataKey="value" stroke="#E5622A" strokeWidth={2} fill="url(#acctGrad)" dot={false} />
+                  <Area type="monotone" dataKey="balance" stroke="#E5622A" strokeWidth={2} fill="url(#acctGrad)" dot={false} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -769,14 +788,14 @@ function AccountDetailModal({
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: '#fff', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0,
                       }}>
-                        {(txn.merchant ?? '?')[0].toUpperCase()}
+                        {(txn.merchantName ?? '?')[0].toUpperCase()}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {txn.merchant}
+                          {txn.merchantName}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                          {txn.category} · {fmtDate(txn.date)}
+                          {txn.categoryName ?? '—'} · {fmtDate(txn.date)}
                         </div>
                       </div>
                       <span style={{ fontSize: '0.875rem', fontWeight: 600, color: txn.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)', flexShrink: 0 }}>
@@ -849,16 +868,7 @@ export default function AccountsPage() {
   const [editAccount, setEditAccount] = useState<Account | null>(null);
   const [detailAccount, setDetailAccount] = useState<Account | null>(null);
 
-  const refreshMutation = useMutation({
-    mutationFn: () => api.post('/accounts/refresh', {}).then((r) => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      notify.success('Accounts refreshed');
-    },
-    onError: () => notify.error('Refresh failed'),
-  });
-
-  const grouped = data?.accounts ? groupAccounts(data.accounts) : null;
+  const grouped = data?.groups ? buildGroupMap(data.groups) : null;
 
   // When edit is triggered from detail modal, close detail and open edit
   function handleEditFromDetail() {
@@ -886,8 +896,7 @@ export default function AccountsPage() {
             variant="ghost"
             size="sm"
             icon={<RefreshCw size={14} />}
-            loading={refreshMutation.isPending}
-            onClick={() => refreshMutation.mutate()}
+            onClick={() => notify.info('Manual refresh is not available')}
           >
             Refresh all
           </Button>
@@ -917,9 +926,9 @@ export default function AccountsPage() {
           {/* Left column: net worth + groups */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <NetWorthSummary
-              totalAssets={data.totalAssets}
-              totalLiabilities={data.totalLiabilities}
-              netWorth={data.netWorth}
+              totalAssets={data.netWorth.assets}
+              totalLiabilities={data.netWorth.liabilities}
+              netWorth={data.netWorth.total}
             />
 
             {grouped && GROUP_ORDER.map((type) => {
@@ -968,9 +977,9 @@ export default function AccountsPage() {
                   <span style={{
                     fontSize: '1rem',
                     fontWeight: 700,
-                    color: data.netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)',
+                    color: data.netWorth.total >= 0 ? 'var(--color-text)' : 'var(--color-danger)',
                   }}>
-                    {fmtCurrency(data.netWorth)}
+                    {fmtCurrency(data.netWorth.total)}
                   </span>
                 </div>
               </div>

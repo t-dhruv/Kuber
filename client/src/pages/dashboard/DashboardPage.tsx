@@ -18,11 +18,10 @@ const fmtDate = (date: string) =>
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface SummaryData {
-  netWorth: number;
-  netWorthChange: number;
-  netWorthChangePct: number;
-  totalIncome: number;
-  totalExpenses: number;
+  netWorth: { current: number; changeAmount: number; changePercent: number };
+  spending: { thisMonth: number; lastMonth: number; changePercent: number };
+  income: { thisMonth: number; lastMonth: number };
+  savings: { rate: number; amount: number };
 }
 
 interface NetWorthPoint {
@@ -39,7 +38,7 @@ interface BudgetCategory {
 }
 
 interface BudgetData {
-  month: string;
+  month?: string;
   categories: BudgetCategory[];
   totalSpent: number;
   totalBudget: number;
@@ -56,18 +55,22 @@ interface SpendingChart {
   data: SpendingPoint[];
 }
 
-interface Transaction {
-  id: string;
-  merchant: string;
-  category: string;
-  categoryColor: string;
-  amount: number;
-  date: string;
+interface SpendingChartRaw {
+  thisMonth: { day: number; amount: number }[];
+  lastMonth: { day: number; amount: number }[];
 }
 
-interface RecentTxns {
-  transactions: Transaction[];
+interface Transaction {
+  id: string;
+  merchantName: string;
+  categoryName: string;
+  categoryColor: string | null;
+  amount: number;
+  date: string;
+  accountName: string;
 }
+
+type RecentTxns = Transaction[];
 
 interface RecurringItem {
   id: string;
@@ -78,8 +81,9 @@ interface RecurringItem {
 }
 
 interface RecurringData {
-  paidTotal: number;
-  upcomingTotal: number;
+  totalPaid: number;
+  totalUpcoming: number;
+  totalMonthly: number;
   paid: RecurringItem[];
   upcoming: RecurringItem[];
 }
@@ -87,9 +91,11 @@ interface RecurringData {
 interface Goal {
   id: string;
   name: string;
-  current: number;
-  target: number;
+  currentAmount: number;
+  targetAmount: number;
+  percent: number;
   status: 'on_track' | 'at_risk' | 'completed';
+  targetDate: string;
 }
 
 interface GoalsData {
@@ -218,12 +224,12 @@ function NetWorthWidget({
       ) : (
         <div style={{ marginBottom: '1rem' }}>
           <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>
-            {fmtCurrency(summary.netWorth)}
+            {fmtCurrency(summary.netWorth.current)}
           </div>
-          <div style={{ marginTop: '0.25rem', fontSize: '0.875rem', color: summary.netWorthChange >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-            {summary.netWorthChange >= 0 ? '▲' : '▼'}{' '}
-            {fmtCurrency(Math.abs(summary.netWorthChange))}{' '}
-            ({summary.netWorthChange >= 0 ? '+' : ''}{summary.netWorthChangePct.toFixed(1)}%) this month
+          <div style={{ marginTop: '0.25rem', fontSize: '0.875rem', color: summary.netWorth.changeAmount >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+            {summary.netWorth.changeAmount >= 0 ? '▲' : '▼'}{' '}
+            {fmtCurrency(Math.abs(summary.netWorth.changeAmount))}{' '}
+            ({summary.netWorth.changeAmount >= 0 ? '+' : ''}{summary.netWorth.changePercent.toFixed(1)}%) this month
           </div>
         </div>
       )}
@@ -291,7 +297,7 @@ function BudgetWidget({ data, isLoading, isError }: { data?: BudgetData; isLoadi
   return (
     <Card padding="lg">
       <WidgetHeader
-        title={`Budget — ${data?.month ?? '…'}`}
+        title={`Budget — ${data?.month ?? new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}`}
         action={
           <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
             Expenses ▼
@@ -471,7 +477,7 @@ function SpendingWidget({ data, isLoading, isError }: { data?: SpendingChart; is
 
 // ─── Widget: Recent Transactions ──────────────────────────────────────────────
 
-function RecentTransactionsWidget({ data, isLoading, isError }: { data?: RecentTxns; isLoading: boolean; isError: boolean }) {
+function RecentTransactionsWidget({ data, isLoading, isError }: { data?: Transaction[]; isLoading: boolean; isError: boolean }) {
   const navigate = useNavigate();
 
   return (
@@ -505,7 +511,7 @@ function RecentTransactionsWidget({ data, isLoading, isError }: { data?: RecentT
         <WidgetError />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {data.transactions.map((txn, idx) => (
+          {data.map((txn, idx) => (
             <div key={txn.id}>
               <div
                 onClick={() => navigate('/transactions')}
@@ -523,14 +529,14 @@ function RecentTransactionsWidget({ data, isLoading, isError }: { data?: RecentT
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: '#fff', fontSize: '0.875rem', fontWeight: 700, flexShrink: 0,
                 }}>
-                  {merchantInitial(txn.merchant)}
+                  {merchantInitial(txn.merchantName)}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {txn.merchant}
+                    {txn.merchantName}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                    {txn.category} · {fmtDate(txn.date)}
+                    {txn.categoryName} · {fmtDate(txn.date)}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexShrink: 0 }}>
@@ -540,7 +546,7 @@ function RecentTransactionsWidget({ data, isLoading, isError }: { data?: RecentT
                   <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>›</span>
                 </div>
               </div>
-              {idx < data.transactions.length - 1 && (
+              {idx < data.length - 1 && (
                 <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
               )}
             </div>
@@ -569,7 +575,7 @@ function RecurringWidget({ data, isLoading, isError }: { data?: RecurringData; i
           {/* Paid section */}
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-success)', marginBottom: '0.375rem' }}>
-              Paid ({fmtCurrency(data.paidTotal)})
+              Paid ({fmtCurrency(data.totalPaid)})
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
               {data.paid.map((item) => (
@@ -587,7 +593,7 @@ function RecurringWidget({ data, isLoading, isError }: { data?: RecurringData; i
           {/* Upcoming section */}
           <div style={{ marginBottom: '0.75rem' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
-              Upcoming ({fmtCurrency(data.upcomingTotal)})
+              Upcoming ({fmtCurrency(data.totalUpcoming)})
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
               {data.upcoming.map((item) => (
@@ -612,7 +618,7 @@ function RecurringWidget({ data, isLoading, isError }: { data?: RecurringData; i
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
             <span style={{ color: 'var(--color-text-secondary)' }}>Total this month</span>
             <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
-              {fmtCurrency((data.paidTotal ?? 0) + (data.upcomingTotal ?? 0))}
+              {fmtCurrency((data.totalPaid ?? 0) + (data.totalUpcoming ?? 0))}
             </span>
           </div>
         </>
@@ -648,7 +654,7 @@ function GoalsWidget({ data, isLoading, isError }: { data?: GoalsData; isLoading
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {data.goals.map((goal) => {
-            const pct = goal.target > 0 ? goal.current / goal.target : 0;
+            const pct = goal.targetAmount > 0 ? goal.currentAmount / goal.targetAmount : 0;
             const statusStyle = goalStatusStyle(goal.status);
             return (
               <div key={goal.id} style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
@@ -665,7 +671,7 @@ function GoalsWidget({ data, isLoading, isError }: { data?: GoalsData; isLoading
                     </span>
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
-                    {fmtCurrency(goal.current)} / {fmtCurrency(goal.target)} · {Math.round(pct * 100)}%
+                    {fmtCurrency(goal.currentAmount)} / {fmtCurrency(goal.targetAmount)} · {Math.round(pct * 100)}%
                   </div>
                   <div style={{ height: 5, backgroundColor: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
                     <div style={{
@@ -710,13 +716,21 @@ export default function DashboardPage() {
   const { data: spendingChart, isLoading: spendingLoading, isError: spendingError } =
     useQuery<SpendingChart>({
       queryKey: ['dashboard', 'spending-chart'],
-      queryFn: () => api.get('/dashboard/spending-chart').then((r) => r.data),
+      queryFn: () => api.get('/dashboard/spending-chart').then((r) => {
+        const raw: SpendingChartRaw = r.data;
+        const prevMap = new Map(raw.lastMonth.map((p) => [p.day, p.amount]));
+        const currMap = new Map(raw.thisMonth.map((p) => [p.day, p.amount]));
+        const days = Array.from(new Set([...raw.thisMonth.map(p => p.day), ...raw.lastMonth.map(p => p.day)])).sort((a, b) => a - b);
+        const data = days.map((day) => ({ day, current: currMap.get(day) ?? 0, previous: prevMap.get(day) ?? 0 }));
+        const currentMonthTotal = raw.thisMonth.reduce((s, p) => s + p.amount, 0);
+        return { currentMonthTotal, data };
+      }),
     });
 
   const { data: recentTxns, isLoading: txnsLoading, isError: txnsError } =
     useQuery<RecentTxns>({
       queryKey: ['dashboard', 'recent-transactions'],
-      queryFn: () => api.get('/dashboard/recent-transactions').then((r) => r.data),
+      queryFn: () => api.get('/dashboard/recent-transactions').then((r) => r.data as Transaction[]),
     });
 
   const { data: recurringData, isLoading: recurringLoading, isError: recurringError } =
@@ -728,7 +742,7 @@ export default function DashboardPage() {
   const { data: goalsData, isLoading: goalsLoading, isError: goalsError } =
     useQuery<GoalsData>({
       queryKey: ['dashboard', 'goals-summary'],
-      queryFn: () => api.get('/dashboard/goals-summary').then((r) => r.data),
+      queryFn: () => api.get('/dashboard/goals-summary').then((r) => ({ goals: r.data as Goal[] })),
     });
 
   return (

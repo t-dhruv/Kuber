@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import { Plus } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -22,64 +22,97 @@ const fmtDate = (d: string) =>
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Matches server: buildHoldingWithSimulatedPrices
 interface Holding {
   id: string;
-  name: string;
+  accountId: string;
+  accountName: string;
   ticker: string;
+  name: string;
   shares: number;
-  price: number;
-  value: number;
+  costBasis: number;
+  currentPrice: number;
+  currentValue: number;
+  totalCost: number;
+  gain: number;
+  gainPercent: number;
   dayChange: number;
-  dayChangePct: number;
-  totalReturn: number;
-  totalReturnPct: number;
-  accountId?: string;
+  dayChangePercent: number;
 }
 
+// Matches server GET /investments/holdings response
 interface HoldingsData {
   holdings: Holding[];
   totalValue: number;
+  totalCostBasis: number;
   totalGain: number;
-  totalReturnPct: number;
+  totalGainPercent: number;
 }
 
-interface AllocationSegment {
+// Matches server GET /investments/allocation byAssetClass entries
+interface AssetClassSegment {
   assetClass: string;
   value: number;
   percent: number;
 }
 
+// Matches server GET /investments/allocation holdings entries
+interface AllocationHolding {
+  ticker: string;
+  name: string;
+  value: number;
+  percent: number;
+  type: string; // asset class label
+}
+
+// Matches server GET /investments/allocation response
 interface AllocationData {
-  segments: AllocationSegment[];
   totalValue: number;
-  holdings: Array<{
-    ticker: string;
-    assetClass: string;
+  byAssetClass: AssetClassSegment[];
+  byAccount: Array<{
+    accountId: string;
+    accountName: string;
     value: number;
     percent: number;
   }>;
+  holdings: AllocationHolding[];
 }
 
-interface PerformancePoint {
+// Matches server GET /investments/performance history entries
+interface HistoryPoint {
   date: string;
-  portfolio: number;
+  value: number;
+}
+
+// Matches server GET /investments/performance benchmarks object
+interface BenchmarksObj {
   sp500: number;
+  usBonds: number;
+  usStocks: number;
 }
 
-interface Benchmark {
-  name: string;
-  returnPct: number;
-  todayPct: number;
-}
-
+// Matches server GET /investments/performance response
 interface PerformanceData {
-  points: PerformancePoint[];
-  benchmarks: Benchmark[];
+  period: string;
+  portfolioReturn: number;
+  portfolioReturnValue: number;
+  benchmarks: BenchmarksObj;
+  history: HistoryPoint[];
+}
+
+// Matches server GET /accounts response groups structure
+interface AccountGroup {
+  accounts: InvestmentAccount[];
 }
 
 interface InvestmentAccount {
   id: string;
   name: string;
+}
+
+interface AccountsResponse {
+  groups: AccountGroup[];
+  netWorth: number;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -191,14 +224,35 @@ function GainBadge({ amount, pct, showArrow = true }: { amount: number; pct: num
 
 // ─── Performance Cards ────────────────────────────────────────────────────────
 
-function PerformanceCards({ benchmarks, period, isLoading }: {
-  benchmarks?: Benchmark[];
+// Benchmark cards: server returns { sp500, usBonds, usStocks } as a plain object.
+// We convert to a display-friendly array here on the client.
+interface BenchmarkCard {
+  name: string;
+  returnPct: number;
+}
+
+function benchmarksToCards(
+  performanceData: PerformanceData | undefined,
+): BenchmarkCard[] {
+  if (!performanceData) return [];
+
+  const { portfolioReturn, benchmarks } = performanceData;
+  return [
+    { name: 'Your Portfolio', returnPct: portfolioReturn },
+    { name: 'S&P 500', returnPct: benchmarks.sp500 },
+    { name: 'US Stocks', returnPct: benchmarks.usStocks },
+    { name: 'US Bonds', returnPct: benchmarks.usBonds },
+  ];
+}
+
+function PerformanceCards({ performanceData, period, isLoading }: {
+  performanceData?: PerformanceData;
   period: Period;
   isLoading: boolean;
 }) {
   const cards = isLoading
-    ? Array.from({ length: 4 }, (_, i) => ({ name: '', returnPct: 0, todayPct: 0, key: i }))
-    : (benchmarks ?? []).map((b, i) => ({ ...b, key: i }));
+    ? Array.from({ length: 4 }, (_, i) => ({ name: '', returnPct: 0, key: i }))
+    : benchmarksToCards(performanceData).map((b, i) => ({ ...b, key: i }));
 
   return (
     <div style={{
@@ -250,13 +304,6 @@ function PerformanceCards({ benchmarks, period, isLoading }: {
               }}>
                 {fmtPct(card.returnPct)} ({period})
               </div>
-              <div style={{
-                fontSize: '0.75rem',
-                marginTop: '0.125rem',
-                color: card.todayPct >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
-              }}>
-                {card.todayPct >= 0 ? '+' : ''}{card.todayPct.toFixed(2)}% today
-              </div>
             </>
           )}
         </div>
@@ -267,7 +314,9 @@ function PerformanceCards({ benchmarks, period, isLoading }: {
 
 // ─── Performance Chart ────────────────────────────────────────────────────────
 
-function PerformanceChart({ data, isLoading }: { data?: PerformancePoint[]; isLoading: boolean }) {
+// Server returns history as { date, value } points — portfolio absolute value.
+// Chart displays value directly (no sp500 overlay since server doesn't provide it per-point).
+function PerformanceChart({ data, isLoading }: { data?: HistoryPoint[]; isLoading: boolean }) {
   return (
     <Card padding="lg">
       {isLoading ? (
@@ -288,14 +337,11 @@ function PerformanceChart({ data, isLoading }: { data?: PerformancePoint[]; isLo
                 tickLine={false}
                 axisLine={false}
                 tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-                tickFormatter={(v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`}
-                width={44}
+                tickFormatter={(v: number) => fmtCurrency(v)}
+                width={72}
               />
               <Tooltip
-                formatter={(value: number, name: string) => [
-                  `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`,
-                  name === 'portfolio' ? 'Your Portfolio' : 'S&P 500',
-                ]}
+                formatter={(value: number) => [fmtCurrency(value), 'Portfolio Value']}
                 labelFormatter={(label: string) => fmtDate(label)}
                 contentStyle={{
                   backgroundColor: 'var(--color-surface)',
@@ -306,19 +352,10 @@ function PerformanceChart({ data, isLoading }: { data?: PerformancePoint[]; isLo
               />
               <Line
                 type="monotone"
-                dataKey="portfolio"
+                dataKey="value"
                 stroke="#E5622A"
                 strokeWidth={2}
                 dot={false}
-                activeDot={{ r: 4 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="sp500"
-                stroke="#0c8599"
-                strokeWidth={2}
-                dot={false}
-                strokeDasharray="4 2"
                 activeDot={{ r: 4 }}
               />
             </LineChart>
@@ -366,7 +403,8 @@ function TickerAvatar({ ticker, positive }: { ticker: string; positive: boolean 
 const TABLE_HEADERS = ['Security', 'Ticker', 'Shares', 'Price', 'Value', 'Day Change', 'Total Return'];
 
 function HoldingsTable({ data, isLoading }: { data?: HoldingsData; isLoading: boolean }) {
-  const sorted = [...(data?.holdings ?? [])].sort((a, b) => b.value - a.value);
+  // Sort by currentValue descending
+  const sorted = [...(data?.holdings ?? [])].sort((a, b) => b.currentValue - a.currentValue);
 
   return (
     <Card padding="lg">
@@ -439,16 +477,16 @@ function HoldingsTable({ data, isLoading }: { data?: HoldingsData; isLoading: bo
                     {h.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}
                   </td>
                   <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
-                    {fmtCurrency(h.price)}
+                    {fmtCurrency(h.currentPrice)}
                   </td>
                   <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {fmtCurrency(h.value)}
+                    {fmtCurrency(h.currentValue)}
                   </td>
                   <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                    <GainBadge amount={h.dayChange} pct={h.dayChangePct} />
+                    <GainBadge amount={h.dayChange} pct={h.dayChangePercent} />
                   </td>
                   <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                    <GainBadge amount={h.totalReturn} pct={h.totalReturnPct} showArrow={false} />
+                    <GainBadge amount={h.gain} pct={h.gainPercent} showArrow={false} />
                   </td>
                 </tr>
               ))
@@ -465,7 +503,7 @@ function HoldingsTable({ data, isLoading }: { data?: HoldingsData; isLoading: bo
                 </td>
                 <td />
                 <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                  <GainBadge amount={data.totalGain} pct={data.totalReturnPct} showArrow={false} />
+                  <GainBadge amount={data.totalGain} pct={data.totalGainPercent} showArrow={false} />
                 </td>
               </tr>
             </tfoot>
@@ -482,6 +520,9 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
   if (isLoading) return <Skeleton height={320} width="100%" />;
   if (!data) return null;
 
+  // Use byAssetClass for the donut (matches server field name)
+  const segments = data.byAssetClass;
+
   return (
     <Card padding="lg">
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -490,7 +531,7 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
           <ResponsiveContainer width={260} height={260}>
             <PieChart>
               <Pie
-                data={data.segments}
+                data={segments}
                 dataKey="value"
                 nameKey="assetClass"
                 cx="50%"
@@ -500,7 +541,7 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
                 paddingAngle={2}
                 strokeWidth={0}
               >
-                {data.segments.map((_, idx) => (
+                {segments.map((_, idx) => (
                   <Cell key={idx} fill={ALLOCATION_COLORS[idx % ALLOCATION_COLORS.length]} />
                 ))}
               </Pie>
@@ -526,7 +567,7 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
 
         {/* Legend */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', flex: 1, minWidth: 180 }}>
-          {data.segments.map((seg, idx) => (
+          {segments.map((seg, idx) => (
             <div key={seg.assetClass} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
               <div style={{
                 width: 10,
@@ -614,7 +655,7 @@ function AllocationTable({ data, isLoading }: { data?: AllocationData; isLoading
                   {h.ticker}
                 </td>
                 <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
-                  {h.assetClass}
+                  {h.type}
                 </td>
                 <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
                   {fmtCurrency(h.value)}
@@ -790,12 +831,13 @@ export default function InvestmentsPage() {
       api.get(`/investments/performance?period=${period}`).then((r) => r.data),
   });
 
-  const { data: accountsData } = useQuery<{ accounts: InvestmentAccount[] }>({
+  // Server returns { groups: [...], netWorth } — flatten all accounts from all groups
+  const { data: accountsData } = useQuery<AccountsResponse>({
     queryKey: ['investments-accounts'],
     queryFn: () => api.get('/accounts?type=investment').then((r) => r.data),
   });
 
-  const accounts = accountsData?.accounts ?? [];
+  const accounts: InvestmentAccount[] = accountsData?.groups?.flatMap((g) => g.accounts) ?? [];
 
   const accountOptions = [
     { value: '', label: 'All accounts' },
@@ -864,12 +906,12 @@ export default function InvestmentsPage() {
       {tab === 'holdings' && (
         <>
           <PerformanceCards
-            benchmarks={performanceData?.benchmarks}
+            performanceData={performanceData}
             period={period}
             isLoading={performanceLoading}
           />
           <PerformanceChart
-            data={performanceData?.points}
+            data={performanceData?.history}
             isLoading={performanceLoading}
           />
           <HoldingsTable data={holdingsData} isLoading={holdingsLoading} />

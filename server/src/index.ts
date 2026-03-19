@@ -17,6 +17,7 @@ import investmentsRouter from './routes/investments';
 import settingsRouter from './routes/settings';
 import notificationsRouter from './routes/notifications';
 import advisorRouter from './routes/advisor';
+import categoriesRouter from './routes/categories';
 import { requireAuth } from './middleware/auth';
 
 const app = express();
@@ -43,6 +44,7 @@ app.use('/api/v1/recurring', requireAuth, recurringRouter);
 app.use('/api/v1/goals', requireAuth, goalsRouter);
 app.use('/api/v1/investments', requireAuth, investmentsRouter);
 app.use('/api/v1/settings', requireAuth, settingsRouter);
+app.use('/api/v1/categories', requireAuth, categoriesRouter);
 app.use('/api/v1/notifications', requireAuth, notificationsRouter);
 app.use('/api/v1/advisor', requireAuth, advisorRouter);
 

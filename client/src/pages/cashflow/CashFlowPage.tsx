@@ -23,61 +23,66 @@ interface MonthSummary {
   income: number;
   expenses: number;
   net: number;
+  savingsRate: number;
 }
 
+// Matches GET /api/v1/cashflow response exactly
 interface YearData {
   year: number;
   months: MonthSummary[];
   ytdIncome: number;
   ytdExpenses: number;
   ytdNet: number;
-  avgMonthlySavingsPct: number;
+  ytdSavingsRate: number;
+  averageMonthlyIncome: number;
+  averageMonthlyExpenses: number;
 }
 
+// Matches items in income.byCategory from GET /api/v1/cashflow/month
 interface IncomeCategory {
-  id: string;
-  name: string;
-  icon: string;
-  amount: number;
-  pctOfTotal: number;
-}
-
-interface ExpenseCategory {
-  id: string;
-  name: string;
-  icon: string;
-  amount: number;
-  pctOfGroupTotal: number;
-  pctOfExpenses: number;
-}
-
-interface ExpenseGroup {
-  id: string;
-  name: string;
-  amount: number;
-  pctOfTotal: number;
-  categories: ExpenseCategory[];
-}
-
-interface BudgetRow {
   categoryId: string;
   categoryName: string;
-  budget: number;
-  actual: number;
-  remaining: number;
-  pctOfIncome: number;
+  categoryIcon: string | null;
+  amount: number;
+  percent: number;
 }
 
+// Matches items in expenses.byGroup[].categories from GET /api/v1/cashflow/month
+interface ExpenseCategoryItem {
+  categoryId: string;
+  categoryName: string;
+  categoryIcon: string | null;
+  amount: number;
+  percent: number;       // percent of total expenses
+  groupName: string;
+  groupId: string;
+}
+
+// Matches items in expenses.byGroup from GET /api/v1/cashflow/month
+interface ExpenseGroup {
+  groupName: string;
+  amount: number;
+  percent: number;       // percent of total expenses
+  categories: ExpenseCategoryItem[];
+}
+
+// Matches GET /api/v1/cashflow/month response exactly
 interface MonthData {
   year: number;
   month: number;
-  income: number;
-  expenses: number;
+  income: {
+    total: number;
+    byCategory: IncomeCategory[];
+  };
+  expenses: {
+    total: number;
+    byCategory: ExpenseCategoryItem[];
+    byGroup: ExpenseGroup[];
+  };
   net: number;
-  savingsPct: number;
-  incomeCategories: IncomeCategory[];
-  expenseGroups: ExpenseGroup[];
-  budgetRows: BudgetRow[];
+  savingsRate: number;
+  topExpenseCategories: Array<{ name: string; amount: number; percent: number }>;
+  dailyFlow: Array<{ day: number; income: number; expenses: number }>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -341,13 +346,13 @@ function KpiCards({ data, isLoading }: { data?: MonthData; isLoading: boolean })
   const cards = [
     {
       label: `Income — ${monthName}`,
-      value: data?.income ?? 0,
+      value: data?.income?.total ?? 0,
       color: 'var(--color-success)',
       format: fmtCurrency,
     },
     {
       label: `Expenses — ${monthName}`,
-      value: data?.expenses ?? 0,
+      value: data?.expenses?.total ?? 0,
       color: 'var(--color-danger)',
       format: fmtCurrency,
     },
@@ -359,8 +364,8 @@ function KpiCards({ data, isLoading }: { data?: MonthData; isLoading: boolean })
     },
     {
       label: 'Savings Rate',
-      value: data?.savingsPct ?? 0,
-      color: savingsColor(data?.savingsPct ?? 0),
+      value: data?.savingsRate ?? 0,
+      color: savingsColor(data?.savingsRate ?? 0),
       format: fmtPct,
     },
   ];
@@ -396,7 +401,7 @@ function KpiCards({ data, isLoading }: { data?: MonthData; isLoading: boolean })
 
 // ─── Section 3: Month Detail ──────────────────────────────────────────────────
 
-type DetailTab = 'Bar Chart' | 'Table' | 'Sankey';
+type DetailTab = 'Bar Chart' | 'Sankey';
 
 function MonthDetail({ data, isLoading, selectedMonth }: { data?: MonthData; isLoading: boolean; selectedMonth: number }) {
   const [tab, setTab] = useState<DetailTab>('Bar Chart');
@@ -413,7 +418,7 @@ function MonthDetail({ data, isLoading, selectedMonth }: { data?: MonthData; isL
     });
   }
 
-  const TABS: DetailTab[] = ['Bar Chart', 'Table', 'Sankey'];
+  const TABS: DetailTab[] = ['Bar Chart', 'Sankey'];
 
   return (
     <Card padding="lg">
@@ -452,14 +457,12 @@ function MonthDetail({ data, isLoading, selectedMonth }: { data?: MonthData; isL
         </div>
       ) : tab === 'Sankey' ? (
         <SankeyPlaceholder />
-      ) : tab === 'Bar Chart' ? (
+      ) : (
         <BarChartView
           data={data}
           collapsedGroups={collapsedGroups}
           onToggleGroup={toggleGroup}
         />
-      ) : (
-        <TableView data={data} />
       )}
     </Card>
   );
@@ -511,24 +514,27 @@ function BarChartView({
     return <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', padding: '1rem 0' }}>No data for this month.</div>;
   }
 
+  const incomeCategories = data.income?.byCategory ?? [];
+  const expenseGroups = data.expenses?.byGroup ?? [];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Income section */}
       <div>
         <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-success)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-          Income — {fmtCurrency(data.income)}
+          Income — {fmtCurrency(data.income?.total ?? 0)}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-          {(data.incomeCategories ?? []).map((cat) => (
-            <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1rem', width: 20, textAlign: 'center' }}>{cat.icon}</span>
-              <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', minWidth: 120, whiteSpace: 'nowrap' }}>{cat.name}</span>
-              <HorizontalBar pct={cat.pctOfTotal} color="var(--color-success)" />
+          {incomeCategories.map((cat) => (
+            <div key={cat.categoryId} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '1rem', width: 20, textAlign: 'center' }}>{cat.categoryIcon ?? ''}</span>
+              <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', minWidth: 120, whiteSpace: 'nowrap' }}>{cat.categoryName}</span>
+              <HorizontalBar pct={cat.percent} color="var(--color-success)" />
               <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', minWidth: 72, textAlign: 'right' }}>{fmtCurrency(cat.amount)}</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(cat.pctOfTotal)}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(cat.percent)}</span>
             </div>
           ))}
-          {(!data.incomeCategories || data.incomeCategories.length === 0) && (
+          {incomeCategories.length === 0 && (
             <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>No income categories.</span>
           )}
         </div>
@@ -539,16 +545,16 @@ function BarChartView({
       {/* Expenses section */}
       <div>
         <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-danger)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-          Expenses — {fmtCurrency(data.expenses)}
+          Expenses — {fmtCurrency(data.expenses?.total ?? 0)}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          {(data.expenseGroups ?? []).map((group) => {
-            const collapsed = collapsedGroups.has(group.id);
+          {expenseGroups.map((group) => {
+            const collapsed = collapsedGroups.has(group.groupName);
             return (
-              <div key={group.id}>
+              <div key={group.groupName}>
                 {/* Group row */}
                 <button
-                  onClick={() => onToggleGroup(group.id)}
+                  onClick={() => onToggleGroup(group.groupName)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '0.75rem',
                     width: '100%', background: 'none', border: 'none', cursor: 'pointer',
@@ -562,113 +568,40 @@ function BarChartView({
                   <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 12 }}>
                     {collapsed ? '▶' : '▾'}
                   </span>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', flex: 1 }}>{group.name}</span>
-                  <HorizontalBar pct={group.pctOfTotal} color="var(--color-danger)" />
+                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', flex: 1 }}>{group.groupName}</span>
+                  <HorizontalBar pct={group.percent} color="var(--color-danger)" />
                   <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', minWidth: 72, textAlign: 'right' }}>{fmtCurrency(group.amount)}</span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(group.pctOfTotal)}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(group.percent)}</span>
                 </button>
 
                 {/* Category rows */}
                 {!collapsed && (
                   <div style={{ paddingLeft: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.125rem', marginBottom: '0.25rem' }}>
-                    {group.categories.map((cat) => (
-                      <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.25rem 0.25rem' }}>
-                        <span style={{ fontSize: '0.9375rem', width: 20, textAlign: 'center' }}>{cat.icon}</span>
-                        <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', flex: 1 }}>{cat.name}</span>
-                        <HorizontalBar pct={cat.pctOfGroupTotal} color="var(--color-danger)" />
-                        <span style={{ fontSize: '0.8125rem', color: 'var(--color-text)', minWidth: 72, textAlign: 'right' }}>{fmtCurrency(cat.amount)}</span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(cat.pctOfGroupTotal)}</span>
-                      </div>
-                    ))}
+                    {group.categories.map((cat) => {
+                      // percent here is cat's share of total expenses; compute share within group
+                      const groupPct = group.percent > 0
+                        ? (cat.amount / group.amount) * 100
+                        : 0;
+                      return (
+                        <div key={cat.categoryId} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.25rem 0.25rem' }}>
+                          <span style={{ fontSize: '0.9375rem', width: 20, textAlign: 'center' }}>{cat.categoryIcon ?? ''}</span>
+                          <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', flex: 1 }}>{cat.categoryName}</span>
+                          <HorizontalBar pct={groupPct} color="var(--color-danger)" />
+                          <span style={{ fontSize: '0.8125rem', color: 'var(--color-text)', minWidth: 72, textAlign: 'right' }}>{fmtCurrency(cat.amount)}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(groupPct)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
             );
           })}
-          {(!data.expenseGroups || data.expenseGroups.length === 0) && (
+          {expenseGroups.length === 0 && (
             <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>No expense data.</span>
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── Table view ───────────────────────────────────────────────────────────────
-
-function TableView({ data }: { data?: MonthData }) {
-  if (!data) {
-    return <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', padding: '1rem 0' }}>No data for this month.</div>;
-  }
-
-  const rows = data.budgetRows ?? [];
-  const totalBudget = rows.reduce((s, r) => s + r.budget, 0);
-  const totalActual = rows.reduce((s, r) => s + r.actual, 0);
-  const totalRemaining = rows.reduce((s, r) => s + r.remaining, 0);
-
-  const COL_STYLE: React.CSSProperties = {
-    padding: '0.625rem 0.75rem',
-    fontSize: '0.8125rem',
-    textAlign: 'right',
-  };
-  const COL_STYLE_LEFT: React.CSSProperties = {
-    ...COL_STYLE,
-    textAlign: 'left',
-  };
-
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
-            {['Category', 'Budget', 'Actual', 'Remaining', '% of Income'].map((h, i) => (
-              <th
-                key={h}
-                style={{
-                  ...( i === 0 ? COL_STYLE_LEFT : COL_STYLE),
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  color: 'var(--color-text-secondary)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  paddingBottom: '0.5rem',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, idx) => (
-            <tr
-              key={row.categoryId}
-              style={{
-                borderBottom: idx < rows.length - 1 ? '1px solid var(--color-border)' : 'none',
-                backgroundColor: 'transparent',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-            >
-              <td style={{ ...COL_STYLE_LEFT, color: 'var(--color-text)', fontWeight: 500 }}>{row.categoryName}</td>
-              <td style={{ ...COL_STYLE, color: 'var(--color-text-secondary)' }}>{fmtCurrency(row.budget)}</td>
-              <td style={{ ...COL_STYLE, color: row.actual > row.budget ? 'var(--color-danger)' : 'var(--color-text)', fontWeight: 500 }}>{fmtCurrency(row.actual)}</td>
-              <td style={{ ...COL_STYLE, color: row.remaining >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{fmtCurrency(row.remaining)}</td>
-              <td style={{ ...COL_STYLE, color: 'var(--color-text-secondary)' }}>{fmtPct(row.pctOfIncome)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr style={{ borderTop: '2px solid var(--color-border)' }}>
-            <td style={{ ...COL_STYLE_LEFT, fontWeight: 700, color: 'var(--color-text)' }}>Total</td>
-            <td style={{ ...COL_STYLE, fontWeight: 600, color: 'var(--color-text)' }}>{fmtCurrency(totalBudget)}</td>
-            <td style={{ ...COL_STYLE, fontWeight: 600, color: totalActual > totalBudget ? 'var(--color-danger)' : 'var(--color-text)' }}>{fmtCurrency(totalActual)}</td>
-            <td style={{ ...COL_STYLE, fontWeight: 600, color: totalRemaining >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>{fmtCurrency(totalRemaining)}</td>
-            <td style={{ ...COL_STYLE, color: 'var(--color-text-secondary)' }}>—</td>
-          </tr>
-        </tfoot>
-      </table>
     </div>
   );
 }
@@ -680,7 +613,7 @@ function YtdSummary({ data, isLoading }: { data?: YearData; isLoading: boolean }
     { label: 'YTD Income', value: data?.ytdIncome ?? 0, color: 'var(--color-success)', format: fmtCurrency },
     { label: 'YTD Expenses', value: data?.ytdExpenses ?? 0, color: 'var(--color-danger)', format: fmtCurrency },
     { label: 'YTD Net', value: data?.ytdNet ?? 0, color: netColor(data?.ytdNet ?? 0), format: fmtCurrency },
-    { label: 'Avg Monthly Savings', value: data?.avgMonthlySavingsPct ?? 0, color: savingsColor(data?.avgMonthlySavingsPct ?? 0), format: fmtPct },
+    { label: 'YTD Savings Rate', value: data?.ytdSavingsRate ?? 0, color: savingsColor(data?.ytdSavingsRate ?? 0), format: fmtPct },
   ];
 
   return (

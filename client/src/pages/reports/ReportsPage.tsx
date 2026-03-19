@@ -114,24 +114,24 @@ interface CategoryBreakdown {
   name: string;
   icon?: string;
   amount: number;
-  pct: number;
+  percent: number;
   transactionCount: number;
 }
 
 interface SpendingReport {
-  totalAmount: number;
-  largestTransaction?: { merchant: string; amount: number };
-  averageTransaction: number;
-  totalTransactions: number;
-  categories: CategoryBreakdown[];
+  total: number;
+  largest?: { merchantName: string; amount: number };
+  average: number;
+  transactionCount: number;
+  items: CategoryBreakdown[];
 }
 
 interface IncomeReport {
-  totalAmount: number;
-  largestTransaction?: { merchant: string; amount: number };
-  averageTransaction: number;
-  totalTransactions: number;
-  categories: CategoryBreakdown[];
+  total: number;
+  largest?: { merchantName: string; amount: number };
+  average: number;
+  transactionCount: number;
+  items: CategoryBreakdown[];
 }
 
 interface CashFlowMonth {
@@ -142,11 +142,11 @@ interface CashFlowMonth {
 }
 
 interface CashFlowReport {
-  totalIncome: number;
-  totalExpenses: number;
-  netIncome: number;
+  income: number;
+  expenses: number;
+  net: number;
   savingsRate: number;
-  months: CashFlowMonth[];
+  byMonth: CashFlowMonth[];
 }
 
 interface ReportTransaction {
@@ -161,10 +161,10 @@ interface ReportTransaction {
 }
 
 interface TransactionsResponse {
-  data: ReportTransaction[];
+  transactions: ReportTransaction[];
   total: number;
   page: number;
-  pageSize: number;
+  totalPages: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -411,18 +411,18 @@ function CashFlowTab({
   const kpiCards = [
     {
       label: 'Total Income',
-      value: fmtCurrencySigned(data?.totalIncome ?? 0),
+      value: fmtCurrencySigned(data?.income ?? 0),
       color: 'var(--color-success)',
     },
     {
       label: 'Total Expenses',
-      value: fmtCurrencySigned(data?.totalExpenses ?? 0),
+      value: fmtCurrencySigned(data?.expenses ?? 0),
       color: 'var(--color-danger)',
     },
     {
       label: 'Net Income',
-      value: fmtCurrencySigned(data?.netIncome ?? 0),
-      color: netColor(data?.netIncome ?? 0),
+      value: fmtCurrencySigned(data?.net ?? 0),
+      color: netColor(data?.net ?? 0),
     },
     {
       label: 'Savings Rate',
@@ -433,8 +433,8 @@ function CashFlowTab({
 
   // Build chart data keyed by month index
   const chartData = useMemo(() => {
-    if (!data?.months) return [];
-    return data.months.map((m) => ({
+    if (!data?.byMonth) return [];
+    return data.byMonth.map((m) => ({
       month: MONTH_NAMES[m.month - 1],
       monthIndex: m.month,
       income: m.income,
@@ -578,9 +578,9 @@ function CategoryTab({ mode, startDate, endDate }: CategoryTabProps) {
         .then((r) => r.data),
   });
 
-  const categories = reportData?.categories ?? [];
+  const categories = reportData?.items ?? [];
   const displayedCategories = showAll ? categories : categories.slice(0, 8);
-  const total = reportData?.totalAmount ?? 0;
+  const total = reportData?.total ?? 0;
 
   // KPI cards
   const color = mode === 'spending' ? 'var(--color-danger)' : 'var(--color-success)';
@@ -592,19 +592,19 @@ function CategoryTab({ mode, startDate, endDate }: CategoryTabProps) {
     },
     {
       label: 'Transactions',
-      value: String(reportData?.totalTransactions ?? 0),
+      value: String(reportData?.transactionCount ?? 0),
       color: 'var(--color-text)',
     },
     {
       label: 'Largest Transaction',
-      value: reportData?.largestTransaction
-        ? fmtCurrency(reportData.largestTransaction.amount)
+      value: reportData?.largest
+        ? fmtCurrency(reportData.largest.amount)
         : '—',
       color: 'var(--color-text)',
     },
     {
       label: 'Avg Transaction',
-      value: fmtCurrency(reportData?.averageTransaction ?? 0),
+      value: fmtCurrency(reportData?.average ?? 0),
       color: 'var(--color-text-secondary)',
     },
   ];
@@ -626,11 +626,11 @@ function CategoryTab({ mode, startDate, endDate }: CategoryTabProps) {
   const pieData = displayedCategories.map((cat, i) => ({
     name: cat.name,
     value: cat.amount,
-    pct: cat.pct,
+    pct: cat.percent,
     color: CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length],
   }));
 
-  const transactions = txData?.data ?? [];
+  const transactions = txData?.transactions ?? [];
   const txTotal = txData?.total ?? 0;
 
   return (
@@ -728,7 +728,7 @@ function CategoryTab({ mode, startDate, endDate }: CategoryTabProps) {
                       {fmtCurrency(cat.amount)}
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>
-                      {fmtPct(cat.pct)}
+                      {fmtPct(cat.percent)}
                     </span>
                   </div>
                 ))}
@@ -776,16 +776,16 @@ function CategoryTab({ mode, startDate, endDate }: CategoryTabProps) {
                   Summary
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <SummaryRow label="Total transactions" value={String(reportData?.totalTransactions ?? 0)} />
-                  {reportData?.largestTransaction && (
+                  <SummaryRow label="Total transactions" value={String(reportData?.transactionCount ?? 0)} />
+                  {reportData?.largest && (
                     <SummaryRow
                       label="Largest transaction"
-                      value={`${reportData.largestTransaction.merchant} — ${fmtCurrency(reportData.largestTransaction.amount)}`}
+                      value={`${reportData.largest.merchantName} — ${fmtCurrency(reportData.largest.amount)}`}
                     />
                   )}
                   <SummaryRow
                     label="Average transaction"
-                    value={fmtCurrency(reportData?.averageTransaction ?? 0)}
+                    value={fmtCurrency(reportData?.average ?? 0)}
                   />
                 </div>
               </div>
@@ -824,7 +824,7 @@ function CategoryTab({ mode, startDate, endDate }: CategoryTabProps) {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: '1rem' }}>
                         <HorizontalBar
-                          pct={cat.pct}
+                          pct={cat.percent}
                           color={CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length]}
                         />
                         <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>

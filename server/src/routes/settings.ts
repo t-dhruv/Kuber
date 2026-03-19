@@ -231,6 +231,45 @@ router.post('/household/invite', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// DELETE /api/v1/settings/household/members/:id
+router.delete('/household/members/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const userId = req.userId!;
+    const { id: targetUserId } = req.params;
+
+    // Verify requesting user is the household owner
+    const membership = await prisma.householdMember.findUnique({
+      where: { userId_householdId: { userId, householdId } },
+    });
+    if (!membership || membership.role.toLowerCase() !== 'owner') {
+      return res.status(403).json({ error: 'Only the owner can remove members' });
+    }
+
+    // Prevent owner from removing themselves
+    if (targetUserId === userId) {
+      return res.status(400).json({ error: 'Owner cannot remove themselves from the household' });
+    }
+
+    // Verify target member belongs to this household
+    const targetMembership = await prisma.householdMember.findUnique({
+      where: { userId_householdId: { userId: targetUserId, householdId } },
+    });
+    if (!targetMembership) {
+      return res.status(404).json({ error: 'Member not found in this household' });
+    }
+
+    await prisma.householdMember.delete({
+      where: { userId_householdId: { userId: targetUserId, householdId } },
+    });
+
+    return res.json({ message: 'Member removed' });
+  } catch (err) {
+    console.error('[settings/household/members DELETE]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/v1/settings/categories
 router.get('/categories', async (req: AuthRequest, res: Response) => {
   try {

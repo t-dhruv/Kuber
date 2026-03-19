@@ -17,8 +17,8 @@ interface Goal {
   id: string;
   name: string;
   type: GoalType;
-  current: number;
-  target: number;
+  currentAmount: number;
+  targetAmount: number;
   targetDate?: string;
   monthlyContribution?: number;
   status: GoalStatus;
@@ -28,18 +28,18 @@ interface Goal {
 interface GoalFormValues {
   name: string;
   type: GoalType;
-  target: string;
+  targetAmount: string;
   targetDate: string;
-  startingAmount: string;
+  currentAmount: string;
   monthlyContribution: string;
 }
 
 const EMPTY_GOAL_FORM: GoalFormValues = {
   name: '',
   type: 'savings',
-  target: '',
+  targetAmount: '',
   targetDate: '',
-  startingAmount: '0',
+  currentAmount: '0',
   monthlyContribution: '',
 };
 
@@ -169,7 +169,7 @@ function GoalCard({
   onDelete: () => void;
   onContribute: () => void;
 }) {
-  const pct = goal.target > 0 ? Math.min(goal.current / goal.target, 1) : 0;
+  const pct = goal.targetAmount > 0 ? Math.min(goal.currentAmount / goal.targetAmount, 1) : 0;
   const statusStyle = goalStatusStyle(goal.status);
   const gradient = GOAL_GRADIENTS[goal.type] ?? GOAL_GRADIENTS.other;
   const typeInfo = GOAL_TYPES.find((t) => t.value === goal.type) ?? GOAL_TYPES[6];
@@ -233,9 +233,9 @@ function GoalCard({
 
         {/* Amounts */}
         <div style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
-          <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{fmtCurrency(goal.current)}</span>
+          <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{fmtCurrency(goal.currentAmount)}</span>
           {' / '}
-          {fmtCurrency(goal.target)}
+          {fmtCurrency(goal.targetAmount)}
         </div>
 
         {/* Target date + monthly */}
@@ -307,9 +307,9 @@ function AddGoalModal({
       setForm({
         name: editing.name,
         type: editing.type,
-        target: String(editing.target),
+        targetAmount: String(editing.targetAmount),
         targetDate: editing.targetDate ? editing.targetDate.slice(0, 10) : '',
-        startingAmount: String(editing.current),
+        currentAmount: String(editing.currentAmount),
         monthlyContribution: editing.monthlyContribution != null ? String(editing.monthlyContribution) : '',
       });
     } else {
@@ -346,9 +346,9 @@ function AddGoalModal({
     const body = {
       name: form.name.trim(),
       type: form.type,
-      target: parseFloat(form.target),
+      targetAmount: parseFloat(form.targetAmount),
       targetDate: form.targetDate || undefined,
-      startingAmount: parseFloat(form.startingAmount) || 0,
+      currentAmount: parseFloat(form.currentAmount) || 0,
       monthlyContribution: form.monthlyContribution ? parseFloat(form.monthlyContribution) : undefined,
     };
     if (editing) {
@@ -415,8 +415,8 @@ function AddGoalModal({
               step="0.01"
               min="0"
               placeholder="10000"
-              value={form.target}
-              onChange={(e) => set('target', e.target.value)}
+              value={form.targetAmount}
+              onChange={(e) => set('targetAmount', e.target.value)}
               required
             />
             <Input
@@ -433,8 +433,8 @@ function AddGoalModal({
               step="0.01"
               min="0"
               placeholder="0"
-              value={form.startingAmount}
-              onChange={(e) => set('startingAmount', e.target.value)}
+              value={form.currentAmount}
+              onChange={(e) => set('currentAmount', e.target.value)}
             />
             <Input
               label="Monthly contribution"
@@ -491,8 +491,8 @@ function ContributeModal({
     contributeMut.mutate({ amount: parseFloat(form.amount) });
   }
 
-  const remaining = goal ? Math.max(goal.target - goal.current, 0) : 0;
-  const pct = goal && goal.target > 0 ? Math.min(goal.current / goal.target, 1) : 0;
+  const remaining = goal ? Math.max(goal.targetAmount - goal.currentAmount, 0) : 0;
+  const pct = goal && goal.targetAmount > 0 ? Math.min(goal.currentAmount / goal.targetAmount, 1) : 0;
 
   return (
     <Modal open={open} onClose={onClose} title="Add Funds" size="sm">
@@ -508,7 +508,7 @@ function ContributeModal({
             }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-            <span>{fmtCurrency(goal.current)} saved</span>
+            <span>{fmtCurrency(goal.currentAmount)} saved</span>
             <span>{fmtCurrency(remaining)} to go</span>
           </div>
         </div>

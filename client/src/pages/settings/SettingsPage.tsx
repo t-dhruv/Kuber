@@ -36,27 +36,30 @@ interface HouseholdData {
   name: string;
   currency: string;
   members: HouseholdMember[];
-  currentUserId: string;
-  isOwner: boolean;
 }
 
 interface HouseholdMember {
-  id: string;
-  name: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
   email: string;
   role: string;
-  avatarUrl?: string | null;
+  joinedAt: string;
 }
 
 interface Category {
   id: string;
   name: string;
-  emoji: string;
-  group: string;
+  emoji: string | null;
+  groupId: string | null;
+  groupName: string | null;
+  group?: { id: string; name: string } | null;
 }
 
-interface CategoriesData {
-  groups: { name: string; categories: Category[] }[];
+interface CategoryGroup {
+  id: string | null;
+  name: string;
+  categories: Category[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -339,17 +342,18 @@ function NotificationsSection() {
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_NOTIF_PREFS);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data, isLoading } = useQuery<NotificationPrefs>({
+  const { data, isLoading } = useQuery<{ preferences: NotificationPrefs }>({
     queryKey: ['settings', 'notifications'],
     queryFn: () => api.get('/settings/notifications').then((r) => r.data),
   });
 
   useEffect(() => {
-    if (data) setPrefs(data);
+    if (data?.preferences) setPrefs(data.preferences);
   }, [data]);
 
   const saveMutation = useMutation({
-    mutationFn: (updated: NotificationPrefs) => api.put('/settings/notifications', updated),
+    mutationFn: (updated: NotificationPrefs) =>
+      api.put('/settings/notifications', { preferences: updated }),
     onError: () => notify.error('Failed to save notification preferences'),
   });
 
@@ -703,10 +707,11 @@ function HouseholdSection() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {(data?.members ?? []).map((member) => {
-              const isCurrentUser = member.id === data?.currentUserId;
+              const fullName = `${member.firstName} ${member.lastName}`.trim();
+              const isOwnerMember = member.role.toLowerCase() === 'owner';
               return (
                 <div
-                  key={member.id}
+                  key={member.userId}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -715,10 +720,10 @@ function HouseholdSection() {
                     borderBottom: '1px solid var(--color-border)',
                   }}
                 >
-                  <Avatar src={member.avatarUrl} name={member.name} size="sm" />
+                  <Avatar src={null} name={fullName} size="sm" />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>
-                      {member.name}{isCurrentUser && <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> (You)</span>}
+                      {fullName}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{member.email}</div>
                   </div>
@@ -732,7 +737,7 @@ function HouseholdSection() {
                   }}>
                     {member.role}
                   </span>
-                  {data?.isOwner && !isCurrentUser && (
+                  {!isOwnerMember && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -791,14 +796,14 @@ function HouseholdSection() {
         size="sm"
       >
         <p style={{ fontSize: '0.875rem', color: 'var(--color-text)', marginBottom: '0.5rem' }}>
-          Remove <strong>{removeTarget?.name}</strong> from the household?
+          Remove <strong>{removeTarget ? `${removeTarget.firstName} ${removeTarget.lastName}`.trim() : ''}</strong> from the household?
         </p>
         <ModalFooter>
           <Button variant="secondary" onClick={() => setRemoveTarget(null)}>Cancel</Button>
           <Button
             variant="danger"
             loading={removeMutation.isPending}
-            onClick={() => removeTarget && removeMutation.mutate(removeTarget.id)}
+            onClick={() => removeTarget && removeMutation.mutate(removeTarget.userId)}
           >
             Remove
           </Button>
@@ -827,10 +832,26 @@ function CategoriesSection() {
   const [catGroup, setCatGroup] = useState('');
   const [catError, setCatError] = useState('');
 
-  const { data, isLoading } = useQuery<CategoriesData>({
+  const { data: rawCategories, isLoading } = useQuery<Category[]>({
     queryKey: ['settings', 'categories'],
     queryFn: () => api.get('/settings/categories').then((r) => r.data),
   });
+
+  const data: { groups: CategoryGroup[] } | undefined = rawCategories
+    ? {
+        groups: rawCategories.reduce((acc, cat) => {
+          const groupId = cat.group?.id ?? null;
+          const groupName = cat.group?.name ?? 'Ungrouped';
+          const existing = acc.find((g) => g.id === groupId);
+          if (existing) {
+            existing.categories.push(cat);
+          } else {
+            acc.push({ id: groupId, name: groupName, categories: [cat] });
+          }
+          return acc;
+        }, [] as CategoryGroup[]),
+      }
+    : undefined;
 
   function openAdd(group?: string) {
     setCatName('');
@@ -842,8 +863,8 @@ function CategoriesSection() {
 
   function openEdit(cat: Category) {
     setCatName(cat.name);
-    setCatEmoji(cat.emoji);
-    setCatGroup(cat.group);
+    setCatEmoji(cat.emoji ?? '');
+    setCatGroup(cat.group?.name ?? '');
     setCatError('');
     setModal({ mode: 'edit', category: cat });
   }
@@ -854,7 +875,10 @@ function CategoriesSection() {
   }
 
   const createMutation = useMutation({
-    mutationFn: () => api.post('/settings/categories', { name: catName, emoji: catEmoji, group: catGroup }),
+    mutationFn: () => {
+      const resolvedGroupId = data?.groups.find((g) => g.name === catGroup)?.id ?? null;
+      return api.post('/settings/categories', { name: catName, emoji: catEmoji, groupId: resolvedGroupId });
+    },
     onSuccess: () => {
       notify.success('Category created');
       queryClient.invalidateQueries({ queryKey: ['settings', 'categories'] });
@@ -866,8 +890,10 @@ function CategoriesSection() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: () =>
-      api.put(`/settings/categories/${modal?.category?.id}`, { name: catName, emoji: catEmoji, group: catGroup }),
+    mutationFn: () => {
+      const resolvedGroupId = data?.groups.find((g) => g.name === catGroup)?.id ?? null;
+      return api.put(`/settings/categories/${modal?.category?.id}`, { name: catName, emoji: catEmoji, groupId: resolvedGroupId });
+    },
     onSuccess: () => {
       notify.success('Category updated');
       queryClient.invalidateQueries({ queryKey: ['settings', 'categories'] });

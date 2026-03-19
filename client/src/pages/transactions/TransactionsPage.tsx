@@ -34,7 +34,7 @@ interface Tag {
 
 interface Transaction {
   id: string;
-  merchant: string;
+  merchantName: string;
   categoryId: string;
   categoryName: string;
   categoryColor?: string;
@@ -52,10 +52,10 @@ interface Transaction {
 }
 
 interface TransactionListResponse {
-  data: Transaction[];
+  transactions: Transaction[];
   total: number;
   page: number;
-  pageSize: number;
+  totalPages: number;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -223,12 +223,11 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
 
   const saveMutation = useMutation({
     mutationFn: () => api.put(`/transactions/${transaction!.id}`, {
-      merchant: form.merchant,
+      description: form.merchantName,
       date: form.date,
       amount: form.amount,
       categoryId: form.categoryId,
       notes: form.notes,
-      tags: form.tags?.map((t) => t.name),
       needsReview: form.needsReview,
       isRecurring: form.isRecurring,
       isHidden: form.isHidden,
@@ -306,8 +305,8 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
             {/* Merchant */}
             <Input
               label="Merchant"
-              value={form.merchant ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, merchant: e.target.value }))}
+              value={form.merchantName ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, merchantName: e.target.value }))}
             />
 
             {/* Date */}
@@ -513,7 +512,7 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     date: fmtInputDate(new Date().toISOString()),
-    merchant: '',
+    description: '',
     amount: '',
     accountId: '',
     categoryId: '',
@@ -528,7 +527,7 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       onClose();
-      setForm({ date: fmtInputDate(new Date().toISOString()), merchant: '', amount: '', accountId: '', categoryId: '', notes: '' });
+      setForm({ date: fmtInputDate(new Date().toISOString()), description: '', amount: '', accountId: '', categoryId: '', notes: '' });
     },
   });
 
@@ -564,8 +563,8 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
         <Input
           label="Merchant / Description"
           placeholder="e.g. Whole Foods Market"
-          value={form.merchant}
-          onChange={(e) => setForm((f) => ({ ...f, merchant: e.target.value }))}
+          value={form.description}
+          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
         />
         <Select
           label="Account"
@@ -606,7 +605,7 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
           variant="primary"
           loading={mutation.isPending}
           onClick={() => mutation.mutate()}
-          disabled={!form.merchant || !form.amount || !form.accountId}
+          disabled={!form.description || !form.amount || !form.accountId}
         >
           Add Transaction
         </Button>
@@ -892,18 +891,18 @@ interface TransactionRowProps {
 
 function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit }: TransactionRowProps) {
   const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState(txn.merchant);
+  const [editValue, setEditValue] = useState(txn.merchantName);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function startEdit() {
     setEditing(true);
-    setEditValue(txn.merchant);
+    setEditValue(txn.merchantName);
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
   function commitEdit() {
     setEditing(false);
-    if (editValue.trim() && editValue !== txn.merchant) {
+    if (editValue.trim() && editValue !== txn.merchantName) {
       onMerchantEdit(txn.id, editValue.trim());
     }
   }
@@ -934,7 +933,7 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit }: Tra
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: '#fff', fontSize: '0.75rem', fontWeight: 700,
       }}>
-        {txn.categoryIcon ?? merchantInitial(txn.merchant)}
+        {txn.categoryIcon ?? merchantInitial(txn.merchantName)}
       </div>
 
       {/* Merchant name */}
@@ -958,7 +957,7 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit }: Tra
             fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
-            {txn.merchant}
+            {txn.merchantName}
           </div>
         )}
       </div>
@@ -1099,14 +1098,14 @@ export default function TransactionsPage() {
     queryFn: () => api.get('/transactions?' + searchParams.toString()).then((r) => r.data),
   });
 
-  const { data: accountsData } = useQuery<{ data: Account[] }>({
+  const { data: accountsData } = useQuery<{ groups: { type: string; totalBalance: number; accounts: Account[] }[] }>({
     queryKey: ['accounts'],
     queryFn: () => api.get('/accounts').then((r) => r.data),
   });
 
-  const accounts = accountsData?.data ?? [];
+  const accounts = accountsData?.groups?.flatMap((g) => g.accounts) ?? [];
   const categories = DEFAULT_CATEGORIES;
-  const transactions: Transaction[] = txnData?.data ?? [];
+  const transactions: Transaction[] = txnData?.transactions ?? [];
   const total = txnData?.total ?? 0;
 
   // ── URL param helpers ──
@@ -1150,38 +1149,38 @@ export default function TransactionsPage() {
 
   const bulkRecategorizeMutation = useMutation({
     mutationFn: (categoryId: string) =>
-      api.post('/transactions/bulk/recategorize', { ids: Array.from(selectedIds), categoryId }),
+      api.post('/transactions/bulk', { action: 'recategorize', ids: Array.from(selectedIds), categoryId }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
   });
 
   const bulkMarkReviewedMutation = useMutation({
     mutationFn: () =>
-      api.post('/transactions/bulk/mark-reviewed', { ids: Array.from(selectedIds) }),
+      api.post('/transactions/bulk', { action: 'mark-reviewed', ids: Array.from(selectedIds) }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
   });
 
   const bulkHideMutation = useMutation({
     mutationFn: () =>
-      api.post('/transactions/bulk/hide', { ids: Array.from(selectedIds) }),
+      api.post('/transactions/bulk', { action: 'hide', ids: Array.from(selectedIds) }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
   });
 
   const bulkDeleteMutation = useMutation({
     mutationFn: () =>
-      api.post('/transactions/bulk/delete', { ids: Array.from(selectedIds) }),
+      api.post('/transactions/bulk', { action: 'delete', ids: Array.from(selectedIds) }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
   });
 
   // ── Inline merchant edit ──
 
   const merchantEditMutation = useMutation({
-    mutationFn: ({ id, merchant }: { id: string; merchant: string }) =>
-      api.patch(`/transactions/${id}`, { merchant }),
+    mutationFn: ({ id, merchantName }: { id: string; merchantName: string }) =>
+      api.put(`/transactions/${id}`, { description: merchantName }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['transactions'] }),
   });
 
-  const handleMerchantEdit = useCallback((id: string, merchant: string) => {
-    merchantEditMutation.mutate({ id, merchant });
+  const handleMerchantEdit = useCallback((id: string, merchantName: string) => {
+    merchantEditMutation.mutate({ id, merchantName });
   }, [merchantEditMutation]);
 
   // ── Active filter count ──

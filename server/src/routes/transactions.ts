@@ -448,16 +448,16 @@ router.post('/:id/review', async (req: AuthRequest, res: Response) => {
 router.post('/bulk', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { ids, updates } = req.body;
+    const { action, ids, categoryId } = req.body;
 
+    if (!action || typeof action !== 'string') {
+      return res.status(400).json({ error: 'action is required' });
+    }
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'ids must be a non-empty array' });
     }
     if (ids.length > 100) {
       return res.status(400).json({ error: 'Maximum 100 transactions per bulk request' });
-    }
-    if (!updates || typeof updates !== 'object') {
-      return res.status(400).json({ error: 'updates is required' });
     }
 
     // Verify all transactions belong to the household
@@ -468,45 +468,49 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'One or more transactions not found' });
     }
 
-    // Build scalar update data
-    const scalarData: any = {};
-    if (updates.categoryId !== undefined) scalarData.categoryId = updates.categoryId;
-    if (updates.needsReview !== undefined) scalarData.needsReview = updates.needsReview;
-    if (updates.isHidden !== undefined) scalarData.isHidden = updates.isHidden;
-
-    // Handle tagIds bulk add
-    const tagIdsToAdd: string[] | undefined = updates.tagIds;
-
-    await prisma.$transaction(async (tx) => {
-      if (Object.keys(scalarData).length > 0) {
-        await tx.transaction.updateMany({
-          where: { id: { in: ids }, householdId },
-          data: scalarData,
-        });
-      }
-
-      if (tagIdsToAdd && tagIdsToAdd.length > 0) {
-        // Validate tags belong to household
-        const validTags = await tx.tag.findMany({
-          where: { id: { in: tagIdsToAdd }, householdId },
-          select: { id: true },
-        });
-        if (validTags.length !== tagIdsToAdd.length) {
-          throw new Error('One or more tagIds are invalid');
+    switch (action) {
+      case 'recategorize': {
+        if (!categoryId || typeof categoryId !== 'string') {
+          return res.status(400).json({ error: 'categoryId is required for recategorize action' });
         }
-
-        const tagLinks = ids.flatMap((transactionId: string) =>
-          tagIdsToAdd.map((tagId: string) => ({ transactionId, tagId }))
-        );
-        await tx.transactionTag.createMany({ data: tagLinks, skipDuplicates: true });
+        const cat = await prisma.category.findFirst({ where: { id: categoryId, householdId } });
+        if (!cat) return res.status(404).json({ error: 'Category not found' });
+        await prisma.transaction.updateMany({
+          where: { id: { in: ids }, householdId },
+          data: { categoryId },
+        });
+        break;
       }
-    });
+
+      case 'mark-reviewed': {
+        await prisma.transaction.updateMany({
+          where: { id: { in: ids }, householdId },
+          data: { needsReview: false },
+        });
+        break;
+      }
+
+      case 'hide': {
+        await prisma.transaction.updateMany({
+          where: { id: { in: ids }, householdId },
+          data: { isHidden: true },
+        });
+        break;
+      }
+
+      case 'delete': {
+        await prisma.transaction.deleteMany({
+          where: { id: { in: ids }, householdId },
+        });
+        break;
+      }
+
+      default:
+        return res.status(400).json({ error: `Unknown action: ${action}` });
+    }
 
     return res.json({ updated: ids.length });
   } catch (err: any) {
-    if (err?.message?.includes('tagIds are invalid')) {
-      return res.status(400).json({ error: err.message });
-    }
     console.error('[transactions/bulk]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }

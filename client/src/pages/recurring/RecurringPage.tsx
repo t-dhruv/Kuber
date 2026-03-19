@@ -30,13 +30,43 @@ interface RecurringItem {
   daysUntilDue?: number;
 }
 
+interface MonthlySummaryExpenseItem {
+  id: string;
+  name: string;
+  amount: number;
+  nextDate: string;
+  daysUntil: number;
+  isPaid: boolean;
+}
+
+interface MonthlySummaryIncomeItem {
+  id: string;
+  name: string;
+  amount: number;
+  nextDate: string;
+  isActive: boolean;
+}
+
 interface MonthlySummary {
-  incomeTotal: number;
-  expensesPaid: number;
-  expensesRemaining: number;
-  expensesTotal: number;
-  upcoming: RecurringItem[];
-  completed: RecurringItem[];
+  month: number;
+  year: number;
+  totalIncome: number;
+  totalExpenses: number;
+  totalMonthly: number;
+  income: MonthlySummaryIncomeItem[];
+  expenses: MonthlySummaryExpenseItem[];
+}
+
+interface AccountsApiResponse {
+  groups: Array<{ type: string; totalBalance: number; accounts: Account[] }>;
+  netWorth: object;
+}
+
+interface Account {
+  id: string;
+  name: string;
+  lastFour?: string;
+  [key: string]: unknown;
 }
 
 interface AccountOption {
@@ -389,8 +419,12 @@ function MonthlyView({
     );
   }
 
-  const expensePct = data.expensesTotal > 0
-    ? Math.min(data.expensesPaid / data.expensesTotal, 1) * 100
+  const unpaidExpenses = data.expenses.filter((e) => !e.isPaid);
+  const paidExpenses = data.expenses.filter((e) => e.isPaid);
+  const expensesPaid = paidExpenses.reduce((s, e) => s + Math.abs(e.amount), 0);
+  const expensesRemaining = unpaidExpenses.reduce((s, e) => s + Math.abs(e.amount), 0);
+  const expensePct = data.totalExpenses > 0
+    ? Math.min(expensesPaid / data.totalExpenses, 1) * 100
     : 0;
 
   return (
@@ -403,7 +437,7 @@ function MonthlyView({
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', width: 72 }}>Income</span>
               <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-success)' }}>
-                {fmtCurrency(data.incomeTotal)}
+                {fmtCurrency(data.totalIncome)}
               </span>
             </div>
             <Button size="sm" variant="outline" icon={<Plus size={12} />} onClick={onAddIncome}>
@@ -423,18 +457,18 @@ function MonthlyView({
                 }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-                <span>{fmtCurrency(data.expensesPaid)} paid</span>
-                <span>{fmtCurrency(data.expensesRemaining)} remaining</span>
+                <span>{fmtCurrency(expensesPaid)} paid</span>
+                <span>{fmtCurrency(expensesRemaining)} remaining</span>
               </div>
             </div>
             <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', flexShrink: 0 }}>
-              Total: {fmtCurrency(data.expensesTotal)}
+              Total: {fmtCurrency(data.totalExpenses)}
             </span>
           </div>
         </div>
       </Card>
 
-      {/* Upcoming */}
+      {/* Upcoming (unpaid expenses) */}
       <Card padding="lg">
         <div style={{ marginBottom: '0.75rem' }}>
           <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -442,7 +476,7 @@ function MonthlyView({
           </span>
         </div>
 
-        {data.upcoming.length === 0 ? (
+        {unpaidExpenses.length === 0 ? (
           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', padding: '0.5rem 0' }}>
             No upcoming items this month.
           </p>
@@ -451,7 +485,7 @@ function MonthlyView({
             {/* Header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 100px 140px 120px 90px 36px',
+              gridTemplateColumns: '1fr 100px 90px 36px',
               gap: '0.5rem',
               padding: '0 0 0.5rem',
               borderBottom: '1px solid var(--color-border)',
@@ -460,54 +494,37 @@ function MonthlyView({
               color: 'var(--color-text-muted)',
             }}>
               <span>Name</span>
-              <span>Date</span>
-              <span>Account</span>
-              <span>Category</span>
+              <span>Due</span>
               <span style={{ textAlign: 'right' }}>Amount</span>
               <span />
             </div>
 
-            {data.upcoming.map((item, idx) => (
+            {unpaidExpenses.map((item, idx) => (
               <div key={item.id}>
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 100px 140px 120px 90px 36px',
+                  gridTemplateColumns: '1fr 100px 90px 36px',
                   gap: '0.5rem',
                   padding: '0.625rem 0',
                   alignItems: 'center',
                   fontSize: '0.8125rem',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                    <span style={{ fontSize: '1rem' }}>{item.categoryIcon ?? '🔵'}</span>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 500, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {item.name}
                       </div>
-                      <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)' }}>
-                        {FREQUENCY_LABELS[item.frequency]}
-                      </div>
                     </div>
                   </div>
                   <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem' }}>
-                    {formatDaysUntil(item.daysUntilDue)}
+                    {formatDaysUntil(item.daysUntil)}
                   </span>
-                  <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {accountLabel(item)}
+                  <span style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-danger)' }}>
+                    -{fmtCurrency(item.amount)}
                   </span>
-                  <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {item.categoryName}
-                  </span>
-                  <span style={{ textAlign: 'right', fontWeight: 600, color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
-                    {item.amount < 0 ? '-' : '+'}{fmtCurrency(item.amount)}
-                  </span>
-                  <OverflowMenu
-                    isActive={item.isActive}
-                    onEdit={() => onEdit(item)}
-                    onToggle={() => onToggle(item)}
-                    onDelete={() => onDelete(item)}
-                  />
+                  <span />
                 </div>
-                {idx < data.upcoming.length - 1 && (
+                {idx < unpaidExpenses.length - 1 && (
                   <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
                 )}
               </div>
@@ -517,14 +534,14 @@ function MonthlyView({
             <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.625rem', marginTop: '0.25rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
               <span style={{ color: 'var(--color-text-secondary)' }}>Upcoming total</span>
               <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
-                {fmtCurrency(data.upcoming.reduce((sum, i) => sum + Math.abs(i.amount), 0))}
+                {fmtCurrency(expensesRemaining)}
               </span>
             </div>
           </>
         )}
       </Card>
 
-      {/* Completed */}
+      {/* Completed (paid expenses) */}
       <Card padding="lg">
         <div style={{ marginBottom: '0.75rem' }}>
           <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -532,7 +549,7 @@ function MonthlyView({
           </span>
         </div>
 
-        {data.completed.length === 0 ? (
+        {paidExpenses.length === 0 ? (
           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', padding: '0.5rem 0' }}>
             No completed items yet.
           </p>
@@ -541,7 +558,7 @@ function MonthlyView({
             {/* Header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 100px 140px 120px 90px 36px',
+              gridTemplateColumns: '1fr 100px 90px',
               gap: '0.5rem',
               padding: '0 0 0.5rem',
               borderBottom: '1px solid var(--color-border)',
@@ -550,18 +567,15 @@ function MonthlyView({
               color: 'var(--color-text-muted)',
             }}>
               <span>Name</span>
-              <span>Date</span>
-              <span>Account</span>
-              <span>Category</span>
+              <span>Next Date</span>
               <span style={{ textAlign: 'right' }}>Amount</span>
-              <span />
             </div>
 
-            {data.completed.map((item, idx) => (
+            {paidExpenses.map((item, idx) => (
               <div key={item.id}>
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 100px 140px 120px 90px 36px',
+                  gridTemplateColumns: '1fr 100px 90px',
                   gap: '0.5rem',
                   padding: '0.625rem 0',
                   alignItems: 'center',
@@ -574,31 +588,16 @@ function MonthlyView({
                       <div style={{ fontWeight: 500, color: 'var(--color-text-muted)', textDecoration: 'line-through', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {item.name}
                       </div>
-                      <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)' }}>
-                        {FREQUENCY_LABELS[item.frequency]}
-                      </div>
                     </div>
                   </div>
                   <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-                    {item.paidDate ? fmtDate(item.paidDate) : '—'}
-                  </span>
-                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {accountLabel(item)}
-                  </span>
-                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {item.categoryName}
+                    {fmtDate(item.nextDate)}
                   </span>
                   <span style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-text-muted)' }}>
                     {fmtCurrency(item.amount)}
                   </span>
-                  <OverflowMenu
-                    isActive={item.isActive}
-                    onEdit={() => {}}
-                    onToggle={() => {}}
-                    onDelete={() => {}}
-                  />
                 </div>
-                {idx < data.completed.length - 1 && (
+                {idx < paidExpenses.length - 1 && (
                   <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
                 )}
               </div>
@@ -608,7 +607,7 @@ function MonthlyView({
             <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.625rem', marginTop: '0.25rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
               <span style={{ color: 'var(--color-text-secondary)' }}>Completed total</span>
               <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
-                {fmtCurrency(data.completed.reduce((sum, i) => sum + Math.abs(i.amount), 0))}
+                {fmtCurrency(expensesPaid)}
               </span>
             </div>
           </>
@@ -822,22 +821,23 @@ export default function RecurringPage() {
 
   const { data: accounts = [] } = useQuery<AccountOption[]>({
     queryKey: ['accounts-options'],
-    queryFn: () => api.get('/accounts').then((r) =>
-      (r.data.accounts ?? r.data ?? []).map((a: any) => ({
+    queryFn: () => api.get('/accounts').then((r) => {
+      const accountsData: AccountsApiResponse = r.data;
+      return (accountsData?.groups?.flatMap((g) => g.accounts) ?? []).map((a) => ({
         id: a.id,
         name: a.name,
         lastFour: a.lastFour,
-      }))
-    ),
+      }));
+    }),
   });
 
   const { data: categories = [] } = useQuery<CategoryOption[]>({
     queryKey: ['categories-options'],
     queryFn: () => api.get('/categories').then((r) =>
-      (r.data.categories ?? r.data ?? []).map((c: any) => ({
+      (Array.isArray(r.data) ? r.data : []).map((c: any) => ({
         id: c.id,
         name: c.name,
-        icon: c.icon,
+        icon: c.emoji ?? c.icon,
       }))
     ),
   });
