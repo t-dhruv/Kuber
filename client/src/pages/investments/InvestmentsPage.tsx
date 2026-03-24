@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
-import { Plus } from 'lucide-react';
+import { Plus, ChevronRight, ChevronDown, Trash2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Card, CardDivider, Skeleton, Button, Modal, ModalFooter, Input, Select, notify,
+  Card, Skeleton, Button, Modal, ModalFooter, Input, Select, notify,
 } from '@/components/ui';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -20,9 +20,20 @@ const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
+const fmtDateFull = (d: string) =>
+  new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-// Matches server: buildHoldingWithSimulatedPrices
+interface HoldingLot {
+  id: string;
+  date: string;
+  shares: number;
+  pricePerShare: number;
+  note?: string | null;
+  status: 'confirmed' | 'pending';
+}
+
 interface Holding {
   id: string;
   accountId: string;
@@ -30,7 +41,7 @@ interface Holding {
   ticker: string;
   name: string;
   shares: number;
-  costBasis: number;
+  avgCostBasis: number;
   currentPrice: number;
   currentValue: number;
   totalCost: number;
@@ -38,9 +49,10 @@ interface Holding {
   gainPercent: number;
   dayChange: number;
   dayChangePercent: number;
+  priceSource: 'live' | 'cached';
+  lots: HoldingLot[];
 }
 
-// Matches server GET /investments/holdings response
 interface HoldingsData {
   holdings: Holding[];
   totalValue: number;
@@ -49,23 +61,20 @@ interface HoldingsData {
   totalGainPercent: number;
 }
 
-// Matches server GET /investments/allocation byAssetClass entries
 interface AssetClassSegment {
   assetClass: string;
   value: number;
   percent: number;
 }
 
-// Matches server GET /investments/allocation holdings entries
 interface AllocationHolding {
   ticker: string;
   name: string;
   value: number;
   percent: number;
-  type: string; // asset class label
+  type: string;
 }
 
-// Matches server GET /investments/allocation response
 interface AllocationData {
   totalValue: number;
   byAssetClass: AssetClassSegment[];
@@ -78,20 +87,17 @@ interface AllocationData {
   holdings: AllocationHolding[];
 }
 
-// Matches server GET /investments/performance history entries
 interface HistoryPoint {
   date: string;
   value: number;
 }
 
-// Matches server GET /investments/performance benchmarks object
 interface BenchmarksObj {
   sp500: number;
   usBonds: number;
   usStocks: number;
 }
 
-// Matches server GET /investments/performance response
 interface PerformanceData {
   period: string;
   portfolioReturn: number;
@@ -100,7 +106,6 @@ interface PerformanceData {
   history: HistoryPoint[];
 }
 
-// Matches server GET /accounts response groups structure
 interface AccountGroup {
   accounts: InvestmentAccount[];
 }
@@ -113,6 +118,28 @@ interface InvestmentAccount {
 interface AccountsResponse {
   groups: AccountGroup[];
   netWorth: number;
+}
+
+interface RecurringSchedule {
+  id: string;
+  holdingId: string;
+  amount: number;
+  frequency: string;
+  dayOfMonth: number;
+  status: 'active' | 'paused';
+  lastRunAt: string | null;
+  nextRunAt: string;
+}
+
+interface PendingLot {
+  id: string;
+  holdingId: string;
+  ticker: string;
+  name: string;
+  date: string;
+  shares: number;
+  pricePerShare: number;
+  note?: string | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -224,8 +251,6 @@ function GainBadge({ amount, pct, showArrow = true }: { amount: number; pct: num
 
 // ─── Performance Cards ────────────────────────────────────────────────────────
 
-// Benchmark cards: server returns { sp500, usBonds, usStocks } as a plain object.
-// We convert to a display-friendly array here on the client.
 interface BenchmarkCard {
   name: string;
   returnPct: number;
@@ -235,7 +260,6 @@ function benchmarksToCards(
   performanceData: PerformanceData | undefined,
 ): BenchmarkCard[] {
   if (!performanceData) return [];
-
   const { portfolioReturn, benchmarks } = performanceData;
   return [
     { name: 'Your Portfolio', returnPct: portfolioReturn },
@@ -255,12 +279,7 @@ function PerformanceCards({ performanceData, period, isLoading }: {
     : benchmarksToCards(performanceData).map((b, i) => ({ ...b, key: i }));
 
   return (
-    <div style={{
-      display: 'flex',
-      gap: '0.75rem',
-      overflowX: 'auto',
-      paddingBottom: '0.25rem',
-    }}>
+    <div style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
       {cards.map((card, idx) => (
         <div
           key={card.key}
@@ -314,8 +333,6 @@ function PerformanceCards({ performanceData, period, isLoading }: {
 
 // ─── Performance Chart ────────────────────────────────────────────────────────
 
-// Server returns history as { date, value } points — portfolio absolute value.
-// Chart displays value directly (no sp500 overlay since server doesn't provide it per-point).
 function PerformanceChart({ data, isLoading }: { data?: HistoryPoint[]; isLoading: boolean }) {
   return (
     <Card padding="lg">
@@ -376,7 +393,7 @@ function PerformanceChart({ data, isLoading }: { data?: HistoryPoint[]; isLoadin
   );
 }
 
-// ─── Holdings Table ───────────────────────────────────────────────────────────
+// ─── Ticker Avatar ────────────────────────────────────────────────────────────
 
 function TickerAvatar({ ticker, positive }: { ticker: string; positive: boolean }) {
   return (
@@ -400,117 +417,531 @@ function TickerAvatar({ ticker, positive }: { ticker: string; positive: boolean 
   );
 }
 
-const TABLE_HEADERS = ['Security', 'Ticker', 'Shares', 'Price', 'Value', 'Day Change', 'Total Return'];
+// ─── Pending Lots Card ────────────────────────────────────────────────────────
 
-function HoldingsTable({ data, isLoading }: { data?: HoldingsData; isLoading: boolean }) {
-  // Sort by currentValue descending
-  const sorted = [...(data?.holdings ?? [])].sort((a, b) => b.currentValue - a.currentValue);
+function PendingLotsCard({ lots }: { lots: PendingLot[] }) {
+  const queryClient = useQueryClient();
+
+  const confirmMutation = useMutation({
+    mutationFn: (lotId: string) =>
+      api.post(`/investments/lots/${lotId}/confirm`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
+      queryClient.invalidateQueries({ queryKey: ['investments-pending'] });
+      notify.success('Purchase confirmed');
+    },
+    onError: () => notify.error('Failed to confirm purchase'),
+  });
+
+  const skipMutation = useMutation({
+    mutationFn: (lotId: string) =>
+      api.post(`/investments/lots/${lotId}/skip`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investments-pending'] });
+      notify.success('Purchase skipped');
+    },
+    onError: () => notify.error('Failed to skip purchase'),
+  });
+
+  if (lots.length === 0) return null;
 
   return (
-    <Card padding="lg">
+    <div style={{
+      backgroundColor: 'var(--color-surface)',
+      border: '1px solid var(--color-warning, #f59e0b)',
+      borderRadius: 'var(--radius-lg)',
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        backgroundColor: 'rgba(245,158,11,0.12)',
+        padding: '0.625rem 1rem',
+        fontWeight: 600,
+        fontSize: '0.875rem',
+        color: '#b45309',
+        borderBottom: '1px solid rgba(245,158,11,0.3)',
+      }}>
+        {lots.length} pending purchase{lots.length !== 1 ? 's' : ''} to review
+      </div>
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
           <thead>
             <tr>
-              {TABLE_HEADERS.map((h) => (
-                <th
-                  key={h}
-                  style={{
-                    textAlign: h === 'Security' ? 'left' : 'right',
-                    padding: '0 0.75rem 0.625rem',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    color: 'var(--color-text-secondary)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    borderBottom: '1px solid var(--color-border)',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+              {['Ticker', 'Date', 'Shares', 'Price/Share', 'Total', ''].map((h) => (
+                <th key={h} style={{
+                  textAlign: h === '' ? 'right' : h === 'Ticker' ? 'left' : 'right',
+                  padding: '0.5rem 0.75rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  color: 'var(--color-text-secondary)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  borderBottom: '1px solid var(--color-border)',
+                }}>
                   {h}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
-              Array.from({ length: 4 }, (_, i) => (
-                <tr key={i}>
-                  <td colSpan={7} style={{ padding: 0 }}>
-                    <SkeletonRow />
-                  </td>
-                </tr>
-              ))
-            ) : sorted.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{
-                  padding: '2rem',
-                  textAlign: 'center',
-                  color: 'var(--color-text-muted)',
-                  fontSize: '0.875rem',
-                }}>
-                  No holdings yet. Add your first holding above.
+            {lots.map((lot) => (
+              <tr key={lot.id}
+                style={{ transition: 'background 0.1s' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'var(--color-surface-hover)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'transparent'; }}
+              >
+                <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                  <span style={{ fontFamily: 'monospace' }}>{lot.ticker}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginLeft: '0.375rem' }}>{lot.name}</span>
+                </td>
+                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+                  {fmtDateFull(lot.date)}
+                </td>
+                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                  {lot.shares.toLocaleString('en-US', { maximumFractionDigits: 5 })}
+                </td>
+                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                  {fmtCurrency(lot.pricePerShare)}
+                </td>
+                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                  {fmtCurrency(lot.shares * lot.pricePerShare)}
+                </td>
+                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>
+                  <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => confirmMutation.mutate(lot.id)}
+                      disabled={confirmMutation.isPending}
+                      style={{
+                        padding: '0.25rem 0.625rem',
+                        borderRadius: 'var(--radius-sm)',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        backgroundColor: 'var(--color-success)',
+                        color: '#fff',
+                      }}
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => skipMutation.mutate(lot.id)}
+                      disabled={skipMutation.isPending}
+                      style={{
+                        padding: '0.25rem 0.625rem',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--color-border)',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        backgroundColor: 'transparent',
+                        color: 'var(--color-text-secondary)',
+                      }}
+                    >
+                      Skip
+                    </button>
+                  </div>
                 </td>
               </tr>
-            ) : (
-              sorted.map((h) => (
-                <tr
-                  key={h.id}
-                  style={{ transition: 'background 0.1s' }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'var(--color-surface-hover)'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'transparent'; }}
-                >
-                  <td style={{ padding: '0.625rem 0.75rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                      <TickerAvatar ticker={h.ticker} positive={h.dayChange >= 0} />
-                      <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
-                        {h.name}
-                      </span>
-                    </div>
-                  </td>
-                  <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
-                      {h.ticker}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
-                    {h.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}
-                  </td>
-                  <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
-                    {fmtCurrency(h.currentPrice)}
-                  </td>
-                  <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                    {fmtCurrency(h.currentValue)}
-                  </td>
-                  <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                    <GainBadge amount={h.dayChange} pct={h.dayChangePercent} />
-                  </td>
-                  <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                    <GainBadge amount={h.gain} pct={h.gainPercent} showArrow={false} />
-                  </td>
-                </tr>
-              ))
-            )}
+            ))}
           </tbody>
-          {!isLoading && data && sorted.length > 0 && (
-            <tfoot>
-              <tr style={{ borderTop: '2px solid var(--color-border)' }}>
-                <td colSpan={4} style={{ padding: '0.625rem 0.75rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-                  Total
-                </td>
-                <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                  {fmtCurrency(data.totalValue)}
-                </td>
-                <td />
-                <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                  <GainBadge amount={data.totalGain} pct={data.totalGainPercent} showArrow={false} />
-                </td>
-              </tr>
-            </tfoot>
-          )}
         </table>
       </div>
-    </Card>
+    </div>
+  );
+}
+
+// ─── Expanded Holding Row ─────────────────────────────────────────────────────
+
+function ExpandedHolding({
+  holding,
+  onAddLot,
+  onSetRecurring,
+}: {
+  holding: Holding;
+  onAddLot: () => void;
+  onSetRecurring: () => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const deleteLotMutation = useMutation({
+    mutationFn: (lotId: string) =>
+      api.delete(`/investments/lots/${lotId}`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
+      notify.success('Lot deleted');
+    },
+    onError: () => notify.error('Failed to delete lot'),
+  });
+
+  const { data: schedules } = useQuery<RecurringSchedule[]>({
+    queryKey: ['investments-recurring', holding.id],
+    queryFn: () =>
+      api.get(`/investments/holdings/${holding.id}/recurring`).then((r) => r.data),
+  });
+
+  const toggleScheduleMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.put(`/investments/recurring/${id}`, { status }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investments-recurring', holding.id] });
+      notify.success('Schedule updated');
+    },
+    onError: () => notify.error('Failed to update schedule'),
+  });
+
+  const deleteScheduleMutation = useMutation({
+    mutationFn: (id: string) =>
+      api.delete(`/investments/recurring/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investments-recurring', holding.id] });
+      notify.success('Schedule deleted');
+    },
+    onError: () => notify.error('Failed to delete schedule'),
+  });
+
+  const confirmedLots = holding.lots.filter((l) => l.status === 'confirmed');
+
+  return (
+    <div style={{
+      padding: '1rem 1.25rem',
+      backgroundColor: 'var(--color-surface-hover)',
+      borderTop: '1px solid var(--color-border)',
+    }}>
+      {/* Lots table */}
+      {confirmedLots.length > 0 && (
+        <div style={{ marginBottom: '1rem', overflowX: 'auto' }}>
+          <div style={{
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+            marginBottom: '0.5rem',
+          }}>
+            Purchase Lots
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
+            <thead>
+              <tr>
+                {['Date', 'Shares', 'Price/Share', 'Total Cost', ''].map((h) => (
+                  <th key={h} style={{
+                    textAlign: h === 'Date' || h === '' ? (h === '' ? 'right' : 'left') : 'right',
+                    padding: '0.25rem 0.5rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    color: 'var(--color-text-secondary)',
+                    borderBottom: '1px solid var(--color-border)',
+                  }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {confirmedLots.map((lot) => (
+                <tr key={lot.id}>
+                  <td style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+                    {fmtDateFull(lot.date)}
+                  </td>
+                  <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                    {lot.shares.toLocaleString('en-US', { maximumFractionDigits: 5 })}
+                  </td>
+                  <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                    {fmtCurrency(lot.pricePerShare)}
+                  </td>
+                  <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                    {fmtCurrency(lot.shares * lot.pricePerShare)}
+                  </td>
+                  <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right' }}>
+                    <button
+                      onClick={() => deleteLotMutation.mutate(lot.id)}
+                      disabled={deleteLotMutation.isPending}
+                      title="Delete lot"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--color-text-muted)',
+                        padding: '0.125rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <Button size="sm" variant="secondary" icon={<Plus size={13} />} onClick={onAddLot}>
+          Add Purchase
+        </Button>
+        <Button size="sm" variant="secondary" icon={<RefreshCw size={13} />} onClick={onSetRecurring}>
+          Set Recurring
+        </Button>
+      </div>
+
+      {/* Recurring schedules */}
+      {schedules && schedules.length > 0 && (
+        <div style={{ marginTop: '0.75rem' }}>
+          <div style={{
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+            marginBottom: '0.5rem',
+          }}>
+            Recurring Schedules
+          </div>
+          {schedules.map((s) => (
+            <div
+              key={s.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.5rem 0.75rem',
+                backgroundColor: 'var(--color-surface)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border)',
+                marginBottom: '0.375rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                {fmtCurrency(s.amount)}/{s.frequency}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                Next: {fmtDateFull(s.nextRunAt)}
+              </span>
+              <span style={{
+                fontSize: '0.6875rem',
+                fontWeight: 600,
+                padding: '0.125rem 0.375rem',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: s.status === 'active' ? 'var(--color-success-light)' : 'var(--color-surface-hover)',
+                color: s.status === 'active' ? 'var(--color-success)' : 'var(--color-text-muted)',
+              }}>
+                {s.status}
+              </span>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.375rem' }}>
+                <button
+                  onClick={() => toggleScheduleMutation.mutate({ id: s.id, status: s.status === 'active' ? 'paused' : 'active' })}
+                  style={{
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--color-border)',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    backgroundColor: 'transparent',
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  {s.status === 'active' ? 'Pause' : 'Resume'}
+                </button>
+                <button
+                  onClick={() => deleteScheduleMutation.mutate(s.id)}
+                  style={{
+                    padding: '0.2rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    backgroundColor: 'transparent',
+                    color: 'var(--color-text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Holdings Table ───────────────────────────────────────────────────────────
+
+const TABLE_HEADERS = ['', 'Security', 'Ticker', 'Shares', 'Avg Cost', 'Price', 'Value', 'Day Change', 'Total Return'];
+
+function HoldingsTable({
+  data,
+  isLoading,
+}: {
+  data?: HoldingsData;
+  isLoading: boolean;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [addLotHolding, setAddLotHolding] = useState<Holding | null>(null);
+  const [recurringHolding, setRecurringHolding] = useState<Holding | null>(null);
+
+  const sorted = [...(data?.holdings ?? [])].sort((a, b) => b.currentValue - a.currentValue);
+
+  function toggleRow(id: string) {
+    setExpandedId((prev) => (prev === id ? null : id));
+  }
+
+  return (
+    <>
+      <Card padding="lg">
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 740 }}>
+            <thead>
+              <tr>
+                {TABLE_HEADERS.map((h) => (
+                  <th
+                    key={h}
+                    style={{
+                      textAlign: h === 'Security' || h === '' ? 'left' : 'right',
+                      padding: '0 0.75rem 0.625rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      color: 'var(--color-text-secondary)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      borderBottom: '1px solid var(--color-border)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading ? (
+                Array.from({ length: 4 }, (_, i) => (
+                  <tr key={i}>
+                    <td colSpan={9} style={{ padding: 0 }}>
+                      <SkeletonRow />
+                    </td>
+                  </tr>
+                ))
+              ) : sorted.length === 0 ? (
+                <tr>
+                  <td colSpan={9} style={{
+                    padding: '2rem',
+                    textAlign: 'center',
+                    color: 'var(--color-text-muted)',
+                    fontSize: '0.875rem',
+                  }}>
+                    No holdings yet. Add your first holding above.
+                  </td>
+                </tr>
+              ) : (
+                sorted.flatMap((h) => {
+                  const isExpanded = expandedId === h.id;
+                  const rows = [
+                    <tr
+                      key={h.id}
+                      style={{ transition: 'background 0.1s', cursor: 'pointer' }}
+                      onClick={() => toggleRow(h.id)}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'var(--color-surface-hover)'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'transparent'; }}
+                    >
+                      <td style={{ padding: '0.625rem 0.5rem 0.625rem 0.75rem', width: 24 }}>
+                        {isExpanded
+                          ? <ChevronDown size={14} style={{ color: 'var(--color-text-secondary)' }} />
+                          : <ChevronRight size={14} style={{ color: 'var(--color-text-secondary)' }} />}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                          <TickerAvatar ticker={h.ticker} positive={h.dayChange >= 0} />
+                          <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
+                            {h.name}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
+                          {h.ticker}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                        {h.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+                        {fmtCurrency(h.avgCostBasis)}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                        {fmtCurrency(h.currentPrice)}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                        {fmtCurrency(h.currentValue)}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
+                        <GainBadge amount={h.dayChange} pct={h.dayChangePercent} />
+                      </td>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
+                        <GainBadge amount={h.gain} pct={h.gainPercent} showArrow={false} />
+                      </td>
+                    </tr>,
+                  ];
+
+                  if (isExpanded) {
+                    rows.push(
+                      <tr key={`${h.id}-expanded`}>
+                        <td colSpan={9} style={{ padding: 0 }}>
+                          <ExpandedHolding
+                            holding={h}
+                            onAddLot={() => { setAddLotHolding(h); }}
+                            onSetRecurring={() => { setRecurringHolding(h); }}
+                          />
+                        </td>
+                      </tr>,
+                    );
+                  }
+
+                  return rows;
+                })
+              )}
+            </tbody>
+            {!isLoading && data && sorted.length > 0 && (
+              <tfoot>
+                <tr style={{ borderTop: '2px solid var(--color-border)' }}>
+                  <td colSpan={5} style={{ padding: '0.625rem 0.75rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+                    Total
+                  </td>
+                  <td />
+                  <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                    {fmtCurrency(data.totalValue)}
+                  </td>
+                  <td />
+                  <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
+                    <GainBadge amount={data.totalGain} pct={data.totalGainPercent} showArrow={false} />
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      </Card>
+
+      {addLotHolding && (
+        <AddLotModal
+          open
+          holding={addLotHolding}
+          onClose={() => setAddLotHolding(null)}
+        />
+      )}
+      {recurringHolding && (
+        <RecurringModal
+          open
+          holding={recurringHolding}
+          onClose={() => setRecurringHolding(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -520,13 +951,11 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
   if (isLoading) return <Skeleton height={320} width="100%" />;
   if (!data) return null;
 
-  // Use byAssetClass for the donut (matches server field name)
   const segments = data.byAssetClass;
 
   return (
     <Card padding="lg">
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        {/* Donut */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <ResponsiveContainer width={260} height={260}>
             <PieChart>
@@ -547,7 +976,6 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
               </Pie>
             </PieChart>
           </ResponsiveContainer>
-          {/* Center text */}
           <div style={{
             position: 'absolute',
             top: '50%',
@@ -565,7 +993,6 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
           </div>
         </div>
 
-        {/* Legend */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', flex: 1, minWidth: 180 }}>
           {segments.map((seg, idx) => (
             <div key={seg.assetClass} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
@@ -678,15 +1105,15 @@ interface AddHoldingForm {
   ticker: string;
   name: string;
   shares: string;
-  costBasisPerShare: string;
+  pricePerShare: string;
   accountId: string;
 }
 
-const EMPTY_FORM: AddHoldingForm = {
+const EMPTY_HOLDING_FORM: AddHoldingForm = {
   ticker: '',
   name: '',
   shares: '',
-  costBasisPerShare: '',
+  pricePerShare: '',
   accountId: '',
 };
 
@@ -700,8 +1127,41 @@ function AddHoldingModal({
   accounts: InvestmentAccount[];
 }) {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<AddHoldingForm>(EMPTY_FORM);
+  const [form, setForm] = useState<AddHoldingForm>(EMPTY_HOLDING_FORM);
   const [errors, setErrors] = useState<Partial<AddHoldingForm>>({});
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quotePriceHint, setQuotePriceHint] = useState<string | null>(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-fill name from ticker
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const ticker = form.ticker.trim().toUpperCase();
+    if (ticker.length < 1) {
+      setQuotePriceHint(null);
+      setQuoteError(null);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      setQuoteLoading(true);
+      setQuoteError(null);
+      try {
+        const res = await api.get(`/investments/quote/${ticker}`);
+        const q = res.data;
+        setForm((prev) => ({ ...prev, name: q.shortName || prev.name }));
+        setQuotePriceHint(`Live price: ${fmtCurrency(q.price)}`);
+      } catch {
+        setQuotePriceHint(null);
+        setQuoteError('Ticker not found');
+      } finally {
+        setQuoteLoading(false);
+      }
+    }, 600);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [form.ticker]);
 
   const mutation = useMutation({
     mutationFn: (payload: object) =>
@@ -710,7 +1170,9 @@ function AddHoldingModal({
       queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
       queryClient.invalidateQueries({ queryKey: ['investments-allocation'] });
       notify.success('Holding added');
-      setForm(EMPTY_FORM);
+      setForm(EMPTY_HOLDING_FORM);
+      setQuotePriceHint(null);
+      setQuoteError(null);
       onClose();
     },
     onError: () => {
@@ -724,8 +1186,8 @@ function AddHoldingModal({
     if (!form.name.trim()) errs.name = 'Required';
     if (!form.shares || isNaN(Number(form.shares)) || Number(form.shares) <= 0)
       errs.shares = 'Must be a positive number';
-    if (!form.costBasisPerShare || isNaN(Number(form.costBasisPerShare)) || Number(form.costBasisPerShare) < 0)
-      errs.costBasisPerShare = 'Must be a non-negative number';
+    if (!form.pricePerShare || isNaN(Number(form.pricePerShare)) || Number(form.pricePerShare) < 0)
+      errs.pricePerShare = 'Must be a non-negative number';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -736,7 +1198,7 @@ function AddHoldingModal({
       ticker: form.ticker.trim().toUpperCase(),
       name: form.name.trim(),
       shares: Number(form.shares),
-      costBasisPerShare: Number(form.costBasisPerShare),
+      pricePerShare: Number(form.pricePerShare),
       accountId: form.accountId || undefined,
     });
   }
@@ -749,13 +1211,30 @@ function AddHoldingModal({
   return (
     <Modal open={open} onClose={onClose} title="Add Holding" size="md">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <Input
-          label="Ticker Symbol"
-          placeholder="e.g. VTI"
-          value={form.ticker}
-          onChange={field('ticker')}
-          error={errors.ticker}
-        />
+        <div>
+          <Input
+            label="Ticker Symbol"
+            placeholder="e.g. VTI"
+            value={form.ticker}
+            onChange={field('ticker')}
+            error={errors.ticker}
+          />
+          {quoteLoading && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+              Looking up ticker...
+            </div>
+          )}
+          {!quoteLoading && quotePriceHint && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-success)', marginTop: '0.25rem' }}>
+              {quotePriceHint}
+            </div>
+          )}
+          {!quoteLoading && quoteError && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-danger)', marginTop: '0.25rem' }}>
+              {quoteError}
+            </div>
+          )}
+        </div>
         <Input
           label="Security Name"
           placeholder="e.g. Vanguard Total Market ETF"
@@ -774,14 +1253,14 @@ function AddHoldingModal({
           error={errors.shares}
         />
         <Input
-          label="Cost Basis per Share"
+          label="Purchase Price per Share"
           type="number"
           placeholder="e.g. 210.00"
           min="0"
           step="any"
-          value={form.costBasisPerShare}
-          onChange={field('costBasisPerShare')}
-          error={errors.costBasisPerShare}
+          value={form.pricePerShare}
+          onChange={field('pricePerShare')}
+          error={errors.pricePerShare}
         />
         {accounts.length > 0 && (
           <Select
@@ -798,6 +1277,291 @@ function AddHoldingModal({
       <ModalFooter>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button onClick={handleSubmit} loading={mutation.isPending}>Add Holding</Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+// ─── Add Lot Modal ────────────────────────────────────────────────────────────
+
+interface AddLotForm {
+  date: string;
+  shares: string;
+  pricePerShare: string;
+  note: string;
+}
+
+function AddLotModal({
+  open,
+  holding,
+  onClose,
+}: {
+  open: boolean;
+  holding: Holding;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState<AddLotForm>({ date: today, shares: '', pricePerShare: '', note: '' });
+  const [errors, setErrors] = useState<Partial<AddLotForm>>({});
+
+  const mutation = useMutation({
+    mutationFn: (payload: object) =>
+      api.post(`/investments/holdings/${holding.id}/lots`, payload).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
+      notify.success('Purchase added');
+      setForm({ date: today, shares: '', pricePerShare: '', note: '' });
+      onClose();
+    },
+    onError: () => notify.error('Failed to add purchase'),
+  });
+
+  function validate(): boolean {
+    const errs: Partial<AddLotForm> = {};
+    if (!form.shares || isNaN(Number(form.shares)) || Number(form.shares) <= 0)
+      errs.shares = 'Must be a positive number';
+    if (!form.pricePerShare || isNaN(Number(form.pricePerShare)) || Number(form.pricePerShare) < 0)
+      errs.pricePerShare = 'Must be a non-negative number';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  function handleSubmit() {
+    if (!validate()) return;
+    mutation.mutate({
+      date: form.date,
+      shares: Number(form.shares),
+      pricePerShare: Number(form.pricePerShare),
+      note: form.note.trim() || undefined,
+    });
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Add Purchase — ${holding.ticker}`} size="sm">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <Input
+          label="Date"
+          type="date"
+          value={form.date}
+          onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))}
+        />
+        <Input
+          label="Shares"
+          type="number"
+          placeholder="e.g. 10"
+          min="0"
+          step="any"
+          value={form.shares}
+          onChange={(e) => setForm((p) => ({ ...p, shares: e.target.value }))}
+          error={errors.shares}
+        />
+        <Input
+          label="Price per Share"
+          type="number"
+          placeholder="e.g. 215.00"
+          min="0"
+          step="any"
+          value={form.pricePerShare}
+          onChange={(e) => setForm((p) => ({ ...p, pricePerShare: e.target.value }))}
+          error={errors.pricePerShare}
+        />
+        <Input
+          label="Note (optional)"
+          placeholder="e.g. Dividend reinvestment"
+          value={form.note}
+          onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))}
+        />
+      </div>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSubmit} loading={mutation.isPending}>Add Purchase</Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+// ─── Recurring Modal ──────────────────────────────────────────────────────────
+
+interface RecurringForm {
+  amount: string;
+  frequency: string;
+  dayOfMonth: string;
+}
+
+function RecurringModal({
+  open,
+  holding,
+  onClose,
+}: {
+  open: boolean;
+  holding: Holding;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<RecurringForm>({ amount: '', frequency: 'monthly', dayOfMonth: '1' });
+  const [errors, setErrors] = useState<Partial<RecurringForm>>({});
+
+  const { data: schedules, isLoading: schedulesLoading } = useQuery<RecurringSchedule[]>({
+    queryKey: ['investments-recurring', holding.id],
+    queryFn: () =>
+      api.get(`/investments/holdings/${holding.id}/recurring`).then((r) => r.data),
+    enabled: open,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (payload: object) =>
+      api.post(`/investments/holdings/${holding.id}/recurring`, payload).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investments-recurring', holding.id] });
+      notify.success('Recurring schedule created');
+      setForm({ amount: '', frequency: 'monthly', dayOfMonth: '1' });
+    },
+    onError: () => notify.error('Failed to create schedule'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      api.delete(`/investments/recurring/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investments-recurring', holding.id] });
+      notify.success('Schedule deleted');
+    },
+    onError: () => notify.error('Failed to delete schedule'),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.put(`/investments/recurring/${id}`, { status }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investments-recurring', holding.id] });
+      notify.success('Schedule updated');
+    },
+    onError: () => notify.error('Failed to update schedule'),
+  });
+
+  function validate(): boolean {
+    const errs: Partial<RecurringForm> = {};
+    if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0)
+      errs.amount = 'Must be a positive amount';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  function handleCreate() {
+    if (!validate()) return;
+    createMutation.mutate({
+      amount: Number(form.amount),
+      frequency: form.frequency,
+      dayOfMonth: ['monthly', 'quarterly'].includes(form.frequency) ? Number(form.dayOfMonth) : undefined,
+    });
+  }
+
+  const showDayOfMonth = ['monthly', 'quarterly'].includes(form.frequency);
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Recurring Buys — ${holding.ticker}`} size="md">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {/* Existing schedules */}
+        {schedulesLoading ? (
+          <Skeleton height={48} width="100%" />
+        ) : schedules && schedules.length > 0 ? (
+          <div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+              Active Schedules
+            </div>
+            {schedules.map((s) => (
+              <div key={s.id} style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.5rem 0.75rem',
+                backgroundColor: 'var(--color-surface-hover)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border)',
+                marginBottom: '0.375rem',
+                flexWrap: 'wrap',
+              }}>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                  {fmtCurrency(s.amount)} / {s.frequency}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                  Next: {fmtDateFull(s.nextRunAt)}
+                </span>
+                <span style={{
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  padding: '0.125rem 0.375rem',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: s.status === 'active' ? 'var(--color-success-light)' : 'var(--color-surface-hover)',
+                  color: s.status === 'active' ? 'var(--color-success)' : 'var(--color-text-muted)',
+                }}>
+                  {s.status}
+                </span>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.375rem' }}>
+                  <button
+                    onClick={() => toggleMutation.mutate({ id: s.id, status: s.status === 'active' ? 'paused' : 'active' })}
+                    style={{ padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', cursor: 'pointer', fontSize: '0.75rem', backgroundColor: 'transparent', color: 'var(--color-text-secondary)' }}
+                  >
+                    {s.status === 'active' ? 'Pause' : 'Resume'}
+                  </button>
+                  <button
+                    onClick={() => deleteMutation.mutate(s.id)}
+                    style={{ padding: '0.2rem', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', backgroundColor: 'transparent', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {/* Create new schedule */}
+        <div style={{ borderTop: schedules && schedules.length > 0 ? '1px solid var(--color-border)' : 'none', paddingTop: schedules && schedules.length > 0 ? '1rem' : 0 }}>
+          {schedules && schedules.length > 0 && (
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.75rem' }}>
+              Add New Schedule
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <Input
+              label="Amount ($)"
+              type="number"
+              placeholder="e.g. 500"
+              min="0"
+              step="any"
+              value={form.amount}
+              onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))}
+              error={errors.amount}
+            />
+            <Select
+              label="Frequency"
+              value={form.frequency}
+              onChange={(e) => setForm((p) => ({ ...p, frequency: e.target.value }))}
+              options={[
+                { value: 'weekly', label: 'Weekly' },
+                { value: 'biweekly', label: 'Bi-weekly' },
+                { value: 'monthly', label: 'Monthly' },
+                { value: 'quarterly', label: 'Quarterly' },
+              ]}
+            />
+            {showDayOfMonth && (
+              <Input
+                label="Day of Month (1-28)"
+                type="number"
+                min="1"
+                max="28"
+                value={form.dayOfMonth}
+                onChange={(e) => setForm((p) => ({ ...p, dayOfMonth: e.target.value }))}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onClose}>Close</Button>
+        <Button onClick={handleCreate} loading={createMutation.isPending}>Create Schedule</Button>
       </ModalFooter>
     </Modal>
   );
@@ -831,7 +1595,12 @@ export default function InvestmentsPage() {
       api.get(`/investments/performance?period=${period}`).then((r) => r.data),
   });
 
-  // Server returns { groups: [...], netWorth } — flatten all accounts from all groups
+  const { data: pendingLots } = useQuery<PendingLot[]>({
+    queryKey: ['investments-pending'],
+    queryFn: () => api.get('/investments/pending').then((r) => r.data),
+    refetchInterval: 60_000,
+  });
+
   const { data: accountsData } = useQuery<AccountsResponse>({
     queryKey: ['investments-accounts'],
     queryFn: () => api.get('/accounts?type=investment').then((r) => r.data),
@@ -847,19 +1616,8 @@ export default function InvestmentsPage() {
   return (
     <div style={{ padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '0.75rem',
-      }}>
-        <h1 style={{
-          fontSize: '1.375rem',
-          fontWeight: 700,
-          color: 'var(--color-text)',
-          margin: 0,
-          flex: '0 0 auto',
-        }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, flex: '0 0 auto' }}>
           Investments
         </h1>
 
@@ -901,6 +1659,11 @@ export default function InvestmentsPage() {
           Add Holding
         </Button>
       </div>
+
+      {/* Pending lots banner */}
+      {pendingLots && pendingLots.length > 0 && (
+        <PendingLotsCard lots={pendingLots} />
+      )}
 
       {/* Holdings Tab */}
       {tab === 'holdings' && (

@@ -30,3 +30,7 @@ export type { Column } from './DataTable';
 
 export { FilterBar } from './FilterBar';
 export type { ActiveFilter, FilterOption } from './FilterBar';
+
+export { InstitutionLogo } from './InstitutionLogo';
+
+export { LogoPicker } from './LogoPicker';

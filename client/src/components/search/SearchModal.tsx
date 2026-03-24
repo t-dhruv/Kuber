@@ -104,11 +104,11 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
 
   // Cached accounts for local filtering
   const queryClient = useQueryClient();
-  const cachedAccounts = (queryClient.getQueryData<AccountResult[]>(['accounts']) ?? []).filter(
-    (a) =>
-      debouncedQuery.length > 1 &&
-      a.name.toLowerCase().includes(debouncedQuery.toLowerCase())
-  );
+  const cachedAccountsData = queryClient.getQueryData<{ groups?: { accounts: AccountResult[] }[] }>(['accounts']);
+  const allAccounts = cachedAccountsData?.groups?.flatMap((g) => g.accounts) ?? [];
+  const cachedAccounts = debouncedQuery.length > 1
+    ? allAccounts.filter((a) => a.name.toLowerCase().includes(debouncedQuery.toLowerCase()))
+    : [];
 
   // Build flat results list for keyboard nav
   const txns = txnResults ?? [];

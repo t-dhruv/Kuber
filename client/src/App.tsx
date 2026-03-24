@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { AppShell } from '@/components/layout';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // ─── Lazy page imports ────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ const GoalsPage = lazy(() => import('@/pages/goals'));
 const InvestmentsPage = lazy(() => import('@/pages/investments'));
 const AdvicePage = lazy(() => import('@/pages/advice'));
 const SettingsPage = lazy(() => import('@/pages/settings'));
+const RulesPage = lazy(() => import('@/pages/rules/RulesPage'));
 
 // ─── Loading fallback ─────────────────────────────────────────────────────────
 
@@ -85,7 +87,9 @@ export default function App() {
       <Route
         element={
           <ProtectedRoute>
-            <AppShell />
+            <ErrorBoundary>
+              <AppShell />
+            </ErrorBoundary>
           </ProtectedRoute>
         }
       >
@@ -166,6 +170,14 @@ export default function App() {
           element={
             <Suspense fallback={<PageLoader />}>
               <AdvicePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/rules"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <RulesPage />
             </Suspense>
           }
         />

@@ -53,6 +53,7 @@ model Household {
   aiConfig    AiConfig?
   conversations Conversation[]
   netWorthSnapshots NetWorthSnapshot[]
+  savedReports  SavedReport[]
   @@map("households")
 }
 
@@ -439,6 +440,17 @@ model UserAdviceProgress {
   task        AdviceTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
   @@unique([householdId, taskId])
   @@map("user_advice_progress")
+}
+
+model SavedReport {
+  id          String    @id @default(cuid())
+  householdId String
+  name        String
+  filters     Json      // { tab, datePreset, startDate, endDate }
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  @@map("saved_reports")
 }
 
 model AuditLog {

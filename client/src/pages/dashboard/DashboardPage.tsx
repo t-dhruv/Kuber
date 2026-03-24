@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useRef, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { api } from '@/lib/api';
 import { Card, CardHeader, CardDivider, Skeleton } from '@/components/ui';
@@ -46,8 +46,8 @@ interface BudgetData {
 
 interface SpendingPoint {
   day: number;
-  current: number;
-  previous: number;
+  thisMonth: number;
+  lastMonth: number;
 }
 
 interface SpendingChart {
@@ -451,22 +451,12 @@ function SpendingWidget({ data, isLoading, isError }: { data?: SpendingChart; is
         <WidgetError />
       ) : (
         <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={data.data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-            <defs>
-              <linearGradient id="spendCurr" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#E5622A" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#E5622A" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="spendPrev" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#adb5bd" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#adb5bd" stopOpacity={0} />
-              </linearGradient>
-            </defs>
+          <LineChart data={data.data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
             <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
             <YAxis hide />
             <Tooltip
-              formatter={(value: number, name: string) => [fmtCurrency(value), name === 'current' ? 'This month' : 'Last month']}
+              formatter={(value: number, name: string) => [fmtCurrency(value), name === 'thisMonth' ? 'This month' : 'Last month']}
               contentStyle={{
                 backgroundColor: 'var(--color-surface)',
                 border: '1px solid var(--color-border)',
@@ -474,9 +464,13 @@ function SpendingWidget({ data, isLoading, isError }: { data?: SpendingChart; is
                 fontSize: '0.8125rem',
               }}
             />
-            <Area type="monotone" dataKey="current" stroke="#E5622A" strokeWidth={2} fill="url(#spendCurr)" dot={false} />
-            <Area type="monotone" dataKey="previous" stroke="#adb5bd" strokeWidth={1.5} fill="url(#spendPrev)" dot={false} strokeDasharray="4 2" />
-          </AreaChart>
+            <Legend
+              formatter={(value) => value === 'thisMonth' ? 'This month' : 'Last month'}
+              wrapperStyle={{ fontSize: '0.75rem', paddingTop: '0.375rem' }}
+            />
+            <Line type="monotone" dataKey="thisMonth" stroke="#E5622A" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="lastMonth" stroke="#adb5bd" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+          </LineChart>
         </ResponsiveContainer>
       )}
     </Card>
@@ -839,9 +833,248 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
   );
 }
 
+// ─── Widget Layout Types & Defaults ──────────────────────────────────────────
+
+interface WidgetLayout {
+  id: string;
+  visible: boolean;
+  order: number;
+}
+
+const WIDGET_META: Array<{ id: string; label: string; column: 'left' | 'right' }> = [
+  { id: 'netWorth',            label: 'Net Worth',            column: 'left' },
+  { id: 'weeklyRecap',         label: 'Weekly Recap',         column: 'left' },
+  { id: 'budgetProgress',      label: 'Budget Progress',      column: 'left' },
+  { id: 'gettingStarted',      label: 'Getting Started',      column: 'left' },
+  { id: 'spendingChart',       label: 'Spending Chart',       column: 'right' },
+  { id: 'recentTransactions',  label: 'Recent Transactions',  column: 'right' },
+  { id: 'recurring',           label: 'Recurring Bills',      column: 'right' },
+  { id: 'goals',               label: 'Goals',                column: 'right' },
+];
+
+const DEFAULT_LAYOUT: WidgetLayout[] = WIDGET_META.map((w, i) => ({
+  id: w.id,
+  visible: true,
+  order: i,
+}));
+
+function mergeLayout(saved: WidgetLayout[] | null): WidgetLayout[] {
+  if (!saved) return DEFAULT_LAYOUT;
+  // Ensure any widgets added since save are included
+  const savedIds = new Set(saved.map(w => w.id));
+  const extras = DEFAULT_LAYOUT
+    .filter(d => !savedIds.has(d.id))
+    .map((d, i) => ({ ...d, order: saved.length + i }));
+  return [...saved, ...extras];
+}
+
+// ─── Widget Customize Modal ───────────────────────────────────────────────────
+
+function CustomizeModal({
+  layout,
+  onSave,
+  onClose,
+  isSaving,
+}: {
+  layout: WidgetLayout[];
+  onSave: (layout: WidgetLayout[]) => void;
+  onClose: () => void;
+  isSaving: boolean;
+}) {
+  const [items, setItems] = useState<WidgetLayout[]>(() =>
+    [...layout].sort((a, b) => a.order - b.order)
+  );
+  const dragIndex = useRef<number | null>(null);
+
+  const handleDragStart = useCallback((idx: number) => {
+    dragIndex.current = idx;
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    const from = dragIndex.current;
+    if (from === null || from === idx) return;
+    setItems(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(idx, 0, moved);
+      dragIndex.current = idx;
+      return next;
+    });
+  }, []);
+
+  const handleDrop = useCallback(() => {
+    dragIndex.current = null;
+  }, []);
+
+  const toggleVisible = useCallback((id: string) => {
+    setItems(prev => prev.map(w => w.id === id ? { ...w, visible: !w.visible } : w));
+  }, []);
+
+  const handleSave = () => {
+    const normalized = items.map((w, i) => ({ ...w, order: i }));
+    onSave(normalized);
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          backgroundColor: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '1.5rem',
+          width: '100%',
+          maxWidth: 420,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
+            Customize Dashboard
+          </h2>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem', color: 'var(--color-text-muted)', lineHeight: 1 }}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', margin: '0 0 1rem' }}>
+          Drag to reorder. Toggle switches to show or hide widgets.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {items.map((w, idx) => {
+            const meta = WIDGET_META.find(m => m.id === w.id);
+            return (
+              <div
+                key={w.id}
+                draggable
+                onDragStart={() => handleDragStart(idx)}
+                onDragOver={e => handleDragOver(e, idx)}
+                onDrop={handleDrop}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  padding: '0.625rem 0.75rem',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'var(--color-surface-hover)',
+                  cursor: 'grab',
+                  border: '1px solid var(--color-border)',
+                  opacity: w.visible ? 1 : 0.5,
+                  transition: 'opacity 0.15s',
+                  userSelect: 'none',
+                }}
+              >
+                {/* Drag handle */}
+                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', flexShrink: 0 }}>⠿</span>
+
+                {/* Label */}
+                <span style={{ flex: 1, fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>
+                  {meta?.label ?? w.id}
+                </span>
+
+                {/* Column badge */}
+                <span style={{
+                  fontSize: '0.6875rem',
+                  padding: '0.125rem 0.4rem',
+                  borderRadius: 'var(--radius-full)',
+                  backgroundColor: 'var(--color-border)',
+                  color: 'var(--color-text-secondary)',
+                  flexShrink: 0,
+                }}>
+                  {meta?.column ?? ''}
+                </span>
+
+                {/* Toggle */}
+                <button
+                  onClick={() => toggleVisible(w.id)}
+                  aria-label={w.visible ? 'Hide widget' : 'Show widget'}
+                  style={{
+                    width: 36, height: 20,
+                    borderRadius: 'var(--radius-full)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    backgroundColor: w.visible ? 'var(--color-accent)' : 'var(--color-border-strong)',
+                    position: 'relative',
+                    transition: 'background-color 0.2s',
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute',
+                    top: 2,
+                    left: w.visible ? 18 : 2,
+                    width: 16, height: 16,
+                    borderRadius: '50%',
+                    backgroundColor: '#fff',
+                    transition: 'left 0.2s',
+                    display: 'block',
+                  }} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '0.5rem 1rem',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border)',
+              background: 'transparent',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              color: 'var(--color-text)',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            style={{
+              padding: '0.5rem 1.25rem',
+              borderRadius: 'var(--radius-md)',
+              border: 'none',
+              backgroundColor: 'var(--color-accent)',
+              color: '#fff',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              opacity: isSaving ? 0.7 : 1,
+            }}
+          >
+            {isSaving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const queryClient = useQueryClient();
+  const [showCustomize, setShowCustomize] = useState(false);
+
+  // ── Widget data queries ──────────────────────────────────────────────────
   const { data: summaryData, isLoading: summaryLoading, isError: summaryError } =
     useQuery<SummaryData>({
       queryKey: ['dashboard', 'summary'],
@@ -867,8 +1100,21 @@ export default function DashboardPage() {
         const raw: SpendingChartRaw = r.data;
         const prevMap = new Map(raw.lastMonth.map((p) => [p.day, p.amount]));
         const currMap = new Map(raw.thisMonth.map((p) => [p.day, p.amount]));
-        const days = Array.from(new Set([...raw.thisMonth.map(p => p.day), ...raw.lastMonth.map(p => p.day)])).sort((a, b) => a - b);
-        const data = days.map((day) => ({ day, current: currMap.get(day) ?? 0, previous: prevMap.get(day) ?? 0 }));
+        // Build day 1-31 range covering all days in either dataset
+        const maxDay = Math.max(
+          ...raw.thisMonth.map(p => p.day),
+          ...raw.lastMonth.map(p => p.day),
+          1,
+        );
+        const days = Array.from({ length: maxDay }, (_, i) => i + 1);
+        // Build cumulative (running total) for each series
+        let cumCurr = 0;
+        let cumPrev = 0;
+        const data: SpendingPoint[] = days.map((day) => {
+          cumCurr += currMap.get(day) ?? 0;
+          cumPrev += prevMap.get(day) ?? 0;
+          return { day, thisMonth: cumCurr, lastMonth: cumPrev };
+        });
         const currentMonthTotal = raw.thisMonth.reduce((s, p) => s + p.amount, 0);
         return { currentMonthTotal, data };
       }),
@@ -898,14 +1144,142 @@ export default function DashboardPage() {
       queryFn: () => api.get('/dashboard/weekly-recap').then((r) => r.data),
     });
 
+  // ── Layout query + mutation ──────────────────────────────────────────────
+  const { data: savedLayout } = useQuery<WidgetLayout[] | null>({
+    queryKey: ['settings', 'dashboard-layout'],
+    queryFn: () => api.get('/settings/dashboard-layout').then((r) => r.data),
+  });
+
+  const layout = mergeLayout(savedLayout ?? null);
+
+  const saveLayoutMutation = useMutation({
+    mutationFn: (newLayout: WidgetLayout[]) =>
+      api.put('/settings/dashboard-layout', { layout: newLayout }).then((r) => r.data),
+    onSuccess: (data: WidgetLayout[]) => {
+      queryClient.setQueryData(['settings', 'dashboard-layout'], data);
+      setShowCustomize(false);
+    },
+  });
+
+  // ── Build ordered, filtered widget lists per column ──────────────────────
+  const sortedLayout = [...layout].sort((a, b) => a.order - b.order);
+
+  // Render a widget node by its ID
+  function renderWidget(id: string): React.ReactNode {
+    switch (id) {
+      case 'netWorth':
+        return (
+          <NetWorthWidget
+            key={id}
+            summary={summaryData}
+            chartData={netWorthChart}
+            summaryLoading={summaryLoading}
+            chartLoading={nwChartLoading}
+            summaryError={summaryError}
+            chartError={nwChartError}
+          />
+        );
+      case 'weeklyRecap':
+        return (
+          <WeeklyRecapWidget
+            key={id}
+            data={weeklyRecapData}
+            isLoading={weeklyRecapLoading}
+            isError={weeklyRecapError}
+          />
+        );
+      case 'budgetProgress':
+        return (
+          <BudgetWidget
+            key={id}
+            data={budgetData}
+            isLoading={budgetLoading}
+            isError={budgetError}
+          />
+        );
+      case 'gettingStarted':
+        return <ChecklistWidget key={id} />;
+      case 'spendingChart':
+        return (
+          <SpendingWidget
+            key={id}
+            data={spendingChart}
+            isLoading={spendingLoading}
+            isError={spendingError}
+          />
+        );
+      case 'recentTransactions':
+        return (
+          <RecentTransactionsWidget
+            key={id}
+            data={recentTxns}
+            isLoading={txnsLoading}
+            isError={txnsError}
+          />
+        );
+      case 'recurring':
+        return (
+          <RecurringWidget
+            key={id}
+            data={recurringData}
+            isLoading={recurringLoading}
+            isError={recurringError}
+          />
+        );
+      case 'goals':
+        return (
+          <GoalsWidget
+            key={id}
+            data={goalsData}
+            isLoading={goalsLoading}
+            isError={goalsError}
+          />
+        );
+      default:
+        return null;
+    }
+  }
+
+  const leftWidgets = sortedLayout
+    .filter(w => w.visible && WIDGET_META.find(m => m.id === w.id)?.column === 'left')
+    .map(w => renderWidget(w.id));
+
+  const rightWidgets = sortedLayout
+    .filter(w => w.visible && WIDGET_META.find(m => m.id === w.id)?.column === 'right')
+    .map(w => renderWidget(w.id));
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr',
-      gap: '1rem',
-      padding: '1rem 0',
-    }}>
-      {/* 2-column grid for md+ */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', padding: '1rem 0' }}>
+      {/* Dashboard header with Customize button */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)' }}>
+          Dashboard
+        </h1>
+        <button
+          onClick={() => setShowCustomize(true)}
+          title="Customize dashboard"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.375rem',
+            padding: '0.375rem 0.875rem',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-border)',
+            background: 'transparent',
+            cursor: 'pointer',
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+            color: 'var(--color-text-secondary)',
+          }}
+        >
+          {/* gear icon (unicode) */}
+          <span style={{ fontSize: '0.875rem' }}>⚙</span>
+          Customize
+        </button>
+      </div>
+
+      {/* 2-column widget grid */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)',
@@ -914,51 +1288,24 @@ export default function DashboardPage() {
       }}>
         {/* Left column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <NetWorthWidget
-            summary={summaryData}
-            chartData={netWorthChart}
-            summaryLoading={summaryLoading}
-            chartLoading={nwChartLoading}
-            summaryError={summaryError}
-            chartError={nwChartError}
-          />
-          <WeeklyRecapWidget
-            data={weeklyRecapData}
-            isLoading={weeklyRecapLoading}
-            isError={weeklyRecapError}
-          />
-          <BudgetWidget
-            data={budgetData}
-            isLoading={budgetLoading}
-            isError={budgetError}
-          />
-          <ChecklistWidget />
+          {leftWidgets}
         </div>
 
         {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <SpendingWidget
-            data={spendingChart}
-            isLoading={spendingLoading}
-            isError={spendingError}
-          />
-          <RecentTransactionsWidget
-            data={recentTxns}
-            isLoading={txnsLoading}
-            isError={txnsError}
-          />
-          <RecurringWidget
-            data={recurringData}
-            isLoading={recurringLoading}
-            isError={recurringError}
-          />
-          <GoalsWidget
-            data={goalsData}
-            isLoading={goalsLoading}
-            isError={goalsError}
-          />
+          {rightWidgets}
         </div>
       </div>
+
+      {/* Customize modal */}
+      {showCustomize && (
+        <CustomizeModal
+          layout={layout}
+          onSave={(newLayout) => saveLayoutMutation.mutate(newLayout)}
+          onClose={() => setShowCustomize(false)}
+          isSaving={saveLayoutMutation.isPending}
+        />
+      )}
     </div>
   );
 }

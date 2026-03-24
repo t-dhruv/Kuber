@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
@@ -533,6 +534,67 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
     return res.send(toCSV(rows, columns));
   } catch (err) {
     console.error('[reports/export/csv]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Saved Reports ────────────────────────────────────────────────────────────
+
+const SavedReportSchema = z.object({
+  name: z.string().min(1, 'name is required').max(100),
+  filters: z.object({
+    tab: z.enum(['cashflow', 'spending', 'income']).optional(),
+    datePreset: z.string().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+  }),
+});
+
+// GET /api/v1/reports/saved
+router.get('/saved', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const saved = await prisma.savedReport.findMany({
+      where: { householdId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(saved);
+  } catch (err) {
+    console.error('[reports/saved GET]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/reports/saved
+router.post('/saved', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const parsed = SavedReportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid input' });
+    }
+    const { name, filters } = parsed.data;
+    const saved = await prisma.savedReport.create({
+      data: { householdId, name, filters },
+    });
+    return res.status(201).json(saved);
+  } catch (err) {
+    console.error('[reports/saved POST]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/v1/reports/saved/:id
+router.delete('/saved/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+    const existing = await prisma.savedReport.findFirst({ where: { id, householdId } });
+    if (!existing) return res.status(404).json({ error: 'Saved report not found' });
+    await prisma.savedReport.delete({ where: { id } });
+    return res.json({ message: 'Deleted' });
+  } catch (err) {
+    console.error('[reports/saved DELETE]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

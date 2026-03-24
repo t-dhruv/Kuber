@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-23 (Sprint 8 complete)
+> Last updated: 2026-03-24 (Sprint 9 complete)
 
 ---
 
@@ -19,7 +19,7 @@
 | Reports | 🟢 Working | All field names corrected; Money Flow Sankey chart implemented |
 | Recurring | 🟢 Working | Runtime crash fixed, MonthlySummary corrected |
 | Goals | 🟢 Working | currentAmount/targetAmount fixed in display + forms |
-| Investments | 🟢 Working | benchmarks crash fixed, all field names corrected |
+| Investments | 🟢 Enhanced | Live benchmarks via Yahoo Finance (SPY/BND/VTI) with 15-min cache + fallback |
 | Settings | 🟢 Working | Notifications fixed; 2FA setup/disable UI; SMTP test; Integrations section |
 | Notifications | 🟢 Working | Read/write envelope corrected |
 | AI Advisor | 🟢 Done | Real multi-provider (Claude/OpenAI/Gemini/OpenRouter); conversation persistence |
@@ -31,6 +31,10 @@
 | Cash Flow Merchants | 🟢 Done | Merchant breakdown tab with ranked list + percentage bars |
 | Recurring Calendar | 🟢 Done | Calendar view toggle: monthly grid with color-coded bill chips |
 | Weekly Recap | 🟢 Done | Dashboard widget: spending Δ, net worth Δ, top category, upcoming bills |
+| Saved Report Views | 🟢 Done | Save/load/delete named filter combos in Reports page |
+| Delete Transactions | 🟢 Done | Settings > Data Management: delete before date (soft-delete, wired) |
+| Dashboard Customization | 🟢 Done | Widget reorder/hide with HTML5 drag-and-drop + persisted layout |
+| Spending Cumulative Chart | 🟢 Done | Dashboard SpendingWidget: this month vs last month day-by-day |
 | Merchants Settings | 🟢 Done | Settings > Merchants: search, sort, inline edit, delete |
 | E2E Tests | 🟢 Done | Playwright setup + smoke tests (7) + auth tests (3); `npm run test:e2e` |
 | Unit Tests | 🔴 None | Server lib unit tests still missing |
@@ -51,6 +55,22 @@
 ---
 
 ## Sprint Log
+
+### Sprint 9 — Live Investment Benchmarks, Saved Reports, Dashboard Customization (2026-03-24)
+**Goal:** Polish and close remaining Monarch feature gaps — live market data, saved views, customizable dashboard.
+
+**Completed:**
+- [x] `getLiveBenchmarks()` in `priceCache.ts` — fetches SPY/BND/VTI historical data via Yahoo Finance, computes period returns (1M/3M/6M/1Y/ALL/YTD), 15-min cache, falls back to hardcoded values on error
+- [x] `investments.ts` — replaced hardcoded benchmark object with `await getLiveBenchmarks()`
+- [x] `SavedReport` model + migration `20260323210000_add_saved_reports` — already existed from prior work
+- [x] `GET/POST/DELETE /api/v1/reports/saved` — already existed; `SavedViewsDropdown` + `SaveViewModal` in ReportsPage already built
+- [x] `DELETE /api/v1/transactions/before?date=` — already existed (soft-delete, returns count)
+- [x] `SettingsPage.tsx` DataSection — wired `handleDeleteHistory` to real mutation (was stub); shows count in success toast
+- [x] `DashboardPage.tsx` — connected existing `CustomizeModal` + `WIDGET_META` skeleton to page render; layout fetched from `GET /api/v1/settings/dashboard-layout`, saved via `PUT`; ordered/filtered columns applied
+- [x] `SpendingWidget` cumulative chart — already fully wired (this month vs last month lines)
+- [x] TypeScript: zero errors client + server
+
+---
 
 ### Sprint 8 — Debt Goals, Merchant Breakdown, Calendar, Weekly Recap, Merchants UI (2026-03-23)
 **Goal:** Post-release backlog — fill remaining Monarch feature gaps.

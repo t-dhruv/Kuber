@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Coins,
+  Zap,
 } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { to: '/recurring', icon: <RefreshCw size={18} />, label: 'Recurring' },
   { to: '/goals', icon: <Target size={18} />, label: 'Goals' },
   { to: '/investments', icon: <LineChart size={18} />, label: 'Investments' },
+  { to: '/rules', icon: <Zap size={18} />, label: 'Rules' },
   { to: '/advice', icon: <Sparkles size={18} />, label: 'Advice' },
 ];
 

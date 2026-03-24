@@ -2014,10 +2014,25 @@ async function downloadFile(url: string, filename: string) {
 function DataSection() {
   const [cleanStartDate, setCleanStartDate] = useState('');
   const [deleteHistoryModalOpen, setDeleteHistoryModalOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: (date: string) =>
+      api.delete(`/transactions/before?date=${encodeURIComponent(date)}`).then((r) => r.data as { count: number }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      setDeleteHistoryModalOpen(false);
+      setCleanStartDate('');
+      notify.success(`${data.count} transaction${data.count !== 1 ? 's' : ''} deleted`);
+    },
+    onError: () => {
+      setDeleteHistoryModalOpen(false);
+      notify.error('Failed to delete transactions');
+    },
+  });
 
   function handleDeleteHistory() {
-    setDeleteHistoryModalOpen(false);
-    notify.info('History deletion not implemented in demo');
+    deleteMutation.mutate(cleanStartDate);
   }
 
   return (
@@ -2094,7 +2109,9 @@ function DataSection() {
         </p>
         <ModalFooter>
           <Button variant="secondary" onClick={() => setDeleteHistoryModalOpen(false)}>Cancel</Button>
-          <Button variant="danger" onClick={handleDeleteHistory}>Delete history</Button>
+          <Button variant="danger" onClick={handleDeleteHistory} disabled={deleteMutation.isPending}>
+            {deleteMutation.isPending ? 'Deleting…' : 'Delete history'}
+          </Button>
         </ModalFooter>
       </Modal>
     </div>

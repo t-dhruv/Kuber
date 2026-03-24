@@ -671,6 +671,66 @@ router.put('/password', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ─── Dashboard Layout ─────────────────────────────────────────────────────────
+
+// GET /api/v1/settings/dashboard-layout
+router.get('/dashboard-layout', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+
+    const pref = await prisma.userPreference.findUnique({
+      where: { userId_key: { userId, key: 'dashboard_layout' } },
+    });
+
+    if (!pref) {
+      return res.json(null);
+    }
+
+    try {
+      return res.json(JSON.parse(pref.value));
+    } catch {
+      return res.json(null);
+    }
+  } catch (err) {
+    console.error('[settings/dashboard-layout GET]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/v1/settings/dashboard-layout
+router.put('/dashboard-layout', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { layout } = req.body;
+
+    if (!Array.isArray(layout)) {
+      return res.status(400).json({ error: 'layout must be an array' });
+    }
+
+    for (const item of layout) {
+      if (
+        typeof item !== 'object' ||
+        typeof item.id !== 'string' ||
+        typeof item.visible !== 'boolean' ||
+        typeof item.order !== 'number'
+      ) {
+        return res.status(400).json({ error: 'Each layout item must have id (string), visible (boolean), order (number)' });
+      }
+    }
+
+    await prisma.userPreference.upsert({
+      where: { userId_key: { userId, key: 'dashboard_layout' } },
+      update: { value: JSON.stringify(layout) },
+      create: { userId, key: 'dashboard_layout', value: JSON.stringify(layout) },
+    });
+
+    return res.json(layout);
+  } catch (err) {
+    console.error('[settings/dashboard-layout PUT]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /api/v1/settings/email/test
 router.post('/email/test', async (req: AuthRequest, res: Response) => {
   try {

@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
@@ -243,6 +244,48 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
     return res.send(toCSV(rows, columns));
   } catch (err) {
     console.error('[transactions/export/csv]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/v1/transactions/before?date=YYYY-MM-DD
+// Soft-deletes (hides) all transactions before the given date.
+// Must be registered before /:id to avoid param collision.
+// ---------------------------------------------------------------------------
+const DeleteBeforeSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+});
+
+router.delete('/before', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const parsed = DeleteBeforeSchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid date' });
+    }
+    const cutoff = new Date(parsed.data.date);
+    if (isNaN(cutoff.getTime())) {
+      return res.status(400).json({ error: 'date is not a valid date' });
+    }
+
+    const result = await prisma.transaction.updateMany({
+      where: { householdId, date: { lt: cutoff } },
+      data: { isHidden: true },
+    });
+
+    logAudit({
+      householdId,
+      userId: req.userId!,
+      action: 'DELETE',
+      entity: 'TRANSACTION',
+      entityId: 'bulk-before-date',
+      before: { cutoffDate: parsed.data.date, count: result.count },
+    });
+
+    return res.json({ count: result.count });
+  } catch (err) {
+    console.error('[transactions/before DELETE]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
