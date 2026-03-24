@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { logAudit } from '../lib/audit';
+import { toCSV, setCsvHeaders } from '../lib/csvExport';
 
 const router = Router();
 
@@ -56,10 +58,12 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
 
-    // Pagination
-    const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 25));
-    const skip = (page - 1) * limit;
+
+    // Cursor param: base64-encoded JSON { date: ISO, id: string }
+    const cursorParam = req.query.cursor as string | undefined;
+    // Offset fallback for page-based UI
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
 
     // Filters
     const {
@@ -110,50 +114,135 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       ];
     }
 
-    if (isRecurring !== undefined) {
-      where.isRecurring = isRecurring === 'true';
-    }
-
-    if (needsReview !== undefined) {
-      where.needsReview = needsReview === 'true';
-    }
+    if (isRecurring !== undefined) where.isRecurring = isRecurring === 'true';
+    if (needsReview !== undefined) where.needsReview = needsReview === 'true';
 
     if (tagIds) {
       const ids = tagIds.split(',').map(s => s.trim()).filter(Boolean);
-      if (ids.length > 0) {
-        where.tags = { some: { tagId: { in: ids } } };
-      }
+      if (ids.length > 0) where.tags = { some: { tagId: { in: ids } } };
     }
 
-    // Build orderBy
-    const allowedSortFields: Record<string, string> = {
-      date: 'date',
-      amount: 'amount',
-      merchantName: 'description', // sort by description as proxy; merchant join sort not supported directly
-    };
-    const sortField = allowedSortFields[sort] ?? 'date';
+    const sortField = sort === 'amount' ? 'amount' : 'date';
     const sortOrder = order === 'asc' ? 'asc' : 'desc';
-    const orderBy: any = { [sortField]: sortOrder };
+    // Always add id as tiebreaker for stable cursor pagination
+    const orderBy: any = [{ [sortField]: sortOrder }, { id: 'desc' }];
 
-    const [transactions, total] = await Promise.all([
-      prisma.transaction.findMany({
-        where,
+    // ── Cursor-based path ──────────────────────────────────────────────────────
+    if (cursorParam) {
+      let cursor: { date: string; id: string };
+      try {
+        cursor = JSON.parse(Buffer.from(cursorParam, 'base64url').toString('utf8'));
+      } catch {
+        return res.status(400).json({ error: 'Invalid cursor' });
+      }
+
+      const cursorDate = new Date(cursor.date);
+      // Fetch one extra to determine if there's a next page
+      const whereWithCursor = {
+        ...where,
+        OR: [
+          { date: sortOrder === 'desc' ? { lt: cursorDate } : { gt: cursorDate } },
+          { date: cursorDate, id: { lt: cursor.id } },
+        ],
+      };
+
+      const rows = await prisma.transaction.findMany({
+        where: whereWithCursor,
         include: TX_INCLUDE,
         orderBy,
-        skip,
-        take: limit,
-      }),
+        take: limit + 1,
+      });
+
+      const hasMore = rows.length > limit;
+      const page_rows = rows.slice(0, limit);
+      const lastRow = page_rows[page_rows.length - 1];
+      const nextCursor = hasMore && lastRow
+        ? Buffer.from(JSON.stringify({ date: lastRow.date.toISOString(), id: lastRow.id })).toString('base64url')
+        : null;
+
+      return res.json({
+        transactions: page_rows.map(formatTx),
+        nextCursor,
+        hasMore,
+      });
+    }
+
+    // ── Offset-based path (backward compat + page-number UI) ──────────────────
+    const skip = (page - 1) * limit;
+    const [transactions, total] = await Promise.all([
+      prisma.transaction.findMany({ where, include: TX_INCLUDE, orderBy, skip, take: limit }),
       prisma.transaction.count({ where }),
     ]);
+
+    const lastRow = transactions[transactions.length - 1];
+    const nextCursor = lastRow && (skip + limit) < total
+      ? Buffer.from(JSON.stringify({ date: lastRow.date.toISOString(), id: lastRow.id })).toString('base64url')
+      : null;
 
     return res.json({
       transactions: transactions.map(formatTx),
       total,
       page,
       totalPages: Math.ceil(total / limit),
+      nextCursor,
     });
   } catch (err) {
     console.error('[transactions/list]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/transactions/export/csv
+// ---------------------------------------------------------------------------
+router.get('/export/csv', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { startDate, endDate, accountId } = req.query as Record<string, string | undefined>;
+
+    const where: Record<string, unknown> = { householdId };
+
+    if (accountId) where.accountId = accountId;
+
+    if (startDate || endDate) {
+      const dateFilter: { gte?: Date; lte?: Date } = {};
+      if (startDate) dateFilter.gte = new Date(startDate);
+      if (endDate) dateFilter.lte = new Date(endDate);
+      where.date = dateFilter;
+    }
+
+    const transactions = await prisma.transaction.findMany({
+      where,
+      include: TX_INCLUDE,
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+      take: 10000,
+    });
+
+    const rows = transactions.map(t => ({
+      date: t.date.toISOString().slice(0, 10),
+      description: formatMerchantName(t.merchant, t.description),
+      amount: t.amount,
+      type: t.amount >= 0 ? 'Income' : 'Expense',
+      category: t.category?.name ?? '',
+      account: t.account.name,
+      notes: t.notes ?? '',
+    }));
+
+    const columns = [
+      { key: 'date',        header: 'Date' },
+      { key: 'description', header: 'Description' },
+      { key: 'amount',      header: 'Amount' },
+      { key: 'type',        header: 'Type' },
+      { key: 'category',    header: 'Category' },
+      { key: 'account',     header: 'Account' },
+      { key: 'notes',       header: 'Notes' },
+    ];
+
+    const filename = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+    setCsvHeaders(res, filename);
+    return res.send(toCSV(rows, columns));
+  } catch (err) {
+    console.error('[transactions/export/csv]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -261,6 +350,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       include: TX_INCLUDE,
     });
 
+    logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'TRANSACTION', entityId: tx.id, after: { amount: tx.amount, description: tx.description } });
     return res.status(201).json(formatTx(tx));
   } catch (err) {
     console.error('[transactions/create]', err);
@@ -313,6 +403,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       include: TX_INCLUDE,
     });
 
+    logAudit({ householdId, userId: req.userId!, action: 'UPDATE', entity: 'TRANSACTION', entityId: tx.id, before: { amount: existing.amount, description: existing.description }, after: { amount: tx.amount, description: tx.description } });
     return res.json(formatTx(tx));
   } catch (err) {
     console.error('[transactions/update]', err);
@@ -332,6 +423,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
 
     await prisma.transaction.delete({ where: { id } });
+    logAudit({ householdId, userId: req.userId!, action: 'DELETE', entity: 'TRANSACTION', entityId: id, before: { amount: existing.amount, description: existing.description } });
 
     return res.json({ success: true });
   } catch (err) {

@@ -5,6 +5,7 @@
     "dev": { "persistent": true, "cache": false },
     "lint": {},
     "test": { "cache": false },
+    "test:e2e": { "cache": false },
     "db:migrate": { "cache": false },
     "db:seed": { "cache": false },
     "db:studio": { "persistent": true, "cache": false }

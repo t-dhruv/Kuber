@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "budgets" ADD COLUMN "budgetType" TEXT NOT NULL DEFAULT 'FLEXIBLE';

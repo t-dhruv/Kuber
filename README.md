@@ -1,100 +1,157 @@
 # Kuber
 
-A full-stack personal finance web application inspired by Monarch Money.
+**Self-hostable personal finance. Open source.**
 
-## Tech Stack
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docker-compose.prod.yml)
 
-**Frontend:** React 18 + TypeScript + Vite + Tailwind CSS v4 + Recharts + TanStack Query + Zustand
-**Backend:** Node.js + Express + TypeScript + Prisma ORM
-**Database:** PostgreSQL 16
-**Auth:** JWT (15min access token) + httpOnly refresh cookie (7 days)
-**Infrastructure:** Docker Compose, Turborepo monorepo
+Kuber is a full-featured personal finance web app you run on your own server. Track accounts, transactions, budgets, investments, and recurring bills — with an AI advisor that works with the provider of your choice. No subscriptions. No third-party bank connections. Your data stays yours.
+
+---
+
+![Kuber dashboard screenshot](docs/screenshot.png)
+
+---
 
 ## Features
 
-- **Dashboard** — Net worth, budget overview, spending charts, goals, recurring bills
-- **Accounts** — Multi-account tracking (checking, savings, credit cards, investments, loans)
-- **Transactions** — Full CRUD with search, filters, bulk edit, category management
-- **Cash Flow** — Monthly/yearly income vs expenses with interactive charts
-- **Budget** — Category-based budgeting with inline editing and progress tracking
-- **Reports** — Spending/income analysis with donut charts and date range filters
-- **Recurring** — Bill tracking with paid/upcoming status
-- **Goals** — Savings goal tracking with progress rings
-- **Investments** — Holdings tracking with simulated prices and allocation breakdown
-- **Settings** — Profile, notifications, household management, category CRUD
-- **AI Advisor** — Mock AI financial assistant with contextual responses
+### Finance Tracking
+- **Dashboard** — Net worth snapshot, budget progress, spending charts, upcoming bills, savings goals
+- **Accounts** — Checking, savings, credit cards, investments, loans, and custom account types
+- **Transactions** — Full CRUD with search, filters, bulk edit, category management, and a rules engine for auto-categorization
+- **Cash Flow** — Monthly and yearly income vs. expenses with interactive charts
+- **Budgets** — Category-based budgets with inline editing and real-time progress tracking
+- **Reports** — Spending and income breakdowns with donut charts and flexible date ranges
+- **Recurring Bills** — Track bills with paid/upcoming status and monthly summaries
+- **Goals** — Savings goals with contribution tracking and progress rings
+- **Investments** — Holdings tracking, allocation breakdown, and performance over time
 
-## Quick Start
+### Security
+- JWT access tokens (15 min) + httpOnly refresh cookie (7 days)
+- Two-factor authentication (TOTP — works with any authenticator app)
+- Account lockout after failed login attempts
+- Full audit log of sensitive actions
+- Household-scoped data — multi-user households supported
+- All financial records soft-deleted, never permanently erased
 
-### Prerequisites
-- Node.js 18+
-- Docker + Docker Compose
+### AI Advisor
+- Chat with an AI financial advisor that has context about your accounts and spending
+- Bring your own provider: **Claude, OpenAI, Gemini, Ollama, OpenRouter**, or disable entirely
+- API key stored encrypted; never leaves your server
 
-### Setup
+### Self-Hosting
+- Single `docker compose up` deployment
+- Nginx reverse proxy included
+- SMTP email (Gmail or any provider) — user-configurable in Settings
+- No external services required; everything runs on your hardware
+
+---
+
+## Quick Start (Self-Host)
+
+**Prerequisites:** Docker and Docker Compose.
 
 ```bash
-# Clone and install
-npm install
-
-# Copy environment file
+git clone https://github.com/yourusername/kuber.git
+cd kuber
 cp .env.example .env
-
-# Start database
-docker-compose up -d postgres
-
-# Run migrations + seed
-cd server && npm run db:migrate && npm run db:seed
-
-# Start development
-npm run dev
+# Edit .env — set JWT secrets, database password, and any optional values
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-### Demo Credentials
-- Email: `demo@kuber.app`
-- Password: `password123`
+Visit **http://localhost** and create your account on first run.
 
-### Development URLs
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:4000
-- API Health: http://localhost:4000/health
+> The `.env.example` file documents every variable. At minimum, set `JWT_SECRET` and `JWT_REFRESH_SECRET` to long random strings before going live.
+
+---
+
+## Development Setup
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full instructions. The short version:
+
+```bash
+# Prerequisites: Node.js 20+, Docker, npm
+git clone https://github.com/yourusername/kuber.git
+cd kuber
+npm install
+cp .env.example .env   # fill in values
+make dev               # starts DB + server + client
+```
+
+| URL | Service |
+|-----|---------|
+| http://localhost:3000 | Frontend |
+| http://localhost:4000 | Backend API |
+| http://localhost:5555 | Prisma Studio (run `make db-studio`) |
+
+Demo credentials after seeding (`make db-seed`): `demo@kuber.app` / `password123`
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS v4 |
+| State | Zustand (auth/UI), TanStack React Query v5 (server state) |
+| Router | React Router v6, lazy-loaded pages |
+| Charts | Recharts |
+| Backend | Node.js, Express 4, TypeScript |
+| ORM | Prisma 5 |
+| Database | PostgreSQL 16 |
+| Auth | JWT + httpOnly cookie + TOTP 2FA |
+| Email | Nodemailer (SMTP, user-configurable) |
+| AI | Multi-provider: Claude, OpenAI, Gemini, Ollama, OpenRouter |
+| Infra | Docker Compose, Nginx, Turborepo monorepo |
+| Testing | Vitest (unit), Playwright (E2E) |
+
+---
 
 ## Project Structure
 
 ```
 kuber/
 ├── client/          # React + Vite frontend
-│   ├── src/
-│   │   ├── components/  # Reusable UI components
-│   │   ├── pages/       # Route-level page components
-│   │   ├── hooks/       # Custom React hooks
-│   │   ├── stores/      # Zustand state stores
-│   │   └── lib/         # API client, utilities
+│   └── src/
+│       ├── components/  # Shared UI components
+│       ├── pages/       # Route-level page components
+│       ├── hooks/       # Custom React hooks
+│       ├── stores/      # Zustand state stores
+│       └── lib/         # Axios client, utilities
 ├── server/          # Node.js + Express backend
-│   ├── src/
-│   │   ├── routes/      # API route handlers
-│   │   ├── middleware/  # Auth, error handling
-│   │   └── lib/         # Prisma client, utilities
-│   └── prisma/          # Schema + migrations + seed
-└── shared/          # Shared TypeScript types
+│   └── src/
+│       ├── routes/      # API route handlers
+│       ├── middleware/  # Auth, error handling, rate limiting
+│       └── lib/         # Prisma client, AI, email, encryption
+│   └── prisma/          # Schema, migrations, seed data
+└── shared/          # Shared TypeScript types and enums
 ```
 
-## API Endpoints
+---
 
-All endpoints prefixed with `/api/v1/` and require Bearer token auth (except `/auth/*`).
+## Roadmap
 
-| Resource | Endpoints |
-|----------|-----------|
-| Auth | POST /auth/signup, /login, /refresh, /logout, /forgot-password, /reset-password |
-| Users | GET/PUT /users/me |
-| Dashboard | GET /dashboard/summary, /spending-chart, /budget-summary, /recent-transactions, /recurring-summary, /net-worth-chart, /goals-summary |
-| Accounts | GET/POST /accounts, GET/PUT/DELETE /accounts/:id |
-| Transactions | GET/POST /transactions, GET/PUT/DELETE /transactions/:id, bulk operations |
-| Budgets | GET/POST/DELETE /budgets |
-| Cash Flow | GET /cashflow, /cashflow/month, /cashflow/sankey |
-| Reports | GET /reports/spending, /income, /cashflow, /trends |
-| Recurring | GET/POST /recurring, GET/PUT/DELETE /recurring/:id, /monthly-summary |
-| Goals | GET/POST /goals, GET/PUT/DELETE /goals/:id, POST /goals/:id/contribute |
-| Investments | GET /investments/holdings, /allocation, /performance, POST/PUT/DELETE /holdings |
-| Settings | GET/PUT /settings/profile, /household, /categories, /notifications, /password |
-| Notifications | GET/PUT/DELETE /notifications |
-| Advisor | POST /advisor/chat |
+Planned for future releases:
+
+- **Bank sync** — Read-only import via Plaid or MX (no manual entry required)
+- **Mobile PWA** — Installable progressive web app with offline support
+- **CSV import/export** — Bulk import from bank exports
+- **Webhooks** — Trigger external automations on financial events
+- **Multiple currencies** — Per-account currency with live exchange rates
+
+Contributions toward any of these are welcome. Open an issue to discuss before starting large work.
+
+---
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, code conventions, and the PR process.
+
+For bugs, open a [GitHub Issue](https://github.com/yourusername/kuber/issues). For security vulnerabilities, see the reporting instructions in CONTRIBUTING.md — do not use public issues.
+
+---
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Kuber Contributors

@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { logAudit } from '../lib/audit';
+import { toCSV, setCsvHeaders } from '../lib/csvExport';
 
 const router = Router();
 
@@ -11,6 +13,7 @@ function formatAccount(account: {
   name: string;
   type: string;
   institution: string | null;
+  institutionLogo: string | null;
   lastFour: string | null;
   balance: number;
   currency: string;
@@ -24,6 +27,7 @@ function formatAccount(account: {
     name: account.name,
     type: account.type,
     institution: account.institution,
+    institutionLogo: account.institutionLogo,
     lastFour: account.lastFour,
     balance: account.balance,
     currency: account.currency,
@@ -77,6 +81,47 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
   } catch (err) {
     console.error('[accounts/GET /]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/v1/accounts/export/csv
+router.get('/export/csv', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+
+    const accounts = await prisma.account.findMany({
+      where: { householdId },
+      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+    });
+
+    const rows = accounts.map(a => ({
+      name: a.name,
+      type: a.type,
+      institution: a.institution ?? '',
+      lastFour: a.lastFour ?? '',
+      balance: a.balance,
+      currency: a.currency,
+      hidden: a.isHidden ? 'Yes' : 'No',
+      excludeFromNetWorth: a.excludeFromNetWorth ? 'Yes' : 'No',
+    }));
+
+    const columns = [
+      { key: 'name',               header: 'Name' },
+      { key: 'type',               header: 'Type' },
+      { key: 'institution',        header: 'Institution' },
+      { key: 'lastFour',           header: 'Last Four' },
+      { key: 'balance',            header: 'Balance' },
+      { key: 'currency',           header: 'Currency' },
+      { key: 'hidden',             header: 'Hidden' },
+      { key: 'excludeFromNetWorth', header: 'Exclude From Net Worth' },
+    ];
+
+    const filename = `accounts-${new Date().toISOString().slice(0, 10)}.csv`;
+    setCsvHeaders(res, filename);
+    return res.send(toCSV(rows, columns));
+  } catch (err) {
+    console.error('[accounts/export/csv]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -162,7 +207,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { name, type, institution, lastFour, balance, currency, notes } = req.body;
+    const { name, type, institution, institutionLogo, lastFour, balance, currency, notes } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'name is required' });
@@ -180,6 +225,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         name: name.trim(),
         type,
         institution: institution ?? null,
+        institutionLogo: institutionLogo ?? null,
         lastFour: lastFour ?? null,
         balance,
         currency: currency ?? 'USD',
@@ -187,6 +233,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       },
     });
 
+    logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'ACCOUNT', entityId: account.id, after: { name: account.name, type: account.type } });
     return res.status(201).json({ account: formatAccount(account) });
   } catch (err) {
     console.error('[accounts/POST /]', err);
@@ -205,7 +252,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    const { name, institution, lastFour, isHidden, excludeFromNetWorth } = req.body;
+    const { name, institution, institutionLogo, lastFour, isHidden, excludeFromNetWorth } = req.body;
 
     const data: Record<string, unknown> = {};
     if (name !== undefined) {
@@ -215,11 +262,13 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       data.name = name.trim();
     }
     if (institution !== undefined) data.institution = institution;
+    if (institutionLogo !== undefined) data.institutionLogo = institutionLogo ?? null;
     if (lastFour !== undefined) data.lastFour = lastFour;
     if (isHidden !== undefined) data.isHidden = isHidden;
     if (excludeFromNetWorth !== undefined) data.excludeFromNetWorth = excludeFromNetWorth;
 
     const account = await prisma.account.update({ where: { id }, data });
+    logAudit({ householdId, userId: req.userId!, action: 'UPDATE', entity: 'ACCOUNT', entityId: id, before: { name: existing.name }, after: { name: account.name } });
 
     return res.json({ account: formatAccount(account) });
   } catch (err) {

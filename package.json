@@ -2,17 +2,24 @@
   "name": "kuber",
   "private": true,
   "packageManager": "npm@11.6.2",
-  "workspaces": ["client", "server", "shared"],
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "turbo test",
+    "test:e2e": "playwright test",
+    "test:smoke": "playwright test --grep @smoke",
     "db:migrate": "turbo run db:migrate --filter=server",
     "db:seed": "turbo run db:seed --filter=server",
     "db:studio": "turbo run db:studio --filter=server"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "turbo": "^2.0.0"
   }
 }

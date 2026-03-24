@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-19
+> Last updated: 2026-03-23 (Sprint 5)
 
 ---
 
@@ -9,31 +9,144 @@
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Core auth | ⚠️ Needs audit | JWT works, refresh needs token family tracking, 2FA not implemented |
+| Core auth | 🟢 Working | JWT + refresh token family tracking + TOTP 2FA + account lockout |
 | Dashboard | 🟢 Working | API shape fixed |
 | Accounts | 🟢 Working | API shape fixed, grouped response handled |
 | Transactions | 🟢 Working | API shape fixed, bulk actions fixed, PATCH→PUT |
-| Budget | 🟢 Working | API shape fixed, nested income/expenses structure |
-| Cash Flow | 🟢 Working | NaN crash fixed, income/expenses as objects |
-| Reports | 🟢 Working | All field names corrected |
+| Budget | 🟢 Enhanced | v2: Fixed/Flexible/Non-Monthly sections, unbudgeted alert, budgetType selector, Left-to-Budget banner |
+| Cash Flow | 🟢 Working | NaN crash fixed, income/expenses as objects; Sankey chart implemented |
+| Reports | 🟢 Working | All field names corrected; Money Flow Sankey chart implemented |
 | Recurring | 🟢 Working | Runtime crash fixed, MonthlySummary corrected |
 | Goals | 🟢 Working | currentAmount/targetAmount fixed in display + forms |
 | Investments | 🟢 Working | benchmarks crash fixed, all field names corrected |
-| Settings | 🟢 Working | Notifications envelope fixed, household members fixed |
+| Settings | 🟢 Working | Notifications fixed; 2FA setup/disable UI; SMTP test; Integrations section |
 | Notifications | 🟢 Working | Read/write envelope corrected |
 | AI Advisor | 🔴 Mock only | Multi-provider not implemented |
-| E2E Tests | 🔴 None | No tests exist |
-| Unit Tests | 🔴 None | No tests exist |
-| Docker prod | ⚠️ Partial | No Nginx, no prod compose |
-| 2FA | 🔴 Not built | Planned |
-| SMTP Email | 🔴 Not built | Schema exists, no sender |
-| Open Source docs | 🔴 Not done | LICENSE, CONTRIBUTING missing |
+| E2E Tests | 🟢 Done | Playwright setup + smoke tests (7) + auth tests (3); `npm run test:e2e` |
+| Unit Tests | 🔴 None | Server lib unit tests still missing |
+| Docker prod | 🟢 Done | Multi-stage Dockerfiles, docker-compose.prod.yml, nginx/prod.conf |
+| GitHub Actions CI | 🟢 Done | .github/workflows/ci.yml — lint + build on push/PR |
+| CSV Export | 🟢 Done | Transactions, Accounts, Reports — GET /export/csv endpoints |
+| 2FA | 🟢 Done | TOTP setup/enable/disable, QR code, backup codes, 2-step login |
+| SMTP Email | 🟢 Done | Nodemailer transport, password reset sends, test-email endpoint |
+| Audit Log | 🟢 Done | AuditLog table, fire-and-forget logAudit() on all mutations |
+| Rules Engine | 🟢 Done | Full CRUD UI + rule builder + apply/apply-all endpoints |
+| Cursor Pagination | 🟢 Done | Transactions: base64url cursor, stable sort, backwards compat |
+| CSP Headers | 🟢 Done | Helmet CSP with self + unsafe-inline for Tailwind |
+| Account Lockout | 🟢 Done | 5/8/10 attempts → 15m/1h/24h, unlock via email |
+| Open Source docs | 🟢 Done | LICENSE (MIT), CONTRIBUTING.md, README.md (full rewrite) |
 
 **Legend:** 🟢 Done | ⚠️ Partial / Needs work | 🔴 Not done / Broken
 
 ---
 
 ## Sprint Log
+
+### Sprint 5 — Budget v2 (2026-03-23)
+**Goal:** Monarch-parity on budgeting — Fixed/Flexible/Non-Monthly split, income budgeting, unbudgeted detection.
+
+**Completed (backend):**
+- [x] Added `budgetType` field to `Budget` model (String, default `'FLEXIBLE'`, values: `FIXED | FLEXIBLE | NON_MONTHLY`)
+- [x] Migration: `20260323000000_add_budget_type_to_budget` (run `make db-migrate` to apply)
+- [x] `GET /api/v1/budgets` — new `expenses.byType.{fixed,flexible,nonMonthly}` breakdown; `unbudgeted[]` array; `budgetType` on every `CategoryRow`
+- [x] `POST /api/v1/budgets` — accepts `budgetType` (validated, defaults to `FLEXIBLE`)
+- [x] `PUT /api/v1/budgets/:id` — new endpoint for updating `budgetType` and/or `amount`
+
+**Completed (frontend):**
+- [x] `BudgetPage.tsx` rewritten — Fixed / Flexible / Non-Monthly collapsible sections with row counts and subtotals
+- [x] "By Type | By Group" toggle — new type view + legacy group view both functional
+- [x] Budget type selector on edit (badge when viewing, `<select>` when editing)
+- [x] `UnbudgetedAlert` — dismissible banner listing categories with spend but no budget, each with "+ Add Budget" CTA
+- [x] `LeftToBudgetBanner` — prominent income − expenses = leftToBudget with green/red coloring
+- [x] Savings Rate badge with color thresholds (≥20% green, 10-19% yellow, <10% red)
+- [x] TypeScript: zero errors on client and server
+
+**Deferred:**
+- Rollover budgets (carry unspent amounts to next month) — future sprint
+
+---
+
+### Sprint 4 — Foundation & Release Infrastructure (2026-03-23)
+**Goal:** Production deployability, test coverage baseline, open source readiness, CSV export.
+
+**Completed (infra):**
+- [x] `server/Dockerfile` — multi-stage: builder (TS compile + Prisma generate) → runner (prod deps only); CMD runs `prisma migrate deploy` before start
+- [x] `client/Dockerfile` — multi-stage: builder (Vite build) → nginx:alpine static server with SPA fallback
+- [x] `docker-compose.prod.yml` — postgres (internal only) + server + client + nginx on `kuber_network`
+- [x] `nginx/prod.conf` — reverse proxy: `/api/` → server:4000, `/` → client:80; gzip; security headers; 120s timeout for AI streaming
+- [x] `.env.example` — full documentation of all env vars with generation instructions
+- [x] `.github/workflows/ci.yml` — lint + build on every push/PR (E2E commented out pending DB service setup)
+
+**Completed (testing):**
+- [x] `@playwright/test` installed at root; `test:e2e` + `test:smoke` scripts added
+- [x] `playwright.config.ts` — Chromium, sequential, baseURL localhost:3000
+- [x] `tests/e2e/helpers/auth.ts` — reusable login helper; confirmed seed credentials: `demo@kuber.app` / `password123`
+- [x] `tests/e2e/smoke.spec.ts` — 7 smoke tests: login/logout, dashboard, accounts, transactions, budget, goals, settings
+- [x] `tests/e2e/auth.spec.ts` — 3 auth tests: unauthenticated redirect, invalid credentials error, valid login
+
+**Completed (open source):**
+- [x] `LICENSE` — MIT 2026, Kuber Contributors
+- [x] `CONTRIBUTING.md` — setup guide, branch strategy, Conventional Commits, PR checklist, code conventions
+- [x] `README.md` — full rewrite: badges, features, Docker quick-start, tech stack table, roadmap
+
+**Completed (features):**
+- [x] `server/src/lib/csvExport.ts` — `toCSV()` + `setCsvHeaders()` utility (RFC 4180 compliant)
+- [x] `GET /api/v1/transactions/export/csv` — date/account filters, 10k row limit
+- [x] `GET /api/v1/accounts/export/csv` — all accounts for household
+- [x] `GET /api/v1/reports/export/csv` — type=spending|income|cashflow with date range
+
+**Deferred:**
+- Server lib unit tests (Vitest) — Sprint 5+
+- E2E tests against real DB in CI (needs postgres service container) — post-release
+
+---
+
+### Sprint 3 — Security Hardening + Rules Engine + Cursor Pagination (2026-03-20)
+**Goal:** TD-003/004/005/014/017/018 security hardening; TD-012 Rules UI; TD-015 cursor pagination.
+
+**Completed (server):**
+- [x] TD-003: Refresh token family tracking — `lib/token.ts`, token hashing (SHA-256), family invalidation on reuse
+- [x] TD-004: TOTP 2FA — setup/enable/disable/validate/use-backup routes; QR code via `otplib` + `qrcode`; 8 bcrypt-hashed backup codes
+- [x] TD-005: SMTP email — `lib/email.ts` with Nodemailer; `sendPasswordResetEmail`, `sendAccountLockoutEmail`, `sendTestEmail`
+- [x] TD-014: Audit log — `AuditLog` Prisma model; `logAudit()` hooked into transactions, accounts, budgets, goals, rules
+- [x] TD-017: CSP headers — Helmet ContentSecurityPolicy in `index.ts`
+- [x] TD-018: Account lockout — 5/8/10+ failed attempts → 15m/1h/24h; lockout email sent
+- [x] TD-012: Rules engine — `routes/rules.ts` with CRUD, `ruleMatches()`, `applyActionsToTransaction()`, apply/apply-all
+- [x] TD-015: Cursor pagination on transactions — base64url `{ date, id }` cursor, composite WHERE, backwards compat offset mode
+- [x] `GET /auth/2fa/status` endpoint; `POST /settings/email/test` endpoint
+
+**Completed (client):**
+- [x] `LoginPage.tsx` — 2-step login: PasswordStep → TotpStep (TOTP + backup code toggle)
+- [x] `useAuth.ts` — added `useTotpStatus`, `useTotpSetup`, `useTotpEnable`, `useTotpDisable`, `useTotpValidate`, `useTotpBackup`
+- [x] Settings → Security — `TwoFactorCard`: QR setup flow → confirm code → backup codes display; disable with password
+- [x] Settings → Integrations — SMTP config display + "Send test email" button
+- [x] `RulesPage.tsx` — rule list with reorder, rule builder modal (conditions + actions), apply/apply-all
+- [x] App routing + sidebar: `/rules` route added, `Zap` icon in nav
+- [x] TypeScript: zero errors on both client and server (post-sprint)
+
+**Deferred:**
+- E2E test infrastructure (Sprint 4)
+- Open source docs: LICENSE, CONTRIBUTING (Sprint 4)
+- Audit log viewer UI (future)
+
+---
+
+### Sprint 2 — UI Stability & Sankey Charts (2026-03-19)
+**Goal:** Fix remaining UI bugs found during E2E: blank pages, broken filters, missing Sankey charts.
+
+**Completed:**
+- [x] Added `ErrorBoundary` to `App.tsx` — wraps all protected routes, prevents blank-page crashes
+- [x] Fixed `TransactionsPage` filter categories — replaced hardcoded `DEFAULT_CATEGORIES` with real `/categories` API call
+- [x] Updated `Category` interface to match server API shape (`emoji`, `groupName` instead of `icon`, `group`)
+- [x] Implemented Sankey chart in `CashFlowPage` — income categories → Cash Flow node → expense groups + Savings
+- [x] Implemented Sankey chart in `ReportsPage` — Income → top expense categories + Savings (Money Flow section)
+- [x] TypeScript: zero errors on both client and server
+
+**Deferred:**
+- SMTP email, TOTP 2FA, refresh token families, account lockout (Sprint 3)
+- E2E test infrastructure (Sprint 4)
+
+---
 
 ### Sprint 1 — Full App Bug Fix (2026-03-19)
 **Goal:** Fix all API shape mismatches that made the entire app broken after the server refactor.
@@ -68,16 +181,16 @@
 | ID | Item | Priority | Sprint | Notes |
 |----|------|----------|--------|-------|
 | TD-001 | ~~API response shape mismatch — all pages broken~~ | ✅ Done | Sprint 1 | Fixed in commit cf4cbbf |
-| TD-002 | No tests at all (unit or E2E) | P0 | Sprint 3 | Risk: regressions invisible |
+| TD-002 | ~~No tests at all (unit or E2E)~~ | ✅ Partial | Sprint 4 | E2E smoke + auth tests added; unit tests still missing |
 | TD-003 | Refresh token family tracking not implemented | P1 | Sprint 2 | Security risk: stolen refresh tokens not detectable |
 | TD-004 | 2FA (TOTP) not implemented | P1 | Sprint 2 | Planned feature |
 | TD-005 | No SMTP email sender | P1 | Sprint 2 | Password reset emails don't actually send |
 | TD-006 | AI Advisor is mock-only | P2 | Sprint 5 | Multi-provider (Claude/OpenAI/Gemini/Ollama/OpenRouter) needed |
-| TD-007 | No Nginx reverse proxy in Docker | P1 | Sprint 4 | Required for production self-hosting |
-| TD-008 | No production Docker Compose | P1 | Sprint 4 | docker-compose.prod.yml missing |
+| TD-007 | ~~No Nginx reverse proxy in Docker~~ | ✅ Done | Sprint 4 | nginx/prod.conf + docker-compose.prod.yml |
+| TD-008 | ~~No production Docker Compose~~ | ✅ Done | Sprint 4 | docker-compose.prod.yml created |
 | TD-009 | Seed data not realistic enough | P2 | Sprint 4 | Needs multi-year data, multiple personas |
-| TD-010 | No LICENSE file | P1 | Sprint 6 | Required for open source |
-| TD-011 | No CONTRIBUTING.md | P2 | Sprint 6 | Open source requirement |
+| TD-010 | ~~No LICENSE file~~ | ✅ Done | Sprint 4 | MIT License added |
+| TD-011 | ~~No CONTRIBUTING.md~~ | ✅ Done | Sprint 4 | CONTRIBUTING.md added |
 | TD-012 | Rules engine has no UI | P3 | Sprint 7 | Backend exists, frontend missing |
 | TD-013 | Plaid/MX bank sync not built | P3 | Sprint 7+ | Manual entry only for now |
 | TD-014 | No audit log table for financial changes | P1 | Sprint 2 | Security/compliance requirement |
@@ -86,7 +199,7 @@
 | TD-017 | No CSP headers configured in Helmet | P1 | Sprint 2 | XSS mitigation |
 | TD-018 | Account lockout after failed logins missing | P1 | Sprint 2 | Brute force protection |
 | TD-019 | OpenAPI/Swagger docs missing | P3 | Sprint 6 | Developer experience |
-| TD-020 | No multi-stage Docker builds | P2 | Sprint 4 | Dev image ships devDependencies to prod |
+| TD-020 | ~~No multi-stage Docker builds~~ | ✅ Done | Sprint 4 | server/Dockerfile + client/Dockerfile both multi-stage |
 
 ---
 
@@ -96,7 +209,10 @@
 |----|-------|--------|--------|
 | BUG-001 | ~~DashboardPage API shape mismatch~~ | ✅ Fixed | cf4cbbf |
 | BUG-002 | ~~All pages had API shape mismatches~~ | ✅ Fixed | cf4cbbf |
-| BUG-003 | Email password reset sends nothing | 🔴 Open | Sprint 2 |
+| BUG-003 | Email password reset sends nothing | 🔴 Open | Sprint 3 |
+| BUG-004 | ~~Pages go blank on crash — no error boundary~~ | ✅ Fixed | Sprint 2 |
+| BUG-005 | ~~Transaction filter uses hardcoded category IDs~~ | ✅ Fixed | Sprint 2 |
+| BUG-006 | ~~Sankey chart placeholders in CashFlow + Reports~~ | ✅ Fixed | Sprint 2 |
 
 ---
 

@@ -8,20 +8,28 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  firstName    String
-  lastName     String
-  avatar       String?
-  timezone     String   @default("America/New_York")
-  theme        String   @default("system")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  householdMembers HouseholdMember[]
-  notifications    Notification[]
-  preferences      UserPreference[]
-  refreshTokens    RefreshToken[]
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  passwordHash        String
+  firstName           String
+  lastName            String
+  avatar              String?
+  timezone            String    @default("America/New_York")
+  theme               String    @default("system")
+  // 2FA
+  totpSecret          String?
+  totpEnabled         Boolean   @default(false)
+  backupCodes         String[]  @default([])
+  // Account lockout
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  householdMembers    HouseholdMember[]
+  notifications       Notification[]
+  preferences         UserPreference[]
+  refreshTokens       RefreshToken[]
+  auditLogs           AuditLog[]
   @@map("users")
 }
 
@@ -42,7 +50,47 @@ model Household {
   merchants   Merchant[]
   tags        Tag[]
   invites     HouseholdInvite[]
+  aiConfig    AiConfig?
+  conversations Conversation[]
   @@map("households")
+}
+
+model AiConfig {
+  id              String    @id @default(cuid())
+  householdId     String    @unique
+  provider        String    @default("none")   // "anthropic"|"openai"|"gemini"|"openrouter"|"none"
+  model           String    @default("")
+  encryptedApiKey String    @default("")
+  baseUrl         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  @@map("ai_configs")
+}
+
+model Conversation {
+  id          String   @id @default(cuid())
+  householdId String
+  userId      String
+  title       String   @default("New conversation")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  messages    ConversationMessage[]
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  @@index([householdId, updatedAt])
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // "user"|"assistant"|"system"
+  content        String
+  tokenCount     Int?
+  createdAt      DateTime @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  @@index([conversationId, createdAt])
+  @@map("conversation_messages")
 }
 
 model HouseholdMember {
@@ -71,11 +119,13 @@ model HouseholdInvite {
 
 model RefreshToken {
   id        String   @id @default(cuid())
-  token     String   @unique
+  tokenHash String   @unique  // SHA-256 of the raw token
+  familyId  String            // shared across all rotations in a session
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([familyId])
   @@map("refresh_tokens")
 }
 
@@ -85,6 +135,7 @@ model Account {
   name               String
   type               String
   institution        String?
+  institutionLogo    String?
   lastFour           String?
   balance            Float     @default(0)
   currency           String    @default("USD")
@@ -168,6 +219,7 @@ model Budget {
   period      String    @default("monthly")
   rollover    Boolean   @default(false)
   startDate   DateTime  @default(now())
+  budgetType  String    @default("FLEXIBLE")   // FIXED | FLEXIBLE | NON_MONTHLY
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
@@ -238,7 +290,37 @@ model InvestmentHolding {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  lots                 HoldingLot[]
+  recurringInvestments RecurringInvestment[]
   @@map("investment_holdings")
+}
+
+model HoldingLot {
+  id            String   @id @default(cuid())
+  holdingId     String
+  date          DateTime @default(now())
+  shares        Float
+  pricePerShare Float
+  note          String?
+  status        String   @default("confirmed") // "confirmed" | "pending"
+  createdAt     DateTime @default(now())
+  holding       InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  @@map("holding_lots")
+}
+
+model RecurringInvestment {
+  id          String    @id @default(cuid())
+  holdingId   String
+  amount      Float
+  frequency   String    // "weekly" | "biweekly" | "monthly" | "quarterly"
+  dayOfMonth  Int       @default(1)
+  status      String    @default("active") // "active" | "paused"
+  lastRunAt   DateTime?
+  nextRunAt   DateTime
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  holding     InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  @@map("recurring_investments")
 }
 
 model Merchant {
@@ -306,4 +388,19 @@ model UserPreference {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([userId, key])
   @@map("user_preferences")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  householdId String
+  userId      String
+  action      String   // CREATE | UPDATE | DELETE
+  entity      String   // TRANSACTION | ACCOUNT | BUDGET | GOAL | RULE
+  entityId    String
+  changes     Json?    // { before: {...}, after: {...} }
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([householdId, createdAt])
+  @@index([entity, entityId])
+  @@map("audit_logs")
 }

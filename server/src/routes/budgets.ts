@@ -1,8 +1,12 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { logAudit } from '../lib/audit';
 
 const router = Router();
+
+const VALID_BUDGET_TYPES = ['FIXED', 'FLEXIBLE', 'NON_MONTHLY'] as const;
+type BudgetType = (typeof VALID_BUDGET_TYPES)[number];
 
 function getMonthBounds(year: number, month: number): { start: Date; end: Date } {
   const start = new Date(year, month - 1, 1);
@@ -134,8 +138,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       select: { categoryId: true, amount: true },
     });
 
-    // Also get categories that have spending but no budget
-    const allCategoriesWithSpend = await prisma.category.findMany({
+    // Also get all categories (to detect unbudgeted spend)
+    const allCategories = await prisma.category.findMany({
       where: { householdId },
       include: { group: true },
     });
@@ -151,21 +155,23 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Build a map of categoryId -> budget amount
-    const budgetByCategory = new Map<string, number>();
+    // Build a map of categoryId -> budget record
+    const budgetByCategory = new Map<string, { amount: number; budgetType: string }>();
     for (const b of budgets) {
-      budgetByCategory.set(b.categoryId, b.amount);
+      budgetByCategory.set(b.categoryId, { amount: b.amount, budgetType: b.budgetType });
     }
 
-    // Collect all category IDs to include: those with budgets + those with actual spend
+    const categoryById = new Map(allCategories.map(c => [c.id, c]));
+
+    // Set of categoryIds that have a budget row
+    const budgetedCategoryIds = new Set(budgets.map(b => b.categoryId));
+
+    // Collect all category IDs to include in main budget view: those with budget rows + actual spend
     const allCategoryIds = new Set<string>([
       ...budgets.map(b => b.categoryId),
       ...Array.from(actualByCategory.keys()),
     ]);
 
-    const categoryById = new Map(allCategoriesWithSpend.map(c => [c.id, c]));
-
-    // Separate income vs expense categories
     type CategoryRow = {
       id: string;
       name: string;
@@ -174,6 +180,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       actual: number;
       remaining: number;
       percent: number;
+      budgetType: string;
     };
 
     type ExpenseGroup = {
@@ -185,12 +192,15 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     const incomeCategories: CategoryRow[] = [];
     const expenseGroupMap = new Map<string, ExpenseGroup>();
+    const unbudgeted: CategoryRow[] = [];
 
     for (const catId of allCategoryIds) {
       const cat = categoryById.get(catId);
       if (!cat) continue;
 
-      const budgeted = budgetByCategory.get(catId) ?? 0;
+      const budgetEntry = budgetByCategory.get(catId);
+      const budgeted = budgetEntry?.amount ?? 0;
+      const budgetType = budgetEntry?.budgetType ?? 'FLEXIBLE';
       const rawActual = actualByCategory.get(catId) ?? 0;
 
       let actual: number;
@@ -213,11 +223,17 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         actual,
         remaining,
         percent,
+        budgetType,
       };
 
       if (cat.type === 'INCOME') {
         incomeCategories.push(row);
       } else {
+        // If the category has actual spend but NO budget row, add to unbudgeted
+        if (!budgetedCategoryIds.has(catId) && actual > 0) {
+          unbudgeted.push(row);
+          continue;
+        }
         const groupId = cat.groupId ?? '__ungrouped';
         const groupName = cat.group?.name ?? 'Uncategorized';
         if (!expenseGroupMap.has(groupId)) {
@@ -242,6 +258,14 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const expensesBudgeted = expenseGroups.reduce((s, g) => s + g.budgeted, 0);
     const expensesActual = expenseGroups.reduce((s, g) => s + g.actual, 0);
 
+    // Build byType breakdown: flatten all budgeted expense categories
+    const allBudgetedExpenseRows = expenseGroups.flatMap(g => g.categories);
+    const byType = {
+      fixed: allBudgetedExpenseRows.filter(r => r.budgetType === 'FIXED'),
+      flexible: allBudgetedExpenseRows.filter(r => r.budgetType === 'FLEXIBLE'),
+      nonMonthly: allBudgetedExpenseRows.filter(r => r.budgetType === 'NON_MONTHLY'),
+    };
+
     const leftToBudget = incomeActual - expensesActual;
     const savingsRate = incomeActual > 0
       ? Math.min(100, Math.max(0, (leftToBudget / incomeActual) * 100))
@@ -259,7 +283,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         budgeted: expensesBudgeted,
         actual: expensesActual,
         groups: expenseGroups,
+        byType,
       },
+      unbudgeted,
       leftToBudget,
       savingsRate,
     });
@@ -273,9 +299,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { categoryId, amount } = req.body as {
+    const { categoryId, amount, budgetType } = req.body as {
       categoryId?: string;
       amount?: number;
+      budgetType?: string;
       month?: number;
       year?: number;
     };
@@ -286,6 +313,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     if (amount === undefined || amount === null || typeof amount !== 'number' || amount < 0) {
       return res.status(400).json({ error: 'amount must be a non-negative number' });
     }
+    if (budgetType !== undefined && !VALID_BUDGET_TYPES.includes(budgetType as BudgetType)) {
+      return res.status(400).json({ error: `budgetType must be one of: ${VALID_BUDGET_TYPES.join(', ')}` });
+    }
 
     // Verify category belongs to this household
     const category = await prisma.category.findFirst({
@@ -295,6 +325,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Category not found or does not belong to this household' });
     }
 
+    const resolvedBudgetType = (budgetType as BudgetType) ?? 'FLEXIBLE';
+
     // Upsert: unique constraint is (householdId, categoryId)
     const budget = await prisma.budget.upsert({
       where: {
@@ -302,6 +334,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       },
       update: {
         amount,
+        budgetType: resolvedBudgetType,
         updatedAt: new Date(),
       },
       create: {
@@ -309,15 +342,72 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         categoryId,
         amount,
         period: 'monthly',
+        budgetType: resolvedBudgetType,
       },
       include: {
         category: { select: { id: true, name: true, emoji: true, type: true } },
       },
     });
 
+    logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'BUDGET', entityId: budget.id, after: { categoryId, amount, budgetType: resolvedBudgetType } });
     return res.json(budget);
   } catch (err) {
     console.error('[budgets/POST]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/v1/budgets/:id
+router.put('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+    const { budgetType, amount } = req.body as { budgetType?: string; amount?: number };
+
+    if (budgetType !== undefined && !VALID_BUDGET_TYPES.includes(budgetType as BudgetType)) {
+      return res.status(400).json({ error: `budgetType must be one of: ${VALID_BUDGET_TYPES.join(', ')}` });
+    }
+    if (amount !== undefined && (typeof amount !== 'number' || amount < 0)) {
+      return res.status(400).json({ error: 'amount must be a non-negative number' });
+    }
+    if (budgetType === undefined && amount === undefined) {
+      return res.status(400).json({ error: 'At least one of budgetType or amount is required' });
+    }
+
+    const existing = await prisma.budget.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Budget not found' });
+    }
+    if (existing.householdId !== householdId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const updateData: { budgetType?: string; amount?: number; updatedAt: Date } = {
+      updatedAt: new Date(),
+    };
+    if (budgetType !== undefined) updateData.budgetType = budgetType;
+    if (amount !== undefined) updateData.amount = amount;
+
+    const budget = await prisma.budget.update({
+      where: { id },
+      data: updateData,
+      include: {
+        category: { select: { id: true, name: true, emoji: true, type: true } },
+      },
+    });
+
+    logAudit({
+      householdId,
+      userId: req.userId!,
+      action: 'UPDATE',
+      entity: 'BUDGET',
+      entityId: id,
+      before: { budgetType: existing.budgetType, amount: existing.amount },
+      after: { budgetType: budget.budgetType, amount: budget.amount },
+    });
+    return res.json(budget);
+  } catch (err) {
+    console.error('[budgets/PUT]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -337,6 +427,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     }
 
     await prisma.budget.delete({ where: { id } });
+    logAudit({ householdId, userId: req.userId!, action: 'DELETE', entity: 'BUDGET', entityId: id, before: { amount: budget.amount } });
 
     return res.json({ success: true });
   } catch (err) {

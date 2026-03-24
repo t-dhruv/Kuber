@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { toCSV, setCsvHeaders } from '../lib/csvExport';
 
 const router = Router();
 
@@ -421,6 +422,117 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
     return res.json({ months: result });
   } catch (err) {
     console.error('[reports/trends]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/reports/export/csv
+// Query params: type (spending|income|cashflow), startDate, endDate
+// ---------------------------------------------------------------------------
+router.get('/export/csv', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { type, startDate, endDate } = req.query as Record<string, string | undefined>;
+
+    const validTypes = ['spending', 'income', 'cashflow'];
+    if (!type || !validTypes.includes(type)) {
+      return res.status(400).json({ error: 'type must be one of: spending, income, cashflow' });
+    }
+
+    const range = parseDateRange(startDate, endDate);
+    if (!range) {
+      return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
+    }
+
+    const filename = `report-${type}-${new Date().toISOString().slice(0, 10)}.csv`;
+    setCsvHeaders(res, filename);
+
+    if (type === 'cashflow') {
+      const transactions = await prisma.transaction.findMany({
+        where: {
+          householdId,
+          date: { gte: range.start, lte: range.end },
+          isHidden: false,
+        },
+        select: { amount: true, date: true },
+      });
+
+      const monthMap = new Map<string, { month: string; income: number; expenses: number }>();
+
+      for (const t of transactions) {
+        const d = new Date(t.date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (!monthMap.has(key)) monthMap.set(key, { month: key, income: 0, expenses: 0 });
+        const entry = monthMap.get(key)!;
+        if (t.amount > 0) entry.income += t.amount;
+        else entry.expenses += Math.abs(t.amount);
+      }
+
+      const rows = Array.from(monthMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, v]) => ({
+          month: v.month,
+          income: Math.round(v.income * 100) / 100,
+          expenses: Math.round(v.expenses * 100) / 100,
+          net: Math.round((v.income - v.expenses) * 100) / 100,
+        }));
+
+      const columns = [
+        { key: 'month',    header: 'Month' },
+        { key: 'income',   header: 'Income' },
+        { key: 'expenses', header: 'Expenses' },
+        { key: 'net',      header: 'Net' },
+      ];
+
+      return res.send(toCSV(rows, columns));
+    }
+
+    // spending or income
+    const amountFilter = type === 'spending' ? { lt: 0 } : { gt: 0 };
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        date: { gte: range.start, lte: range.end },
+        amount: amountFilter,
+        isHidden: false,
+      },
+      include: {
+        category: { select: { name: true } },
+      },
+    });
+
+    const totalAbs = transactions.reduce((s, t) => s + Math.abs(t.amount), 0);
+    const groupMap = new Map<string, { category: string; amount: number }>();
+
+    for (const t of transactions) {
+      const name = t.category?.name ?? 'Uncategorized';
+      const existing = groupMap.get(name);
+      if (existing) {
+        existing.amount += Math.abs(t.amount);
+      } else {
+        groupMap.set(name, { category: name, amount: Math.abs(t.amount) });
+      }
+    }
+
+    const rows = Array.from(groupMap.values())
+      .sort((a, b) => b.amount - a.amount)
+      .map(g => ({
+        category: g.category,
+        amount: Math.round(g.amount * 100) / 100,
+        percentage: totalAbs > 0 ? Math.round((g.amount / totalAbs) * 10000) / 100 : 0,
+      }));
+
+    const columns = [
+      { key: 'category',   header: 'Category' },
+      { key: 'amount',     header: 'Amount' },
+      { key: 'percentage', header: 'Percentage' },
+    ];
+
+    return res.send(toCSV(rows, columns));
+  } catch (err) {
+    console.error('[reports/export/csv]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
