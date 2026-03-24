@@ -22,9 +22,10 @@ interface Account {
 interface Category {
   id: string;
   name: string;
-  icon?: string;
-  color?: string;
-  group?: string;
+  emoji?: string | null;
+  type: string;
+  groupId?: string | null;
+  groupName?: string | null;
 }
 
 interface Tag {
@@ -61,22 +62,6 @@ interface TransactionListResponse {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 25;
-
-const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'food', name: 'Food & Dining', icon: '🍔', color: '#E5622A', group: 'Living' },
-  { id: 'groceries', name: 'Groceries', icon: '🛒', color: '#2f9e44', group: 'Living' },
-  { id: 'transport', name: 'Transportation', icon: '🚗', color: '#1971c2', group: 'Living' },
-  { id: 'entertainment', name: 'Entertainment', icon: '🎬', color: '#9c36b5', group: 'Living' },
-  { id: 'subscriptions', name: 'Subscriptions', icon: '📱', color: '#0c8599', group: 'Living' },
-  { id: 'utilities', name: 'Utilities', icon: '💡', color: '#e67700', group: 'Bills' },
-  { id: 'rent', name: 'Rent & Mortgage', icon: '🏠', color: '#c92a2a', group: 'Bills' },
-  { id: 'insurance', name: 'Insurance', icon: '🛡️', color: '#5c7cfa', group: 'Bills' },
-  { id: 'health', name: 'Health & Fitness', icon: '🏥', color: '#f06595', group: 'Health' },
-  { id: 'shopping', name: 'Shopping', icon: '🛍️', color: '#f59f00', group: 'Personal' },
-  { id: 'income', name: 'Income', icon: '💰', color: '#2f9e44', group: 'Income' },
-  { id: 'transfer', name: 'Transfer', icon: '↔️', color: '#868e96', group: 'Other' },
-  { id: 'other', name: 'Other', icon: '📦', color: '#868e96', group: 'Other' },
-];
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -132,7 +117,7 @@ function CategoryPicker({
   const filtered = categories.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase())
   );
-  const groups = Array.from(new Set(filtered.map((c) => c.group ?? 'Other')));
+  const groups = Array.from(new Set(filtered.map((c) => c.groupName ?? 'Other')));
 
   return (
     <div>
@@ -150,7 +135,7 @@ function CategoryPicker({
             <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 0.25rem', marginBottom: '0.25rem' }}>
               {group}
             </div>
-            {filtered.filter((c) => (c.group ?? 'Other') === group).map((cat) => (
+            {filtered.filter((c) => (c.groupName ?? 'Other') === group).map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => onSelect(cat.id)}
@@ -170,11 +155,11 @@ function CategoryPicker({
               >
                 <span style={{
                   width: 24, height: 24, borderRadius: 'var(--radius-full)',
-                  backgroundColor: cat.color ?? 'var(--color-accent)',
+                  backgroundColor: 'var(--color-accent)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '0.75rem', flexShrink: 0,
                 }}>
-                  {cat.icon ?? cat.name[0]}
+                  {cat.emoji ?? cat.name[0]}
                 </span>
                 <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: selectedId === cat.id ? 600 : 400 }}>
                   {cat.name}
@@ -346,11 +331,11 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
                   <>
                     <span style={{
                       width: 22, height: 22, borderRadius: 'var(--radius-full)',
-                      backgroundColor: selectedCategory.color ?? 'var(--color-accent)',
+                      backgroundColor: 'var(--color-accent)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: '0.6875rem', flexShrink: 0,
                     }}>
-                      {selectedCategory.icon ?? selectedCategory.name[0]}
+                      {selectedCategory.emoji ?? selectedCategory.name[0]}
                     </span>
                     <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', flex: 1 }}>{selectedCategory.name}</span>
                   </>
@@ -538,7 +523,7 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
 
   const categoryOptions = categories.map((c) => ({
     value: c.id,
-    label: `${c.icon ?? ''} ${c.name}`.trim(),
+    label: `${c.emoji ?? ''} ${c.name}`.trim(),
   }));
 
   return (
@@ -744,7 +729,7 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
                     onChange={() => toggleCategory(cat.id)}
                     style={{ accentColor: 'var(--color-accent)' }}
                   />
-                  <span style={{ fontSize: '0.75rem' }}>{cat.icon ?? ''}</span>
+                  <span style={{ fontSize: '0.75rem' }}>{cat.emoji ?? ''}</span>
                   <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{cat.name}</span>
                 </label>
               ))}
@@ -1103,8 +1088,13 @@ export default function TransactionsPage() {
     queryFn: () => api.get('/accounts').then((r) => r.data),
   });
 
+  const { data: categoriesData } = useQuery<Category[]>({
+    queryKey: ['categories'],
+    queryFn: () => api.get('/categories').then((r) => r.data),
+  });
+
   const accounts = accountsData?.groups?.flatMap((g) => g.accounts) ?? [];
-  const categories = DEFAULT_CATEGORIES;
+  const categories = categoriesData ?? [];
   const transactions: Transaction[] = txnData?.transactions ?? [];
   const total = txnData?.total ?? 0;
 
@@ -1380,6 +1370,40 @@ export default function TransactionsPage() {
           </div>
         )}
       </Card>
+
+      {/* Summary Stats Panel */}
+      {!txnsLoading && transactions.length > 0 && (() => {
+        const expenses = transactions.filter((t) => t.amount < 0);
+        const totalSpending = expenses.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+        const largestExpense = expenses.length > 0 ? Math.max(...expenses.map((t) => Math.abs(t.amount))) : 0;
+        const avgAmount = transactions.length > 0 ? transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0) / transactions.length : 0;
+        const dates = transactions.map((t) => t.date).sort();
+        const firstDate = dates[0] ? new Date(dates[0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+        const lastDate = dates[dates.length - 1] ? new Date(dates[dates.length - 1]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+        return (
+          <Card padding="lg">
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>
+              Summary
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+              {[
+                { label: 'Total transactions', value: String(transactions.length) },
+                { label: 'Total spending', value: fmtCurrency(totalSpending) },
+                { label: 'Largest expense', value: largestExpense > 0 ? fmtCurrency(largestExpense) : '—' },
+                { label: 'Average transaction', value: fmtCurrency(avgAmount) },
+                { label: 'First transaction', value: firstDate },
+                { label: 'Last transaction', value: lastDate },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.125rem' }}>{label}</div>
+                  <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Filters panel */}
       <FiltersPanel

@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Shared Types ─────────────────────────────────────────────────────────────
 
 interface Message {
   id: string;
@@ -27,6 +27,29 @@ interface ServerMessage {
   createdAt: string;
 }
 
+// ─── Advice Library Types ─────────────────────────────────────────────────────
+
+interface AdviceTask {
+  id: string;
+  title: string;
+  description: string;
+  sortOrder: number;
+  completedAt: string | null;
+}
+
+interface AdviceTopic {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  icon: string;
+  sortOrder: number;
+  tasks: AdviceTask[];
+  completedCount: number;
+  totalTasks: number;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const INITIAL_WELCOME: Message = {
@@ -44,6 +67,16 @@ const INITIAL_WELCOME: Message = {
 };
 
 const NOT_CONFIGURED_SNIPPET = 'Settings → AI Advisor';
+
+const CATEGORIES = [
+  { value: 'all', label: 'All' },
+  { value: 'save', label: 'Save' },
+  { value: 'spend', label: 'Spend' },
+  { value: 'pay-down', label: 'Pay Down' },
+  { value: 'invest', label: 'Invest' },
+  { value: 'protect', label: 'Protect' },
+  { value: 'wellness', label: 'Wellness' },
+];
 
 function genId() {
   return Math.random().toString(36).slice(2, 10);
@@ -251,10 +284,419 @@ function MessageBubble({
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── Topic Detail Panel ────────────────────────────────────────────────────────
 
-export default function AdvicePage() {
-  const navigate = useNavigate();
+function TopicDetailPanel({
+  topic,
+  onClose,
+  onToggleTask,
+}: {
+  topic: AdviceTopic;
+  onClose: () => void;
+  onToggleTask: (topicId: string, taskId: string) => void;
+}) {
+  const pct = topic.totalTasks > 0 ? Math.round((topic.completedCount / topic.totalTasks) * 100) : 0;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: 480,
+          maxWidth: '100vw',
+          height: '100vh',
+          backgroundColor: 'var(--color-surface)',
+          boxShadow: '-4px 0 24px rgba(0,0,0,0.18)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Panel header */}
+        <div
+          style={{
+            padding: '1.25rem 1.5rem',
+            borderBottom: '1px solid var(--color-border)',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '1.75rem' }}>{topic.icon}</span>
+              <h2 style={{ fontSize: '1.0625rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                {topic.title}
+              </h2>
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--color-text-muted)',
+                fontSize: '1.1rem',
+                padding: '0.25rem 0.375rem',
+                borderRadius: 'var(--radius-sm)',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-text)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
+            >
+              ✕
+            </button>
+          </div>
+
+          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', margin: '0 0 1rem' }}>
+            {topic.description}
+          </p>
+
+          {/* Progress bar */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Progress</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                {topic.completedCount} of {topic.totalTasks} tasks complete
+              </span>
+            </div>
+            <div
+              style={{
+                height: 6,
+                borderRadius: 'var(--radius-full)',
+                backgroundColor: 'var(--color-border)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  width: `${pct}%`,
+                  borderRadius: 'var(--radius-full)',
+                  backgroundColor: pct === 100 ? 'var(--color-success, #22c55e)' : 'var(--color-accent)',
+                  transition: 'width 0.3s ease',
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Task list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1.5rem' }}>
+          {topic.tasks.map((task) => {
+            const done = task.completedAt !== null;
+            return (
+              <div
+                key={task.id}
+                style={{
+                  display: 'flex',
+                  gap: '0.875rem',
+                  padding: '0.875rem 0',
+                  borderBottom: '1px solid var(--color-border)',
+                  alignItems: 'flex-start',
+                }}
+              >
+                <button
+                  onClick={() => onToggleTask(topic.id, task.id)}
+                  style={{
+                    flexShrink: 0,
+                    width: 20,
+                    height: 20,
+                    borderRadius: 'var(--radius-sm)',
+                    border: done ? 'none' : '2px solid var(--color-border)',
+                    backgroundColor: done ? 'var(--color-accent)' : 'transparent',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginTop: '0.125rem',
+                    transition: 'background 0.15s, border 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!done) e.currentTarget.style.borderColor = 'var(--color-accent)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!done) e.currentTarget.style.borderColor = 'var(--color-border)';
+                  }}
+                  title={done ? 'Mark incomplete' : 'Mark complete'}
+                >
+                  {done && (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      color: done ? 'var(--color-text-muted)' : 'var(--color-text)',
+                      textDecoration: done ? 'line-through' : 'none',
+                      marginBottom: '0.25rem',
+                    }}
+                  >
+                    {task.title}
+                  </div>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                    {task.description}
+                  </div>
+                  {done && task.completedAt && (
+                    <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                      Completed {new Date(task.completedAt).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Advice Library Tab ────────────────────────────────────────────────────────
+
+function AdviceLibraryTab() {
+  const queryClient = useQueryClient();
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [selectedTopic, setSelectedTopic] = useState<AdviceTopic | null>(null);
+
+  const { data: topics, isLoading, isError } = useQuery<AdviceTopic[]>({
+    queryKey: ['advice', 'topics'],
+    queryFn: () => api.get('/advice/topics').then((r) => r.data),
+  });
+
+  const toggleTask = useMutation({
+    mutationFn: ({ topicId, taskId }: { topicId: string; taskId: string }) =>
+      api.put(`/advice/topics/${topicId}/tasks/${taskId}`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['advice', 'topics'] });
+    },
+  });
+
+  function handleToggleTask(topicId: string, taskId: string) {
+    toggleTask.mutate({ topicId, taskId });
+    // Optimistically update the selectedTopic in state so the panel feels instant
+    if (selectedTopic && selectedTopic.id === topicId) {
+      const taskIndex = selectedTopic.tasks.findIndex((t) => t.id === taskId);
+      if (taskIndex === -1) return;
+      const task = selectedTopic.tasks[taskIndex];
+      const nowDone = task.completedAt === null;
+      const updatedTasks = selectedTopic.tasks.map((t) =>
+        t.id === taskId ? { ...t, completedAt: nowDone ? new Date().toISOString() : null } : t
+      );
+      const newCount = updatedTasks.filter((t) => t.completedAt !== null).length;
+      setSelectedTopic({ ...selectedTopic, tasks: updatedTasks, completedCount: newCount });
+    }
+  }
+
+  // Sync selectedTopic with fresh query data when it arrives
+  useEffect(() => {
+    if (!topics || !selectedTopic) return;
+    const fresh = topics.find((t) => t.id === selectedTopic.id);
+    if (fresh) setSelectedTopic(fresh);
+  }, [topics]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filtered = (topics ?? []).filter(
+    (t) => categoryFilter === 'all' || t.category === categoryFilter
+  );
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200, color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+        Loading advice topics...
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200, color: 'var(--color-danger, #ef4444)', fontSize: '0.875rem' }}>
+        Failed to load advice topics.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
+      {/* Category filter pills */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
+        {CATEGORIES.map((cat) => {
+          const active = categoryFilter === cat.value;
+          return (
+            <button
+              key={cat.value}
+              onClick={() => setCategoryFilter(cat.value)}
+              style={{
+                padding: '0.3rem 0.875rem',
+                borderRadius: 'var(--radius-full)',
+                border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                backgroundColor: active ? 'var(--color-accent)' : 'transparent',
+                color: active ? '#fff' : 'var(--color-text)',
+                fontSize: '0.8125rem',
+                fontWeight: active ? 600 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {cat.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Topic grid */}
+      {filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem', padding: '3rem 0' }}>
+          No topics in this category yet.
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: '1rem',
+          }}
+        >
+          {filtered.map((topic) => {
+            const pct = topic.totalTasks > 0 ? Math.round((topic.completedCount / topic.totalTasks) * 100) : 0;
+            const done = topic.completedCount === topic.totalTasks && topic.totalTasks > 0;
+            return (
+              <div
+                key={topic.id}
+                style={{
+                  backgroundColor: 'var(--color-surface)',
+                  border: `1px solid ${done ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '1.25rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem',
+                }}
+              >
+                {/* Icon + title */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '1.75rem', flexShrink: 0 }}>{topic.icon}</span>
+                  <div>
+                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                      {topic.title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '0.6875rem',
+                        fontWeight: 600,
+                        color: 'var(--color-accent)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        marginTop: '0.125rem',
+                      }}
+                    >
+                      {topic.category.replace('-', ' ')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <p
+                  style={{
+                    fontSize: '0.8125rem',
+                    color: 'var(--color-text-muted)',
+                    lineHeight: 1.5,
+                    margin: 0,
+                    flex: 1,
+                  }}
+                >
+                  {topic.description}
+                </p>
+
+                {/* Progress bar */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)' }}>
+                      {topic.completedCount}/{topic.totalTasks} tasks
+                    </span>
+                    {done && (
+                      <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-success, #22c55e)' }}>
+                        Complete
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      height: 5,
+                      borderRadius: 'var(--radius-full)',
+                      backgroundColor: 'var(--color-border)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${pct}%`,
+                        borderRadius: 'var(--radius-full)',
+                        backgroundColor: done ? 'var(--color-success, #22c55e)' : 'var(--color-accent)',
+                        transition: 'width 0.3s ease',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* View button */}
+                <button
+                  onClick={() => setSelectedTopic(topic)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-accent)',
+                    backgroundColor: 'transparent',
+                    color: 'var(--color-accent)',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--color-accent)';
+                    e.currentTarget.style.color = '#fff';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = 'var(--color-accent)';
+                  }}
+                >
+                  View checklist
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Topic detail panel */}
+      {selectedTopic && (
+        <TopicDetailPanel
+          topic={selectedTopic}
+          onClose={() => setSelectedTopic(null)}
+          onToggleTask={handleToggleTask}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── AI Chat Tab ──────────────────────────────────────────────────────────────
+
+function AiChatTab({ onGoToSettings }: { onGoToSettings: () => void }) {
   const queryClient = useQueryClient();
 
   const [messages, setMessages] = useState<Message[]>([INITIAL_WELCOME]);
@@ -274,7 +716,6 @@ export default function AdvicePage() {
     retry: false,
   });
 
-  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
@@ -312,7 +753,6 @@ export default function AdvicePage() {
         if (body.conversationId) {
           setConversationId(body.conversationId);
           setActiveConvId(body.conversationId);
-          // Refresh conversation list
           queryClient.invalidateQueries({ queryKey: ['advisor', 'conversations'] });
         }
       } catch {
@@ -394,23 +834,11 @@ export default function AdvicePage() {
     setTimeout(() => inputRef.current?.focus(), 50);
   }
 
-  function goToSettings() {
-    navigate('/settings?tab=ai');
-  }
-
-  // Derive user initial from auth — fallback to 'U'
   const userInitial = 'U';
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        height: 'calc(100vh - 3.5rem)',
-        overflow: 'hidden',
-        gap: 0,
-      }}
-    >
-      {/* ── Left sidebar: conversation history ── */}
+    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      {/* Left sidebar: conversation history */}
       <aside
         style={{
           width: 300,
@@ -455,7 +883,6 @@ export default function AdvicePage() {
 
         {/* Conversation list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem' }}>
-          {/* Current (unsaved) session — only show when no activeConvId */}
           {!activeConvId && (
             <div
               style={{
@@ -484,7 +911,6 @@ export default function AdvicePage() {
             </div>
           )}
 
-          {/* Past conversations */}
           {conversations && conversations.length > 0 ? (
             conversations.map((conv) => {
               const isActive = activeConvId === conv.id;
@@ -583,7 +1009,7 @@ export default function AdvicePage() {
         </div>
       </aside>
 
-      {/* ── Right main: chat interface ── */}
+      {/* Right main: chat interface */}
       <div
         style={{
           flex: 1,
@@ -660,7 +1086,7 @@ export default function AdvicePage() {
                 message={msg}
                 userInitial={userInitial}
                 onSuggestion={handleSuggestion}
-                onGoToSettings={goToSettings}
+                onGoToSettings={onGoToSettings}
               />
             ))
           )}
@@ -731,6 +1157,78 @@ export default function AdvicePage() {
             Send →
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+type Tab = 'chat' | 'library';
+
+export default function AdvicePage() {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<Tab>('chat');
+
+  function goToSettings() {
+    navigate('/settings?tab=ai');
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: 'calc(100vh - 3.5rem)',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Tab bar */}
+      <div
+        style={{
+          flexShrink: 0,
+          borderBottom: '1px solid var(--color-border)',
+          backgroundColor: 'var(--color-surface)',
+          display: 'flex',
+          padding: '0 1.5rem',
+          gap: '0',
+        }}
+      >
+        {([
+          { key: 'chat', label: '✨ AI Chat' },
+          { key: 'library', label: '📚 Advice Library' },
+        ] as { key: Tab; label: string }[]).map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                padding: '0.875rem 1.25rem',
+                border: 'none',
+                borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
+                backgroundColor: 'transparent',
+                color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                fontSize: '0.875rem',
+                fontWeight: active ? 600 : 400,
+                cursor: 'pointer',
+                transition: 'color 0.15s, border-color 0.15s',
+                marginBottom: '-1px',
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab content */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {activeTab === 'chat' ? (
+          <AiChatTab onGoToSettings={goToSettings} />
+        ) : (
+          <AdviceLibraryTab />
+        )}
       </div>
     </div>
   );

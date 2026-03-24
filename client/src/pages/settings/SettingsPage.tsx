@@ -2,13 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   User, Monitor, Bell, Shield, Home, Tag, Database, CreditCard,
-  Pencil, Trash2, Plus, ChevronDown, ChevronRight, Upload,
+  Pencil, Trash2, Plus, ChevronDown, ChevronRight, Upload, ShieldCheck, ShieldOff, Mail,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Button, Input, Select, Checkbox, Avatar, Card, CardDivider, Modal, ModalFooter, notify,
 } from '@/components/ui';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuthStore } from '@/stores/authStore';
+import { useTotpStatus, useTotpSetup, useTotpEnable, useTotpDisable } from '@/hooks/useAuth';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -102,6 +104,8 @@ type NavSection =
   | 'security'
   | 'household'
   | 'categories'
+  | 'tags'
+  | 'integrations'
   | 'data'
   | 'billing';
 
@@ -112,6 +116,8 @@ const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'security', label: 'Security', icon: <Shield size={16} /> },
   { id: 'household', label: 'Household', icon: <Home size={16} /> },
   { id: 'categories', label: 'Categories', icon: <Tag size={16} /> },
+  { id: 'tags', label: 'Tags', icon: <Tag size={16} /> },
+  { id: 'integrations', label: 'Integrations', icon: <Mail size={16} /> },
   { id: 'data', label: 'Data', icon: <Database size={16} /> },
   { id: 'billing', label: 'Billing', icon: <CreditCard size={16} /> },
 ];
@@ -473,6 +479,222 @@ function NotificationsSection() {
   );
 }
 
+// ─── 2FA Setup Flow ───────────────────────────────────────────────────────────
+
+type TotpSetupStep = 'idle' | 'qr' | 'confirm' | 'backup-codes';
+
+function TwoFactorCard() {
+  const { data: status, isLoading } = useTotpStatus();
+  const setupMutation = useTotpSetup();
+  const enableMutation = useTotpEnable();
+  const disableMutation = useTotpDisable();
+
+  const [step, setStep] = useState<TotpSetupStep>('idle');
+  const [qrData, setQrData] = useState<{ secret: string; qrCodeDataUrl: string } | null>(null);
+  const [confirmCode, setConfirmCode] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [disableModalOpen, setDisableModalOpen] = useState(false);
+  const [disablePassword, setDisablePassword] = useState('');
+
+  const errorMessage = (enableMutation.error as any)?.response?.data?.error ?? null;
+  const disableError = (disableMutation.error as any)?.response?.data?.error ?? null;
+
+  function handleStartSetup() {
+    setupMutation.mutate(undefined, {
+      onSuccess: (data) => {
+        setQrData(data);
+        setConfirmCode('');
+        setStep('qr');
+      },
+      onError: () => notify.error('Failed to start 2FA setup'),
+    });
+  }
+
+  function handleConfirm() {
+    if (confirmCode.length !== 6) return;
+    enableMutation.mutate({ code: confirmCode }, {
+      onSuccess: (data) => {
+        setBackupCodes(data.backupCodes);
+        setStep('backup-codes');
+        notify.success('Two-factor authentication enabled');
+      },
+    });
+  }
+
+  function handleDisable() {
+    if (!disablePassword) return;
+    disableMutation.mutate({ password: disablePassword }, {
+      onSuccess: () => {
+        setDisableModalOpen(false);
+        setDisablePassword('');
+        notify.success('Two-factor authentication disabled');
+      },
+    });
+  }
+
+  if (isLoading) return null;
+
+  const isEnabled = status?.totpEnabled ?? false;
+
+  return (
+    <>
+      <Card padding="lg">
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+            {isEnabled
+              ? <ShieldCheck size={20} style={{ color: 'var(--color-success)', flexShrink: 0, marginTop: 2 }} />
+              : <ShieldOff size={20} style={{ color: 'var(--color-text-muted)', flexShrink: 0, marginTop: 2 }} />
+            }
+            <div>
+              <div style={{ fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
+                Two-Factor Authentication
+              </div>
+              <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', margin: 0 }}>
+                {isEnabled
+                  ? `Enabled — ${status?.backupCodesRemaining ?? 0} backup code${status?.backupCodesRemaining !== 1 ? 's' : ''} remaining`
+                  : 'Add an extra layer of security using an authenticator app.'}
+              </p>
+            </div>
+          </div>
+          {step === 'idle' && (
+            isEnabled ? (
+              <Button variant="outline" size="sm" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)', flexShrink: 0 }} onClick={() => setDisableModalOpen(true)}>
+                Disable
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" loading={setupMutation.isPending} onClick={handleStartSetup} style={{ flexShrink: 0 }}>
+                Set up
+              </Button>
+            )
+          )}
+        </div>
+
+        {/* Step: Show QR code */}
+        {step === 'qr' && qrData && (
+          <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '1.5rem' }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+              Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.), then click <strong>Next</strong>.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+              <img src={qrData.qrCodeDataUrl} alt="TOTP QR code" style={{ width: 180, height: 180, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+            </div>
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'center', marginBottom: '1rem' }}>
+              Can't scan? Enter this key manually: <code style={{ userSelect: 'all' }}>{qrData.secret}</code>
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <Button variant="secondary" onClick={() => { setStep('idle'); setQrData(null); }}>Cancel</Button>
+              <Button variant="primary" onClick={() => setStep('confirm')}>Next</Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Confirm code */}
+        {step === 'confirm' && (
+          <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '1.5rem' }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+              Enter the 6-digit code from your authenticator app to verify setup.
+            </p>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={confirmCode}
+              onChange={(e) => setConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000"
+              maxLength={6}
+              autoFocus
+              style={{
+                width: '100%', padding: '0.625rem 0.875rem', borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border-strong)', backgroundColor: 'var(--color-bg)',
+                color: 'var(--color-text)', fontSize: '1.375rem', letterSpacing: '0.4em',
+                textAlign: 'center', outline: 'none', boxSizing: 'border-box', marginBottom: '0.75rem',
+              }}
+            />
+            {errorMessage && (
+              <div style={{ padding: '0.625rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-danger-light)', color: 'var(--color-danger)', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+                {errorMessage}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <Button variant="secondary" onClick={() => setStep('qr')}>Back</Button>
+              <Button
+                variant="primary"
+                loading={enableMutation.isPending}
+                disabled={confirmCode.length !== 6}
+                onClick={handleConfirm}
+              >
+                Verify & Enable
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Show backup codes */}
+        {step === 'backup-codes' && (
+          <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '1.5rem' }}>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 600, marginBottom: '0.5rem' }}>
+              Save your backup codes
+            </p>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+              Store these codes somewhere safe. Each can be used once if you lose access to your authenticator app.
+            </p>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem',
+              backgroundColor: 'var(--color-surface-hover)', borderRadius: 'var(--radius-md)',
+              padding: '1rem', marginBottom: '1rem', fontFamily: 'monospace', fontSize: '0.9375rem',
+            }}>
+              {backupCodes.map((code) => (
+                <div key={code} style={{ color: 'var(--color-text)', letterSpacing: '0.05em' }}>{code}</div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <Button variant="secondary" size="sm" onClick={() => {
+                navigator.clipboard.writeText(backupCodes.join('\n'));
+                notify.success('Backup codes copied to clipboard');
+              }}>
+                Copy codes
+              </Button>
+              <Button variant="primary" onClick={() => setStep('idle')}>Done</Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Disable 2FA modal */}
+      <Modal
+        open={disableModalOpen}
+        onClose={() => { setDisableModalOpen(false); setDisablePassword(''); }}
+        title="Disable Two-Factor Authentication"
+        size="sm"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <p style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+            Enter your password to confirm disabling 2FA.
+          </p>
+          <Input
+            label="Password"
+            type="password"
+            value={disablePassword}
+            onChange={(e) => setDisablePassword(e.target.value)}
+            autoComplete="current-password"
+            error={disableError || undefined}
+          />
+          <ModalFooter>
+            <Button variant="secondary" onClick={() => { setDisableModalOpen(false); setDisablePassword(''); }}>Cancel</Button>
+            <Button
+              variant="danger"
+              loading={disableMutation.isPending}
+              disabled={!disablePassword}
+              onClick={handleDisable}
+            >
+              Disable 2FA
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
 // ─── Section: Security ────────────────────────────────────────────────────────
 
 function SecuritySection() {
@@ -558,6 +780,9 @@ function SecuritySection() {
             </Button>
           </div>
         </Card>
+
+        {/* Two-Factor Authentication */}
+        <TwoFactorCard />
 
         {/* Danger Zone */}
         <Card padding="lg" style={{ borderColor: 'var(--color-danger)' }}>
@@ -813,6 +1038,144 @@ function HouseholdSection() {
   );
 }
 
+// ─── Emoji Picker ─────────────────────────────────────────────────────────────
+
+const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
+  { label: 'Money', emojis: ['💰','💵','💳','🏦','📈','📉','💸','🏧','💹','🪙','💴','💶','💷','🤑','📊','💼'] },
+  { label: 'Food', emojis: ['🍔','🍕','🥗','☕','🍺','🛒','🥩','🍣','🍜','🥐','🍎','🥑','🧃','🍷','🍰','🥡'] },
+  { label: 'Home', emojis: ['🏠','🏡','🛋️','🧹','🔑','🛏️','🪴','🧰','🔧','💡','🚿','🪟','🏗️','🪞','🧺','🏘️'] },
+  { label: 'Transport', emojis: ['🚗','✈️','🚌','🚇','⛽','🚕','🛵','🚲','🛫','🏎️','🚢','🚁','🛻','🏍️','⛵','🚐'] },
+  { label: 'Health', emojis: ['💊','🏥','🩺','🧘','🏋️','💉','🩻','🦷','🩹','😷','🫀','🧬','⚕️','🏃','🧪','🩼'] },
+  { label: 'Shopping', emojis: ['👗','👟','👜','💎','🎁','🛍️','⌚','👒','💄','🕶️','👔','🧥','💍','🎀','👠','🛒'] },
+  { label: 'Fun', emojis: ['🎮','🎬','🎵','🎭','⚽','🎯','🎲','🎸','🎟️','🏖️','🎡','🎠','🏄','🎳','🧩','🪂'] },
+  { label: 'Bills', emojis: ['📱','💻','📺','📡','💧','🔌','🌐','📰','🖨️','☁️','📷','⌨️','🖥️','📠','🔋','🎙️'] },
+  { label: 'Symbols', emojis: ['⭐','🔴','🟢','🔵','🟡','🟠','🟣','⚫','🔶','🔷','✅','❌','⚡','🔥','💥','🌈'] },
+];
+
+function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.375rem' }}>
+        Emoji
+      </label>
+      <div style={{ position: 'relative' }} ref={ref}>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.625rem',
+            padding: '0.5rem 0.875rem',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-border-strong)',
+            backgroundColor: 'var(--color-bg)',
+            cursor: 'pointer',
+            fontSize: '1.5rem',
+            lineHeight: 1,
+            minWidth: 120,
+          }}
+        >
+          <span>{value || '—'}</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>Pick ▾</span>
+        </button>
+
+        {open && (
+          <div style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            zIndex: 100,
+            backgroundColor: 'var(--color-surface-elevated, var(--color-surface))',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-lg)',
+            width: 300,
+            marginTop: 4,
+          }}>
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--color-border)', overflowX: 'auto', padding: '0.25rem 0.5rem 0' }}>
+              {EMOJI_GROUPS.map((g, i) => (
+                <button
+                  key={g.label}
+                  type="button"
+                  onClick={() => setTab(i)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '0.25rem 0.5rem',
+                    fontSize: '0.6875rem',
+                    fontWeight: tab === i ? 700 : 400,
+                    color: tab === i ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                    borderBottom: tab === i ? '2px solid var(--color-accent)' : '2px solid transparent',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                  }}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+            {/* Emoji grid */}
+            <div style={{ padding: '0.5rem', display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '0.125rem' }}>
+              {EMOJI_GROUPS[tab].emojis.map((em) => (
+                <button
+                  key={em}
+                  type="button"
+                  onClick={() => { onChange(em); setOpen(false); }}
+                  style={{
+                    background: value === em ? 'var(--color-accent-light)' : 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '1.25rem',
+                    padding: '0.25rem',
+                    lineHeight: 1,
+                    textAlign: 'center',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = value === em ? 'var(--color-accent-light)' : 'transparent')}
+                  title={em}
+                >
+                  {em}
+                </button>
+              ))}
+            </div>
+            {/* Manual input for custom */}
+            <div style={{ borderTop: '1px solid var(--color-border)', padding: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', flexShrink: 0 }}>Custom:</span>
+              <input
+                value={value}
+                onChange={(e) => onChange(e.target.value.slice(0, 2))}
+                placeholder="✏️"
+                maxLength={2}
+                style={{
+                  flex: 1, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
+                  padding: '0.25rem 0.5rem', fontSize: '1rem', backgroundColor: 'var(--color-bg)',
+                  color: 'var(--color-text)', outline: 'none',
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Section: Categories ──────────────────────────────────────────────────────
 
 interface CategoryModalState {
@@ -998,7 +1361,9 @@ function CategoriesSection() {
                         borderBottom: idx < group.categories.length - 1 ? '1px solid var(--color-border)' : 'none',
                       }}
                     >
-                      <span style={{ fontSize: '1rem' }}>{cat.emoji}</span>
+                      <span style={{ fontSize: '1.625rem', lineHeight: 1, width: 28, textAlign: 'center', flexShrink: 0 }}>
+                        {cat.emoji || '·'}
+                      </span>
                       <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--color-text)' }}>
                         {cat.name}
                       </span>
@@ -1063,13 +1428,7 @@ function CategoriesSection() {
             onChange={(e) => setCatName(e.target.value)}
             placeholder="e.g. Groceries"
           />
-          <Input
-            label="Emoji"
-            value={catEmoji}
-            onChange={(e) => setCatEmoji(e.target.value.slice(0, 2))}
-            placeholder="🛒"
-            maxLength={2}
-          />
+          <EmojiPicker value={catEmoji} onChange={setCatEmoji} />
           <Input
             label="Group"
             value={catGroup}
@@ -1116,15 +1475,317 @@ function CategoriesSection() {
   );
 }
 
+// ─── Section: Tags ────────────────────────────────────────────────────────────
+
+interface TagData {
+  id: string;
+  name: string;
+  color: string;
+  transactionCount: number;
+}
+
+const TAG_PRESET_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'];
+
+interface TagModalState {
+  mode: 'add' | 'edit';
+  tag?: TagData;
+}
+
+function TagsSection() {
+  const queryClient = useQueryClient();
+  const [modal, setModal] = useState<TagModalState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TagData | null>(null);
+  const [tagName, setTagName] = useState('');
+  const [tagColor, setTagColor] = useState(TAG_PRESET_COLORS[4]);
+  const [tagError, setTagError] = useState('');
+
+  const { data: tags, isLoading } = useQuery<TagData[]>({
+    queryKey: ['settings', 'tags'],
+    queryFn: () => api.get('/settings/tags').then((r) => r.data),
+  });
+
+  function openAdd() {
+    setTagName('');
+    setTagColor(TAG_PRESET_COLORS[4]);
+    setTagError('');
+    setModal({ mode: 'add' });
+  }
+
+  function openEdit(tag: TagData) {
+    setTagName(tag.name);
+    setTagColor(tag.color);
+    setTagError('');
+    setModal({ mode: 'edit', tag });
+  }
+
+  function closeModal() {
+    setModal(null);
+    setTagError('');
+  }
+
+  const createMutation = useMutation({
+    mutationFn: () => api.post('/settings/tags', { name: tagName, color: tagColor }),
+    onSuccess: () => {
+      notify.success('Tag created');
+      queryClient.invalidateQueries({ queryKey: ['settings', 'tags'] });
+      closeModal();
+    },
+    onError: () => setTagError('Failed to create tag.'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: () => api.put(`/settings/tags/${modal?.tag?.id}`, { name: tagName, color: tagColor }),
+    onSuccess: () => {
+      notify.success('Tag updated');
+      queryClient.invalidateQueries({ queryKey: ['settings', 'tags'] });
+      closeModal();
+    },
+    onError: () => setTagError('Failed to update tag.'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/settings/tags/${id}`),
+    onSuccess: () => {
+      notify.success('Tag deleted');
+      queryClient.invalidateQueries({ queryKey: ['settings', 'tags'] });
+      setDeleteTarget(null);
+    },
+    onError: () => {
+      notify.error('Failed to delete tag');
+      setDeleteTarget(null);
+    },
+  });
+
+  function handleSave() {
+    setTagError('');
+    if (!tagName.trim()) { setTagError('Name is required.'); return; }
+    if (modal?.mode === 'edit') updateMutation.mutate();
+    else createMutation.mutate();
+  }
+
+  if (isLoading) {
+    return (
+      <div>
+        <SectionHeader title="Tags" description="Manage transaction tags." />
+        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+        <SectionHeader title="Tags" description="Manage transaction tags." inline />
+        <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={openAdd}>
+          New Tag
+        </Button>
+      </div>
+
+      <Card padding="none">
+        {(!tags || tags.length === 0) ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+            No tags yet. Create one to start organizing transactions.
+          </div>
+        ) : (
+          tags.map((tag, idx) => (
+            <div
+              key={tag.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.75rem',
+                padding: '0.625rem 1rem',
+                borderBottom: idx < tags.length - 1 ? '1px solid var(--color-border)' : 'none',
+              }}
+            >
+              {/* Color swatch */}
+              <div style={{
+                width: 16, height: 16, borderRadius: 'var(--radius-full)',
+                backgroundColor: tag.color, flexShrink: 0,
+              }} />
+              {/* Name */}
+              <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 500 }}>
+                {tag.name}
+              </span>
+              {/* Transaction count badge */}
+              <span style={{
+                fontSize: '0.75rem', fontWeight: 600,
+                color: 'var(--color-text-muted)',
+                backgroundColor: 'var(--color-surface-hover)',
+                borderRadius: 'var(--radius-full)',
+                padding: '0.125rem 0.5rem',
+              }}>
+                {tag.transactionCount} {tag.transactionCount === 1 ? 'tx' : 'txs'}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Pencil size={13} />}
+                onClick={() => openEdit(tag)}
+                style={{ color: 'var(--color-text-secondary)' }}
+              >
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Trash2 size={13} />}
+                onClick={() => setDeleteTarget(tag)}
+                style={{ color: 'var(--color-danger)' }}
+              >
+                Delete
+              </Button>
+            </div>
+          ))
+        )}
+      </Card>
+
+      {/* Add / Edit modal */}
+      <Modal
+        open={!!modal}
+        onClose={closeModal}
+        title={modal?.mode === 'edit' ? 'Edit Tag' : 'New Tag'}
+        size="sm"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <Input
+            label="Name"
+            value={tagName}
+            onChange={(e) => setTagName(e.target.value)}
+            placeholder="e.g. Business"
+            error={tagError || undefined}
+          />
+          <div>
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+              Color
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {TAG_PRESET_COLORS.map((c) => (
+                <div
+                  key={c}
+                  onClick={() => setTagColor(c)}
+                  style={{
+                    width: 28, height: 28, borderRadius: 'var(--radius-full)',
+                    backgroundColor: c, cursor: 'pointer',
+                    outline: tagColor === c ? `3px solid ${c}` : '3px solid transparent',
+                    outlineOffset: 2,
+                    transition: 'outline 0.1s',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <ModalFooter>
+            <Button variant="secondary" onClick={closeModal}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={createMutation.isPending || updateMutation.isPending}
+              onClick={handleSave}
+            >
+              {modal?.mode === 'edit' ? 'Save' : 'Create'}
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Tag"
+        size="sm"
+      >
+        <p style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+          This tag will be removed from all transactions. Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+        </p>
+        <ModalFooter>
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={deleteMutation.isPending}
+            onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+          >
+            Delete
+          </Button>
+        </ModalFooter>
+      </Modal>
+    </div>
+  );
+}
+
+// ─── Section: Integrations ────────────────────────────────────────────────────
+
+function IntegrationsSection() {
+  const testEmailMutation = useMutation({
+    mutationFn: () => api.post('/settings/email/test'),
+    onSuccess: () => notify.success('Test email sent', 'Check your inbox.'),
+    onError: (err: any) => notify.error('Failed to send test email', err?.response?.data?.error ?? 'Check server SMTP configuration.'),
+  });
+
+  return (
+    <div>
+      <SectionHeader title="Integrations" description="Configure external services used by Kuber." />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 560 }}>
+        {/* SMTP */}
+        <Card padding="lg">
+          <div style={{ marginBottom: '0.75rem' }}>
+            <div style={{ fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
+              Email (SMTP)
+            </div>
+            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', margin: 0 }}>
+              Kuber uses SMTP for password reset emails and account notifications. Configure SMTP via environment variables on your server:
+            </p>
+          </div>
+
+          <div style={{
+            backgroundColor: 'var(--color-surface-hover)',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.875rem 1rem',
+            fontFamily: 'monospace',
+            fontSize: '0.8125rem',
+            color: 'var(--color-text-secondary)',
+            marginBottom: '1rem',
+            lineHeight: 1.6,
+          }}>
+            <div>SMTP_HOST=smtp.gmail.com</div>
+            <div>SMTP_PORT=587</div>
+            <div>SMTP_USER=you@gmail.com</div>
+            <div>SMTP_PASS=your-app-password</div>
+            <div>SMTP_FROM="Kuber &lt;noreply@yourdomain.com&gt;"</div>
+          </div>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={testEmailMutation.isPending}
+            onClick={() => testEmailMutation.mutate()}
+          >
+            Send test email to my address
+          </Button>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 // ─── Section: Data ────────────────────────────────────────────────────────────
+
+async function downloadFile(url: string, filename: string) {
+  try {
+    const response = await api.get(url, { responseType: 'blob' });
+    const blob = new Blob([response.data], { type: 'text/csv' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch {
+    notify.error('Download failed', 'Could not export the file. Please try again.');
+  }
+}
 
 function DataSection() {
   const [cleanStartDate, setCleanStartDate] = useState('');
   const [deleteHistoryModalOpen, setDeleteHistoryModalOpen] = useState(false);
-
-  function handleDownload(type: 'transactions' | 'balances') {
-    notify.info('Export started — file will download shortly (not implemented in demo)');
-  }
 
   function handleDeleteHistory() {
     setDeleteHistoryModalOpen(false);
@@ -1147,7 +1808,7 @@ function DataSection() {
                 <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>Transactions</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Download all transactions as CSV</div>
               </div>
-              <Button variant="secondary" size="sm" onClick={() => handleDownload('transactions')}>
+              <Button variant="secondary" size="sm" onClick={() => downloadFile('/transactions/export/csv', 'transactions.csv')}>
                 Download CSV
               </Button>
             </div>
@@ -1157,7 +1818,7 @@ function DataSection() {
                 <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>Account Balances</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Download account balance history as CSV</div>
               </div>
-              <Button variant="secondary" size="sm" onClick={() => handleDownload('balances')}>
+              <Button variant="secondary" size="sm" onClick={() => downloadFile('/accounts/export/csv', 'account-balances.csv')}>
                 Download CSV
               </Button>
             </div>
@@ -1280,6 +1941,8 @@ export default function SettingsPage() {
       case 'security': return <SecuritySection />;
       case 'household': return <HouseholdSection />;
       case 'categories': return <CategoriesSection />;
+      case 'tags': return <TagsSection />;
+      case 'integrations': return <IntegrationsSection />;
       case 'data': return <DataSection />;
       case 'billing': return <BillingSection />;
     }

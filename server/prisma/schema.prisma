@@ -405,6 +405,42 @@ model NetWorthSnapshot {
   @@map("net_worth_snapshots")
 }
 
+model AdviceTopic {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  title       String
+  description String
+  category    String
+  icon        String
+  sortOrder   Int           @default(0)
+  tasks       AdviceTask[]
+  progress    UserAdviceProgress[]
+  @@map("advice_topics")
+}
+
+model AdviceTask {
+  id          String        @id @default(cuid())
+  topicId     String
+  title       String
+  description String
+  sortOrder   Int           @default(0)
+  topic       AdviceTopic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  progress    UserAdviceProgress[]
+  @@map("advice_tasks")
+}
+
+model UserAdviceProgress {
+  id          String      @id @default(cuid())
+  householdId String
+  topicId     String
+  taskId      String
+  completedAt DateTime    @default(now())
+  topic       AdviceTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  task        AdviceTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  @@unique([householdId, taskId])
+  @@map("user_advice_progress")
+}
+
 model AuditLog {
   id          String   @id @default(cuid())
   householdId String

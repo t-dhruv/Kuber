@@ -2,16 +2,20 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { sendTestEmail } from '../lib/email';
 
 const router = Router();
 
-const DEFAULT_NOTIFICATION_PREFERENCES: Record<string, boolean> = {
-  budgetAlerts: true,
-  goalMilestones: true,
-  recurringReminders: true,
-  weeklyDigest: false,
-  monthlyReport: true,
-  securityAlerts: true,
+const DEFAULT_NOTIFICATION_PREFERENCES: Record<string, Record<string, boolean>> = {
+  accountDisconnected: { inApp: true, email: true, push: false },
+  largeExpense: { inApp: true, email: false, push: false },
+  needsReview: { inApp: true, email: false, push: false },
+  overBudget: { inApp: true, email: true, push: false },
+  monthlyRecap: { inApp: true, email: true, push: false },
+  newRecurring: { inApp: true, email: false, push: false },
+  paymentDue: { inApp: true, email: true, push: false },
+  goalMilestone: { inApp: true, email: true, push: false },
+  weeklyDigest: { inApp: false, email: false, push: false },
 };
 
 // GET /api/v1/settings/profile
@@ -390,6 +394,101 @@ router.delete('/categories/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/v1/settings/tags
+router.get('/tags', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const tags = await prisma.tag.findMany({
+      where: { householdId },
+      include: { _count: { select: { transactionTags: true } } },
+      orderBy: { name: 'asc' },
+    });
+    return res.json(tags.map((t) => ({
+      id: t.id,
+      name: t.name,
+      color: t.color,
+      transactionCount: t._count.transactionTags,
+    })));
+  } catch (err) {
+    console.error('[settings/tags GET]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/settings/tags
+router.post('/tags', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { name, color } = req.body;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    const tag = await prisma.tag.create({
+      data: {
+        householdId,
+        name: name.trim(),
+        color: color ?? '#6366f1',
+      },
+    });
+
+    return res.status(201).json({ id: tag.id, name: tag.name, color: tag.color, transactionCount: 0 });
+  } catch (err) {
+    console.error('[settings/tags POST]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/v1/settings/tags/:id
+router.put('/tags/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+    const { name, color } = req.body;
+
+    const existing = await prisma.tag.findFirst({ where: { id, householdId } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Tag not found' });
+    }
+
+    if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+      return res.status(400).json({ error: 'name must be a non-empty string' });
+    }
+
+    const updateData: { name?: string; color?: string } = {};
+    if (name !== undefined) updateData.name = name.trim();
+    if (color !== undefined) updateData.color = color;
+
+    const tag = await prisma.tag.update({ where: { id }, data: updateData });
+
+    const count = await prisma.transactionTag.count({ where: { tagId: id } });
+    return res.json({ id: tag.id, name: tag.name, color: tag.color, transactionCount: count });
+  } catch (err) {
+    console.error('[settings/tags PUT]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/v1/settings/tags/:id
+router.delete('/tags/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+
+    const existing = await prisma.tag.findFirst({ where: { id, householdId } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Tag not found' });
+    }
+
+    await prisma.tag.delete({ where: { id } });
+    return res.json({ message: 'Tag deleted' });
+  } catch (err) {
+    console.error('[settings/tags DELETE]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/v1/settings/notifications
 router.get('/notifications', async (req: AuthRequest, res: Response) => {
   try {
@@ -399,7 +498,7 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
       where: { userId_key: { userId, key: 'notification_preferences' } },
     });
 
-    let preferences: Record<string, boolean>;
+    let preferences: Record<string, Record<string, boolean>>;
     if (pref) {
       try {
         preferences = JSON.parse(pref.value);
@@ -474,6 +573,20 @@ router.put('/password', async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error('[settings/password PUT]', err);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/settings/email/test
+router.post('/email/test', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    await sendTestEmail(user.email);
+    return res.json({ message: `Test email sent to ${user.email}` });
+  } catch (err) {
+    console.error('[settings/email/test]', err);
+    return res.status(500).json({ error: 'Failed to send test email. Check your SMTP configuration.' });
   }
 });
 
