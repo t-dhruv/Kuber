@@ -405,4 +405,130 @@ router.get('/goals-summary', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/v1/dashboard/weekly-recap
+router.get('/weekly-recap', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const now = new Date();
+
+    const last7Start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const prev7Start = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+    // Format period label e.g. "Mar 15 – Mar 21"
+    const fmtShort = (d: Date) =>
+      d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const periodLabel = `${fmtShort(last7Start)} – ${fmtShort(now)}`;
+
+    // Spending: last 7 days vs prev 7 days
+    const [last7Txns, prev7Txns] = await Promise.all([
+      prisma.transaction.findMany({
+        where: {
+          householdId,
+          date: { gte: last7Start, lt: now },
+          amount: { lt: 0 },
+          isHidden: false,
+        },
+        select: { amount: true, categoryId: true },
+      }),
+      prisma.transaction.findMany({
+        where: {
+          householdId,
+          date: { gte: prev7Start, lt: last7Start },
+          amount: { lt: 0 },
+          isHidden: false,
+        },
+        select: { amount: true },
+      }),
+    ]);
+
+    const spendingTotal = last7Txns.reduce((s, t) => s + Math.abs(t.amount), 0);
+    const spendingPrev = prev7Txns.reduce((s, t) => s + Math.abs(t.amount), 0);
+    const spendingChange = spendingTotal - spendingPrev;
+    const spendingChangePercent = spendingPrev !== 0 ? (spendingChange / spendingPrev) * 100 : 0;
+
+    // Net worth: diff two most recent snapshots
+    const snapshots = await prisma.netWorthSnapshot.findMany({
+      where: { householdId },
+      orderBy: { date: 'desc' },
+      take: 2,
+      select: { netWorth: true },
+    });
+
+    const accounts = await prisma.account.findMany({
+      where: { householdId, isHidden: false, excludeFromNetWorth: false },
+      select: { balance: true },
+    });
+    const netWorthCurrent = accounts.reduce((s, a) => s + a.balance, 0);
+    const netWorthChange = snapshots.length >= 2 ? snapshots[0].netWorth - snapshots[1].netWorth : 0;
+    const netWorthChangePercent =
+      snapshots.length >= 2 && snapshots[1].netWorth !== 0
+        ? (netWorthChange / Math.abs(snapshots[1].netWorth)) * 100
+        : 0;
+
+    // Top category by spending last 7 days
+    let topCategory: { name: string; amount: number; icon: string | null } | null = null;
+    if (last7Txns.length > 0) {
+      const byCategory = new Map<string, number>();
+      for (const t of last7Txns) {
+        if (t.categoryId) {
+          byCategory.set(t.categoryId, (byCategory.get(t.categoryId) ?? 0) + Math.abs(t.amount));
+        }
+      }
+      if (byCategory.size > 0) {
+        const [topCatId, topCatAmt] = [...byCategory.entries()].sort((a, b) => b[1] - a[1])[0];
+        const cat = await prisma.category.findUnique({
+          where: { id: topCatId },
+          select: { name: true, emoji: true },
+        });
+        if (cat) {
+          topCategory = { name: cat.name, amount: topCatAmt, icon: cat.emoji ?? null };
+        }
+      }
+    }
+
+    // Upcoming bills: RecurringItem nextDate between now and now+7days
+    const next7End = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const upcomingItems = await prisma.recurringItem.findMany({
+      where: {
+        householdId,
+        isActive: true,
+        nextDate: { gte: now, lte: next7End },
+      },
+      select: { name: true, amount: true, nextDate: true },
+      orderBy: { nextDate: 'asc' },
+    });
+
+    const upcoming = upcomingItems.map(item => {
+      const daysUntilDue = Math.ceil(
+        (new Date(item.nextDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      return {
+        name: item.name,
+        amount: Math.abs(item.amount),
+        dueDate: new Date(item.nextDate).toISOString(),
+        daysUntilDue,
+      };
+    });
+
+    return res.json({
+      period: { start: last7Start.toISOString(), end: now.toISOString(), label: periodLabel },
+      spending: {
+        total: spendingTotal,
+        change: spendingChange,
+        changePercent: spendingChangePercent,
+      },
+      netWorth: {
+        current: netWorthCurrent,
+        change: netWorthChange,
+        changePercent: netWorthChangePercent,
+      },
+      topCategory,
+      upcoming,
+    });
+  } catch (err) {
+    console.error('[dashboard/weekly-recap]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

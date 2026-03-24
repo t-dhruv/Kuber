@@ -102,6 +102,14 @@ interface GoalsData {
   goals: Goal[];
 }
 
+interface WeeklyRecapData {
+  period: { start: string; end: string; label: string };
+  spending: { total: number; change: number; changePercent: number };
+  netWorth: { current: number; change: number; changePercent: number };
+  topCategory: { name: string; amount: number; icon: string | null } | null;
+  upcoming: Array<{ name: string; amount: number; dueDate: string; daysUntilDue: number }>;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const CHECKLIST_KEY = 'kuber_checklist_dismissed';
@@ -692,6 +700,145 @@ function GoalsWidget({ data, isLoading, isError }: { data?: GoalsData; isLoading
   );
 }
 
+// ─── Widget: Weekly Recap ─────────────────────────────────────────────────────
+
+function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapData; isLoading: boolean; isError: boolean }) {
+  return (
+    <Card padding="lg">
+      <WidgetHeader
+        title="Your Weekly Recap"
+        action={
+          data?.period?.label ? (
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>
+              {data.period.label}
+            </span>
+          ) : undefined
+        }
+      />
+
+      {isLoading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+            {[1, 2, 3].map(i => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                <Skeleton height={12} width="60%" />
+                <Skeleton height={22} width="80%" />
+                <Skeleton height={12} width="50%" />
+              </div>
+            ))}
+          </div>
+          <Skeleton height={80} width="100%" />
+        </div>
+      ) : isError || !data ? (
+        <WidgetError />
+      ) : (
+        <>
+          {/* Stat tiles */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+            {/* Spending */}
+            <div style={{
+              backgroundColor: 'var(--color-surface-hover)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem',
+            }}>
+              <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.375rem' }}>
+                Spending
+              </div>
+              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                {fmtCurrency(data.spending.total)}
+              </div>
+              <div style={{
+                marginTop: '0.25rem', fontSize: '0.6875rem',
+                color: data.spending.change > 0 ? 'var(--color-danger)' : data.spending.change < 0 ? 'var(--color-success)' : 'var(--color-text-muted)',
+              }}>
+                {data.spending.change > 0 ? '↑' : data.spending.change < 0 ? '↓' : '—'}{' '}
+                {data.spending.change !== 0 ? `${Math.abs(data.spending.changePercent).toFixed(1)}% vs last week` : 'Same as last week'}
+              </div>
+            </div>
+
+            {/* Net Worth */}
+            <div style={{
+              backgroundColor: 'var(--color-surface-hover)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem',
+            }}>
+              <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.375rem' }}>
+                Net Worth
+              </div>
+              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                {fmtCurrency(data.netWorth.current)}
+              </div>
+              <div style={{
+                marginTop: '0.25rem', fontSize: '0.6875rem',
+                color: data.netWorth.change >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+              }}>
+                {data.netWorth.change >= 0 ? '+' : ''}{fmtCurrency(data.netWorth.change)} this week
+              </div>
+            </div>
+
+            {/* Top Category */}
+            <div style={{
+              backgroundColor: 'var(--color-surface-hover)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem',
+            }}>
+              <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.375rem' }}>
+                Top Category
+              </div>
+              {data.topCategory ? (
+                <>
+                  <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>
+                    {data.topCategory.icon ? `${data.topCategory.icon} ` : ''}{data.topCategory.name}
+                  </div>
+                  <div style={{ marginTop: '0.25rem', fontSize: '0.6875rem', color: 'var(--color-text-secondary)' }}>
+                    {fmtCurrency(data.topCategory.amount)}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>No spending</div>
+              )}
+            </div>
+          </div>
+
+          {/* Upcoming bills strip */}
+          <div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Upcoming Bills (Next 7 Days)
+            </div>
+            {data.upcoming.length === 0 ? (
+              <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', padding: '0.5rem 0' }}>
+                No bills due in the next 7 days 🎉
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                {data.upcoming.map((bill, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '0.375rem 0.625rem',
+                      backgroundColor: 'var(--color-surface-hover)',
+                      borderRadius: 'var(--radius-sm)',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 500 }}>{bill.name}</span>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 600 }}>{fmtCurrency(bill.amount)}</div>
+                      <div style={{ fontSize: '0.6875rem', color: bill.daysUntilDue <= 1 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
+                        {bill.daysUntilDue === 0 ? 'Due today' : bill.daysUntilDue === 1 ? 'Due tomorrow' : `in ${bill.daysUntilDue}d`}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -745,6 +892,12 @@ export default function DashboardPage() {
       queryFn: () => api.get('/dashboard/goals-summary').then((r) => ({ goals: r.data as Goal[] })),
     });
 
+  const { data: weeklyRecapData, isLoading: weeklyRecapLoading, isError: weeklyRecapError } =
+    useQuery<WeeklyRecapData>({
+      queryKey: ['dashboard', 'weekly-recap'],
+      queryFn: () => api.get('/dashboard/weekly-recap').then((r) => r.data),
+    });
+
   return (
     <div style={{
       display: 'grid',
@@ -768,6 +921,11 @@ export default function DashboardPage() {
             chartLoading={nwChartLoading}
             summaryError={summaryError}
             chartError={nwChartError}
+          />
+          <WeeklyRecapWidget
+            data={weeklyRecapData}
+            isLoading={weeklyRecapLoading}
+            isError={weeklyRecapError}
           />
           <BudgetWidget
             data={budgetData}

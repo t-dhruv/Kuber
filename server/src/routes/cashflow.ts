@@ -118,9 +118,14 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
       select: {
         date: true,
         amount: true,
+        description: true,
         categoryId: true,
         category: {
           select: { id: true, name: true, emoji: true, type: true, groupId: true, group: true },
+        },
+        merchantId: true,
+        merchant: {
+          select: { id: true, name: true, displayName: true },
         },
       },
     });
@@ -133,6 +138,16 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
     const expenseByCategory = new Map<
       string,
       { categoryId: string; categoryName: string; categoryIcon: string | null; amount: number; groupName: string; groupId: string }
+    >();
+
+    // Merchant breakdown maps
+    const incomeByMerchantMap = new Map<
+      string,
+      { merchantId: string | null; merchantName: string; amount: number; transactionCount: number }
+    >();
+    const expenseByMerchantMap = new Map<
+      string,
+      { merchantId: string | null; merchantName: string; amount: number; transactionCount: number }
     >();
 
     const dailyIncome = new Map<number, number>();
@@ -152,6 +167,13 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
       const catIcon = t.category?.emoji ?? null;
       const catType = t.category?.type ?? 'EXPENSE';
 
+      // Merchant key: use merchantId if present, else fall back to description
+      const mKey = t.merchantId ?? `__desc_${t.description}`;
+      const mName = t.merchant
+        ? (t.merchant.displayName || t.merchant.name)
+        : t.description;
+      const mId = t.merchantId ?? null;
+
       if (catType === 'INCOME' || t.amount > 0) {
         const existing = incomeByCategory.get(catId);
         if (existing) {
@@ -162,6 +184,19 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
             categoryName: catName,
             categoryIcon: catIcon,
             amount: t.amount > 0 ? t.amount : Math.abs(t.amount),
+          });
+        }
+
+        const mExisting = incomeByMerchantMap.get(mKey);
+        if (mExisting) {
+          mExisting.amount += t.amount > 0 ? t.amount : Math.abs(t.amount);
+          mExisting.transactionCount += 1;
+        } else {
+          incomeByMerchantMap.set(mKey, {
+            merchantId: mId,
+            merchantName: mName,
+            amount: t.amount > 0 ? t.amount : Math.abs(t.amount),
+            transactionCount: 1,
           });
         }
       } else {
@@ -178,6 +213,19 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
             amount: Math.abs(t.amount),
             groupName,
             groupId,
+          });
+        }
+
+        const mExisting = expenseByMerchantMap.get(mKey);
+        if (mExisting) {
+          mExisting.amount += Math.abs(t.amount);
+          mExisting.transactionCount += 1;
+        } else {
+          expenseByMerchantMap.set(mKey, {
+            merchantId: mId,
+            merchantName: mName,
+            amount: Math.abs(t.amount),
+            transactionCount: 1,
           });
         }
       }
@@ -224,6 +272,21 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
       }))
       .sort((a, b) => b.amount - a.amount);
 
+    // Merchant breakdowns
+    const expenseByMerchant = Array.from(expenseByMerchantMap.values())
+      .map(m => ({
+        ...m,
+        percentage: totalExpenses > 0 ? (m.amount / totalExpenses) * 100 : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    const incomeByMerchant = Array.from(incomeByMerchantMap.values())
+      .map(m => ({
+        ...m,
+        percentage: totalIncome > 0 ? (m.amount / totalIncome) * 100 : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
     // Top 5 expense categories
     const topExpenseCategories = expenseByCat.slice(0, 5).map(c => ({
       name: c.categoryName,
@@ -253,11 +316,13 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
       income: {
         total: totalIncome,
         byCategory: incomeBycat,
+        byMerchant: incomeByMerchant,
       },
       expenses: {
         total: totalExpenses,
         byCategory: expenseByCat,
         byGroup,
+        byMerchant: expenseByMerchant,
       },
       net,
       savingsRate,

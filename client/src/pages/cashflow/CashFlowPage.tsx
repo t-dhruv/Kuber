@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell,
+  ResponsiveContainer, Cell, Sankey, Rectangle,
 } from 'recharts';
 import { api } from '@/lib/api';
 import { Card, CardDivider, Skeleton } from '@/components/ui';
@@ -66,6 +67,15 @@ interface ExpenseGroup {
   categories: ExpenseCategoryItem[];
 }
 
+// Matches items in income.byMerchant / expenses.byMerchant from GET /api/v1/cashflow/month
+interface MerchantBreakdownItem {
+  merchantId: string | null;
+  merchantName: string;
+  amount: number;
+  transactionCount: number;
+  percentage: number;
+}
+
 // Matches GET /api/v1/cashflow/month response exactly
 interface MonthData {
   year: number;
@@ -73,11 +83,13 @@ interface MonthData {
   income: {
     total: number;
     byCategory: IncomeCategory[];
+    byMerchant: MerchantBreakdownItem[];
   };
   expenses: {
     total: number;
     byCategory: ExpenseCategoryItem[];
     byGroup: ExpenseGroup[];
+    byMerchant: MerchantBreakdownItem[];
   };
   net: number;
   savingsRate: number;
@@ -401,9 +413,9 @@ function KpiCards({ data, isLoading }: { data?: MonthData; isLoading: boolean })
 
 // ─── Section 3: Month Detail ──────────────────────────────────────────────────
 
-type DetailTab = 'Bar Chart' | 'Sankey';
+type DetailTab = 'Bar Chart' | 'Sankey' | 'Merchants';
 
-function MonthDetail({ data, isLoading, selectedMonth }: { data?: MonthData; isLoading: boolean; selectedMonth: number }) {
+function MonthDetail({ data, isLoading, selectedMonth, year }: { data?: MonthData; isLoading: boolean; selectedMonth: number; year: number }) {
   const [tab, setTab] = useState<DetailTab>('Bar Chart');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -418,7 +430,7 @@ function MonthDetail({ data, isLoading, selectedMonth }: { data?: MonthData; isL
     });
   }
 
-  const TABS: DetailTab[] = ['Bar Chart', 'Sankey'];
+  const TABS: DetailTab[] = ['Bar Chart', 'Sankey', 'Merchants'];
 
   return (
     <Card padding="lg">
@@ -456,7 +468,9 @@ function MonthDetail({ data, isLoading, selectedMonth }: { data?: MonthData; isL
           {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} height={32} width="100%" />)}
         </div>
       ) : tab === 'Sankey' ? (
-        <SankeyPlaceholder />
+        <SankeyChart data={data} year={year} month={selectedMonth} />
+      ) : tab === 'Merchants' ? (
+        <MerchantBreakdownView data={data} />
       ) : (
         <BarChartView
           data={data}
@@ -468,19 +482,165 @@ function MonthDetail({ data, isLoading, selectedMonth }: { data?: MonthData; isL
   );
 }
 
-function SankeyPlaceholder() {
+const SANKEY_COLORS = [
+  '#2f9e44', '#1971c2', '#9c36b5', '#e67700', '#c92a2a',
+  '#0c8599', '#f76707', '#5c7cfa', '#f59f00', '#868e96',
+];
+
+function SankeyChart({ data, year, month }: { data?: MonthData; year: number; month: number }) {
+  const navigate = useNavigate();
+  const [hovered, setHovered] = useState<number | null>(null);
+
+  if (!data || data.income.total <= 0) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: 220, color: 'var(--color-text-muted)', fontSize: '0.875rem',
+      }}>
+        No data for this month
+      </div>
+    );
+  }
+
+  // Build nodes: income categories → "Cash Flow" → expense groups [+ Savings]
+  const incomeNodes = data.income.byCategory.map((c) => ({ name: c.categoryName, amount: c.amount }));
+  const cfIndex = incomeNodes.length;
+  const expenseNodes = data.expenses.byGroup.map((g) => ({ name: g.groupName, amount: g.amount }));
+  const net = data.income.total - data.expenses.total;
+  const hasSavings = net > 0;
+  const nodes = [
+    ...incomeNodes,
+    { name: 'Cash Flow', amount: data.income.total },
+    ...expenseNodes,
+    ...(hasSavings ? [{ name: 'Savings', amount: net }] : []),
+  ];
+
+  // Build a click action per node index
+  function handleNodeClick(index: number) {
+    const node = nodes[index];
+    if (index === cfIndex) return; // Cash Flow node — no action
+    if (hasSavings && index === nodes.length - 1) return; // Savings node
+
+    // Date range for selected month
+    const from = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const to = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+    navigate(`/transactions?search=${encodeURIComponent(node.name)}&startDate=${from}&endDate=${to}`);
+  }
+
+  const links: { source: number; target: number; value: number }[] = [];
+
+  data.income.byCategory.forEach((c, i) => {
+    if (c.amount > 0) links.push({ source: i, target: cfIndex, value: Math.round(c.amount * 100) / 100 });
+  });
+  data.expenses.byGroup.forEach((g, i) => {
+    if (g.amount > 0) links.push({ source: cfIndex, target: cfIndex + 1 + i, value: Math.round(g.amount * 100) / 100 });
+  });
+  if (hasSavings) {
+    links.push({ source: cfIndex, target: nodes.length - 1, value: Math.round(net * 100) / 100 });
+  }
+
+  if (links.length === 0) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 220, color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+        No transactions this month
+      </div>
+    );
+  }
+
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: 220,
-      border: '2px dashed var(--color-border)',
-      borderRadius: 'var(--radius-lg)',
-      color: 'var(--color-text-muted)',
-      fontSize: '0.9375rem',
-    }}>
-      Sankey diagram — full implementation in Sprint 5
+    <div>
+      <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem', textAlign: 'center' }}>
+        Click a category node to view transactions
+      </p>
+      <div style={{ height: 320 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <Sankey
+            data={{ nodes, links }}
+            nodePadding={14}
+            nodeWidth={18}
+            margin={{ top: 8, right: 140, bottom: 8, left: 140 }}
+            link={({ sourceX, sourceY, sourceControlX, targetControlX, targetX, targetY, linkWidth, index }: any) => (
+              <path
+                d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
+                fill="none"
+                stroke="var(--color-border)"
+                strokeWidth={linkWidth}
+                strokeOpacity={0.45}
+              />
+            )}
+            node={({ x, y, width, height, index, payload }: {
+              x: number; y: number; width: number; height: number; index: number; payload: { name: string; value: number };
+            }) => {
+              const isCenter = index === cfIndex;
+              const isSavings = hasSavings && index === nodes.length - 1;
+              const isClickable = !isCenter && !isSavings;
+              const isHov = hovered === index;
+              const color = isCenter
+                ? 'var(--color-accent)'
+                : isSavings
+                  ? '#2f9e44'
+                  : SANKEY_COLORS[index % SANKEY_COLORS.length];
+              const nodeAmount = nodes[index]?.amount ?? 0;
+              const amtStr = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Math.abs(nodeAmount));
+
+              return (
+                <g
+                  onClick={() => handleNodeClick(index)}
+                  onMouseEnter={() => setHovered(index)}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{ cursor: isClickable ? 'pointer' : 'default' }}
+                >
+                  <Rectangle
+                    x={x} y={y} width={width} height={Math.max(height, 4)}
+                    fill={color} fillOpacity={isHov ? 1 : 0.85} radius={3}
+                  />
+                  {/* Node label */}
+                  <text
+                    x={index <= cfIndex ? x - 8 : x + width + 8}
+                    y={y + height / 2 - (isHov ? 7 : 0)}
+                    textAnchor={index <= cfIndex ? 'end' : 'start'}
+                    dominantBaseline="middle"
+                    style={{
+                      fontSize: '0.6875rem',
+                      fill: isHov ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                      fontFamily: 'inherit',
+                      fontWeight: isHov ? 600 : 400,
+                      transition: 'all 0.1s',
+                    }}
+                  >
+                    {payload.name}
+                  </text>
+                  {/* Amount label shown on hover */}
+                  {isHov && (
+                    <text
+                      x={index <= cfIndex ? x - 8 : x + width + 8}
+                      y={y + height / 2 + 8}
+                      textAnchor={index <= cfIndex ? 'end' : 'start'}
+                      dominantBaseline="middle"
+                      style={{ fontSize: '0.625rem', fill: color, fontFamily: 'inherit', fontWeight: 600 }}
+                    >
+                      {amtStr}
+                    </text>
+                  )}
+                  {/* Clickable hint */}
+                  {isHov && isClickable && (
+                    <text
+                      x={index <= cfIndex ? x - 8 : x + width + 8}
+                      y={y + height / 2 + 20}
+                      textAnchor={index <= cfIndex ? 'end' : 'start'}
+                      dominantBaseline="middle"
+                      style={{ fontSize: '0.5625rem', fill: 'var(--color-accent)', fontFamily: 'inherit' }}
+                    >
+                      View transactions →
+                    </text>
+                  )}
+                </g>
+              );
+            }}
+          />
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
@@ -606,6 +766,94 @@ function BarChartView({
   );
 }
 
+// ─── Merchant Breakdown View ──────────────────────────────────────────────────
+
+function MerchantBreakdownView({ data }: { data?: MonthData }) {
+  const [showAllExpense, setShowAllExpense] = useState(false);
+  const [showAllIncome, setShowAllIncome] = useState(false);
+
+  if (!data) {
+    return <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', padding: '1rem 0' }}>No data for this month.</div>;
+  }
+
+  const expenseMerchants = data.expenses?.byMerchant ?? [];
+  const incomeMerchants = data.income?.byMerchant ?? [];
+
+  const visibleExpense = showAllExpense ? expenseMerchants : expenseMerchants.slice(0, 15);
+  const visibleIncome = showAllIncome ? incomeMerchants : incomeMerchants.slice(0, 15);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Income sources */}
+      <div>
+        <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-success)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+          Income Sources — {fmtCurrency(data.income?.total ?? 0)}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {visibleIncome.length === 0 && (
+            <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>No income this month.</span>
+          )}
+          {visibleIncome.map((m, idx) => (
+            <div key={m.merchantId ?? m.merchantName + idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', minWidth: 0, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {m.merchantName}
+              </span>
+              <HorizontalBar pct={m.percentage} color="var(--color-success)" />
+              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', minWidth: 72, textAlign: 'right' }}>{fmtCurrency(m.amount)}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(m.percentage)}</span>
+              <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', minWidth: 48, textAlign: 'right' }}>{m.transactionCount}×</span>
+            </div>
+          ))}
+          {incomeMerchants.length > 15 && (
+            <button
+              onClick={() => setShowAllIncome((v) => !v)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8125rem', color: 'var(--color-accent)', padding: '0.25rem 0', textAlign: 'left' }}
+            >
+              {showAllIncome ? 'Show less' : `Show ${incomeMerchants.length - 15} more`}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <CardDivider />
+
+      {/* Expense merchants */}
+      <div>
+        <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-danger)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+          Top Merchants — {fmtCurrency(data.expenses?.total ?? 0)}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {visibleExpense.length === 0 && (
+            <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>No expense merchants this month.</span>
+          )}
+          {visibleExpense.map((m, idx) => (
+            <div key={m.merchantId ?? m.merchantName + idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', minWidth: 20, textAlign: 'right' }}>
+                {idx + 1}
+              </span>
+              <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', minWidth: 0, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {m.merchantName}
+              </span>
+              <HorizontalBar pct={m.percentage} color="var(--color-danger)" />
+              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', minWidth: 72, textAlign: 'right' }}>{fmtCurrency(m.amount)}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(m.percentage)}</span>
+              <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', minWidth: 48, textAlign: 'right' }}>{m.transactionCount}×</span>
+            </div>
+          ))}
+          {expenseMerchants.length > 15 && (
+            <button
+              onClick={() => setShowAllExpense((v) => !v)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8125rem', color: 'var(--color-accent)', padding: '0.25rem 0', textAlign: 'left' }}
+            >
+              {showAllExpense ? 'Show less' : `Show ${expenseMerchants.length - 15} more`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Section 4: YTD Summary ───────────────────────────────────────────────────
 
 function YtdSummary({ data, isLoading }: { data?: YearData; isLoading: boolean }) {
@@ -697,6 +945,7 @@ export default function CashFlowPage() {
         data={monthData}
         isLoading={monthLoading}
         selectedMonth={selectedMonth}
+        year={year}
       />
 
       {/* Section 4: YTD summary */}

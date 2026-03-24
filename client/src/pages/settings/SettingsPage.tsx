@@ -105,6 +105,7 @@ type NavSection =
   | 'household'
   | 'categories'
   | 'tags'
+  | 'merchants'
   | 'integrations'
   | 'data'
   | 'billing';
@@ -117,6 +118,7 @@ const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'household', label: 'Household', icon: <Home size={16} /> },
   { id: 'categories', label: 'Categories', icon: <Tag size={16} /> },
   { id: 'tags', label: 'Tags', icon: <Tag size={16} /> },
+  { id: 'merchants', label: 'Merchants', icon: <CreditCard size={16} /> },
   { id: 'integrations', label: 'Integrations', icon: <Mail size={16} /> },
   { id: 'data', label: 'Data', icon: <Database size={16} /> },
   { id: 'billing', label: 'Billing', icon: <CreditCard size={16} /> },
@@ -1711,6 +1713,232 @@ function TagsSection() {
   );
 }
 
+// ─── Section: Merchants ───────────────────────────────────────────────────────
+
+interface MerchantItem {
+  id: string;
+  name: string;
+  displayName: string;
+  logoUrl: string | null;
+  transactionCount: number;
+}
+
+function MerchantsSection() {
+  const queryClient = useQueryClient();
+  const [order, setOrder] = useState<'TRANSACTION_COUNT' | 'NAME'>('TRANSACTION_COUNT');
+  const [search, setSearch] = useState('');
+  const [showCount, setShowCount] = useState(50);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<MerchantItem | null>(null);
+
+  const { data: merchants, isLoading } = useQuery<MerchantItem[]>({
+    queryKey: ['settings', 'merchants', order],
+    queryFn: () => api.get(`/settings/merchants?order=${order}`).then(r => r.data),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
+      api.put(`/settings/merchants/${id}`, { displayName }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'merchants'] });
+      setEditingId(null);
+      notify.success('Merchant updated');
+    },
+    onError: (err: any) => notify.error('Failed to update merchant', err?.response?.data?.error ?? 'Please try again.'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/settings/merchants/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'merchants'] });
+      setDeleteTarget(null);
+      notify.success('Merchant removed');
+    },
+    onError: () => notify.error('Failed to delete merchant'),
+  });
+
+  const filtered = (merchants ?? []).filter(m =>
+    m.displayName.toLowerCase().includes(search.toLowerCase()) ||
+    m.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const visible = filtered.slice(0, showCount);
+
+  function startEdit(m: MerchantItem) {
+    setEditingId(m.id);
+    setEditValue(m.displayName);
+  }
+
+  function commitEdit(id: string) {
+    const trimmed = editValue.trim();
+    if (!trimmed) return;
+    updateMutation.mutate({ id, displayName: trimmed });
+  }
+
+  function handleEditKeyDown(e: React.KeyboardEvent, id: string) {
+    if (e.key === 'Enter') commitEdit(id);
+    if (e.key === 'Escape') setEditingId(null);
+  }
+
+  return (
+    <div>
+      <SectionHeader
+        title="Merchants"
+        description="View and edit how merchants appear throughout Kuber."
+      />
+
+      {/* Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <Input
+          placeholder="Search merchants..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ maxWidth: 260 }}
+        />
+        <div style={{ display: 'flex', gap: '0.375rem' }}>
+          <button
+            onClick={() => setOrder('TRANSACTION_COUNT')}
+            style={{
+              padding: '0.375rem 0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem',
+              fontWeight: 600, border: '1px solid var(--color-border)', cursor: 'pointer',
+              backgroundColor: order === 'TRANSACTION_COUNT' ? 'var(--color-accent)' : 'var(--color-surface)',
+              color: order === 'TRANSACTION_COUNT' ? '#fff' : 'var(--color-text-secondary)',
+            }}
+          >
+            By transaction count
+          </button>
+          <button
+            onClick={() => setOrder('NAME')}
+            style={{
+              padding: '0.375rem 0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem',
+              fontWeight: 600, border: '1px solid var(--color-border)', cursor: 'pointer',
+              backgroundColor: order === 'NAME' ? 'var(--color-accent)' : 'var(--color-surface)',
+              color: order === 'NAME' ? '#fff' : 'var(--color-text-secondary)',
+            }}
+          >
+            By name
+          </button>
+        </div>
+      </div>
+
+      <Card padding="none">
+        {isLoading ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+            Loading merchants...
+          </div>
+        ) : visible.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+            {search ? 'No merchants match your search.' : 'No merchants yet.'}
+          </div>
+        ) : (
+          visible.map((m, idx) => (
+            <div
+              key={m.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.75rem',
+                padding: '0.625rem 1rem',
+                borderBottom: idx < visible.length - 1 ? '1px solid var(--color-border)' : 'none',
+              }}
+            >
+              {/* Name or inline editor */}
+              {editingId === m.id ? (
+                <input
+                  autoFocus
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  onKeyDown={e => handleEditKeyDown(e, m.id)}
+                  onBlur={() => commitEdit(m.id)}
+                  style={{
+                    flex: 1, fontSize: '0.875rem', fontWeight: 500,
+                    padding: '0.25rem 0.5rem',
+                    border: '1px solid var(--color-accent)',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    outline: 'none',
+                  }}
+                />
+              ) : (
+                <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 500 }}>
+                  {m.displayName}
+                  {m.displayName !== m.name && (
+                    <span style={{ marginLeft: '0.375rem', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                      ({m.name})
+                    </span>
+                  )}
+                </span>
+              )}
+
+              {/* Transaction count badge */}
+              <span style={{
+                fontSize: '0.75rem', fontWeight: 600,
+                color: 'var(--color-text-muted)',
+                backgroundColor: 'var(--color-surface-hover)',
+                borderRadius: 'var(--radius-full)',
+                padding: '0.125rem 0.5rem',
+                flexShrink: 0,
+              }}>
+                {m.transactionCount} {m.transactionCount === 1 ? 'tx' : 'txs'}
+              </span>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Pencil size={13} />}
+                onClick={() => startEdit(m)}
+                style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}
+              >
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Trash2 size={13} />}
+                onClick={() => setDeleteTarget(m)}
+                style={{ color: 'var(--color-danger)', flexShrink: 0 }}
+              >
+                Delete
+              </Button>
+            </div>
+          ))
+        )}
+      </Card>
+
+      {/* Show more */}
+      {filtered.length > showCount && (
+        <div style={{ marginTop: '0.75rem', textAlign: 'center' }}>
+          <Button variant="secondary" size="sm" onClick={() => setShowCount(c => c + 50)}>
+            Show more ({filtered.length - showCount} remaining)
+          </Button>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Remove Merchant"
+        size="sm"
+      >
+        <p style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+          Remove this merchant? Transactions will become unlinked.{' '}
+          Are you sure you want to remove <strong>{deleteTarget?.displayName}</strong>?
+        </p>
+        <ModalFooter>
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={deleteMutation.isPending}
+            onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+          >
+            Remove
+          </Button>
+        </ModalFooter>
+      </Modal>
+    </div>
+  );
+}
+
 // ─── Section: Integrations ────────────────────────────────────────────────────
 
 function IntegrationsSection() {
@@ -1942,6 +2170,7 @@ export default function SettingsPage() {
       case 'household': return <HouseholdSection />;
       case 'categories': return <CategoriesSection />;
       case 'tags': return <TagsSection />;
+      case 'merchants': return <MerchantsSection />;
       case 'integrations': return <IntegrationsSection />;
       case 'data': return <DataSection />;
       case 'billing': return <BillingSection />;

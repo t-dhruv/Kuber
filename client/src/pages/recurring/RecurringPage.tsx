@@ -10,7 +10,7 @@ import { notify } from '@/components/ui';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Frequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUALLY';
-type ViewMode = 'monthly' | 'all';
+type ViewMode = 'monthly' | 'all' | 'calendar';
 
 interface RecurringItem {
   id: string;
@@ -758,6 +758,203 @@ function AllRecurringView({
   );
 }
 
+// ─── Calendar View ────────────────────────────────────────────────────────────
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES_FULL = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function buildCalendarGrid(year: number, month: number): Array<Date | null> {
+  const firstDay = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0);
+  const startPad = firstDay.getDay(); // 0=Sun
+  const endPad = 6 - lastDay.getDay();
+  const cells: Array<Date | null> = [];
+  for (let i = 0; i < startPad; i++) cells.push(null);
+  for (let d = 1; d <= lastDay.getDate(); d++) cells.push(new Date(year, month - 1, d));
+  for (let i = 0; i < endPad; i++) cells.push(null);
+  return cells;
+}
+
+function CalendarView({
+  allItems,
+  isLoading,
+}: {
+  allItems?: RecurringItem[];
+  isLoading: boolean;
+}) {
+  const now = new Date();
+  const [calYear, setCalYear] = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(now.getMonth() + 1);
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const cells = buildCalendarGrid(calYear, calMonth);
+
+  // Index items by their nextDate day (within the displayed month/year)
+  const itemsByDay = new Map<number, RecurringItem[]>();
+  if (allItems) {
+    for (const item of allItems) {
+      if (!item.isActive) continue;
+      const d = new Date(item.nextDate);
+      if (d.getFullYear() === calYear && d.getMonth() + 1 === calMonth) {
+        const day = d.getDate();
+        if (!itemsByDay.has(day)) itemsByDay.set(day, []);
+        itemsByDay.get(day)!.push(item);
+      }
+    }
+  }
+
+  function chipStatus(item: RecurringItem): 'paid' | 'overdue' | 'upcoming' {
+    if (item.isPaid) return 'paid';
+    const d = new Date(item.nextDate);
+    const itemDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    return itemDay < today ? 'overdue' : 'upcoming';
+  }
+
+  const chipColors: Record<'paid' | 'overdue' | 'upcoming', { bg: string; text: string }> = {
+    paid: { bg: 'var(--color-success-light)', text: 'var(--color-success)' },
+    overdue: { bg: 'var(--color-danger-light)', text: 'var(--color-danger)' },
+    upcoming: { bg: 'rgba(99,102,241,0.1)', text: 'var(--color-accent)' },
+  };
+
+  function prevMonth() {
+    if (calMonth === 1) { setCalYear((y) => y - 1); setCalMonth(12); }
+    else setCalMonth((m) => m - 1);
+  }
+  function nextMonth() {
+    if (calMonth === 12) { setCalYear((y) => y + 1); setCalMonth(1); }
+    else setCalMonth((m) => m + 1);
+  }
+
+  if (isLoading) {
+    return (
+      <Card padding="lg">
+        <Skeleton height={400} width="100%" />
+      </Card>
+    );
+  }
+
+  return (
+    <Card padding="lg">
+      {/* Calendar header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        <button
+          onClick={prevMonth}
+          style={{
+            width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)',
+            backgroundColor: 'var(--color-surface)', cursor: 'pointer', color: 'var(--color-text-secondary)', fontSize: '0.875rem',
+          }}
+        >
+          ‹
+        </button>
+        <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
+          {MONTH_NAMES_FULL[calMonth - 1]} {calYear}
+        </span>
+        <button
+          onClick={nextMonth}
+          style={{
+            width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)',
+            backgroundColor: 'var(--color-surface)', cursor: 'pointer', color: 'var(--color-text-secondary)', fontSize: '0.875rem',
+          }}
+        >
+          ›
+        </button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', marginBottom: '2px' }}>
+        {DAY_NAMES.map((d) => (
+          <div key={d} style={{
+            textAlign: 'center', fontSize: '0.6875rem', fontWeight: 600,
+            color: 'var(--color-text-muted)', padding: '0.25rem 0',
+            textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px' }}>
+        {cells.map((date, idx) => {
+          if (!date) {
+            return <div key={`pad-${idx}`} style={{ minHeight: 80, backgroundColor: 'var(--color-surface-hover)', borderRadius: 'var(--radius-sm)', opacity: 0.4 }} />;
+          }
+          const day = date.getDate();
+          const isToday = date.getTime() === today.getTime();
+          const items = itemsByDay.get(day) ?? [];
+
+          return (
+            <div
+              key={day}
+              style={{
+                minHeight: 80,
+                padding: '0.25rem 0.3125rem',
+                backgroundColor: isToday ? 'rgba(99,102,241,0.07)' : 'var(--color-surface)',
+                border: isToday ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+              }}
+            >
+              <span style={{
+                fontSize: '0.75rem',
+                fontWeight: isToday ? 700 : 500,
+                color: isToday ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                alignSelf: 'flex-end',
+                lineHeight: 1,
+              }}>
+                {day}
+              </span>
+              {items.map((item) => {
+                const status = chipStatus(item);
+                const colors = chipColors[status];
+                return (
+                  <div
+                    key={item.id}
+                    title={`${item.name} — ${fmtCurrency(item.amount)}`}
+                    style={{
+                      fontSize: '0.625rem',
+                      fontWeight: 600,
+                      padding: '1px 4px',
+                      borderRadius: 3,
+                      backgroundColor: colors.bg,
+                      color: colors.text,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {item.categoryIcon ? `${item.categoryIcon} ` : ''}{item.name}
+                    <span style={{ opacity: 0.7 }}> {fmtCurrency(item.amount)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: '1rem', marginTop: '0.875rem', flexWrap: 'wrap' }}>
+        {(['upcoming', 'overdue', 'paid'] as const).map((s) => (
+          <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: chipColors[s].bg, border: `1px solid ${chipColors[s].text}` }} />
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', textTransform: 'capitalize' }}>{s}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 // ─── Delete Confirm Modal ─────────────────────────────────────────────────────
 
 function DeleteConfirmModal({
@@ -879,7 +1076,7 @@ export default function RecurringPage() {
           display: 'flex', background: 'var(--color-surface)', border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)', overflow: 'hidden', flex: '0 0 auto',
         }}>
-          {(['monthly', 'all'] as ViewMode[]).map((v) => (
+          {(['monthly', 'all', 'calendar'] as ViewMode[]).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -891,7 +1088,7 @@ export default function RecurringPage() {
                 transition: 'background 0.15s',
               }}
             >
-              {v === 'monthly' ? 'Monthly' : 'All recurring'}
+              {v === 'monthly' ? 'Monthly' : v === 'all' ? 'All recurring' : 'Calendar'}
             </button>
           ))}
         </div>
@@ -916,6 +1113,11 @@ export default function RecurringPage() {
           onDelete={openDelete}
           onToggle={(item) => toggleMut.mutate(item)}
           onAddIncome={openAdd}
+        />
+      ) : view === 'calendar' ? (
+        <CalendarView
+          allItems={allRecurring}
+          isLoading={allLoading}
         />
       ) : (
         <AllRecurringView

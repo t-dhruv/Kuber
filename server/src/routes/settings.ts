@@ -489,6 +489,101 @@ router.delete('/tags/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ─── Merchants ────────────────────────────────────────────────────────────────
+
+// GET /api/v1/settings/merchants?order=TRANSACTION_COUNT|NAME
+router.get('/merchants', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const order = req.query.order === 'NAME' ? 'NAME' : 'TRANSACTION_COUNT';
+
+    const merchants = await prisma.merchant.findMany({
+      where: { householdId },
+      select: {
+        id: true,
+        name: true,
+        displayName: true,
+        logoUrl: true,
+        _count: { select: { transactions: true } },
+      },
+      orderBy: order === 'NAME' ? { displayName: 'asc' } : { createdAt: 'asc' },
+    });
+
+    // Sort by transaction count client-side when needed (Prisma doesn't sort by _count directly in older versions)
+    const result = merchants
+      .map(m => ({
+        id: m.id,
+        name: m.name,
+        displayName: m.displayName,
+        logoUrl: m.logoUrl ?? null,
+        transactionCount: m._count.transactions,
+      }))
+      .sort((a, b) =>
+        order === 'TRANSACTION_COUNT'
+          ? b.transactionCount - a.transactionCount
+          : a.displayName.localeCompare(b.displayName)
+      );
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[settings/merchants GET]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/v1/settings/merchants/:id
+router.put('/merchants/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+    const { displayName } = req.body;
+
+    if (!displayName || typeof displayName !== 'string' || displayName.trim().length === 0) {
+      return res.status(400).json({ error: 'displayName is required and must be non-empty' });
+    }
+    if (displayName.trim().length > 100) {
+      return res.status(400).json({ error: 'displayName must be 100 characters or fewer' });
+    }
+
+    const existing = await prisma.merchant.findFirst({ where: { id, householdId } });
+    if (!existing) return res.status(404).json({ error: 'Merchant not found' });
+
+    const updated = await prisma.merchant.update({
+      where: { id },
+      data: { displayName: displayName.trim() },
+      select: { id: true, name: true, displayName: true, logoUrl: true },
+    });
+
+    return res.json({ ...updated, logoUrl: updated.logoUrl ?? null });
+  } catch (err) {
+    console.error('[settings/merchants PUT]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/v1/settings/merchants/:id
+router.delete('/merchants/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+
+    const existing = await prisma.merchant.findFirst({ where: { id, householdId } });
+    if (!existing) return res.status(404).json({ error: 'Merchant not found' });
+
+    // Null out merchantId on linked transactions before deleting
+    await prisma.transaction.updateMany({
+      where: { merchantId: id, householdId },
+      data: { merchantId: null },
+    });
+
+    await prisma.merchant.delete({ where: { id } });
+    return res.json({ message: 'Merchant deleted' });
+  } catch (err) {
+    console.error('[settings/merchants DELETE]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/v1/settings/notifications
 router.get('/notifications', async (req: AuthRequest, res: Response) => {
   try {
