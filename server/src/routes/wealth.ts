@@ -4,6 +4,14 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { getAiClientForHousehold } from '../lib/ai';
 import type { AiMessage } from '../lib/ai/types';
+import {
+  computeTargets,
+  bucketTransactions,
+  buildBucket,
+  buildAlerts,
+  computeSavingsCapacity,
+  type BucketKey,
+} from '../lib/wealthAnalysis';
 
 const router = Router();
 
@@ -32,24 +40,6 @@ function getMonthRange(monthParam?: string): { start: Date; end: Date; month: st
   const month = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
 
   return { start, end, month };
-}
-
-type BucketKey = 'needs' | 'wants' | 'savings' | 'uncategorized';
-
-interface CategoryTotal {
-  id: string;
-  name: string;
-  icon: string | null;
-  amount: number;
-  bucketType: string;
-}
-
-interface BucketData {
-  total: number;
-  target: number;
-  delta: number;
-  pct: number;
-  categories: CategoryTotal[];
 }
 
 // ─── Auto-detect income from previous calendar month ─────────────────────────
@@ -268,85 +258,24 @@ router.get('/analysis', async (req: AuthRequest, res: Response) => {
     });
 
     // 4. Sum per bucket and accumulate category totals
-    const bucketTotals: Record<BucketKey, number> = {
-      needs: 0,
-      wants: 0,
-      savings: 0,
-      uncategorized: 0,
-    };
-
-    const catMap = new Map<string, CategoryTotal>();
-
-    for (const tx of transactions) {
-      const bucket = (tx.category?.bucketType ?? 'uncategorized') as BucketKey;
-      const absAmount = Math.abs(tx.amount);
-
-      bucketTotals[bucket] += absAmount;
-
-      const catKey = tx.categoryId ?? '__uncategorized__';
-      const existing = catMap.get(catKey);
-      if (existing) {
-        existing.amount += absAmount;
-      } else {
-        catMap.set(catKey, {
-          id: catKey,
-          name: tx.category?.name ?? 'Uncategorized',
-          icon: tx.category?.emoji ?? null,
-          amount: absAmount,
-          bucketType: bucket,
-        });
-      }
-    }
+    const { bucketTotals, catMap } = bucketTransactions(transactions);
 
     // 5. Compute targets (0 if no income set)
-    const targets = {
-      needs: income != null ? income * 0.5 : 0,
-      wants: income != null ? income * 0.3 : 0,
-      savings: income != null ? income * 0.2 : 0,
-    };
+    const targets = computeTargets(income);
 
     // 6. Build per-bucket data
-    function buildBucket(key: BucketKey, target: number): BucketData {
-      const cats = [...catMap.values()]
-        .filter((c) => c.bucketType === key)
-        .sort((a, b) => b.amount - a.amount);
-      const total = bucketTotals[key];
-      const delta = total - target;
-      const pct = target > 0 ? (total / target) * 100 : 0;
-      return { total, target, delta, pct, categories: cats };
-    }
-
     const buckets = {
-      needs: buildBucket('needs', targets.needs),
-      wants: buildBucket('wants', targets.wants),
-      savings: buildBucket('savings', targets.savings),
-      uncategorized: buildBucket('uncategorized', 0),
+      needs: buildBucket('needs', targets.needs, bucketTotals, catMap),
+      wants: buildBucket('wants', targets.wants, bucketTotals, catMap),
+      savings: buildBucket('savings', targets.savings, bucketTotals, catMap),
+      uncategorized: buildBucket('uncategorized', 0, bucketTotals, catMap),
     };
 
     // 7. Build alerts
-    type AlertSeverity = 'danger' | 'warning' | 'info';
-    const alerts: Array<{ bucket: string; message: string; severity: AlertSeverity }> = [];
-
-    if (income != null) {
-      for (const key of ['needs', 'wants', 'savings'] as const) {
-        const { total, target } = buckets[key];
-        if (total > target && target > 0) {
-          const overage = (total - target) / target;
-          const severity: AlertSeverity = overage > 0.2 ? 'danger' : 'warning';
-          const pctOver = Math.round(overage * 100);
-          alerts.push({
-            bucket: key,
-            message: `Your ${key} spending is ${pctOver}% over budget ($${(total - target).toFixed(2)} excess)`,
-            severity,
-          });
-        }
-      }
-    }
+    const alerts = buildAlerts(income, buckets);
 
     // 8. Savings capacity
-    const totalSpent =
-      bucketTotals.needs + bucketTotals.wants + bucketTotals.savings + bucketTotals.uncategorized;
-    const savingsCapacity = income != null ? Math.max(0, income - totalSpent) : 0;
+    const savingsCapacity = computeSavingsCapacity(income, bucketTotals);
 
     // 9. Investment ladder — check goals for context
     const goals = await prisma.goal.findMany({

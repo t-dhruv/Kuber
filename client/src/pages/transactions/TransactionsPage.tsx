@@ -3,12 +3,13 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Plus, ChevronRight, RotateCcw, X, Check,
-  ChevronLeft, ChevronRight as ChevronRightIcon,
+  ChevronLeft, ChevronRight as ChevronRightIcon, Upload,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card,
 } from '@/components/ui';
+import { ImportModal } from './components/ImportModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -812,9 +813,10 @@ function BulkActionsBar({ count, categories, onRecategorize, onMarkReviewed, onH
       position: 'sticky', top: 0, zIndex: 20,
       backgroundColor: 'var(--color-accent)',
       padding: '0.625rem 1rem',
-      display: 'flex', alignItems: 'center', gap: '0.75rem',
+      display: 'flex', alignItems: 'center', gap: '0.5rem',
       borderRadius: 'var(--radius-md)',
       marginBottom: '0.5rem',
+      flexWrap: 'wrap',
     }}>
       <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff', marginRight: 'auto' }}>
         {count} selected
@@ -947,18 +949,18 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit }: Tra
         )}
       </div>
 
-      {/* Category name */}
-      <div style={{ flex: '0 0 130px', fontSize: '0.8125rem', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {/* Category name — hidden on mobile */}
+      <div className="hidden sm:block" style={{ flex: '0 0 130px', fontSize: '0.8125rem', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {txn.categoryName}
       </div>
 
-      {/* Account */}
-      <div style={{ flex: '0 0 150px', fontSize: '0.8125rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {/* Account — hidden on mobile and tablet */}
+      <div className="hidden md:block" style={{ flex: '0 0 150px', fontSize: '0.8125rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {txn.accountName}{txn.accountLastFour ? ` ••${txn.accountLastFour}` : ''}
       </div>
 
-      {/* Badges */}
-      <div style={{ display: 'flex', gap: '0.25rem', flex: '0 0 auto' }}>
+      {/* Badges — hidden on mobile */}
+      <div className="hidden sm:flex" style={{ gap: '0.25rem', flex: '0 0 auto' }}>
         {txn.isRecurring && (
           <span title="Recurring" style={{ color: 'var(--color-info)', fontSize: '0.875rem' }}>
             <RotateCcw size={13} />
@@ -1072,6 +1074,7 @@ export default function TransactionsPage() {
   const [drawerTxn, setDrawerTxn] = useState<Transaction | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const page = parseInt(searchParams.get('page') ?? '1', 10);
   const search = searchParams.get('search') ?? '';
@@ -1197,8 +1200,8 @@ export default function TransactionsPage() {
           Transactions
         </h1>
 
-        {/* Search */}
-        <div style={{ width: 240 }}>
+        {/* Search — full width on mobile */}
+        <div className="w-full sm:w-60">
           <Input
             placeholder="Search..."
             value={search}
@@ -1207,8 +1210,8 @@ export default function TransactionsPage() {
           />
         </div>
 
-        {/* Date range */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+        {/* Date range — hidden on mobile, shown on sm+ */}
+        <div className="hidden sm:flex items-center gap-1.5">
           <input
             type="date"
             value={searchParams.get('startDate') ?? ''}
@@ -1257,6 +1260,15 @@ export default function TransactionsPage() {
           )}
         </button>
 
+        {/* Import CSV button */}
+        <Button
+          variant="secondary"
+          icon={<Upload size={14} />}
+          onClick={() => setShowImportModal(true)}
+        >
+          Import CSV
+        </Button>
+
         {/* Add button */}
         <Button
           variant="primary"
@@ -1281,6 +1293,7 @@ export default function TransactionsPage() {
       )}
 
       {/* Transaction list */}
+      <div className="overflow-x-auto">
       <Card padding="none">
         {/* Column header */}
         <div style={{
@@ -1298,9 +1311,9 @@ export default function TransactionsPage() {
           />
           <div style={{ width: 32, flexShrink: 0 }} />
           <div style={{ flex: '1 1 180px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Merchant</div>
-          <div style={{ flex: '0 0 130px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Category</div>
-          <div style={{ flex: '0 0 150px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Account</div>
-          <div style={{ flex: '0 0 auto', minWidth: 60 }} />
+          <div className="hidden sm:block" style={{ flex: '0 0 130px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Category</div>
+          <div className="hidden md:block" style={{ flex: '0 0 150px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Account</div>
+          <div className="hidden sm:block" style={{ flex: '0 0 auto', minWidth: 60 }} />
           <div style={{ flex: '0 0 90px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'right' }}>Amount</div>
           <div style={{ width: 24, flexShrink: 0 }} />
         </div>
@@ -1370,6 +1383,7 @@ export default function TransactionsPage() {
           </div>
         )}
       </Card>
+      </div>
 
       {/* Summary Stats Panel */}
       {!txnsLoading && transactions.length > 0 && (() => {
@@ -1429,6 +1443,13 @@ export default function TransactionsPage() {
         onClose={() => setShowAddModal(false)}
         accounts={accounts}
         categories={categories}
+      />
+
+      {/* Import CSV modal */}
+      <ImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImported={() => queryClient.invalidateQueries({ queryKey: ['transactions'] })}
       />
     </div>
   );

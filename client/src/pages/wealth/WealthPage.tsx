@@ -415,16 +415,18 @@ function WhereToCut({ analysis }: { analysis: WealthAnalysis }) {
   return (
     <Card className="p-5">
       <CardHeader title="Where to Cut" description="Top categories contributing to overspend" />
-      <div className="flex flex-col divide-y divide-[var(--color-border)] mt-3">
+      <div className="overflow-x-auto -mx-1 px-1 mt-3">
+      <div className="flex flex-col divide-y divide-[var(--color-border)] min-w-[320px]">
         {withOverage.map((c, i) => (
           <div key={c.id} className="flex items-center gap-3 py-2.5 text-sm">
-            <span className="text-[var(--color-text-muted)] w-5 text-center font-mono text-xs">{i + 1}</span>
-            <span className="w-6 text-center">{c.icon ?? '📦'}</span>
-            <span className="flex-1 font-medium text-[var(--color-text)]">{c.name}</span>
-            <span className="text-xs text-[var(--color-text-muted)]">{c.bucket}</span>
-            <span className="text-red-500 font-semibold">over by {fmtCurrency(c.overage)}</span>
+            <span className="text-[var(--color-text-muted)] w-5 text-center font-mono text-xs flex-shrink-0">{i + 1}</span>
+            <span className="w-6 text-center flex-shrink-0">{c.icon ?? '📦'}</span>
+            <span className="flex-1 font-medium text-[var(--color-text)] truncate">{c.name}</span>
+            <span className="text-xs text-[var(--color-text-muted)] flex-shrink-0">{c.bucket}</span>
+            <span className="text-red-500 font-semibold flex-shrink-0">over by {fmtCurrency(c.overage)}</span>
           </div>
         ))}
+      </div>
       </div>
     </Card>
   );

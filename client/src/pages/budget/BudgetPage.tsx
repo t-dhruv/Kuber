@@ -560,14 +560,8 @@ function BudgetRow({
         padding: '0 0.5rem',
       }}
     >
-      {/* Main row */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 120px 100px 90px',
-        alignItems: 'center',
-        minHeight: '44px',
-        gap: '0.5rem',
-      }}>
+      {/* Main row — responsive: name+amount on mobile, full 4-col on sm+ */}
+      <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_100px_90px] items-center gap-2 min-h-[44px]">
         {/* Name */}
         <div
           onClick={() => onNavigateToTransactions?.(item.id)}
@@ -603,13 +597,13 @@ function BudgetRow({
           />
         </div>
 
-        {/* Actual */}
-        <div style={{ textAlign: 'right', fontSize: '0.875rem', color: 'var(--color-text)' }}>
+        {/* Actual — hidden on mobile */}
+        <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', color: 'var(--color-text)' }}>
           {fmtCurrency(item.actual)}
         </div>
 
-        {/* Remaining */}
-        <div style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, color: remainingColor(item.remaining) }}>
+        {/* Remaining — hidden on mobile */}
+        <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, color: remainingColor(item.remaining) }}>
           {fmtCurrency(item.remaining)}
         </div>
       </div>
@@ -713,17 +707,11 @@ function BudgetTypeSection({
       {expanded && (
         <>
           {/* Column headers */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 120px 100px 90px',
-            gap: '0.5rem',
-            padding: '0 0.5rem',
-            marginBottom: '0.125rem',
-          }}>
+          <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_100px_90px] gap-2 px-2 mb-0.5">
             <div />
             <div style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>Budget</div>
-            <div style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>Actual</div>
-            <div style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>Remaining</div>
+            <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>Actual</div>
+            <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>Remaining</div>
           </div>
 
           <div style={{ height: 1, backgroundColor: 'var(--color-border)', marginBottom: '0.25rem' }} />
@@ -746,23 +734,17 @@ function BudgetTypeSection({
 
           {/* Totals footer */}
           <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '0.25rem 0' }} />
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 120px 100px 90px',
-            gap: '0.5rem',
-            alignItems: 'center',
-            padding: '0.375rem 0.5rem',
-          }}>
+          <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_100px_90px] gap-2 items-center px-2 py-1.5">
             <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
               Total {title}:
             </span>
             <span style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
               {fmtCurrency(totalBudgeted)}
             </span>
-            <span style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+            <span className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
               {fmtCurrency(totalActual)}
             </span>
-            <span style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: remainingColor(totalRemaining) }}>
+            <span className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: remainingColor(totalRemaining) }}>
               {fmtCurrency(totalRemaining)}
             </span>
           </div>
@@ -831,14 +813,7 @@ function BudgetGroupSection({
   return (
     <div style={{ marginBottom: '1.5rem' }}>
       {/* Section header */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 120px 100px 90px',
-        gap: '0.5rem',
-        alignItems: 'center',
-        padding: '0 0.5rem',
-        marginBottom: '0.25rem',
-      }}>
+      <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_100px_90px] gap-2 items-center px-2 mb-1">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span style={{
             fontSize: '0.6875rem',
@@ -865,8 +840,8 @@ function BudgetGroupSection({
           </button>
         </div>
         <div style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-secondary)' }}>Budget</div>
-        <div style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-secondary)' }}>Actual</div>
-        <div style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-secondary)' }}>Remaining</div>
+        <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-secondary)' }}>Actual</div>
+        <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-secondary)' }}>Remaining</div>
       </div>
 
       {/* Divider */}
@@ -891,23 +866,17 @@ function BudgetGroupSection({
 
       {/* Totals row */}
       <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '0.25rem 0' }} />
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 120px 100px 90px',
-        gap: '0.5rem',
-        alignItems: 'center',
-        padding: '0.375rem 0.5rem',
-      }}>
+      <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_100px_90px] gap-2 items-center px-2 py-1.5">
         <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
           Total {group.name}:
         </span>
         <span style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
           {fmtCurrency(totalBudget)}
         </span>
-        <span style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+        <span className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
           {fmtCurrency(totalActual)}
         </span>
-        <span style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: remainingColor(totalRemaining) }}>
+        <span className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: remainingColor(totalRemaining) }}>
           {fmtCurrency(totalRemaining)}
         </span>
       </div>
@@ -1493,13 +1462,8 @@ export default function BudgetPage() {
         />
       )}
 
-      {/* Two-column layout */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '65fr 35fr',
-        gap: '1.25rem',
-        alignItems: 'start',
-      }}>
+      {/* Two-column layout — single column on mobile, 65/35 on md+ */}
+      <div className="grid grid-cols-1 md:grid-cols-[65fr_35fr] gap-5 items-start">
         {/* Left column — Budget table */}
         <Card padding="lg">
           {budgetLoading ? (

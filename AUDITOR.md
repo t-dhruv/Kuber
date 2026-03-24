@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-24 (Sprint 11 complete)
+> Last updated: 2026-03-24 (Sprint 12 complete)
 
 ---
 
@@ -38,7 +38,9 @@
 | Wealth Strategy | 🟢 Done | 50/30/20 dashboard: salary input, bucket cards, alerts, Where to Cut, Investment Ladder, AI coach |
 | Merchants Settings | 🟢 Done | Settings > Merchants: search, sort, inline edit, delete |
 | E2E Tests | 🟢 Done | Playwright setup + smoke tests (7) + auth tests (3); `npm run test:e2e` |
-| Unit Tests | 🔴 None | Server lib unit tests still missing |
+| Unit Tests | 🟢 Done | 69 tests: csvExport (100%), netWorthJob (100%), priceCache (97%), wealthAnalysis (100%) |
+| CSV Import | 🟢 Done | 3-step modal: upload → column mapping → preview & import; server parses CSV, auto-matches categories/merchants |
+| Mobile Responsive | 🟢 Done | Sidebar drawer, Dashboard stacking, Transactions column hiding, Budget grid, Wealth overflow fixes |
 | Docker prod | 🟢 Done | Multi-stage Dockerfiles, docker-compose.prod.yml, nginx/prod.conf |
 | GitHub Actions CI | 🟢 Done | .github/workflows/ci.yml — lint + build on push/PR |
 | CSV Export | 🟢 Done | Transactions, Accounts, Reports — GET /export/csv endpoints |
@@ -56,6 +58,29 @@
 ---
 
 ## Sprint Log
+
+### Sprint 12 — CSV Import, Mobile Polish, Unit Tests (2026-03-24)
+**Goal:** Pre-release quality — transaction import, mobile responsiveness, test coverage.
+
+**Completed:**
+- [x] `POST /api/v1/transactions/import/preview` — parses first 5 rows, returns headers + preview + errors
+- [x] `POST /api/v1/transactions/import` — full import with Prisma transaction, >10% error rate → 422 rollback, finds/creates merchants, case-insensitive category matching, marks imported txns `needsReview: true`
+- [x] `client/src/pages/transactions/components/ImportModal.tsx` — 3-step modal: Upload (drag-drop + account + date format) → Map Columns (auto-heuristic mapping + 3-row preview) → Preview & Import (10-row table + import mutation)
+- [x] "Import CSV" button added to TransactionsPage toolbar
+- [x] Mobile sidebar drawer: hamburger toggle, overlay backdrop, slide-in animation, close on nav click
+- [x] Dashboard: single-column stacking on mobile, WeeklyRecap horizontal scroll
+- [x] Transactions: collapsible filters, column hiding (Category hidden on xs, Account hidden on sm), bulk action wrapping
+- [x] Budget: responsive grid (stacks on mobile), Actual/Remaining columns hidden on xs
+- [x] Wealth: WhereToCut overflow-x-auto, header stacking
+- [x] `server/vitest.config.ts` + test scripts in package.json
+- [x] `server/src/lib/csvExport.test.ts` — 16 tests, 100% coverage
+- [x] `server/src/lib/netWorthJob.test.ts` — 7 tests, 100% coverage
+- [x] `server/src/lib/priceCache.test.ts` — 20 tests, 97% coverage
+- [x] `server/src/lib/wealthAnalysis.ts` — extracted pure helpers from wealth route
+- [x] `server/src/routes/wealth.test.ts` — 29 tests, 100% coverage
+- [x] 69/69 tests pass, ~450ms
+
+---
 
 ### Sprint 11 — Wealth Strategy: 50/30/20 Dashboard + AI Coach (2026-03-24)
 **Goal:** Smart wealth-building feature: 50/30/20 rule analysis, personalized insights, investment ladder, AI coaching.

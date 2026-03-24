@@ -45,7 +45,12 @@ const navItems: NavItem[] = [
   { to: '/advice', icon: <Sparkles size={18} />, label: 'Advice' },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(STORAGE_KEY) === 'true';
@@ -70,11 +75,22 @@ export function Sidebar() {
     navigate('/login');
   };
 
+  const handleNavClick = () => {
+    // Close mobile drawer when a nav item is clicked
+    onMobileClose?.();
+  };
+
   const width = collapsed ? 'w-16' : 'w-64';
+
+  // On mobile: hidden by default, slides in as drawer when mobileOpen
+  // On desktop (md+): always visible, width controlled by collapsed state
+  const mobileVisibility = mobileOpen
+    ? 'translate-x-0'
+    : '-translate-x-full md:translate-x-0';
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-full ${width} flex flex-col bg-[var(--color-surface)] border-r border-[var(--color-border)] transition-all duration-200 z-30`}
+      className={`fixed left-0 top-0 h-full ${width} flex flex-col bg-[var(--color-surface)] border-r border-[var(--color-border)] transition-all duration-200 z-30 ${mobileVisibility}`}
       aria-label="Main navigation"
     >
       {/* Logo */}
@@ -103,6 +119,7 @@ export function Sidebar() {
             <NavLink
               to={item.to}
               end={item.to === '/'}
+              onClick={handleNavClick}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm font-medium transition-colors ${
                   collapsed ? 'justify-center' : ''
@@ -127,6 +144,7 @@ export function Sidebar() {
         <Tooltip content="AI Assistant" placement="right" disabled={!collapsed}>
           <NavLink
             to="/advice"
+            onClick={handleNavClick}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm font-medium transition-colors ${
                 collapsed ? 'justify-center' : ''

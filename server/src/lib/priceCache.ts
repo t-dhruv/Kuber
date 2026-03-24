@@ -88,6 +88,7 @@ export function getCacheStatus() {
   }));
 }
 
+
 // ─── Live Benchmarks ──────────────────────────────────────────────────────────
 
 export interface BenchmarkReturns {
@@ -189,4 +190,10 @@ export async function getLiveBenchmarks(): Promise<Record<BenchmarkPeriod, Bench
     // Return stale cache if available, otherwise hardcoded fallback
     return benchmarkCache?.data ?? BENCHMARK_FALLBACK;
   }
+}
+
+/** Clear all in-memory caches. Intended for use in tests only. */
+export function clearCacheForTesting(): void {
+  cache.clear();
+  benchmarkCache = null;
 }

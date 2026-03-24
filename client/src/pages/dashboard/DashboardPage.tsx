@@ -727,8 +727,9 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
         <WidgetError />
       ) : (
         <>
-          {/* Stat tiles */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          {/* Stat tiles — horizontal scroll on mobile */}
+          <div className="overflow-x-auto -mx-1 px-1 mb-5">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(130px, 1fr))', gap: '0.75rem', minWidth: 360 }}>
             {/* Spending */}
             <div style={{
               backgroundColor: 'var(--color-surface-hover)',
@@ -792,6 +793,7 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>No spending</div>
               )}
             </div>
+          </div>
           </div>
 
           {/* Upcoming bills strip */}
@@ -1279,13 +1281,8 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* 2-column widget grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)',
-        gap: '1rem',
-        alignItems: 'start',
-      }}>
+      {/* 2-column widget grid — single column on mobile, 2-col on md+ */}
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4 items-start">
         {/* Left column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {leftWidgets}

@@ -1,9 +1,23 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
+
+// multer: memory storage, CSV only, 10 MB limit
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
+    }
+  },
+});
 
 const router = Router();
 
@@ -286,6 +300,377 @@ router.delete('/before', async (req: AuthRequest, res: Response) => {
     return res.json({ count: result.count });
   } catch (err) {
     console.error('[transactions/before DELETE]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// CSV Import helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal CSV parser — handles quoted fields with embedded commas/newlines.
+ * Returns an array of row-arrays (strings).
+ */
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (inQuotes) {
+      if (ch === '"' && next === '"') {
+        field += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        row.push(field.trim());
+        field = '';
+      } else if (ch === '\n' || (ch === '\r' && next === '\n')) {
+        if (ch === '\r') i++;
+        row.push(field.trim());
+        if (row.some(c => c !== '')) rows.push(row);
+        row = [];
+        field = '';
+      } else if (ch === '\r') {
+        row.push(field.trim());
+        if (row.some(c => c !== '')) rows.push(row);
+        row = [];
+        field = '';
+      } else {
+        field += ch;
+      }
+    }
+  }
+  // last field/row
+  if (field !== '' || row.length > 0) {
+    row.push(field.trim());
+    if (row.some(c => c !== '')) rows.push(row);
+  }
+
+  return rows;
+}
+
+/** Parse amount: handles negatives, parentheses like (123.45), $, commas. */
+function parseAmount(raw: string): number {
+  let s = raw.trim().replace(/[$,\s]/g, '');
+  const negative = s.startsWith('(') && s.endsWith(')');
+  s = s.replace(/[()]/g, '');
+  const val = parseFloat(s);
+  if (isNaN(val)) return NaN;
+  return negative ? -val : val;
+}
+
+/** Parse date from a value string given a format token. Returns Date | null. */
+function parseDate(raw: string, format: string): Date | null {
+  const s = raw.trim();
+  let year: number, month: number, day: number;
+
+  if (format === 'YYYY-MM-DD') {
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    [year, month, day] = [+m[1], +m[2], +m[3]];
+  } else if (format === 'MM/DD/YYYY') {
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return null;
+    [month, day, year] = [+m[1], +m[2], +m[3]];
+  } else if (format === 'DD/MM/YYYY') {
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return null;
+    [day, month, year] = [+m[1], +m[2], +m[3]];
+  } else if (format === 'MM-DD-YYYY') {
+    const m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (!m) return null;
+    [month, day, year] = [+m[1], +m[2], +m[3]];
+  } else {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(year!, month! - 1, day!);
+  if (isNaN(d.getTime()) || d.getFullYear() !== year! || d.getMonth() !== month! - 1 || d.getDate() !== day!) {
+    return null;
+  }
+  return d;
+}
+
+interface CsvMapping {
+  date: string;
+  description: string;
+  amount: string;
+  category?: string;
+  notes?: string;
+}
+
+interface ParsedRow {
+  date: Date;
+  description: string;
+  amount: number;
+  category?: string;
+  notes?: string;
+}
+
+interface RowError {
+  row: number;
+  message: string;
+}
+
+function parseImportRows(
+  rows: string[][],
+  headers: string[],
+  mapping: CsvMapping,
+  dateFormat: string,
+  limit?: number,
+): { parsed: ParsedRow[]; errors: RowError[] } {
+  const idx = (col: string) => headers.indexOf(col);
+  const dateIdx = idx(mapping.date);
+  const descIdx = idx(mapping.description);
+  const amtIdx = idx(mapping.amount);
+  const catIdx = mapping.category ? idx(mapping.category) : -1;
+  const notesIdx = mapping.notes ? idx(mapping.notes) : -1;
+
+  const parsed: ParsedRow[] = [];
+  const errors: RowError[] = [];
+
+  const dataRows = limit !== undefined ? rows.slice(0, limit) : rows;
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const rowNum = i + 2; // 1-indexed, +1 for header
+    const row = dataRows[i];
+
+    if (dateIdx === -1) { errors.push({ row: rowNum, message: 'date column not found' }); continue; }
+    if (descIdx === -1) { errors.push({ row: rowNum, message: 'description column not found' }); continue; }
+    if (amtIdx === -1) { errors.push({ row: rowNum, message: 'amount column not found' }); continue; }
+
+    const rawDate = row[dateIdx] ?? '';
+    const rawDesc = row[descIdx] ?? '';
+    const rawAmt = row[amtIdx] ?? '';
+
+    const date = parseDate(rawDate, dateFormat);
+    if (!date) {
+      errors.push({ row: rowNum, message: `Cannot parse date "${rawDate}" with format ${dateFormat}` });
+      continue;
+    }
+
+    const amount = parseAmount(rawAmt);
+    if (isNaN(amount)) {
+      errors.push({ row: rowNum, message: `Cannot parse amount "${rawAmt}"` });
+      continue;
+    }
+
+    if (amount === 0) continue; // skip zero amounts silently
+
+    const description = rawDesc || 'Unknown';
+    const category = catIdx !== -1 ? (row[catIdx] ?? '').trim() || undefined : undefined;
+    const notes = notesIdx !== -1 ? (row[notesIdx] ?? '').trim() || undefined : undefined;
+
+    parsed.push({ date, description, amount, category, notes });
+  }
+
+  return { parsed, errors };
+}
+
+const ImportBodySchema = z.object({
+  accountId: z.string().min(1),
+  dateFormat: z.enum(['YYYY-MM-DD', 'MM/DD/YYYY', 'DD/MM/YYYY', 'MM-DD-YYYY']).default('YYYY-MM-DD'),
+  mapping: z.string().min(1), // JSON string
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/transactions/import/preview
+// ---------------------------------------------------------------------------
+router.post('/import/preview', upload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'CSV file is required' });
+
+    const bodyParsed = ImportBodySchema.safeParse(req.body);
+    if (!bodyParsed.success) {
+      return res.status(400).json({ error: bodyParsed.error.errors[0]?.message ?? 'Invalid request' });
+    }
+    const { accountId, dateFormat, mapping: mappingStr } = bodyParsed.data;
+
+    let mapping: CsvMapping;
+    try {
+      mapping = JSON.parse(mappingStr);
+    } catch {
+      return res.status(400).json({ error: 'mapping must be valid JSON' });
+    }
+    if (!mapping.date || !mapping.description || !mapping.amount) {
+      return res.status(400).json({ error: 'mapping must include date, description, and amount fields' });
+    }
+
+    const householdId = req.householdId!;
+    const account = await prisma.account.findFirst({ where: { id: accountId, householdId } });
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+
+    const text = req.file.buffer.toString('utf-8').replace(/^\uFEFF/, ''); // strip BOM
+    const allRows = parseCSV(text);
+    if (allRows.length < 2) return res.status(400).json({ error: 'CSV has no data rows' });
+
+    const headers = allRows[0].map(h => h.trim());
+    const dataRows = allRows.slice(1);
+
+    const { parsed, errors } = parseImportRows(dataRows, headers, mapping, dateFormat, 5);
+
+    return res.json({
+      headers,
+      preview: parsed.map(p => ({
+        date: p.date.toISOString().slice(0, 10),
+        description: p.description,
+        amount: p.amount,
+        category: p.category ?? null,
+        notes: p.notes ?? null,
+      })),
+      errors,
+      totalDataRows: dataRows.length,
+    });
+  } catch (err) {
+    console.error('[transactions/import/preview]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/transactions/import
+// ---------------------------------------------------------------------------
+router.post('/import', upload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'CSV file is required' });
+
+    const bodyParsed = ImportBodySchema.safeParse(req.body);
+    if (!bodyParsed.success) {
+      return res.status(400).json({ error: bodyParsed.error.errors[0]?.message ?? 'Invalid request' });
+    }
+    const { accountId, dateFormat, mapping: mappingStr } = bodyParsed.data;
+
+    let mapping: CsvMapping;
+    try {
+      mapping = JSON.parse(mappingStr);
+    } catch {
+      return res.status(400).json({ error: 'mapping must be valid JSON' });
+    }
+    if (!mapping.date || !mapping.description || !mapping.amount) {
+      return res.status(400).json({ error: 'mapping must include date, description, and amount fields' });
+    }
+
+    const householdId = req.householdId!;
+    const account = await prisma.account.findFirst({ where: { id: accountId, householdId } });
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+
+    const text = req.file.buffer.toString('utf-8').replace(/^\uFEFF/, '');
+    const allRows = parseCSV(text);
+    if (allRows.length < 2) return res.status(400).json({ error: 'CSV has no data rows' });
+
+    const headers = allRows[0].map(h => h.trim());
+    const dataRows = allRows.slice(1);
+
+    const { parsed, errors } = parseImportRows(dataRows, headers, mapping, dateFormat);
+
+    // If >10% of rows have errors, reject everything
+    const totalAttempted = dataRows.length;
+    if (totalAttempted > 0 && errors.length / totalAttempted > 0.1) {
+      return res.status(422).json({
+        error: `Too many parse errors (${errors.length}/${totalAttempted}). Import cancelled.`,
+        errors,
+        imported: 0,
+        skipped: totalAttempted - parsed.length,
+      });
+    }
+
+    // Pre-load all categories for this household (for case-insensitive matching)
+    const categories = await prisma.category.findMany({
+      where: { householdId },
+      select: { id: true, name: true },
+    });
+    const categoryMap = new Map(categories.map(c => [c.name.toLowerCase(), c.id]));
+
+    // Merchant cache to avoid redundant DB calls within this import
+    const merchantCache = new Map<string, string>(); // name -> id
+
+    // Run all inserts in a transaction
+    const created = await prisma.$transaction(async (tx) => {
+      const results: string[] = [];
+
+      for (const row of parsed) {
+        // Resolve or create merchant
+        const merchantKey = row.description.toLowerCase();
+        let merchantId: string | null = null;
+
+        if (merchantCache.has(merchantKey)) {
+          merchantId = merchantCache.get(merchantKey)!;
+        } else {
+          let merchant = await tx.merchant.findFirst({
+            where: { householdId, name: { equals: row.description, mode: 'insensitive' } },
+            select: { id: true },
+          });
+          if (!merchant) {
+            merchant = await tx.merchant.create({
+              data: { householdId, name: row.description, displayName: row.description },
+              select: { id: true },
+            });
+          }
+          merchantId = merchant.id;
+          merchantCache.set(merchantKey, merchantId);
+        }
+
+        // Resolve category
+        const categoryId = row.category
+          ? (categoryMap.get(row.category.toLowerCase()) ?? null)
+          : null;
+
+        const newTx = await tx.transaction.create({
+          data: {
+            householdId,
+            accountId,
+            date: row.date,
+            description: row.description,
+            originalDescription: row.description,
+            amount: row.amount,
+            categoryId,
+            merchantId,
+            notes: row.notes ?? null,
+            needsReview: true, // imported transactions start as needing review
+            isHidden: false,
+            isRecurring: false,
+            isSplit: false,
+          },
+          select: { id: true },
+        });
+        results.push(newTx.id);
+      }
+
+      return results;
+    });
+
+    const skipped = totalAttempted - parsed.length;
+
+    logAudit({
+      householdId,
+      userId: req.userId!,
+      action: 'CREATE',
+      entity: 'TRANSACTION',
+      entityId: 'csv-import',
+      after: { imported: created.length, accountId },
+    });
+
+    return res.json({
+      imported: created.length,
+      skipped,
+      errors,
+    });
+  } catch (err) {
+    console.error('[transactions/import]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
