@@ -37,6 +37,12 @@ interface BucketDetail {
   categories: CategoryDetail[];
 }
 
+interface IncomeData {
+  monthlyNetIncome: number | null;
+  autoDetected: boolean;
+  updatedAt: string | null;
+}
+
 interface WealthAnalysis {
   income: number | null;
   month: string;
@@ -235,10 +241,10 @@ function BucketCard({
 // ─── Income Row ───────────────────────────────────────────────────────────────
 
 function IncomeSetup({
-  income,
+  incomeData,
   onSaved,
 }: {
-  income: number | null;
+  incomeData: IncomeData | undefined;
   onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -246,7 +252,7 @@ function IncomeSetup({
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: (amount: number) => api.put('/wealth/income', { income: amount }),
+    mutationFn: (amount: number) => api.put('/wealth/income', { monthlyNetIncome: amount }),
     onSuccess: () => {
       notify.success('Income saved');
       queryClient.invalidateQueries({ queryKey: ['wealth'] });
@@ -265,23 +271,8 @@ function IncomeSetup({
     mutation.mutate(n);
   };
 
-  if (income !== null && !editing) {
-    return (
-      <div className="flex items-center gap-3 px-5 py-3 bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] text-sm">
-        <span className="text-[var(--color-text-muted)]">Monthly take-home:</span>
-        <span className="font-semibold text-[var(--color-text)]">{fmtCurrency(income)}/mo</span>
-        <button
-          onClick={() => {
-            setValue(String(income));
-            setEditing(true);
-          }}
-          className="ml-auto flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline"
-        >
-          <Pencil size={12} /> Edit
-        </button>
-      </div>
-    );
-  }
+  const income = incomeData?.monthlyNetIncome ?? null;
+  const autoDetected = incomeData?.autoDetected ?? false;
 
   if (editing) {
     return (
@@ -305,14 +296,37 @@ function IncomeSetup({
     );
   }
 
-  // No income set
+  if (income !== null) {
+    return (
+      <div className="flex items-center gap-3 px-5 py-3 bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] text-sm">
+        <span className="text-[var(--color-text-muted)]">Monthly take-home:</span>
+        <span className="font-semibold text-[var(--color-text)]">{fmtCurrency(income)}/mo</span>
+        {autoDetected && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+            Auto-detected from last month
+          </span>
+        )}
+        <button
+          onClick={() => {
+            setValue(String(income));
+            setEditing(true);
+          }}
+          className="ml-auto flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline"
+        >
+          <Pencil size={12} /> Override
+        </button>
+      </div>
+    );
+  }
+
+  // Cannot detect — no previous month income transactions
   return (
     <Card className="p-5">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="flex-1">
           <p className="font-semibold text-[var(--color-text)]">Set your monthly take-home income</p>
           <p className="text-sm text-[var(--color-text-muted)] mt-0.5">
-            Unlock your 50/30/20 wealth strategy by entering your monthly take-home pay.
+            No income transactions found from last month. Enter your monthly take-home pay to unlock your strategy.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -634,6 +648,11 @@ export default function WealthPage() {
   const [showAiPanel, setShowAiPanel] = useState(false);
   const queryClient = useQueryClient();
 
+  const { data: incomeData } = useQuery<IncomeData>({
+    queryKey: ['wealth', 'income'],
+    queryFn: () => api.get('/wealth/income').then((r) => r.data),
+  });
+
   const { data: analysis, isLoading } = useQuery<WealthAnalysis>({
     queryKey: ['wealth', 'analysis', month],
     queryFn: () => api.get(`/wealth/analysis?month=${month}`).then((r) => r.data),
@@ -692,8 +711,8 @@ export default function WealthPage() {
         <Skeleton className="h-16 w-full rounded-[var(--radius-md)]" />
       ) : (
         <IncomeSetup
-          income={analysis?.income ?? null}
-          onSaved={() => queryClient.invalidateQueries({ queryKey: ['wealth', 'analysis', month] })}
+          incomeData={incomeData}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ['wealth'] })}
         />
       )}
 

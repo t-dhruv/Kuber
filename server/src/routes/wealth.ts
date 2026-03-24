@@ -52,11 +52,33 @@ interface BucketData {
   categories: CategoryTotal[];
 }
 
+// ─── Auto-detect income from previous calendar month ─────────────────────────
+
+async function detectPrevMonthIncome(householdId: string): Promise<number | null> {
+  const now = new Date();
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+  const incomeTxns = await prisma.transaction.findMany({
+    where: {
+      householdId,
+      date: { gte: prevMonthStart, lte: prevMonthEnd },
+      amount: { gt: 0 },
+      isHidden: false,
+    },
+    select: { amount: true },
+  });
+
+  if (incomeTxns.length === 0) return null;
+  return incomeTxns.reduce((sum, t) => sum + t.amount, 0);
+}
+
 // ─── GET /api/v1/wealth/income ────────────────────────────────────────────────
 
 router.get('/income', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
+    const householdId = req.householdId!;
 
     const [incomePref, updatedAtPref] = await Promise.all([
       prisma.userPreference.findUnique({
@@ -67,10 +89,21 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
       }),
     ]);
 
-    const monthlyNetIncome = incomePref ? parseFloat(incomePref.value) : null;
-    const updatedAt = updatedAtPref ? updatedAtPref.value : null;
+    if (incomePref) {
+      return res.json({
+        monthlyNetIncome: parseFloat(incomePref.value),
+        updatedAt: updatedAtPref?.value ?? null,
+        autoDetected: false,
+      });
+    }
 
-    return res.json({ monthlyNetIncome, updatedAt });
+    // No manual override — auto-detect from previous month's income transactions
+    const detected = await detectPrevMonthIncome(householdId);
+    return res.json({
+      monthlyNetIncome: detected,
+      updatedAt: null,
+      autoDetected: detected !== null,
+    });
   } catch (err) {
     console.error('[wealth/income GET]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -208,11 +241,13 @@ router.get('/analysis', async (req: AuthRequest, res: Response) => {
     const userId = req.userId!;
     const householdId = req.householdId!;
 
-    // 1. Get income from user preference
+    // 1. Get income — manual override takes priority, else auto-detect from prev month
     const incomePref = await prisma.userPreference.findUnique({
       where: { userId_key: { userId, key: 'wealth_monthly_income' } },
     });
-    const income = incomePref ? parseFloat(incomePref.value) : null;
+    const income = incomePref
+      ? parseFloat(incomePref.value)
+      : await detectPrevMonthIncome(householdId);
 
     // 2. Date range
     const { start, end, month } = getMonthRange(req.query.month as string | undefined);
