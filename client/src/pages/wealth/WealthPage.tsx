@@ -1,0 +1,737 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  ChevronLeft,
+  ChevronRight,
+  TrendingUp,
+  AlertTriangle,
+  Sparkles,
+  Pencil,
+  Check,
+  X,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
+  Settings,
+} from 'lucide-react';
+import { api } from '@/lib/api';
+import { Card, CardHeader, Button, Input, Skeleton, notify } from '@/components/ui';
+import type { AxiosError } from 'axios';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type BucketType = 'needs' | 'wants' | 'savings' | 'uncategorized';
+
+interface CategoryDetail {
+  id: string;
+  name: string;
+  icon: string | null;
+  amount: number;
+}
+
+interface BucketDetail {
+  total: number;
+  target: number;
+  delta: number;
+  pct: number;
+  categories: CategoryDetail[];
+}
+
+interface WealthAnalysis {
+  income: number | null;
+  month: string;
+  targets: { needs: number; wants: number; savings: number };
+  actuals: { needs: number; wants: number; savings: number };
+  buckets: {
+    needs: BucketDetail;
+    wants: BucketDetail;
+    savings: BucketDetail;
+    uncategorized: BucketDetail;
+  };
+  alerts: Array<{ bucket: string; message: string; severity: 'danger' | 'warning' | 'info' }>;
+  savingsCapacity: number;
+  investmentLadder: Array<{
+    step: number;
+    label: string;
+    description: string;
+    status: 'complete' | 'inprogress' | 'todo';
+    amount?: number;
+  }>;
+}
+
+// ─── Formatters ───────────────────────────────────────────────────────────────
+
+const fmtCurrency = (n: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+
+function getMonthLabel(ym: string) {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function addMonths(ym: string, delta: number) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}`;
+}
+
+function todayYM() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// ─── Progress Bar ─────────────────────────────────────────────────────────────
+
+function ProgressBar({ pct, color }: { pct: number; color: 'green' | 'yellow' | 'red' }) {
+  const fill = Math.min(pct, 100);
+  const colorClass =
+    color === 'green'
+      ? 'bg-[var(--color-success,#22c55e)]'
+      : color === 'yellow'
+      ? 'bg-[var(--color-warning,#f59e0b)]'
+      : 'bg-[var(--color-danger,#ef4444)]';
+  return (
+    <div className="h-2 w-full rounded-full bg-[var(--color-border)]">
+      <div
+        className={`h-2 rounded-full transition-all ${colorClass}`}
+        style={{ width: `${fill}%` }}
+      />
+    </div>
+  );
+}
+
+// ─── Bucket status helpers ─────────────────────────────────────────────────────
+
+function bucketColor(type: 'needs' | 'wants' | 'savings', pct: number): 'green' | 'yellow' | 'red' {
+  if (type === 'savings') {
+    if (pct >= 100) return 'green';
+    if (pct >= 90) return 'yellow';
+    return 'red';
+  }
+  // needs / wants: lower is better
+  if (pct <= 100) return 'green';
+  if (pct <= 110) return 'yellow';
+  return 'red';
+}
+
+function bucketTextColor(color: 'green' | 'yellow' | 'red') {
+  if (color === 'green') return 'text-[var(--color-success,#22c55e)]';
+  if (color === 'yellow') return 'text-[var(--color-warning,#f59e0b)]';
+  return 'text-[var(--color-danger,#ef4444)]';
+}
+
+// ─── Bucket Card ──────────────────────────────────────────────────────────────
+
+const BUCKET_META: Record<
+  'needs' | 'wants' | 'savings',
+  { icon: string; label: string; targetPct: number }
+> = {
+  needs: { icon: '🏠', label: 'Needs', targetPct: 50 },
+  wants: { icon: '🎉', label: 'Wants', targetPct: 30 },
+  savings: { icon: '💰', label: 'Savings', targetPct: 20 },
+};
+
+function BucketCard({
+  type,
+  bucket,
+  income,
+}: {
+  type: 'needs' | 'wants' | 'savings';
+  bucket: BucketDetail;
+  income: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const meta = BUCKET_META[type];
+  const color = bucketColor(type, bucket.pct);
+  const textColor = bucketTextColor(color);
+  const isOver = type !== 'savings' ? bucket.total > bucket.target : bucket.total < bucket.target;
+  const deltaLabel =
+    type === 'savings'
+      ? bucket.delta >= 0
+        ? `▲ ${fmtCurrency(bucket.delta)} over target`
+        : `▼ ${fmtCurrency(Math.abs(bucket.delta))} under target`
+      : bucket.delta >= 0
+      ? `▲ ${fmtCurrency(bucket.delta)} under budget`
+      : `▼ ${fmtCurrency(Math.abs(bucket.delta))} over budget`;
+  const deltaPositive =
+    type === 'savings' ? bucket.delta >= 0 : bucket.delta >= 0;
+
+  const topCats = bucket.categories.slice(0, expanded ? undefined : 5);
+  const maxAmt = bucket.categories[0]?.amount ?? 1;
+
+  return (
+    <Card className="flex flex-col gap-3 p-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">{meta.icon}</span>
+          <span className="font-semibold text-[var(--color-text)]">{meta.label}</span>
+        </div>
+        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]">
+          {meta.targetPct}% target
+        </span>
+      </div>
+
+      {/* Amounts */}
+      <div>
+        <span className="text-2xl font-bold text-[var(--color-text)]">{fmtCurrency(bucket.total)}</span>
+        <span className="text-sm text-[var(--color-text-muted)]"> / {fmtCurrency(bucket.target)}</span>
+      </div>
+
+      {/* Progress */}
+      <ProgressBar pct={bucket.pct} color={color} />
+
+      {/* Pct of income */}
+      <div className="flex items-center justify-between text-sm">
+        <span className={`font-medium ${textColor}`}>
+          {bucket.pct.toFixed(1)}% of income
+        </span>
+        <span className={`text-xs ${deltaPositive ? 'text-[var(--color-success,#22c55e)]' : 'text-[var(--color-danger,#ef4444)]'}`}>
+          {deltaLabel}
+        </span>
+      </div>
+
+      {/* Category list */}
+      {bucket.categories.length > 0 && (
+        <div className="flex flex-col gap-1.5 pt-1 border-t border-[var(--color-border)]">
+          {topCats.map((cat) => (
+            <div key={cat.id} className="flex items-center gap-2 text-sm">
+              <span className="w-5 text-center flex-shrink-0">{cat.icon ?? '📦'}</span>
+              <span className="flex-1 truncate text-[var(--color-text-secondary)]">{cat.name}</span>
+              <div className="w-20 h-1.5 rounded-full bg-[var(--color-border)] flex-shrink-0">
+                <div
+                  className="h-1.5 rounded-full bg-[var(--color-accent)]"
+                  style={{ width: `${Math.min((cat.amount / maxAmt) * 100, 100)}%` }}
+                />
+              </div>
+              <span className="text-xs text-[var(--color-text-muted)] w-16 text-right flex-shrink-0">
+                {fmtCurrency(cat.amount)}
+              </span>
+            </div>
+          ))}
+          {bucket.categories.length > 5 && (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline mt-1"
+            >
+              {expanded ? (
+                <>
+                  <ChevronUp size={12} /> Show less
+                </>
+              ) : (
+                <>
+                  <ChevronDown size={12} /> Show {bucket.categories.length - 5} more
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Income Row ───────────────────────────────────────────────────────────────
+
+function IncomeSetup({
+  income,
+  onSaved,
+}: {
+  income: number | null;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState('');
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: (amount: number) => api.put('/wealth/income', { income: amount }),
+    onSuccess: () => {
+      notify.success('Income saved');
+      queryClient.invalidateQueries({ queryKey: ['wealth'] });
+      setEditing(false);
+      onSaved();
+    },
+    onError: () => notify.error('Failed to save income'),
+  });
+
+  const handleSave = () => {
+    const n = parseFloat(value.replace(/,/g, ''));
+    if (isNaN(n) || n <= 0) {
+      notify.error('Please enter a valid amount');
+      return;
+    }
+    mutation.mutate(n);
+  };
+
+  if (income !== null && !editing) {
+    return (
+      <div className="flex items-center gap-3 px-5 py-3 bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] text-sm">
+        <span className="text-[var(--color-text-muted)]">Monthly take-home:</span>
+        <span className="font-semibold text-[var(--color-text)]">{fmtCurrency(income)}/mo</span>
+        <button
+          onClick={() => {
+            setValue(String(income));
+            setEditing(true);
+          }}
+          className="ml-auto flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline"
+        >
+          <Pencil size={12} /> Edit
+        </button>
+      </div>
+    );
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-3 px-5 py-3 bg-[var(--color-surface-hover)] rounded-[var(--radius-md)]">
+        <span className="text-sm text-[var(--color-text-muted)]">Monthly take-home: $</span>
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="e.g. 5000"
+          className="w-40"
+          onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+          autoFocus
+        />
+        <Button size="sm" onClick={handleSave} loading={mutation.isPending}>
+          <Check size={14} />
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+          <X size={14} />
+        </Button>
+      </div>
+    );
+  }
+
+  // No income set
+  return (
+    <Card className="p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex-1">
+          <p className="font-semibold text-[var(--color-text)]">Set your monthly take-home income</p>
+          <p className="text-sm text-[var(--color-text-muted)] mt-0.5">
+            Unlock your 50/30/20 wealth strategy by entering your monthly take-home pay.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-sm text-[var(--color-text-muted)]">$</span>
+          <Input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="e.g. 5000"
+            className="w-40"
+            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+          />
+          <Button onClick={handleSave} loading={mutation.isPending}>
+            Save
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─── Alerts Section ───────────────────────────────────────────────────────────
+
+function AlertsSection({ alerts }: { alerts: WealthAnalysis['alerts'] }) {
+  if (!alerts.length) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <h2 className="text-sm font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">
+        Alerts
+      </h2>
+      {alerts.map((alert, i) => (
+        <div
+          key={i}
+          className={`flex items-start gap-3 px-4 py-3 rounded-[var(--radius-md)] border ${
+            alert.severity === 'danger'
+              ? 'border-[var(--color-danger,#ef4444)] bg-red-50 dark:bg-red-950/20'
+              : alert.severity === 'warning'
+              ? 'border-[var(--color-warning,#f59e0b)] bg-amber-50 dark:bg-amber-950/20'
+              : 'border-[var(--color-border)] bg-[var(--color-surface-hover)]'
+          }`}
+        >
+          <span className="text-lg flex-shrink-0">
+            {alert.severity === 'danger' ? '🔴' : '⚠️'}
+          </span>
+          <p className="text-sm text-[var(--color-text)]">{alert.message}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Where to Cut ─────────────────────────────────────────────────────────────
+
+function WhereToCut({ analysis }: { analysis: WealthAnalysis }) {
+  // Collect over-budget categories from needs + wants buckets
+  const { needs, wants } = analysis.buckets;
+  const allCats = [
+    ...needs.categories.map((c) => ({ ...c, bucket: 'Needs' })),
+    ...wants.categories.map((c) => ({ ...c, bucket: 'Wants' })),
+  ];
+
+  // Only show if their bucket is over budget
+  const needsOver = needs.total > needs.target;
+  const wantsOver = wants.total > wants.target;
+
+  const candidates = allCats.filter(
+    (c) => (c.bucket === 'Needs' && needsOver) || (c.bucket === 'Wants' && wantsOver)
+  );
+
+  if (!candidates.length || (!needsOver && !wantsOver)) return null;
+
+  // Rough overage per category: proportional share of bucket delta
+  const withOverage = candidates
+    .map((c) => {
+      const bucket = c.bucket === 'Needs' ? needs : wants;
+      const share = bucket.total > 0 ? c.amount / bucket.total : 0;
+      const bucketOver = Math.max(0, bucket.total - bucket.target);
+      const overage = share * bucketOver;
+      return { ...c, overage };
+    })
+    .filter((c) => c.overage > 0)
+    .sort((a, b) => b.overage - a.overage)
+    .slice(0, 5);
+
+  if (!withOverage.length) return null;
+
+  return (
+    <Card className="p-5">
+      <CardHeader title="Where to Cut" description="Top categories contributing to overspend" />
+      <div className="flex flex-col divide-y divide-[var(--color-border)] mt-3">
+        {withOverage.map((c, i) => (
+          <div key={c.id} className="flex items-center gap-3 py-2.5 text-sm">
+            <span className="text-[var(--color-text-muted)] w-5 text-center font-mono text-xs">{i + 1}</span>
+            <span className="w-6 text-center">{c.icon ?? '📦'}</span>
+            <span className="flex-1 font-medium text-[var(--color-text)]">{c.name}</span>
+            <span className="text-xs text-[var(--color-text-muted)]">{c.bucket}</span>
+            <span className="text-red-500 font-semibold">over by {fmtCurrency(c.overage)}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ─── Investment Ladder ────────────────────────────────────────────────────────
+
+function InvestmentLadder({ analysis }: { analysis: WealthAnalysis }) {
+  const { investmentLadder, savingsCapacity } = analysis;
+
+  // Find the first inprogress step
+  const inprogressIdx = investmentLadder.findIndex((s) => s.status === 'inprogress');
+  const inprogressStep = inprogressIdx >= 0 ? investmentLadder[inprogressIdx] : null;
+
+  // Months to fund: only if we have an amount and capacity > 0
+  let monthsToFund: number | null = null;
+  if (inprogressStep?.amount && savingsCapacity > 0) {
+    monthsToFund = Math.ceil(inprogressStep.amount / savingsCapacity);
+  }
+
+  const stepIcon: Record<string, string> = {
+    complete: '✅',
+    inprogress: '🔄',
+    todo: '⬜',
+  };
+
+  return (
+    <Card className="p-5">
+      <CardHeader title="Wealth Building Ladder" description="Your path to financial independence" />
+      <div className="flex flex-col gap-3 mt-4">
+        {investmentLadder.map((step) => (
+          <div
+            key={step.step}
+            className={`flex items-start gap-3 p-3 rounded-[var(--radius-md)] ${
+              step.status === 'complete'
+                ? 'bg-green-50 dark:bg-green-950/20'
+                : step.status === 'inprogress'
+                ? 'bg-[var(--color-accent-light)]'
+                : 'bg-[var(--color-surface-hover)]'
+            }`}
+          >
+            <span className="text-lg flex-shrink-0 mt-0.5">{stepIcon[step.status]}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`font-semibold text-sm ${
+                    step.status === 'complete'
+                      ? 'text-[var(--color-success,#22c55e)]'
+                      : step.status === 'inprogress'
+                      ? 'text-[var(--color-accent)]'
+                      : 'text-[var(--color-text-muted)]'
+                  }`}
+                >
+                  Step {step.step}: {step.label}
+                </span>
+                {step.status === 'inprogress' && step.amount !== undefined && (
+                  <span className="text-xs bg-[var(--color-accent)] text-white px-2 py-0.5 rounded-full">
+                    {fmtCurrency(step.amount)} needed
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{step.description}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Savings capacity summary */}
+      <div className="mt-4 pt-4 border-t border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">
+        <span>
+          Based on your current savings capacity of{' '}
+          <span className="font-semibold text-[var(--color-text)]">{fmtCurrency(savingsCapacity)}/mo</span>
+          {inprogressStep && monthsToFund !== null ? (
+            <>
+              , you could fully fund{' '}
+              <span className="font-semibold text-[var(--color-accent)]">Step {inprogressStep.step}</span> in{' '}
+              <span className="font-semibold text-[var(--color-text)]">~{monthsToFund} month{monthsToFund !== 1 ? 's' : ''}</span>.
+            </>
+          ) : (
+            '.'
+          )}
+        </span>
+      </div>
+    </Card>
+  );
+}
+
+// ─── AI Analysis Panel ────────────────────────────────────────────────────────
+
+interface AiAnalysisResult {
+  configured: boolean;
+  message?: string;
+  analysis?: string;
+  generatedAt?: string;
+  cached?: boolean;
+}
+
+function AiAnalysisPanel({ onDismiss }: { onDismiss: () => void }) {
+  const [result, setResult] = useState<AiAnalysisResult | null>(null);
+  const [triggered, setTriggered] = useState(false);
+
+  const mutation = useMutation<AiAnalysisResult, AxiosError, boolean>({
+    mutationFn: (refresh: boolean) =>
+      api.post('/wealth/ai-analysis', { refresh }).then((r) => r.data as AiAnalysisResult),
+    onSuccess: (data) => setResult(data),
+    onError: () => notify.error('Failed to get AI analysis'),
+  });
+
+  if (!triggered) {
+    setTriggered(true);
+    mutation.mutate(false);
+  }
+
+  const formattedDate = result?.generatedAt
+    ? new Date(result.generatedAt).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+
+  return (
+    <Card className="p-5" style={{ background: 'var(--color-surface-hover)' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Sparkles size={16} className="text-[var(--color-accent)] flex-shrink-0" />
+          <span className="font-semibold text-sm text-[var(--color-text)]">AI Wealth Coach</span>
+          {result?.configured && formattedDate && (
+            <span className="text-xs text-[var(--color-text-muted)]">
+              · {result.cached ? 'Cached' : 'Generated'} {formattedDate}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {result?.configured && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<RefreshCw size={13} />}
+              onClick={() => mutation.mutate(true)}
+              loading={mutation.isPending}
+            >
+              Refresh
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={onDismiss}>
+            <X size={14} />
+          </Button>
+        </div>
+      </div>
+
+      {/* Loading */}
+      {mutation.isPending && (
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+          <Skeleton className="h-4 w-4/6" />
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">Analyzing your wealth strategy...</p>
+        </div>
+      )}
+
+      {/* Not configured */}
+      {!mutation.isPending && result && !result.configured && (
+        <div className="flex items-start gap-3">
+          <Settings size={18} className="text-[var(--color-text-muted)] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-[var(--color-text)]">
+              {result.message ?? 'Configure an AI provider in Settings to get personalized wealth coaching.'}
+            </p>
+            <a
+              href="/settings?section=integrations"
+              className="text-xs text-[var(--color-accent)] underline mt-1 inline-block"
+            >
+              Go to Settings → Integrations
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Analysis text */}
+      {!mutation.isPending && result?.configured && result.analysis && (
+        <p className="text-sm leading-relaxed text-[var(--color-text)] whitespace-pre-wrap">
+          {result.analysis}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Skeleton loader ──────────────────────────────────────────────────────────
+
+function WealthSkeleton() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[0, 1, 2].map((i) => (
+          <Card key={i} className="p-5 flex flex-col gap-3">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-2 w-full" />
+            <Skeleton className="h-4 w-20" />
+          </Card>
+        ))}
+      </div>
+      <Card className="p-5">
+        <Skeleton className="h-5 w-40 mb-3" />
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-12 w-full mb-2" />
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function WealthPage() {
+  const [month, setMonth] = useState(todayYM);
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: analysis, isLoading } = useQuery<WealthAnalysis>({
+    queryKey: ['wealth', 'analysis', month],
+    queryFn: () => api.get(`/wealth/analysis?month=${month}`).then((r) => r.data),
+  });
+
+  const handlePrev = () => setMonth((m) => addMonths(m, -1));
+  const handleNext = () => setMonth((m) => addMonths(m, 1));
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-6">
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <TrendingUp size={20} className="text-[var(--color-accent)]" />
+            <h1 className="text-xl font-bold text-[var(--color-text)]">Wealth Strategy</h1>
+          </div>
+          <p className="text-sm text-[var(--color-text-muted)] mt-0.5">50 / 30 / 20 Rule</p>
+        </div>
+
+        {/* Month selector */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrev}
+            className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] transition-colors"
+            aria-label="Previous month"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="text-sm font-medium text-[var(--color-text)] w-36 text-center">
+            {getMonthLabel(month)}
+          </span>
+          <button
+            onClick={handleNext}
+            className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] transition-colors"
+            aria-label="Next month"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        {/* AI Analysis button */}
+        <Button
+          variant={showAiPanel ? 'primary' : 'outline'}
+          size="sm"
+          onClick={() => setShowAiPanel((v) => !v)}
+          className="flex items-center gap-1.5"
+        >
+          <Sparkles size={14} />
+          {showAiPanel ? 'Hide AI Coach' : 'Get AI Analysis'}
+        </Button>
+      </div>
+
+      {/* ── Income setup ── */}
+      {isLoading ? (
+        <Skeleton className="h-16 w-full rounded-[var(--radius-md)]" />
+      ) : (
+        <IncomeSetup
+          income={analysis?.income ?? null}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ['wealth', 'analysis', month] })}
+        />
+      )}
+
+      {/* ── Main content (requires income) ── */}
+      {isLoading ? (
+        <WealthSkeleton />
+      ) : analysis && analysis.income !== null ? (
+        <>
+          {/* ── Three bucket cards ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <BucketCard type="needs" bucket={analysis.buckets.needs} income={analysis.income} />
+            <BucketCard type="wants" bucket={analysis.buckets.wants} income={analysis.income} />
+            <BucketCard type="savings" bucket={analysis.buckets.savings} income={analysis.income} />
+          </div>
+
+          {/* ── Alerts ── */}
+          <AlertsSection alerts={analysis.alerts} />
+
+          {/* ── Where to cut ── */}
+          <WhereToCut analysis={analysis} />
+
+          {/* ── Investment ladder ── */}
+          {analysis.investmentLadder.length > 0 && (
+            <InvestmentLadder analysis={analysis} />
+          )}
+
+          {/* ── AI Wealth Coach Panel ── */}
+          {showAiPanel && (
+            <AiAnalysisPanel onDismiss={() => setShowAiPanel(false)} />
+          )}
+        </>
+      ) : analysis && analysis.income === null ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center text-[var(--color-text-muted)]">
+          <TrendingUp size={48} className="mb-4 opacity-30" />
+          <p className="text-lg font-medium">Set your income above to unlock your wealth strategy</p>
+          <p className="text-sm mt-1">We'll show your 50/30/20 breakdown once your take-home income is set.</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}

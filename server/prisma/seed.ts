@@ -1405,6 +1405,69 @@ async function seedAdviceTopics() {
       console.log(`  Advice topic created: ${topicData.title}`);
     }
   }
+
+  // Seed 50/30/20 bucket types for all categories
+  await seedCategoryBuckets();
+}
+
+// ---------------------------------------------------------------------------
+// Bucket seeding — maps known category names to 50/30/20 buckets
+// ---------------------------------------------------------------------------
+
+async function seedCategoryBuckets() {
+  const needsNames = new Set([
+    'housing', 'rent', 'mortgage', 'utilities', 'groceries', 'food & grocery',
+    'insurance', 'health & medical', 'healthcare', 'medical', 'transport',
+    'auto & transport', 'gas', 'childcare', 'phone', 'internet', 'subscriptions',
+    // seed-specific
+    'rent/mortgage', 'hydro', 'ttc / transit', 'doctor / dental', 'pharmacy',
+    'mental health',
+  ]);
+
+  const wantsNames = new Set([
+    'dining', 'restaurants', 'food & dining', 'entertainment', 'shopping',
+    'travel', 'personal care', 'hobbies', 'sports', 'gifts', 'clothing',
+    'electronics', 'beauty',
+    // seed-specific
+    'coffee shops', 'takeout & delivery', 'alcohol & bars', 'amazon',
+    'online shopping', 'home & garden', 'movies & tv', 'music', 'games',
+    'events & concerts', 'flights', 'hotels', 'vacation', 'travel insurance',
+    'gym', 'parking', 'rideshare', 'car maintenance',
+  ]);
+
+  const savingsNames = new Set([
+    'investments', 'savings', 'retirement', 'debt payment', 'loan payment',
+    'transfer', 'goals',
+    // seed-specific
+    'tfsa contribution', 'rrsp contribution', 'investment purchase',
+    'books & courses', 'professional development',
+  ]);
+
+  const allCategories = await prisma.category.findMany({
+    select: { id: true, name: true },
+  });
+
+  for (const cat of allCategories) {
+    const lower = cat.name.toLowerCase();
+    let bucketType: string;
+
+    if (needsNames.has(lower)) {
+      bucketType = 'needs';
+    } else if (wantsNames.has(lower)) {
+      bucketType = 'wants';
+    } else if (savingsNames.has(lower)) {
+      bucketType = 'savings';
+    } else {
+      bucketType = 'uncategorized';
+    }
+
+    await prisma.category.update({
+      where: { id: cat.id },
+      data: { bucketType },
+    });
+  }
+
+  console.log(`  Seeded bucketType for ${allCategories.length} categories`);
 }
 
 main()

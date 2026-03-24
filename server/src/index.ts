@@ -22,6 +22,7 @@ import rulesRouter from './routes/rules';
 import auditRouter from './routes/audit';
 import networthRouter from './routes/networth';
 import adviceLibraryRouter from './routes/advice';
+import wealthRouter from './routes/wealth';
 import { requireAuth } from './middleware/auth';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
 
@@ -73,6 +74,7 @@ app.use('/api/v1/notifications', requireAuth, notificationsRouter);
 app.use('/api/v1/advisor', requireAuth, advisorRouter);
 app.use('/api/v1/networth', requireAuth, networthRouter);
 app.use('/api/v1/advice', requireAuth, adviceLibraryRouter);
+app.use('/api/v1/wealth', requireAuth, wealthRouter);
 
 app.listen(PORT, () => {
   console.log(`Kuber server running on :${PORT}`);

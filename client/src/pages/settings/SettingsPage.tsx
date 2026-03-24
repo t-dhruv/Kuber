@@ -1185,11 +1185,31 @@ interface CategoryModalState {
   category?: Category;
 }
 
+// ─── Bucket badge colours ─────────────────────────────────────────────────────
+
+type BucketType = 'needs' | 'wants' | 'savings' | 'uncategorized';
+
+const BUCKET_COLORS: Record<BucketType, { bg: string; text: string; label: string }> = {
+  needs:          { bg: '#dbeafe', text: '#1d4ed8', label: 'Needs' },
+  wants:          { bg: '#ffedd5', text: '#c2410c', label: 'Wants' },
+  savings:        { bg: '#dcfce7', text: '#15803d', label: 'Savings' },
+  uncategorized:  { bg: '#f1f5f9', text: '#64748b', label: 'Unset' },
+};
+
+interface CategoryBucket {
+  id: string;
+  name: string;
+  emoji: string | null;
+  bucketType: string;
+}
+
 function CategoriesSection() {
   const queryClient = useQueryClient();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [modal, setModal] = useState<CategoryModalState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
+  // Track which category has the bucket dropdown open
+  const [editingBucket, setEditingBucket] = useState<string | null>(null);
 
   // Modal form state
   const [catName, setCatName] = useState('');
@@ -1200,6 +1220,50 @@ function CategoriesSection() {
   const { data: rawCategories, isLoading } = useQuery<Category[]>({
     queryKey: ['settings', 'categories'],
     queryFn: () => api.get('/settings/categories').then((r) => r.data),
+  });
+
+  // Fetch bucket assignments
+  const { data: buckets } = useQuery<CategoryBucket[]>({
+    queryKey: ['wealth', 'category-buckets'],
+    queryFn: () => api.get('/wealth/category-buckets').then((r) => r.data),
+  });
+
+  const bucketMap = new Map<string, BucketType>(
+    (buckets ?? []).map((b) => [b.id, (b.bucketType as BucketType) ?? 'uncategorized'])
+  );
+
+  // Update a single bucket
+  const updateBucketMutation = useMutation({
+    mutationFn: ({ categoryId, bucketType }: { categoryId: string; bucketType: BucketType }) =>
+      api.put('/wealth/category-buckets', { categoryId, bucketType }),
+    onMutate: async ({ categoryId, bucketType }) => {
+      await queryClient.cancelQueries({ queryKey: ['wealth', 'category-buckets'] });
+      const prev = queryClient.getQueryData<CategoryBucket[]>(['wealth', 'category-buckets']);
+      queryClient.setQueryData<CategoryBucket[]>(['wealth', 'category-buckets'], (old) =>
+        (old ?? []).map((b) => (b.id === categoryId ? { ...b, bucketType } : b))
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['wealth', 'category-buckets'], ctx.prev);
+      notify.error('Failed to update bucket');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['wealth', 'category-buckets'] });
+      queryClient.invalidateQueries({ queryKey: ['wealth', 'analysis'] });
+      setEditingBucket(null);
+    },
+  });
+
+  // Reset all buckets to defaults
+  const resetBucketsMutation = useMutation({
+    mutationFn: () => api.post('/wealth/category-buckets/reset'),
+    onSuccess: () => {
+      notify.success('Buckets reset to defaults');
+      queryClient.invalidateQueries({ queryKey: ['wealth', 'category-buckets'] });
+      queryClient.invalidateQueries({ queryKey: ['wealth', 'analysis'] });
+    },
+    onError: () => notify.error('Failed to reset buckets'),
   });
 
   const data: { groups: CategoryGroup[] } | undefined = rawCategories
@@ -1312,11 +1376,22 @@ function CategoriesSection() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-        <SectionHeader title="Categories" description="Manage transaction categories." inline />
-        <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => openAdd()}>
-          Add category
-        </Button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <SectionHeader title="Categories" description="Manage transaction categories and 50/30/20 buckets." inline />
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => resetBucketsMutation.mutate()}
+            loading={resetBucketsMutation.isPending}
+            style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem' }}
+          >
+            Reset buckets to defaults
+          </Button>
+          <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => openAdd()}>
+            Add category
+          </Button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1.25rem' }}>
@@ -1352,7 +1427,11 @@ function CategoriesSection() {
               {/* Category rows */}
               {!isCollapsed && (
                 <div>
-                  {group.categories.map((cat, idx) => (
+                  {group.categories.map((cat, idx) => {
+                    const bucketKey = (bucketMap.get(cat.id) ?? 'uncategorized') as BucketType;
+                    const bucketMeta = BUCKET_COLORS[bucketKey];
+                    const isEditingThisBucket = editingBucket === cat.id;
+                    return (
                     <div
                       key={cat.id}
                       style={{
@@ -1369,6 +1448,53 @@ function CategoriesSection() {
                       <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--color-text)' }}>
                         {cat.name}
                       </span>
+                      {/* Bucket badge / dropdown */}
+                      {isEditingThisBucket ? (
+                        <select
+                          autoFocus
+                          value={bucketKey}
+                          onChange={(e) => {
+                            updateBucketMutation.mutate({
+                              categoryId: cat.id,
+                              bucketType: e.target.value as BucketType,
+                            });
+                          }}
+                          onBlur={() => setEditingBucket(null)}
+                          style={{
+                            fontSize: '0.75rem',
+                            padding: '0.125rem 0.375rem',
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid var(--color-border)',
+                            background: 'var(--color-surface)',
+                            color: 'var(--color-text)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <option value="needs">Needs</option>
+                          <option value="wants">Wants</option>
+                          <option value="savings">Savings</option>
+                          <option value="uncategorized">Unset</option>
+                        </select>
+                      ) : (
+                        <button
+                          onClick={() => setEditingBucket(cat.id)}
+                          title="Click to change bucket"
+                          style={{
+                            fontSize: '0.6875rem',
+                            fontWeight: 600,
+                            padding: '0.1875rem 0.5rem',
+                            borderRadius: '9999px',
+                            background: bucketMeta.bg,
+                            color: bucketMeta.text,
+                            border: 'none',
+                            cursor: 'pointer',
+                            flexShrink: 0,
+                            letterSpacing: '0.01em',
+                          }}
+                        >
+                          {bucketMeta.label}
+                        </button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1388,7 +1514,8 @@ function CategoriesSection() {
                         Delete
                       </Button>
                     </div>
-                  ))}
+                    );
+                  })}
                   {/* Add to group */}
                   <button
                     onClick={() => openAdd(group.name)}

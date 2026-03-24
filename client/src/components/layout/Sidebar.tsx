@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Coins,
   Zap,
+  Layers,
 } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
@@ -35,6 +36,7 @@ const navItems: NavItem[] = [
   { to: '/transactions', icon: <ArrowLeftRight size={18} />, label: 'Transactions' },
   { to: '/cash-flow', icon: <TrendingUp size={18} />, label: 'Cash Flow' },
   { to: '/reports', icon: <BarChart2 size={18} />, label: 'Reports' },
+  { to: '/wealth', icon: <Layers size={18} />, label: 'Wealth' },
   { to: '/budget', icon: <PiggyBank size={18} />, label: 'Budget' },
   { to: '/recurring', icon: <RefreshCw size={18} />, label: 'Recurring' },
   { to: '/goals', icon: <Target size={18} />, label: 'Goals' },

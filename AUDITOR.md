@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-24 (Sprint 10 complete)
+> Last updated: 2026-03-24 (Sprint 11 complete)
 
 ---
 
@@ -35,6 +35,7 @@
 | Delete Transactions | 🟢 Done | Settings > Data Management: delete before date (soft-delete, wired) |
 | Dashboard Customization | 🟢 Done | Widget reorder/hide with HTML5 drag-and-drop + persisted layout |
 | Spending Cumulative Chart | 🟢 Done | Dashboard SpendingWidget: this month vs last month day-by-day |
+| Wealth Strategy | 🟢 Done | 50/30/20 dashboard: salary input, bucket cards, alerts, Where to Cut, Investment Ladder, AI coach |
 | Merchants Settings | 🟢 Done | Settings > Merchants: search, sort, inline edit, delete |
 | E2E Tests | 🟢 Done | Playwright setup + smoke tests (7) + auth tests (3); `npm run test:e2e` |
 | Unit Tests | 🔴 None | Server lib unit tests still missing |
@@ -55,6 +56,33 @@
 ---
 
 ## Sprint Log
+
+### Sprint 11 — Wealth Strategy: 50/30/20 Dashboard + AI Coach (2026-03-24)
+**Goal:** Smart wealth-building feature: 50/30/20 rule analysis, personalized insights, investment ladder, AI coaching.
+
+**Completed:**
+- [x] `Category.bucketType` field added (needs | wants | savings | uncategorized), default 'uncategorized'
+- [x] `WealthAiCache` model — per-household 24h AI analysis cache
+- [x] Migration `20260324100000_add_wealth_strategy` — ALTER categories + CREATE wealth_ai_cache
+- [x] `seedCategoryBuckets()` — keyword-matched defaults seeded for all existing categories
+- [x] `GET/PUT /api/v1/wealth/income` — read/write monthly net take-home income (via UserPreference)
+- [x] `GET /api/v1/wealth/analysis?month=YYYY-MM` — full 50/30/20 analysis: targets, actuals, per-bucket category breakdown, delta, alerts, savingsCapacity, investmentLadder (5 steps, status from Goals)
+- [x] `GET/PUT /api/v1/wealth/category-buckets` — read/override per-category bucket assignment
+- [x] `POST /api/v1/wealth/category-buckets/reset` — reset to keyword defaults
+- [x] `POST /api/v1/wealth/ai-analysis` — 24h cached AI wealth coaching: prompt with income + bucket data, calls configured provider, returns analysis text
+- [x] `client/src/pages/wealth/WealthPage.tsx` — new page at `/wealth`:
+  - Income setup card (inline input if not set, edit row if set)
+  - 3 bucket cards (Needs/Wants/Savings) with color-coded progress bars, category breakdowns, delta lines
+  - Alerts section (danger/warning per bucket)
+  - "Where to Cut" — top 5 over-budget categories ranked by overage
+  - Investment Ladder — 5 steps with status icons + months-to-fund projection
+  - AI Analysis Panel — auto-fetches, 24h cache, refresh button, not-configured fallback
+- [x] Sidebar: "Wealth" nav item (Layers icon) between Reports and Budget
+- [x] `App.tsx` — lazy route `/wealth` added
+- [x] `SettingsPage.tsx` — Categories section: bucket badge + inline dropdown per category, Reset defaults button
+- [x] TypeScript: zero errors client + server
+
+---
 
 ### Sprint 10 — Reports v2: Filters, Change View, Monthly Grouping, Cash Flow Bar Chart (2026-03-24)
 **Goal:** Close the Monarch reports gap — filters panel, period comparison, monthly/quarterly grouping, polished transaction list.
