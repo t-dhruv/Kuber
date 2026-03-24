@@ -14,16 +14,174 @@ function parseDateRange(startDate: unknown, endDate: unknown): { start: Date; en
   return { start, end };
 }
 
-// GET /api/v1/reports/spending
-router.get('/spending', async (req: AuthRequest, res: Response) => {
+// ─── Helper: group transactions by groupBy key (spending or income) ───────────
+
+type GroupMode = 'spending' | 'income';
+
+async function fetchGroupedTransactions(
+  householdId: string,
+  start: Date,
+  end: Date,
+  groupBy: string,
+  mode: GroupMode,
+) {
+  const amountWhere = mode === 'spending' ? { lt: 0 } : { gt: 0 };
+
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      householdId,
+      date: { gte: start, lte: end },
+      amount: amountWhere,
+      isHidden: false,
+    },
+    include: {
+      category: { select: { id: true, name: true, emoji: true } },
+      merchant: { select: { id: true, displayName: true } },
+      account: { select: { id: true, name: true } },
+      tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+    },
+  });
+
+  const groupMap = new Map<string, { id: string; name: string; icon: string | null; amount: number }>();
+
+  function addToGroup(id: string, name: string, icon: string | null, amount: number) {
+    const abs = Math.abs(amount);
+    const existing = groupMap.get(id);
+    if (existing) {
+      existing.amount += abs;
+    } else {
+      groupMap.set(id, { id, name, icon, amount: abs });
+    }
+  }
+
+  for (const t of transactions) {
+    if (groupBy === 'category') {
+      addToGroup(t.categoryId ?? '__uncategorized__', t.category?.name ?? 'Uncategorized', t.category?.emoji ?? null, t.amount);
+    } else if (groupBy === 'merchant') {
+      addToGroup(t.merchantId ?? '__unknown__', t.merchant?.displayName ?? t.description, null, t.amount);
+    } else if (groupBy === 'account') {
+      addToGroup(t.accountId, t.account.name, null, t.amount);
+    } else {
+      // tag
+      if (t.tags.length === 0) {
+        addToGroup('__untagged__', 'Untagged', null, t.amount);
+      } else {
+        for (const tt of t.tags) {
+          addToGroup(tt.tag.id, tt.tag.name, null, t.amount);
+        }
+      }
+    }
+  }
+
+  return groupMap;
+}
+
+// GET /api/v1/reports/spending/compare
+router.get('/spending/compare', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const { startDate, endDate, groupBy = 'category' } = req.query;
 
     const range = parseDateRange(startDate, endDate);
-    if (!range) {
-      return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
+    if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
+
+    const validGroupBy = ['category', 'merchant', 'account', 'tag'];
+    if (!validGroupBy.includes(groupBy as string)) {
+      return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
     }
+
+    // Compute prior period of same duration
+    const durationMs = range.end.getTime() - range.start.getTime() + 86400000; // +1 day
+    const priorEnd = new Date(range.start.getTime() - 86400000);
+    const priorStart = new Date(priorEnd.getTime() - durationMs + 86400000);
+
+    const [currentMap, priorMap] = await Promise.all([
+      fetchGroupedTransactions(householdId, range.start, range.end, groupBy as string, 'spending'),
+      fetchGroupedTransactions(householdId, priorStart, priorEnd, groupBy as string, 'spending'),
+    ]);
+
+    // Merge keys from both periods
+    const allKeys = new Set([...currentMap.keys(), ...priorMap.keys()]);
+    const items = Array.from(allKeys).map((key) => {
+      const cur = currentMap.get(key);
+      const pri = priorMap.get(key);
+      const id = cur?.id ?? pri?.id ?? key;
+      const name = cur?.name ?? pri?.name ?? key;
+      const icon = cur?.icon ?? pri?.icon ?? null;
+      const current = Math.round((cur?.amount ?? 0) * 100) / 100;
+      const prior = Math.round((pri?.amount ?? 0) * 100) / 100;
+      const delta = Math.round((current - prior) * 100) / 100;
+      const deltaPercent = prior !== 0 ? Math.round((delta / prior) * 10000) / 100 : 0;
+      return { id, name, icon, current, prior, delta, deltaPercent };
+    }).sort((a, b) => b.current - a.current);
+
+    const currentTotal = Math.round(Array.from(currentMap.values()).reduce((s, v) => s + v.amount, 0) * 100) / 100;
+    const priorTotal = Math.round(Array.from(priorMap.values()).reduce((s, v) => s + v.amount, 0) * 100) / 100;
+    const totalDelta = Math.round((currentTotal - priorTotal) * 100) / 100;
+
+    return res.json({ items, currentTotal, priorTotal, totalDelta });
+  } catch (err) {
+    console.error('[reports/spending/compare]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/v1/reports/income/compare
+router.get('/income/compare', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { startDate, endDate, groupBy = 'category' } = req.query;
+
+    const range = parseDateRange(startDate, endDate);
+    if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
+
+    const validGroupBy = ['category', 'merchant', 'account', 'tag'];
+    if (!validGroupBy.includes(groupBy as string)) {
+      return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
+    }
+
+    const durationMs = range.end.getTime() - range.start.getTime() + 86400000;
+    const priorEnd = new Date(range.start.getTime() - 86400000);
+    const priorStart = new Date(priorEnd.getTime() - durationMs + 86400000);
+
+    const [currentMap, priorMap] = await Promise.all([
+      fetchGroupedTransactions(householdId, range.start, range.end, groupBy as string, 'income'),
+      fetchGroupedTransactions(householdId, priorStart, priorEnd, groupBy as string, 'income'),
+    ]);
+
+    const allKeys = new Set([...currentMap.keys(), ...priorMap.keys()]);
+    const items = Array.from(allKeys).map((key) => {
+      const cur = currentMap.get(key);
+      const pri = priorMap.get(key);
+      const id = cur?.id ?? pri?.id ?? key;
+      const name = cur?.name ?? pri?.name ?? key;
+      const icon = cur?.icon ?? pri?.icon ?? null;
+      const current = Math.round((cur?.amount ?? 0) * 100) / 100;
+      const prior = Math.round((pri?.amount ?? 0) * 100) / 100;
+      const delta = Math.round((current - prior) * 100) / 100;
+      const deltaPercent = prior !== 0 ? Math.round((delta / prior) * 10000) / 100 : 0;
+      return { id, name, icon, current, prior, delta, deltaPercent };
+    }).sort((a, b) => b.current - a.current);
+
+    const currentTotal = Math.round(Array.from(currentMap.values()).reduce((s, v) => s + v.amount, 0) * 100) / 100;
+    const priorTotal = Math.round(Array.from(priorMap.values()).reduce((s, v) => s + v.amount, 0) * 100) / 100;
+    const totalDelta = Math.round((currentTotal - priorTotal) * 100) / 100;
+
+    return res.json({ items, currentTotal, priorTotal, totalDelta });
+  } catch (err) {
+    console.error('[reports/income/compare]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/v1/reports/spending/monthly
+router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { startDate, endDate, groupBy = 'category' } = req.query;
+
+    const range = parseDateRange(startDate, endDate);
+    if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
 
     const validGroupBy = ['category', 'merchant', 'account', 'tag'];
     if (!validGroupBy.includes(groupBy as string)) {
@@ -37,6 +195,200 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
         amount: { lt: 0 },
         isHidden: false,
       },
+      include: {
+        category: { select: { id: true, name: true, emoji: true } },
+        merchant: { select: { id: true, displayName: true } },
+        account: { select: { id: true, name: true } },
+        tags: { include: { tag: { select: { id: true, name: true } } } },
+      },
+    });
+
+    // Build sorted month list in range
+    const monthSet = new Set<string>();
+    const cur = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
+    while (cur <= range.end) {
+      monthSet.add(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`);
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    const sortedMonths = Array.from(monthSet).sort();
+
+    const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = sortedMonths.map((m) => {
+      const [y, mo] = m.split('-');
+      return `${MONTH_ABBR[parseInt(mo) - 1]} ${y}`;
+    });
+
+    // seriesMap: groupId -> { meta, monthKey -> amount }
+    type SeriesEntry = { id: string; name: string; icon: string | null; byMonth: Map<string, number> };
+    const seriesMap = new Map<string, SeriesEntry>();
+
+    function addToSeries(id: string, name: string, icon: string | null, monthKey: string, absAmount: number) {
+      if (!seriesMap.has(id)) {
+        seriesMap.set(id, { id, name, icon, byMonth: new Map() });
+      }
+      const entry = seriesMap.get(id)!;
+      entry.byMonth.set(monthKey, (entry.byMonth.get(monthKey) ?? 0) + absAmount);
+    }
+
+    for (const t of transactions) {
+      const d = new Date(t.date);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const abs = Math.abs(t.amount);
+
+      if ((groupBy as string) === 'category') {
+        addToSeries(t.categoryId ?? '__uncategorized__', t.category?.name ?? 'Uncategorized', t.category?.emoji ?? null, monthKey, abs);
+      } else if ((groupBy as string) === 'merchant') {
+        addToSeries(t.merchantId ?? '__unknown__', t.merchant?.displayName ?? t.description, null, monthKey, abs);
+      } else if ((groupBy as string) === 'account') {
+        addToSeries(t.accountId, t.account.name, null, monthKey, abs);
+      } else {
+        if (t.tags.length === 0) {
+          addToSeries('__untagged__', 'Untagged', null, monthKey, abs);
+        } else {
+          for (const tt of t.tags) {
+            addToSeries(tt.tag.id, tt.tag.name, null, monthKey, abs);
+          }
+        }
+      }
+    }
+
+    const series = Array.from(seriesMap.values()).map((s) => ({
+      id: s.id,
+      name: s.name,
+      icon: s.icon,
+      data: sortedMonths.map((mk) => Math.round((s.byMonth.get(mk) ?? 0) * 100) / 100),
+    }));
+
+    return res.json({ months, series });
+  } catch (err) {
+    console.error('[reports/spending/monthly]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/v1/reports/income/monthly
+router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { startDate, endDate, groupBy = 'category' } = req.query;
+
+    const range = parseDateRange(startDate, endDate);
+    if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
+
+    const validGroupBy = ['category', 'merchant', 'account', 'tag'];
+    if (!validGroupBy.includes(groupBy as string)) {
+      return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
+    }
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        date: { gte: range.start, lte: range.end },
+        amount: { gt: 0 },
+        isHidden: false,
+      },
+      include: {
+        category: { select: { id: true, name: true, emoji: true } },
+        merchant: { select: { id: true, displayName: true } },
+        account: { select: { id: true, name: true } },
+        tags: { include: { tag: { select: { id: true, name: true } } } },
+      },
+    });
+
+    const monthSet = new Set<string>();
+    const cur = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
+    while (cur <= range.end) {
+      monthSet.add(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`);
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    const sortedMonths = Array.from(monthSet).sort();
+
+    const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = sortedMonths.map((m) => {
+      const [y, mo] = m.split('-');
+      return `${MONTH_ABBR[parseInt(mo) - 1]} ${y}`;
+    });
+
+    type SeriesEntry = { id: string; name: string; icon: string | null; byMonth: Map<string, number> };
+    const seriesMap = new Map<string, SeriesEntry>();
+
+    function addToSeries(id: string, name: string, icon: string | null, monthKey: string, amount: number) {
+      if (!seriesMap.has(id)) {
+        seriesMap.set(id, { id, name, icon, byMonth: new Map() });
+      }
+      const entry = seriesMap.get(id)!;
+      entry.byMonth.set(monthKey, (entry.byMonth.get(monthKey) ?? 0) + amount);
+    }
+
+    for (const t of transactions) {
+      const d = new Date(t.date);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+      if ((groupBy as string) === 'category') {
+        addToSeries(t.categoryId ?? '__uncategorized__', t.category?.name ?? 'Uncategorized', t.category?.emoji ?? null, monthKey, t.amount);
+      } else if ((groupBy as string) === 'merchant') {
+        addToSeries(t.merchantId ?? '__unknown__', t.merchant?.displayName ?? t.description, null, monthKey, t.amount);
+      } else if ((groupBy as string) === 'account') {
+        addToSeries(t.accountId, t.account.name, null, monthKey, t.amount);
+      } else {
+        if (t.tags.length === 0) {
+          addToSeries('__untagged__', 'Untagged', null, monthKey, t.amount);
+        } else {
+          for (const tt of t.tags) {
+            addToSeries(tt.tag.id, tt.tag.name, null, monthKey, t.amount);
+          }
+        }
+      }
+    }
+
+    const series = Array.from(seriesMap.values()).map((s) => ({
+      id: s.id,
+      name: s.name,
+      icon: s.icon,
+      data: sortedMonths.map((mk) => Math.round((s.byMonth.get(mk) ?? 0) * 100) / 100),
+    }));
+
+    return res.json({ months, series });
+  } catch (err) {
+    console.error('[reports/income/monthly]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/v1/reports/spending
+router.get('/spending', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { startDate, endDate, groupBy = 'category', categoryIds, accountIds, tagIds, minAmount, maxAmount } = req.query;
+
+    const range = parseDateRange(startDate, endDate);
+    if (!range) {
+      return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
+    }
+
+    const validGroupBy = ['category', 'merchant', 'account', 'tag'];
+    if (!validGroupBy.includes(groupBy as string)) {
+      return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
+    }
+
+    // Build spending amount filter (amounts are negative; abs(amount) between min and max)
+    let amountWhere: Record<string, number> = { lt: 0 };
+    if (minAmount) amountWhere = { ...amountWhere, lte: -(parseFloat(minAmount as string)) };
+    if (maxAmount) amountWhere = { ...amountWhere, gte: -(parseFloat(maxAmount as string)) };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: Record<string, any> = {
+      householdId,
+      date: { gte: range.start, lte: range.end },
+      amount: amountWhere,
+      isHidden: false,
+    };
+    if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
+    if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
+    if (tagIds) where.tags = { some: { tag: { id: { in: (tagIds as string).split(',') } } } };
+
+    const transactions = await prisma.transaction.findMany({
+      where,
       include: {
         category: { select: { id: true, name: true, emoji: true } },
         merchant: { select: { id: true, displayName: true } },
@@ -134,6 +486,11 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
         transactionCount: g.count,
       }));
 
+    // First / last transaction dates for spending
+    const spendingDates = transactions.map(t => t.date.getTime()).sort((a, b) => a - b);
+    const firstDate = spendingDates.length > 0 ? new Date(spendingDates[0]).toISOString() : null;
+    const lastDate = spendingDates.length > 0 ? new Date(spendingDates[spendingDates.length - 1]).toISOString() : null;
+
     return res.json({
       total: Math.round(total * 100) / 100,
       startDate: range.start.toISOString(),
@@ -143,6 +500,8 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
       largest,
       average: Math.round(average * 100) / 100,
       transactionCount,
+      firstDate,
+      lastDate,
     });
   } catch (err) {
     console.error('[reports/spending]', err);
@@ -154,7 +513,7 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
 router.get('/income', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { startDate, endDate, groupBy = 'category' } = req.query;
+    const { startDate, endDate, groupBy = 'category', categoryIds, accountIds, tagIds, minAmount, maxAmount } = req.query;
 
     const range = parseDateRange(startDate, endDate);
     if (!range) {
@@ -166,13 +525,24 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
     }
 
+    // Build income amount filter (amounts are positive)
+    let amountWhere: Record<string, number> = { gt: 0 };
+    if (minAmount) amountWhere = { ...amountWhere, gte: parseFloat(minAmount as string) };
+    if (maxAmount) amountWhere = { ...amountWhere, lte: parseFloat(maxAmount as string) };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: Record<string, any> = {
+      householdId,
+      date: { gte: range.start, lte: range.end },
+      amount: amountWhere,
+      isHidden: false,
+    };
+    if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
+    if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
+    if (tagIds) where.tags = { some: { tag: { id: { in: (tagIds as string).split(',') } } } };
+
     const transactions = await prisma.transaction.findMany({
-      where: {
-        householdId,
-        date: { gte: range.start, lte: range.end },
-        amount: { gt: 0 },
-        isHidden: false,
-      },
+      where,
       include: {
         category: { select: { id: true, name: true, emoji: true } },
         merchant: { select: { id: true, displayName: true } },
@@ -262,6 +632,11 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
         transactionCount: g.count,
       }));
 
+    // First / last transaction dates for income
+    const incomeDates = transactions.map(t => t.date.getTime()).sort((a, b) => a - b);
+    const firstDate = incomeDates.length > 0 ? new Date(incomeDates[0]).toISOString() : null;
+    const lastDate = incomeDates.length > 0 ? new Date(incomeDates[incomeDates.length - 1]).toISOString() : null;
+
     return res.json({
       total: Math.round(total * 100) / 100,
       startDate: range.start.toISOString(),
@@ -271,6 +646,8 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
       largest,
       average: Math.round(average * 100) / 100,
       transactionCount,
+      firstDate,
+      lastDate,
     });
   } catch (err) {
     console.error('[reports/income]', err);
@@ -282,19 +659,34 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
 router.get('/cashflow', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, categoryIds, accountIds, tagIds, minAmount, maxAmount } = req.query;
 
     const range = parseDateRange(startDate, endDate);
     if (!range) {
       return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: Record<string, any> = {
+      householdId,
+      date: { gte: range.start, lte: range.end },
+      isHidden: false,
+    };
+    if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
+    if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
+    if (tagIds) where.tags = { some: { tag: { id: { in: (tagIds as string).split(',') } } } };
+    // For cashflow, amount filter applies to abs(amount); approximate with OR
+    if (minAmount || maxAmount) {
+      const min = minAmount ? parseFloat(minAmount as string) : 0;
+      const max = maxAmount ? parseFloat(maxAmount as string) : Number.MAX_SAFE_INTEGER;
+      where.OR = [
+        { amount: { gte: min, lte: max } },     // income side
+        { amount: { gte: -max, lte: -min } },    // spending side (negative)
+      ];
+    }
+
     const transactions = await prisma.transaction.findMany({
-      where: {
-        householdId,
-        date: { gte: range.start, lte: range.end },
-        isHidden: false,
-      },
+      where,
       select: { amount: true, date: true },
     });
 
@@ -327,6 +719,8 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
     const net = income - expenses;
     const savingsRate = income > 0 ? Math.min(100, Math.max(0, (net / income) * 100)) : 0;
 
+    const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
     const byMonth = Array.from(monthMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, v]) => ({
@@ -337,6 +731,14 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
         net: Math.round((v.income - v.expenses) * 100) / 100,
       }));
 
+    // monthly: human-readable label used by grouped bar chart
+    const monthly = byMonth.map(m => ({
+      month: `${MONTH_ABBR[m.month - 1]} ${m.year}`,
+      income: m.income,
+      expenses: m.expenses,
+      net: m.net,
+    }));
+
     return res.json({
       startDate: range.start.toISOString(),
       endDate: range.end.toISOString(),
@@ -345,6 +747,7 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
       net: Math.round(net * 100) / 100,
       savingsRate: Math.round(savingsRate * 100) / 100,
       byMonth,
+      monthly,
     });
   } catch (err) {
     console.error('[reports/cashflow]', err);

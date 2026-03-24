@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-24 (Sprint 9 complete)
+> Last updated: 2026-03-24 (Sprint 10 complete)
 
 ---
 
@@ -16,7 +16,7 @@
 | Transactions | 🟢 Working | API shape fixed, bulk actions fixed, PATCH→PUT |
 | Budget | 🟢 Enhanced | v2: Fixed/Flexible/Non-Monthly sections, unbudgeted alert, budgetType selector, Left-to-Budget banner |
 | Cash Flow | 🟢 Working | NaN crash fixed, income/expenses as objects; Sankey chart implemented |
-| Reports | 🟢 Working | All field names corrected; Money Flow Sankey chart implemented |
+| Reports | 🟢 Enhanced | Reports v2: Filters panel (categories/accounts/tags/amount), Totals/Change toggle with period comparison, Monthly/Quarterly grouping, Cash Flow grouped bar+line chart, polished transaction rows + full summary sidebar |
 | Recurring | 🟢 Working | Runtime crash fixed, MonthlySummary corrected |
 | Goals | 🟢 Working | currentAmount/targetAmount fixed in display + forms |
 | Investments | 🟢 Enhanced | Live benchmarks via Yahoo Finance (SPY/BND/VTI) with 15-min cache + fallback |
@@ -55,6 +55,24 @@
 ---
 
 ## Sprint Log
+
+### Sprint 10 — Reports v2: Filters, Change View, Monthly Grouping, Cash Flow Bar Chart (2026-03-24)
+**Goal:** Close the Monarch reports gap — filters panel, period comparison, monthly/quarterly grouping, polished transaction list.
+
+**Completed:**
+- [x] `server/src/routes/reports.ts` — filter params (`categoryIds`, `accountIds`, `tagIds`, `minAmount`, `maxAmount`) wired into `/spending`, `/income`, `/cashflow` queries
+- [x] `GET /reports/spending/compare` + `GET /reports/income/compare` — prior period computed, returns `{items[{current,prior,delta,deltaPercent}], currentTotal, priorTotal, totalDelta}`
+- [x] `GET /reports/spending/monthly` + `GET /reports/income/monthly` — category × month matrix, returns `{months[], series[{id,name,icon,data[]}]}`
+- [x] `ReportsPage.tsx` — `FiltersPanel` dropdown: Categories/Accounts/Tags/Amount tabs, active badge, clear all, click-outside close
+- [x] `extraParams` wired through `CashFlowTab` and `CategoryTab` so filters apply to all fetches
+- [x] Totals/Change toggle in Spending/Income tabs; Change view = grouped bar (current=blue, prior=gray) with delta tooltip
+- [x] Monthly/Quarterly grouping dropdown (quarterly computed client-side by summing 3 months)
+- [x] Cash Flow tab: default view changed to grouped bar (Income green + Expenses red + Net dashed line); Sankey toggle preserved
+- [x] Transaction rows: merchant avatar circle, category emoji+name subtitle, account pill chip, amount+date stacked column
+- [x] Summary sidebar: Total spending/income, Largest transaction, Average, First/Last transaction dates — all fields complete
+- [x] TypeScript: zero errors client + server
+
+---
 
 ### Sprint 9 — Live Investment Benchmarks, Saved Reports, Dashboard Customization (2026-03-24)
 **Goal:** Polish and close remaining Monarch feature gaps — live market data, saved views, customizable dashboard.
