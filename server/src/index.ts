@@ -18,13 +18,34 @@ import settingsRouter from './routes/settings';
 import notificationsRouter from './routes/notifications';
 import advisorRouter from './routes/advisor';
 import categoriesRouter from './routes/categories';
+import rulesRouter from './routes/rules';
+import auditRouter from './routes/audit';
+import networthRouter from './routes/networth';
 import { requireAuth } from './middleware/auth';
+import { takeNetWorthSnapshot } from './lib/netWorthJob';
 
 const app = express();
 const PORT = process.env.PORT ?? 4000;
 
-app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_URL ?? 'http://localhost:3000', credentials: true }));
+const clientUrl = process.env.CLIENT_URL ?? 'http://localhost:3000';
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],  // Tailwind CSS-in-JS requires this
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      connectSrc: ["'self'", clientUrl],
+      fontSrc: ["'self'", 'data:'],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Allow embedding for dev
+}));
+app.use(cors({ origin: clientUrl, credentials: true }));
 app.use(compression() as any);
 app.use(express.json());
 app.use(cookieParser());
@@ -45,7 +66,15 @@ app.use('/api/v1/goals', requireAuth, goalsRouter);
 app.use('/api/v1/investments', requireAuth, investmentsRouter);
 app.use('/api/v1/settings', requireAuth, settingsRouter);
 app.use('/api/v1/categories', requireAuth, categoriesRouter);
+app.use('/api/v1/rules', requireAuth, rulesRouter);
+app.use('/api/v1/audit', requireAuth, auditRouter);
 app.use('/api/v1/notifications', requireAuth, notificationsRouter);
 app.use('/api/v1/advisor', requireAuth, advisorRouter);
+app.use('/api/v1/networth', requireAuth, networthRouter);
 
-app.listen(PORT, () => console.log(`Kuber server running on :${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Kuber server running on :${PORT}`);
+  takeNetWorthSnapshot().catch((err) =>
+    console.error('[networth-job] startup snapshot failed:', err),
+  );
+});

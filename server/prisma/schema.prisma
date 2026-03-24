@@ -52,6 +52,7 @@ model Household {
   invites     HouseholdInvite[]
   aiConfig    AiConfig?
   conversations Conversation[]
+  netWorthSnapshots NetWorthSnapshot[]
   @@map("households")
 }
 
@@ -388,6 +389,20 @@ model UserPreference {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([userId, key])
   @@map("user_preferences")
+}
+
+model NetWorthSnapshot {
+  id          String    @id @default(cuid())
+  householdId String
+  date        DateTime  @db.Date
+  assets      Float
+  liabilities Float
+  netWorth    Float
+  createdAt   DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  @@unique([householdId, date])
+  @@index([householdId, date])
+  @@map("net_worth_snapshots")
 }
 
 model AuditLog {

@@ -1,171 +1,212 @@
 import { Router, Response } from 'express';
-import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { getAiClientForHousehold } from '../lib/ai';
+import { getChatContext } from '../lib/ai/context';
+import { chatSystemPrompt } from '../lib/ai/prompts';
+import type { AiMessage } from '../lib/ai/types';
 
 const router = Router();
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-}
+// ─── POST /api/v1/advisor/chat ────────────────────────────────────────────────
 
-function getMonthBounds(date: Date): { start: Date; end: Date } {
-  const start = new Date(date.getFullYear(), date.getMonth(), 1);
-  const end = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-  return { start, end };
-}
-
-interface FinancialContext {
-  monthIncome: number;
-  monthExpenses: number;
-  netWorth: number;
-  topCategory: string;
-  totalBudget: number;
-  budgetStatus: string;
-}
-
-async function getFinancialContext(householdId: string): Promise<FinancialContext> {
-  const now = new Date();
-  const { start, end } = getMonthBounds(now);
-
-  const [accounts, transactions, budgets] = await Promise.all([
-    prisma.account.findMany({
-      where: { householdId, isHidden: false, excludeFromNetWorth: false },
-      select: { balance: true },
-    }),
-    prisma.transaction.findMany({
-      where: {
-        householdId,
-        date: { gte: start, lt: end },
-        isHidden: false,
-      },
-      select: { amount: true, categoryId: true },
-    }),
-    prisma.budget.findMany({
-      where: { householdId },
-      select: { amount: true },
-    }),
-  ]);
-
-  const netWorth = accounts.reduce((sum, a) => sum + a.balance, 0);
-  const monthIncome = transactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-  const monthExpenses = transactions.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
-  const totalBudget = budgets.reduce((s, b) => s + b.amount, 0);
-
-  // Find top spending category
-  const spendByCategory = new Map<string, number>();
-  for (const t of transactions) {
-    if (t.amount < 0 && t.categoryId) {
-      spendByCategory.set(t.categoryId, (spendByCategory.get(t.categoryId) ?? 0) + Math.abs(t.amount));
-    }
-  }
-
-  let topCategoryId: string | null = null;
-  let topCategoryAmount = 0;
-  for (const [catId, amt] of spendByCategory.entries()) {
-    if (amt > topCategoryAmount) {
-      topCategoryAmount = amt;
-      topCategoryId = catId;
-    }
-  }
-
-  let topCategory = 'Uncategorized';
-  if (topCategoryId) {
-    const cat = await prisma.category.findUnique({
-      where: { id: topCategoryId },
-      select: { name: true },
-    });
-    topCategory = cat?.name ?? 'Uncategorized';
-  }
-
-  const remaining = totalBudget - monthExpenses;
-  const budgetStatus =
-    totalBudget === 0
-      ? 'No budget set for this month'
-      : remaining >= 0
-      ? `You have ${formatCurrency(remaining)} left in your budget`
-      : `You are ${formatCurrency(Math.abs(remaining))} over budget`;
-
-  return { monthIncome, monthExpenses, netWorth, topCategory, totalBudget, budgetStatus };
-}
-
-type AdvisorResponse = { message: string; suggestions: string[] };
-
-const responses: Record<string, (d: FinancialContext) => AdvisorResponse> = {
-  spending: (d) => ({
-    message: `Your spending this month is ${formatCurrency(d.monthExpenses)}. Your top category is ${d.topCategory}. ${d.budgetStatus}.`,
-    suggestions: [
-      'Show me spending by category',
-      'How can I reduce my spending?',
-      'Compare to last month',
-    ],
-  }),
-  budget: (d) => ({
-    message: `You've budgeted ${formatCurrency(d.totalBudget)} this month and spent ${formatCurrency(d.monthExpenses)}. You have ${formatCurrency(d.totalBudget - d.monthExpenses)} remaining.`,
-    suggestions: [
-      'Which categories am I over budget?',
-      'Help me create a budget',
-      'Show my budget breakdown',
-    ],
-  }),
-  'net worth': (d) => ({
-    message: `Your current net worth is ${formatCurrency(d.netWorth)}. This includes all your accounts and liabilities.`,
-    suggestions: [
-      'How has my net worth changed?',
-      'What affects my net worth?',
-      'Show my accounts',
-    ],
-  }),
-  save: (d) => ({
-    message:
-      d.monthIncome > 0
-        ? `Based on your income of ${formatCurrency(d.monthIncome)} and expenses of ${formatCurrency(d.monthExpenses)}, you're saving ${formatCurrency(d.monthIncome - d.monthExpenses)} this month (${Math.round(((d.monthIncome - d.monthExpenses) / d.monthIncome) * 100)}% savings rate).`
-        : `You have ${formatCurrency(d.monthExpenses)} in expenses this month. Add income transactions to track your savings rate.`,
-    suggestions: [
-      'How can I save more?',
-      'Show my savings goals',
-      'What are my biggest expenses?',
-    ],
-  }),
-  default: (d) => ({
-    message: `I can help you understand your finances. Your net worth is ${formatCurrency(d.netWorth)} and you've spent ${formatCurrency(d.monthExpenses)} this month. What would you like to know?`,
-    suggestions: [
-      'How is my budget?',
-      'What did I spend on last month?',
-      'Show my net worth trend',
-      'Am I saving enough?',
-    ],
-  }),
-};
-
-// POST /api/v1/advisor/chat
 router.post('/chat', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
+    const userId = req.userId!;
     const { message, conversationId } = req.body as { message?: string; conversationId?: string };
 
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message is required' });
     }
 
-    const resolvedConversationId = conversationId ?? randomUUID();
-    const lower = message.toLowerCase();
+    // 1. Get or create conversation
+    let conversation = conversationId
+      ? await prisma.conversation.findFirst({
+          where: { id: conversationId, householdId },
+        })
+      : null;
 
-    const context = await getFinancialContext(householdId);
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          householdId,
+          userId,
+          title: message.slice(0, 60),
+        },
+      });
+    }
 
-    const matchedKey = Object.keys(responses).find(
-      key => key !== 'default' && lower.includes(key)
-    );
+    const convId = conversation.id;
 
-    const { message: responseMessage, suggestions } = responses[matchedKey ?? 'default'](context);
+    // 2. Fetch last 20 messages for history
+    const history = await prisma.conversationMessage.findMany({
+      where: { conversationId: convId },
+      orderBy: { createdAt: 'asc' },
+      take: 20,
+    });
 
+    // 3. Build financial context
+    const ctx = await getChatContext(prisma, householdId);
+
+    // 4. Build messages array
+    const systemPrompt = chatSystemPrompt(ctx);
+    const historyMessages: AiMessage[] = history.map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+    const messages: AiMessage[] = [
+      ...historyMessages,
+      { role: 'user', content: message },
+    ];
+
+    // 5 & 6. Try to get AI client — return friendly message if not configured
+    let responseContent: string;
+    try {
+      const client = await getAiClientForHousehold(householdId, prisma);
+
+      // 7. Call AI
+      const result = await client.complete({
+        messages,
+        systemPrompt,
+        maxTokens: 1024,
+        temperature: 0.7,
+      });
+      responseContent = result.content;
+    } catch (aiErr: unknown) {
+      const errMsg = aiErr instanceof Error ? aiErr.message : String(aiErr);
+      const isNotConfigured =
+        errMsg.includes('not configured') || errMsg.includes('provider not configured');
+
+      if (isNotConfigured) {
+        responseContent =
+          "I'm not configured yet. Go to Settings → AI Advisor to choose your AI provider (Claude, OpenAI, Gemini, Ollama, or OpenRouter) and add your API key.";
+      } else {
+        console.error('[advisor/chat] AI error:', errMsg);
+        responseContent = 'I encountered an error processing your request. Please try again.';
+      }
+    }
+
+    // 8. Save user message and assistant response
+    await prisma.conversationMessage.createMany({
+      data: [
+        { conversationId: convId, role: 'user', content: message },
+        { conversationId: convId, role: 'assistant', content: responseContent },
+      ],
+    });
+
+    // Update conversation title if it was just created (use first user message)
+    if (!conversationId) {
+      await prisma.conversation.update({
+        where: { id: convId },
+        data: { title: message.slice(0, 60), updatedAt: new Date() },
+      });
+    } else {
+      await prisma.conversation.update({
+        where: { id: convId },
+        data: { updatedAt: new Date() },
+      });
+    }
+
+    // 9. Return response
     return res.json({
-      conversationId: resolvedConversationId,
-      message: responseMessage,
-      suggestions,
+      conversationId: convId,
+      message: responseContent,
     });
   } catch (err) {
     console.error('[advisor/chat]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /api/v1/advisor/conversations ──────────────────────────────────────
+// List conversations for the household
+
+router.get('/conversations', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+
+    const conversations = await prisma.conversation.findMany({
+      where: { householdId },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+      include: {
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    const result = conversations.map((c) => ({
+      id: c.id,
+      title: c.title,
+      updatedAt: c.updatedAt.toISOString(),
+      lastMessage: c.messages[0]?.content.slice(0, 100) ?? '',
+    }));
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[advisor/conversations]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /api/v1/advisor/conversations/:id/messages ──────────────────────────
+
+router.get('/conversations/:id/messages', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+
+    // Verify conversation belongs to household
+    const conversation = await prisma.conversation.findFirst({
+      where: { id, householdId },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const messages = await prisma.conversationMessage.findMany({
+      where: { conversationId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return res.json(
+      messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt.toISOString(),
+      }))
+    );
+  } catch (err) {
+    console.error('[advisor/conversations/:id/messages]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── DELETE /api/v1/advisor/conversations/:id ─────────────────────────────────
+
+router.delete('/conversations/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+
+    const conversation = await prisma.conversation.findFirst({
+      where: { id, householdId },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    await prisma.conversation.delete({ where: { id } });
+
+    return res.json({ message: 'Deleted' });
+  } catch (err) {
+    console.error('[advisor/conversations/:id delete]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

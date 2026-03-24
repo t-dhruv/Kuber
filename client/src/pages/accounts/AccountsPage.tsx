@@ -2,11 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line,
 } from 'recharts';
 import { ChevronDown, ChevronRight, RefreshCw, Plus, MoreHorizontal, Pencil, EyeOff, MinusCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Card, Button, Input, Select, Modal, ModalFooter, Skeleton,
+  Card, Button, Input, Select, Modal, ModalFooter, Skeleton, InstitutionLogo, LogoPicker,
 } from '@/components/ui';
 import { notify } from '@/components/ui';
 
@@ -19,6 +20,7 @@ interface Account {
   name: string;
   type: AccountType;
   institution?: string | null;
+  institutionLogo?: string | null;
   lastFour?: string | null;
   balance: number;
   currency: string;
@@ -45,6 +47,21 @@ interface AccountsData {
   netWorth: NetWorth;
 }
 
+type NetWorthRange = '1M' | '3M' | '6M' | '1Y' | 'ALL';
+
+interface NetWorthHistoryPoint {
+  date: string;
+  assets: number;
+  liabilities: number;
+  netWorth: number;
+}
+
+interface NetWorthHistoryData {
+  current: { assets: number; liabilities: number; netWorth: number };
+  history: NetWorthHistoryPoint[];
+  change: { amount: number; percent: number; since: string | null };
+}
+
 interface Transaction {
   id: string;
   merchantName: string;
@@ -64,6 +81,7 @@ interface AccountFormValues {
   name: string;
   type: AccountType;
   institution: string;
+  institutionLogo: string | null;
   lastFour: string;
   balance: string;
   currency: string;
@@ -73,6 +91,7 @@ const EMPTY_FORM: AccountFormValues = {
   name: '',
   type: 'checking',
   institution: '',
+  institutionLogo: null,
   lastFour: '',
   balance: '',
   currency: 'USD',
@@ -121,22 +140,13 @@ const fmtChange = (change: number) => {
   return `${sign}${fmtCurrency(change)}`;
 };
 
+const fmtPercent = (pct: number) => {
+  const sign = pct >= 0 ? '+' : '';
+  return `${sign}${pct.toFixed(1)}%`;
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function institutionInitial(account: Account): string {
-  const src = account.institution ?? account.name ?? '?';
-  return src[0].toUpperCase();
-}
-
-function institutionColor(name: string): string {
-  const colors = [
-    '#E5622A', '#2f9e44', '#1971c2', '#9c36b5',
-    '#e67700', '#0c8599', '#c2255c', '#2f9e44',
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-}
 
 function isLiability(type: AccountType): boolean {
   return type === 'credit_card' || type === 'loan';
@@ -264,13 +274,13 @@ function AccountRow({
   account,
   onClick,
   onEdit,
+  monthChange,
 }: {
   account: Account;
   onClick: () => void;
   onEdit: () => void;
+  monthChange?: number;
 }) {
-  const iconColor = institutionColor(account.institution ?? account.name);
-  const initial = institutionInitial(account);
   const displayName = account.institution
     ? account.lastFour
       ? `${account.institution} ••${account.lastFour}`
@@ -294,22 +304,8 @@ function AccountRow({
       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
     >
-      {/* Bank icon */}
-      <div style={{
-        width: 32,
-        height: 32,
-        borderRadius: 'var(--radius-full)',
-        backgroundColor: iconColor,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontSize: '0.8125rem',
-        fontWeight: 700,
-        flexShrink: 0,
-      }}>
-        {initial}
-      </div>
+      {/* Bank logo */}
+      <InstitutionLogo name={account.institution ?? account.name} logoSlug={account.institutionLogo ?? undefined} size={32} />
 
       {/* Name + last four */}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -328,15 +324,23 @@ function AccountRow({
         </div>
       </div>
 
-      {/* Balance */}
-      <div style={{
-        fontSize: '0.875rem',
-        fontWeight: 600,
-        color: balanceColor(account.balance, account.type),
-        flexShrink: 0,
-        marginRight: '0.25rem',
-      }}>
-        {fmtCurrency(account.balance, account.currency)}
+      {/* Balance + optional 1M change */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, marginRight: '0.25rem' }}>
+        <div style={{
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          color: balanceColor(account.balance, account.type),
+        }}>
+          {fmtCurrency(account.balance, account.currency)}
+        </div>
+        {monthChange !== undefined && (
+          <div style={{
+            fontSize: '0.6875rem',
+            color: monthChange >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+          }}>
+            {fmtChange(monthChange)}
+          </div>
+        )}
       </div>
 
       {/* Overflow menu */}
@@ -426,6 +430,141 @@ function AccountGroup({
   );
 }
 
+// ─── Net Worth Chart ──────────────────────────────────────────────────────────
+
+const NW_RANGES: NetWorthRange[] = ['1M', '3M', '6M', '1Y', 'ALL'];
+
+function NetWorthChart() {
+  const [range, setRange] = useState<NetWorthRange>('1Y');
+
+  const { data, isLoading } = useQuery<NetWorthHistoryData>({
+    queryKey: ['networth', 'history', range],
+    queryFn: () => api.get(`/networth/history?range=${range}`).then((r) => r.data),
+  });
+
+  const current = data?.current;
+  const history = data?.history ?? [];
+  const change = data?.change;
+
+  const changePositive = (change?.amount ?? 0) >= 0;
+
+  return (
+    <Card padding="lg">
+      {/* Header: current net worth + range tabs */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>Net Worth</div>
+          {isLoading ? (
+            <Skeleton height={36} width={160} />
+          ) : (
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: (current?.netWorth ?? 0) >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>
+              {fmtCurrency(current?.netWorth ?? 0)}
+            </div>
+          )}
+          {!isLoading && change && change.since && (
+            <div style={{ fontSize: '0.8125rem', color: changePositive ? 'var(--color-success)' : 'var(--color-danger)', marginTop: '0.25rem' }}>
+              {fmtChange(change.amount)} ({fmtPercent(change.percent)}) since {fmtDate(change.since)}
+            </div>
+          )}
+        </div>
+        {/* Range tabs */}
+        <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: 'var(--color-surface-hover)', borderRadius: 'var(--radius-md)', padding: '0.25rem' }}>
+          {NW_RANGES.map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              style={{
+                padding: '0.25rem 0.625rem',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                border: 'none',
+                cursor: 'pointer',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: range === r ? 'var(--color-surface-elevated)' : 'transparent',
+                color: range === r ? 'var(--color-text)' : 'var(--color-text-muted)',
+                transition: 'background 0.15s',
+              }}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chart */}
+      {isLoading ? (
+        <Skeleton height={160} width="100%" />
+      ) : history.length === 0 ? (
+        <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+          No history yet — data will appear after the first snapshot.
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={history} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
+              tickFormatter={(d: string) => {
+                const date = new Date(d);
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              }}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              hide
+              domain={['auto', 'auto']}
+            />
+            <Tooltip
+              formatter={(value: number) => [fmtCurrency(value), 'Net Worth']}
+              labelFormatter={(label: string) => new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              contentStyle={{
+                backgroundColor: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.8125rem',
+              }}
+            />
+            <Line
+              type="monotone"
+              dataKey="netWorth"
+              stroke="#E5622A"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, fill: '#E5622A' }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+
+      {/* Assets vs Liabilities breakdown */}
+      {!isLoading && current && (
+        <div style={{
+          display: 'flex',
+          gap: '1.5rem',
+          marginTop: '1rem',
+          paddingTop: '1rem',
+          borderTop: '1px solid var(--color-border)',
+          flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: 1, minWidth: 100 }}>
+            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>Assets</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-success)' }}>{fmtCurrency(current.assets)}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 100 }}>
+            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>Liabilities</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-danger)' }}>{fmtCurrency(current.liabilities)}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 100 }}>
+            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>Net Worth</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: current.netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>{fmtCurrency(current.netWorth)}</div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ─── Net Worth Bar ────────────────────────────────────────────────────────────
 
 function NetWorthSummary({
@@ -493,11 +632,15 @@ function NetWorthSummary({
 function AccountForm({
   values,
   onChange,
+  onLogoChange,
   errors,
+  hideBalance = false,
 }: {
   values: AccountFormValues;
   onChange: (field: keyof AccountFormValues, value: string) => void;
+  onLogoChange: (slug: string | null) => void;
   errors: Partial<Record<keyof AccountFormValues, string>>;
+  hideBalance?: boolean;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -522,6 +665,16 @@ function AccountForm({
         onChange={(e) => onChange('institution', e.target.value)}
         placeholder="e.g. Chase Bank"
       />
+      <div>
+        <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: 6 }}>
+          Logo
+        </div>
+        <LogoPicker
+          value={values.institutionLogo}
+          institutionName={values.institution || values.name}
+          onChange={onLogoChange}
+        />
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
         <Input
           label="Last Four Digits"
@@ -539,16 +692,18 @@ function AccountForm({
           maxLength={3}
         />
       </div>
-      <Input
-        label="Starting Balance"
-        value={values.balance}
-        onChange={(e) => onChange('balance', e.target.value)}
-        error={errors.balance}
-        placeholder="0.00"
-        type="number"
-        step="0.01"
-        required
-      />
+      {!hideBalance && (
+        <Input
+          label="Starting Balance"
+          value={values.balance}
+          onChange={(e) => onChange('balance', e.target.value)}
+          error={errors.balance}
+          placeholder="0.00"
+          type="number"
+          step="0.01"
+          required
+        />
+      )}
     </div>
   );
 }
@@ -578,6 +733,10 @@ function AddAccountModal({
     setErrors((e) => ({ ...e, [field]: undefined }));
   }
 
+  function handleLogoChange(slug: string | null) {
+    setValues((v) => ({ ...v, institutionLogo: slug }));
+  }
+
   const mutation = useMutation({
     mutationFn: (body: object) => api.post('/accounts', body).then((r) => r.data),
     onSuccess: () => {
@@ -596,6 +755,7 @@ function AddAccountModal({
       name: values.name.trim(),
       type: values.type,
       institution: values.institution.trim() || undefined,
+      institutionLogo: values.institutionLogo ?? undefined,
       lastFour: values.lastFour || undefined,
       balance: Number(values.balance),
       currency: values.currency || 'USD',
@@ -610,7 +770,7 @@ function AddAccountModal({
 
   return (
     <Modal open={open} onClose={handleClose} title="Add Account" size="md">
-      <AccountForm values={values} onChange={handleChange} errors={errors} />
+      <AccountForm values={values} onChange={handleChange} onLogoChange={handleLogoChange} errors={errors} />
       <ModalFooter>
         <Button variant="ghost" onClick={handleClose} disabled={mutation.isPending}>Cancel</Button>
         <Button onClick={handleSubmit} loading={mutation.isPending}>Add Account</Button>
@@ -638,6 +798,7 @@ function EditAccountModal({
         name: account.name,
         type: account.type,
         institution: account.institution ?? '',
+        institutionLogo: account.institutionLogo ?? null,
         lastFour: account.lastFour ?? '',
         balance: String(account.balance),
         currency: account.currency ?? 'USD',
@@ -649,6 +810,10 @@ function EditAccountModal({
   function handleChange(field: keyof AccountFormValues, value: string) {
     setValues((v) => ({ ...v, [field]: value }));
     setErrors((e) => ({ ...e, [field]: undefined }));
+  }
+
+  function handleLogoChange(slug: string | null) {
+    setValues((v) => ({ ...v, institutionLogo: slug }));
   }
 
   const mutation = useMutation({
@@ -668,6 +833,7 @@ function EditAccountModal({
       name: values.name.trim(),
       type: values.type,
       institution: values.institution.trim() || undefined,
+      institutionLogo: values.institutionLogo,
       lastFour: values.lastFour || undefined,
       balance: Number(values.balance),
       currency: values.currency || 'USD',
@@ -676,7 +842,7 @@ function EditAccountModal({
 
   return (
     <Modal open={!!account} onClose={onClose} title="Edit Account" size="md">
-      <AccountForm values={values} onChange={handleChange} errors={errors} />
+      <AccountForm values={values} onChange={handleChange} onLogoChange={handleLogoChange} errors={errors} hideBalance />
       <ModalFooter>
         <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>Cancel</Button>
         <Button onClick={handleSubmit} loading={mutation.isPending}>Save Changes</Button>
@@ -923,8 +1089,9 @@ export default function AccountsPage() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)', gap: '1rem', alignItems: 'start' }}>
-          {/* Left column: net worth + groups */}
+          {/* Left column: net worth chart + groups */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <NetWorthChart />
             <NetWorthSummary
               totalAssets={data.netWorth.assets}
               totalLiabilities={data.netWorth.liabilities}
