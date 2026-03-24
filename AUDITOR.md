@@ -11,7 +11,8 @@
 |------|--------|-------|
 | Core auth | 🟢 Working | JWT + refresh token family tracking + TOTP 2FA + account lockout |
 | Dashboard | 🟢 Working | API shape fixed |
-| Accounts | 🟢 Working | API shape fixed, grouped response handled |
+| Accounts | 🟢 Enhanced | Net Worth chart (1M/3M/6M/1Y/ALL), assets/liabilities panel |
+| Net Worth History | 🟢 Done | Daily snapshots, history API, performance chart in AccountsPage |
 | Transactions | 🟢 Working | API shape fixed, bulk actions fixed, PATCH→PUT |
 | Budget | 🟢 Enhanced | v2: Fixed/Flexible/Non-Monthly sections, unbudgeted alert, budgetType selector, Left-to-Budget banner |
 | Cash Flow | 🟢 Working | NaN crash fixed, income/expenses as objects; Sankey chart implemented |
@@ -21,7 +22,7 @@
 | Investments | 🟢 Working | benchmarks crash fixed, all field names corrected |
 | Settings | 🟢 Working | Notifications fixed; 2FA setup/disable UI; SMTP test; Integrations section |
 | Notifications | 🟢 Working | Read/write envelope corrected |
-| AI Advisor | 🔴 Mock only | Multi-provider not implemented |
+| AI Advisor | 🟢 Done | Real multi-provider (Claude/OpenAI/Gemini/OpenRouter); conversation persistence |
 | E2E Tests | 🟢 Done | Playwright setup + smoke tests (7) + auth tests (3); `npm run test:e2e` |
 | Unit Tests | 🔴 None | Server lib unit tests still missing |
 | Docker prod | 🟢 Done | Multi-stage Dockerfiles, docker-compose.prod.yml, nginx/prod.conf |
@@ -41,6 +42,33 @@
 ---
 
 ## Sprint Log
+
+### Sprint 6 — Net Worth History + Real AI Advisor (2026-03-23)
+**Goal:** Net worth as a first-class feature + real multi-provider AI advisor replacing mock.
+
+**Completed (net worth):**
+- [x] `NetWorthSnapshot` model + migration `20260323100000_add_net_worth_snapshots`
+- [x] `server/src/lib/netWorthJob.ts` — `takeNetWorthSnapshot()` upserts daily assets/liabilities/netWorth per household
+- [x] Fire-and-forget startup snapshot in `index.ts`
+- [x] `GET /api/v1/networth/history?range=1M|3M|6M|1Y|ALL` — returns current + history + change since oldest snapshot
+- [x] `POST /api/v1/networth/snapshot` — manual trigger endpoint
+- [x] `AccountsPage`: `NetWorthChart` component (Recharts LineChart, range tabs), assets/liabilities breakdown panel, `monthChange` prop on `AccountRow`
+
+**Completed (AI advisor):**
+- [x] `advisor.ts` rewritten — real AI via `getAiClientForHousehold` + `getChatContext` + `chatSystemPrompt`
+- [x] Conversation persistence — saves user + assistant to `ConversationMessage` table
+- [x] `GET /api/v1/advisor/conversations` — list with lastMessage preview
+- [x] `GET /api/v1/advisor/conversations/:id/messages` — load history
+- [x] `DELETE /api/v1/advisor/conversations/:id`
+- [x] Graceful unconfigured-provider: returns friendly 200 with Settings CTA (not 500)
+- [x] `AdvicePage`: conversation sidebar, load past conversations, delete, Settings deeplink button
+- [x] TypeScript: zero errors on client and server
+
+**Deferred:**
+- Per-account 30-day balance delta (needs account balance history — future sprint)
+- AI streaming responses (SSE) — future enhancement
+
+---
 
 ### Sprint 5 — Budget v2 (2026-03-23)
 **Goal:** Monarch-parity on budgeting — Fixed/Flexible/Non-Monthly split, income budgeting, unbudgeted detection.
