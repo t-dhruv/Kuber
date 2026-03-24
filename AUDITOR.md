@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-23 (Sprint 5)
+> Last updated: 2026-03-23 (Sprint 7 complete)
 
 ---
 
@@ -23,6 +23,10 @@
 | Settings | 🟢 Working | Notifications fixed; 2FA setup/disable UI; SMTP test; Integrations section |
 | Notifications | 🟢 Working | Read/write envelope corrected |
 | AI Advisor | 🟢 Done | Real multi-provider (Claude/OpenAI/Gemini/OpenRouter); conversation persistence |
+| Advice Library | 🟢 Done | 6 topics × 6 tasks, task checklist UI, per-household completion tracking |
+| Tags Management | 🟢 Done | Settings > Tags CRUD with color swatches and transaction counts |
+| Transaction Stats | 🟢 Done | Summary panel: count, spending, largest, average, date range |
+| Data Downloads | 🟢 Done | Transactions + account balances CSV wired to real endpoints |
 | E2E Tests | 🟢 Done | Playwright setup + smoke tests (7) + auth tests (3); `npm run test:e2e` |
 | Unit Tests | 🔴 None | Server lib unit tests still missing |
 | Docker prod | 🟢 Done | Multi-stage Dockerfiles, docker-compose.prod.yml, nginx/prod.conf |
@@ -42,6 +46,30 @@
 ---
 
 ## Sprint Log
+
+### Sprint 7 — Structured Advice Library + Tags + Transaction Stats (2026-03-23)
+**Goal:** Release polish — structured advice, tags management, transaction stats, wired data downloads.
+
+**Completed:**
+- [x] `AdviceTopic` / `AdviceTask` / `UserAdviceProgress` schema models + migration `20260323200000`
+- [x] Seeded 6 advice topics × 6 tasks each: Emergency Fund, Budget, Pay Off Debt, Start Investing, Buy a Home, Protect Yourself
+- [x] `GET /api/v1/advice/topics` — returns topics + tasks + per-household completion state
+- [x] `PUT /api/v1/advice/topics/:topicId/tasks/:taskId` — toggle task completion
+- [x] `AdvicePage` restructured: AI Chat tab (preserved) + Advice Library tab (category pills, topic cards, progress bars, slide-in checklist panel with optimistic toggles)
+- [x] `GET/POST/PUT/DELETE /api/v1/settings/tags` with transaction counts
+- [x] Settings > Tags section: color swatch picker, CRUD modals, delete confirmation
+- [x] Transaction summary stats panel (count, total spending, largest, average, date range) — computed client-side
+- [x] Data section downloads wired: transactions CSV + account balances CSV via authenticated blob download
+- [x] TypeScript: zero errors client + server
+
+**Already done (discovered during gap analysis, not new work):**
+- Categories management UI — was already fully implemented in SettingsPage
+- Dark mode (Light/Dark/System) — already in DisplaySection
+- Savings Rate in Reports — already computed
+- Dashboard spending chart (this month vs last) — SpendingWidget already existed
+- Dashboard onboarding checklist — GettingStartedChecklist already existed
+
+---
 
 ### Sprint 6 — Net Worth History + Real AI Advisor (2026-03-23)
 **Goal:** Net worth as a first-class feature + real multi-provider AI advisor replacing mock.
