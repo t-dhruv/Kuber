@@ -1,8 +1,11 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { sendTestEmail } from '../lib/email';
+import { encrypt } from '../lib/encryption';
+import { getAiClient, invalidateAiCache } from '../lib/ai';
 
 const router = Router();
 
@@ -728,6 +731,110 @@ router.put('/dashboard-layout', async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error('[settings/dashboard-layout PUT]', err);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── AI Config ────────────────────────────────────────────────────────────────
+
+const aiConfigSchema = z.object({
+  provider: z.enum(['anthropic', 'openai', 'gemini', 'openrouter', 'none']),
+  model: z.string().optional(),
+  apiKey: z.string().optional(),
+  baseUrl: z.string().optional(),
+});
+
+function formatAiConfigResponse(config: {
+  provider: string;
+  model: string;
+  encryptedApiKey: string;
+  baseUrl: string | null;
+  updatedAt: Date;
+} | null) {
+  if (!config) {
+    return { provider: 'none', model: '', baseUrl: null, hasApiKey: false, updatedAt: null };
+  }
+  return {
+    provider: config.provider,
+    model: config.model,
+    baseUrl: config.baseUrl,
+    hasApiKey: config.encryptedApiKey !== '',
+    updatedAt: config.updatedAt.toISOString(),
+  };
+}
+
+// GET /api/v1/settings/ai-config
+router.get('/ai-config', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const config = await prisma.aiConfig.findUnique({ where: { householdId } });
+    return res.json(formatAiConfigResponse(config));
+  } catch (err) {
+    console.error('[settings/ai-config GET]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/v1/settings/ai-config
+router.put('/ai-config', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const parsed = aiConfigSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
+    }
+    const { provider, model, apiKey, baseUrl } = parsed.data;
+
+    // Determine encrypted key: if a new apiKey is provided, encrypt it; otherwise keep existing
+    let encryptedApiKey: string | undefined;
+    if (apiKey && apiKey.trim() !== '') {
+      encryptedApiKey = encrypt(apiKey.trim());
+    }
+
+    const existing = encryptedApiKey === undefined
+      ? await prisma.aiConfig.findUnique({ where: { householdId }, select: { encryptedApiKey: true } })
+      : null;
+
+    const config = await prisma.aiConfig.upsert({
+      where: { householdId },
+      update: {
+        provider,
+        model: model ?? '',
+        ...(encryptedApiKey !== undefined ? { encryptedApiKey } : { encryptedApiKey: existing?.encryptedApiKey ?? '' }),
+        baseUrl: baseUrl ?? null,
+      },
+      create: {
+        householdId,
+        provider,
+        model: model ?? '',
+        encryptedApiKey: encryptedApiKey ?? '',
+        baseUrl: baseUrl ?? null,
+      },
+    });
+
+    invalidateAiCache(householdId);
+    return res.json(formatAiConfigResponse(config));
+  } catch (err) {
+    console.error('[settings/ai-config PUT]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/settings/ai-config/test
+router.post('/ai-config/test', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const config = await prisma.aiConfig.findUnique({ where: { householdId } });
+
+    if (!config || config.provider === 'none') {
+      return res.json({ valid: false, error: 'No provider configured' });
+    }
+
+    const client = getAiClient(config);
+    const valid = await client.validateApiKey();
+    return res.json({ valid });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Connection test failed';
+    return res.json({ valid: false, error: message });
   }
 });
 

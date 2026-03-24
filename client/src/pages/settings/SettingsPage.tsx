@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   User, Monitor, Bell, Shield, Home, Tag, Database, CreditCard,
-  Pencil, Trash2, Plus, ChevronDown, ChevronRight, Upload, ShieldCheck, ShieldOff, Mail,
+  Pencil, Trash2, Plus, ChevronDown, ChevronRight, Upload, ShieldCheck, ShieldOff, Mail, Bot,
+  CheckCircle2, XCircle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
@@ -2068,6 +2069,208 @@ function MerchantsSection() {
 
 // ─── Section: Integrations ────────────────────────────────────────────────────
 
+interface AiConfigResponse {
+  provider: string;
+  model: string;
+  baseUrl: string | null;
+  hasApiKey: boolean;
+  updatedAt: string | null;
+}
+
+const PROVIDER_DEFAULTS: Record<string, { model: string; label: string; keyHint: string }> = {
+  anthropic:  { model: 'claude-sonnet-4-6', label: 'Claude (Anthropic)', keyHint: 'console.anthropic.com' },
+  openai:     { model: 'gpt-4o',            label: 'OpenAI (GPT)',        keyHint: 'platform.openai.com' },
+  gemini:     { model: 'gemini-1.5-pro',    label: 'Google Gemini',       keyHint: 'aistudio.google.com' },
+  openrouter: { model: 'openai/gpt-4o',     label: 'OpenRouter',          keyHint: 'openrouter.ai/keys' },
+  none:       { model: '',                  label: 'None (disabled)',      keyHint: '' },
+};
+
+const PROVIDER_OPTIONS = [
+  { value: 'none',       label: 'None (disabled)' },
+  { value: 'anthropic',  label: 'Claude (Anthropic)' },
+  { value: 'openai',     label: 'OpenAI (GPT)' },
+  { value: 'gemini',     label: 'Google Gemini' },
+  { value: 'openrouter', label: 'OpenRouter' },
+];
+
+function AiAdvisorCard() {
+  const queryClient = useQueryClient();
+  const [provider, setProvider] = useState('none');
+  const [model, setModel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [testResult, setTestResult] = useState<{ valid: boolean; error?: string } | null>(null);
+  const [initialized, setInitialized] = useState(false);
+
+  const { data: config } = useQuery<AiConfigResponse>({
+    queryKey: ['settings', 'ai-config'],
+    queryFn: () => api.get('/settings/ai-config').then((r) => r.data as AiConfigResponse),
+  });
+
+  // Seed form from fetched config once
+  useEffect(() => {
+    if (config && !initialized) {
+      setProvider(config.provider);
+      setModel(config.model || PROVIDER_DEFAULTS[config.provider]?.model || '');
+      setBaseUrl(config.baseUrl ?? '');
+      setInitialized(true);
+    }
+  }, [config, initialized]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      api.put('/settings/ai-config', {
+        provider,
+        model,
+        apiKey: apiKey || undefined,
+        baseUrl: baseUrl || undefined,
+      }).then((r) => r.data as AiConfigResponse),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'ai-config'] });
+      setApiKey('');
+      setTestResult(null);
+      notify.success('AI configuration saved');
+    },
+    onError: (err: any) => notify.error('Failed to save', err?.response?.data?.error ?? 'Unknown error'),
+  });
+
+  const testMutation = useMutation({
+    mutationFn: () =>
+      api.post('/settings/ai-config/test').then((r) => r.data as { valid: boolean; error?: string }),
+    onSuccess: (data) => setTestResult(data),
+    onError: () => setTestResult({ valid: false, error: 'Request failed' }),
+  });
+
+  function handleProviderChange(newProvider: string) {
+    setProvider(newProvider);
+    setModel(PROVIDER_DEFAULTS[newProvider]?.model ?? '');
+    setBaseUrl('');
+    setTestResult(null);
+  }
+
+  const isConfigured = config && config.provider !== 'none' && config.hasApiKey;
+  const keyHint = PROVIDER_DEFAULTS[provider]?.keyHint ?? '';
+
+  return (
+    <Card padding="lg">
+      {/* Header + status */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        <Bot size={18} color="var(--color-primary)" />
+        <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>AI Advisor</span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+        <span style={{
+          width: 8, height: 8, borderRadius: '50%',
+          backgroundColor: isConfigured ? 'var(--color-success, #22c55e)' : 'var(--color-text-muted)',
+          display: 'inline-block', flexShrink: 0,
+        }} />
+        <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+          {isConfigured
+            ? `Configured — ${PROVIDER_DEFAULTS[config.provider]?.label ?? config.provider} (${config.model})`
+            : 'Not configured'}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+        {/* Provider */}
+        <div>
+          <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', display: 'block', marginBottom: '0.375rem' }}>
+            Provider
+          </label>
+          <Select
+            value={provider}
+            onChange={(e) => handleProviderChange(e.target.value)}
+            options={PROVIDER_OPTIONS}
+          />
+        </div>
+
+        {/* Model */}
+        {provider !== 'none' && (
+          <div>
+            <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', display: 'block', marginBottom: '0.375rem' }}>
+              Model
+            </label>
+            <Input
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder={PROVIDER_DEFAULTS[provider]?.model ?? 'Enter model name'}
+            />
+          </div>
+        )}
+
+        {/* API Key */}
+        {provider !== 'none' && (
+          <div>
+            <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', display: 'block', marginBottom: '0.375rem' }}>
+              API Key
+              {keyHint && (
+                <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: '0.5rem' }}>
+                  — get yours at {keyHint}
+                </span>
+              )}
+            </label>
+            <Input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={config?.hasApiKey && config.provider === provider ? '••••••••' : 'Enter API key'}
+            />
+          </div>
+        )}
+
+        {/* Base URL (OpenRouter only) */}
+        {provider === 'openrouter' && (
+          <div>
+            <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', display: 'block', marginBottom: '0.375rem' }}>
+              API Base URL
+            </label>
+            <Input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://openrouter.ai/api/v1"
+            />
+          </div>
+        )}
+
+        {/* Test result */}
+        {testResult && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            fontSize: '0.8125rem',
+            color: testResult.valid ? 'var(--color-success, #22c55e)' : 'var(--color-danger, #ef4444)',
+          }}>
+            {testResult.valid
+              ? <><CheckCircle2 size={14} /> Connection successful</>
+              : <><XCircle size={14} /> {testResult.error ?? 'Connection failed'}</>}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+          >
+            Save
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={testMutation.isPending}
+            onClick={() => testMutation.mutate()}
+            disabled={provider === 'none'}
+          >
+            Test Connection
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function IntegrationsSection() {
   const testEmailMutation = useMutation({
     mutationFn: () => api.post('/settings/email/test'),
@@ -2080,6 +2283,9 @@ function IntegrationsSection() {
       <SectionHeader title="Integrations" description="Configure external services used by Kuber." />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 560 }}>
+        {/* AI Advisor */}
+        <AiAdvisorCard />
+
         {/* SMTP */}
         <Card padding="lg">
           <div style={{ marginBottom: '0.75rem' }}>
