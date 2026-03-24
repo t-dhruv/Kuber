@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-23 (Sprint 7 complete)
+> Last updated: 2026-03-23 (Sprint 8 complete)
 
 ---
 
@@ -27,6 +27,11 @@
 | Tags Management | 🟢 Done | Settings > Tags CRUD with color swatches and transaction counts |
 | Transaction Stats | 🟢 Done | Summary panel: count, spending, largest, average, date range |
 | Data Downloads | 🟢 Done | Transactions + account balances CSV wired to real endpoints |
+| Debt Goals | 🟢 Done | Pay Down tab: debt cards, live balance, payoff summary, Add modal |
+| Cash Flow Merchants | 🟢 Done | Merchant breakdown tab with ranked list + percentage bars |
+| Recurring Calendar | 🟢 Done | Calendar view toggle: monthly grid with color-coded bill chips |
+| Weekly Recap | 🟢 Done | Dashboard widget: spending Δ, net worth Δ, top category, upcoming bills |
+| Merchants Settings | 🟢 Done | Settings > Merchants: search, sort, inline edit, delete |
 | E2E Tests | 🟢 Done | Playwright setup + smoke tests (7) + auth tests (3); `npm run test:e2e` |
 | Unit Tests | 🔴 None | Server lib unit tests still missing |
 | Docker prod | 🟢 Done | Multi-stage Dockerfiles, docker-compose.prod.yml, nginx/prod.conf |
@@ -46,6 +51,27 @@
 ---
 
 ## Sprint Log
+
+### Sprint 8 — Debt Goals, Merchant Breakdown, Calendar, Weekly Recap, Merchants UI (2026-03-23)
+**Goal:** Post-release backlog — fill remaining Monarch feature gaps.
+
+**Completed:**
+- [x] `GET /goals/accounts-for-debt` — CREDIT_CARD/LOAN accounts for goal linking
+- [x] Debt goals: live `currentAmount` from linked account balance, `linkedAccount` in response
+- [x] `DebtGoalCard`: paid off / remaining / progress bar / account chip
+- [x] `AddDebtGoalModal`: name, total debt, monthly payment, account dropdown, payoff date
+- [x] `PayDownSummary`: total debt remaining / total monthly / estimated debt-free date
+- [x] `ContributeModal` updated to be debt-aware
+- [x] Cash Flow `/month`: `byMerchant` on income + expenses (displayName fallback chain)
+- [x] `CashFlowPage`: Merchants tab with ranked list, percentage bars, tx count, Show more
+- [x] `RecurringPage`: Calendar view — monthly grid, color chips (green/red/blue), legend
+- [x] `GET /dashboard/weekly-recap`: spending Δ, net worth Δ, top category, upcoming bills
+- [x] `WeeklyRecapWidget`: 3 stat tiles + upcoming bills strip + empty state
+- [x] `GET/PUT/DELETE /settings/merchants` with tx counts + null-safe delete
+- [x] `MerchantsSection`: search, sort toggle, inline edit, show more, delete confirm
+- [x] TypeScript: zero errors client + server
+
+---
 
 ### Sprint 7 — Structured Advice Library + Tags + Transaction Stats (2026-03-23)
 **Goal:** Release polish — structured advice, tags management, transaction stats, wired data downloads.
