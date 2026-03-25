@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-24 (Sprint 12 complete)
+> Last updated: 2026-03-24 (Sprint 13 complete — v1.0.0-beta released)
 
 ---
 
@@ -52,12 +52,29 @@
 | CSP Headers | 🟢 Done | Helmet CSP with self + unsafe-inline for Tailwind |
 | Account Lockout | 🟢 Done | 5/8/10 attempts → 15m/1h/24h, unlock via email |
 | Open Source docs | 🟢 Done | LICENSE (MIT), CONTRIBUTING.md, README.md (full rewrite) |
+| CHANGELOG | 🟢 Done | Keep a Changelog format, full v1.0.0-beta entry |
+| Container Registry | 🟢 Done | .github/workflows/release.yml — GHCR publish on v* tag, auto GitHub Release |
+| Self-Hosting Guide | 🟢 Done | docs/SELF_HOSTING.md — full ops guide: quickstart, env vars, HTTPS, backup, troubleshooting |
+| v1.0.0-beta | 🟢 Tagged | All packages at 1.0.0-beta |
 
 **Legend:** 🟢 Done | ⚠️ Partial / Needs work | 🔴 Not done / Broken
 
 ---
 
 ## Sprint Log
+
+### Sprint 13 — Release Prep: CHANGELOG, Container Registry, Self-Hosting Guide (2026-03-24)
+**Goal:** Ship v1.0.0-beta as a polished open source release.
+
+**Completed:**
+- [x] `CHANGELOG.md` — Keep a Changelog format; full v1.0.0-beta entry covering all 18+ feature areas
+- [x] `.github/workflows/release.yml` — on `v*.*.*` tag: builds + pushes server + client Docker images to GHCR; creates GitHub Release with changelog extract; prerelease flag auto-set for `-beta`/`-alpha`/`-rc`
+- [x] `docs/SELF_HOSTING.md` — comprehensive ops guide: 5-step quickstart, env vars reference table, update workflow, pre-built image snippet, AI Advisor setup, HTTPS/Let's Encrypt, reverse proxy, DB backup/restore, troubleshooting table, security checklist
+- [x] `README.md` — Self-Hosting section updated to link to full guide
+- [x] `package.json` (root + server + client) — version bumped to `1.0.0-beta`
+- [x] Git tag `v1.0.0-beta` created
+
+---
 
 ### Sprint 12 — CSV Import, Mobile Polish, Unit Tests (2026-03-24)
 **Goal:** Pre-release quality — transaction import, mobile responsiveness, test coverage.

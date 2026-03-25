@@ -1,5 +1,6 @@
 {
   "name": "kuber",
+  "version": "1.0.0-beta",
   "private": true,
   "packageManager": "npm@11.6.2",
   "workspaces": [

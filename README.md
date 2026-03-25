@@ -48,21 +48,28 @@ Kuber is a full-featured personal finance web app you run on your own server. Tr
 
 ---
 
-## Quick Start (Self-Host)
+## Self-Hosting
 
-**Prerequisites:** Docker and Docker Compose.
+Kuber is built to run on your own hardware. The full deployment guide covers quick start, environment variables, HTTPS with Let's Encrypt, backups, updates, and troubleshooting:
+
+**[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**
+
+### Quick Start
+
+**Prerequisites:** Docker and Docker Compose v2.
 
 ```bash
 git clone https://github.com/yourusername/kuber.git
 cd kuber
 cp .env.example .env
-# Edit .env — set JWT secrets, database password, and any optional values
+# Edit .env — set JWT_SECRET, JWT_REFRESH_SECRET, and POSTGRES_PASSWORD
 docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
 ```
 
 Visit **http://localhost** and create your account on first run.
 
-> The `.env.example` file documents every variable. At minimum, set `JWT_SECRET` and `JWT_REFRESH_SECRET` to long random strings before going live.
+> At minimum, set `JWT_SECRET` and `JWT_REFRESH_SECRET` to long random strings before going live. Generate them with `openssl rand -base64 64`. See the [full self-hosting guide](docs/SELF_HOSTING.md) for all configuration options, HTTPS setup, and backup instructions.
 
 ---
 
