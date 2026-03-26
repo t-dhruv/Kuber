@@ -34,6 +34,8 @@ import assetsRouter from './routes/assets';
 import liabilitiesRouter from './routes/liabilities';
 import taxAccountsRouter from './routes/taxAccounts';
 import fxRouter from './routes/fx';
+import autoCategorizeRouter from './routes/autoCategorize';
+import receiptsRouter from './routes/receipts';
 import { requireAuth } from './middleware/auth';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
 import { runAccountBalanceSnapshot } from './lib/accountBalanceJob';
@@ -101,6 +103,8 @@ app.use('/api/v1/assets', requireAuth, assetsRouter);
 app.use('/api/v1/liabilities', requireAuth, liabilitiesRouter);
 app.use('/api/v1/tax-accounts', requireAuth, taxAccountsRouter);
 app.use('/api/v1/fx', requireAuth, fxRouter);
+app.use('/api/v1/auto-categorize', requireAuth, autoCategorizeRouter);
+app.use('/api/v1/receipts', requireAuth, receiptsRouter);
 
 function checkIfDigestDue(schedule: { frequency: string; lastSentAt: Date | null }, now: Date): boolean {
   const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday

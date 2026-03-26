@@ -3,15 +3,17 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Plus, ChevronRight, RotateCcw, X, Check,
-  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors,
+  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card,
+  Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card, notify,
 } from '@/components/ui';
 import { ImportModal } from './components/ImportModal';
 import { SplitTransactionModal } from './components/SplitTransactionModal';
 import { DuplicateReviewModal } from './components/DuplicateReviewModal';
+import { ReceiptOcrModal } from './components/ReceiptOcrModal';
+import { AiSetupNudge } from '@/components/ui/AiSetupNudge';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1238,6 +1240,8 @@ export default function TransactionsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [showAutoCatPanel, setShowAutoCatPanel] = useState(false);
   const [splitTxn, setSplitTxn] = useState<Transaction | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
 
@@ -1269,6 +1273,28 @@ export default function TransactionsPage() {
   });
 
   const duplicateCount = duplicatesData?.count ?? 0;
+
+  // ── Auto-categorize ──
+
+  const { data: autoCatStatus, refetch: refetchAutoCatStatus, isFetching: autoCatStatusFetching } = useQuery<{
+    configured: boolean;
+    notConfigured?: boolean;
+    uncategorizedCount: number;
+  }>({
+    queryKey: ['auto-categorize-status'],
+    queryFn: () => api.get('/auto-categorize/status').then((r) => r.data),
+    enabled: false,
+  });
+
+  const autoCatMutation = useMutation({
+    mutationFn: () => api.post('/auto-categorize/batch').then((r) => r.data as { updated: number }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      setShowAutoCatPanel(false);
+      notify.success(`Updated ${data.updated} transaction${data.updated !== 1 ? 's' : ''}`);
+    },
+    onError: () => notify.error('Auto-categorize failed. Please try again.'),
+  });
 
   const accounts = accountsData?.groups?.flatMap((g) => g.accounts) ?? [];
   const categories = categoriesData ?? [];
@@ -1438,6 +1464,27 @@ export default function TransactionsPage() {
           )}
         </button>
 
+        {/* Auto-categorize button */}
+        <Button
+          variant="secondary"
+          icon={<Sparkles size={14} />}
+          onClick={async () => {
+            setShowAutoCatPanel(true);
+            await refetchAutoCatStatus();
+          }}
+        >
+          Auto-categorize
+        </Button>
+
+        {/* Scan Receipt button */}
+        <Button
+          variant="secondary"
+          icon={<Camera size={14} />}
+          onClick={() => setShowReceiptModal(true)}
+        >
+          Scan Receipt
+        </Button>
+
         {/* Import CSV button */}
         <Button
           variant="secondary"
@@ -1456,6 +1503,44 @@ export default function TransactionsPage() {
           Add
         </Button>
       </div>
+
+      {/* Auto-categorize panel */}
+      {showAutoCatPanel && (
+        <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 flex flex-col gap-3">
+          {autoCatStatusFetching && (
+            <p className="text-sm text-[color:var(--text-secondary)]">Checking AI status…</p>
+          )}
+          {!autoCatStatusFetching && autoCatStatus?.notConfigured && (
+            <>
+              <AiSetupNudge message="Auto-categorize requires an AI provider. Set one up to automatically categorize your uncategorized transactions." />
+              <div className="flex justify-end">
+                <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--text-secondary)] hover:underline">Dismiss</button>
+              </div>
+            </>
+          )}
+          {!autoCatStatusFetching && autoCatStatus && !autoCatStatus.notConfigured && (
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm text-[color:var(--text-secondary)]">
+                {autoCatStatus.uncategorizedCount > 0
+                  ? `Auto-categorize ${autoCatStatus.uncategorizedCount} uncategorized transaction${autoCatStatus.uncategorizedCount !== 1 ? 's' : ''}?`
+                  : 'All transactions are already categorized.'}
+              </p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--text-secondary)] hover:underline">Cancel</button>
+                {autoCatStatus.uncategorizedCount > 0 && (
+                  <Button
+                    variant="primary"
+                    disabled={autoCatMutation.isPending}
+                    onClick={() => autoCatMutation.mutate()}
+                  >
+                    {autoCatMutation.isPending ? 'Categorizing…' : 'Confirm'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bulk actions */}
       {someSelected && (
@@ -1659,6 +1744,13 @@ export default function TransactionsPage() {
         onClose={() => setShowImportModal(false)}
         onImported={() => queryClient.invalidateQueries({ queryKey: ['transactions'] })}
       />
+
+      {/* Receipt OCR modal */}
+      {showReceiptModal && (
+        <ReceiptOcrModal
+          onClose={() => setShowReceiptModal(false)}
+        />
+      )}
 
       {/* Duplicate review modal */}
       <DuplicateReviewModal
