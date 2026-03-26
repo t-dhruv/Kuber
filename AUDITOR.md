@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-25 (Monarch parity sprints complete — E2E 10/10 green)
+> Last updated: 2026-03-26 (Sprint 14 roadmap locked — AI-first transformation begins)
 
 ---
 
@@ -69,11 +69,222 @@
 | Self-Hosting Guide | 🟢 Done | docs/SELF_HOSTING.md — full ops guide: quickstart, env vars, HTTPS, backup, troubleshooting |
 | v1.0.0-beta | 🟢 Tagged | All packages at 1.0.0-beta |
 
+| Drop Zone Import | 🔴 Planned | Sprint 14 — drag-drop CSV/PDF, bank auto-detect, dedup, preview |
+| AI Ingest Pipeline | 🔴 Planned | Sprint 14 — bank format registry, PDF parser, SHA256 dedup, import history |
+| PDF Statement Parser | 🔴 Planned | Sprint 15 — pdf-parse + AI extraction + tesseract fallback |
+| Email/IMAP Watcher | 🔴 Planned | Sprint 15 — optional email connector, Amazon/PayPal parsers |
+| Proactive AI Engine | 🔴 Planned | Sprint 16 — anomaly/fraud detection, subscription auto-detect, missed payments |
+| Auto-Categorization | 🔴 Planned | Sprint 16 — local qwen2.5:0.5b model, confidence scoring |
+| Receipt OCR | 🔴 Planned | Sprint 16 — moondream2 vision model, camera capture |
+| Investment Intelligence | 🔴 Planned | Sprint 17 — YouTube transcripts, Google News per holding, RRSP/TFSA hints |
+| Multi-Currency | 🔴 Planned | Sprint 17 — CAD/USD, live FX rates |
+| PWA / Mobile | 🔴 Planned | Sprint 18 — manifest, service worker, voice input, onboarding wizard |
+
 **Legend:** 🟢 Done | ⚠️ Partial / Needs work | 🔴 Not done / Broken
 
 ---
 
+## AI-First Roadmap (Sprints 14–18)
+
+> Kuber is evolving from a manual finance tracker into an AI-first financial co-pilot.
+> The user manages bank imports themselves (no Plaid, no credential sharing) via a Drop Zone UI.
+> AI runs locally (ultra-lightweight models) or via the user's configured cloud provider.
+
+### Architecture Principles
+- **No Plaid, no bank credentials** — user downloads CSV/PDF from their bank and drops it into Kuber
+- **AI-optional** — every AI feature gracefully degrades if no provider configured
+- **Local-first AI** — ultra-lightweight Ollama models run on the user's machine (qwen2.5:0.5b 400MB, phi3.5-mini 2.2GB, moondream2 1.8GB, all-minilm 45MB)
+- **Privacy by default** — no transaction data leaves the user's infrastructure unless they choose a cloud AI provider
+- **n8n-optional** — advanced automation via n8n Docker service (not required for core features)
+
+---
+
+### Sprint 14 — Drop Zone + AI Ingest Pipeline (NEXT UP)
+**Goal:** Let users drop CSV or PDF bank statements into Kuber. Auto-detect bank format, parse, dedup, preview, and confirm import. No manual column mapping for known banks.
+
+#### New Components
+| File | Purpose |
+|------|---------|
+| `client/src/pages/import/ImportPage.tsx` | New `/import` route — DropZone, ImportPreview, ImportHistory |
+| `client/src/pages/import/components/DropZone.tsx` | Drag-drop or click-to-upload for CSV/PDF |
+| `client/src/pages/import/components/ImportPreview.tsx` | Table showing new/duplicate/flagged rows with color coding |
+| `client/src/pages/import/components/ImportHistory.tsx` | Log of past imports (file name, date, row count, status) |
+| `server/src/lib/bankFormats.ts` | Bank format registry — column mappings per bank, auto-detected from CSV headers |
+| `server/src/lib/pdfParser.ts` | pdf-parse primary + AI extraction + tesseract.js fallback for scanned PDFs |
+| `server/src/lib/importDedup.ts` | SHA256 dedup hash: `date + normalizedDescription + amount` |
+| `server/src/routes/import.ts` | New route file — parse, confirm, history, webhook endpoints |
+
+#### API Routes
+```
+POST /api/v1/import/parse      — upload file, returns detected bank + parsed rows + dedup flags
+POST /api/v1/import/confirm    — bulk-create accepted rows, returns created count
+GET  /api/v1/import/history    — paginated log of past imports for household
+POST /api/v1/import/webhook    — n8n webhook receiver (same contract as /parse)
+```
+
+#### Standard Ingest Schema (internal)
+```json
+{
+  "source": "td-canada",
+  "account": "TD Chequing ••4821",
+  "transactions": [
+    { "date": "2026-03-25", "description": "TIM HORTONS", "amount": -4.75, "type": "debit", "reference": "sha256hash" }
+  ]
+}
+```
+
+#### Bank Format Registry (planned)
+| Bank | Country | Format |
+|------|---------|--------|
+| TD Canada Trust | CA | CSV: Date, Description, Debit, Credit, Balance |
+| RBC Royal Bank | CA | CSV: Account Type, Account Number, Transaction Date, Cheque Number, Description 1, Description 2, CAD$, USD$ |
+| CIBC | CA | CSV: Date, Description, Debit, Credit |
+| BMO | CA | CSV: Date, Description, Withdrawals, Deposits, Balance |
+| Scotiabank | CA | CSV: Date, Description, Amount |
+| Chase | US | CSV: Transaction Date, Post Date, Description, Category, Type, Amount, Memo |
+| Bank of America | US | CSV: Posted Date, Reference Number, Payee, Address, Amount |
+| Wells Fargo | US | CSV: Date, Amount, *, *, Description |
+| Capital One | US | CSV: Transaction Date, Posted Date, Card No., Description, Category, Debit, Credit |
+| American Express | US | CSV: Date, Description, Amount |
+
+#### Dedup Logic
+```
+hash = SHA256(date + normalizeDescription(description) + Math.abs(amount).toFixed(2))
+```
+- `normalizeDescription`: lowercase, remove extra whitespace, strip trailing reference codes
+- Import preview shows each row as: `NEW` (green) | `DUPLICATE` (gray, hidden by default) | `REVIEW` (yellow, amount/date mismatch)
+
+#### Prisma Schema Addition
+```prisma
+model ImportHistory {
+  id            String   @id @default(cuid())
+  householdId   String
+  filename      String
+  bankSource    String?
+  rowsTotal     Int
+  rowsImported  Int
+  rowsDuplicate Int
+  rowsSkipped   Int
+  status        String   // completed | partial | failed
+  createdAt     DateTime @default(now())
+
+  household     Household @relation(fields: [householdId], references: [id])
+  @@map("import_history")
+}
+```
+
+#### Sidebar Addition
+- Add "Import" nav item (Upload icon) between Transactions and Reports
+
+#### Dependencies to add
+```
+server: pdf-parse, @types/pdf-parse, tesseract.js (optional, lazy-loaded)
+```
+
+---
+
+### Sprint 15 — Bank Template Expansion + Email Connector (PLANNED)
+**Goal:** Complete bank format registry (all 10 banks), PDF statement parser hardened, optional email/IMAP watcher for Amazon & PayPal order receipts.
+
+#### Planned Work
+- [ ] Complete all 10 bank CSV templates with integration tests using real sample files
+- [ ] PDF parser: table extraction for TD/RBC/CIBC/Chase PDF statements
+- [ ] `server/src/lib/emailConnector.ts` — optional IMAP connection (user credentials stored encrypted)
+- [ ] Amazon order parser: extract items, amounts, dates from order confirmation emails
+- [ ] PayPal parser: parse PayPal receipt emails into transactions
+- [ ] n8n workflow template: watch email folder → POST to `/api/v1/import/webhook`
+- [ ] Import page: email connector setup UI in Settings > Integrations
+
+---
+
+### Sprint 16 — Proactive AI Engine (PLANNED)
+**Goal:** Kuber proactively surfaces insights, catches anomalies, auto-categorizes, and detects suspicious activity — without the user asking.
+
+#### AI Features
+| Feature | Model | Trigger |
+|---------|-------|---------|
+| Auto-categorization | qwen2.5:0.5b (local) or cloud provider | On import + uncategorized txns |
+| Anomaly detection | phi3.5-mini (local) or cloud | Daily background job |
+| Fraud / unusual spending alert | phi3.5-mini (local) or cloud | On each import |
+| Subscription auto-detection | Rule engine + AI validation | Weekly scan |
+| Missed payment warning | Recurring + Accounts query | Daily job |
+| Receipt OCR | moondream2 (local vision model) | On photo upload |
+| AI confidence scoring | Embedding similarity (all-minilm) | During categorization |
+
+#### Notification Center
+- New `Notification` model: type, title, body, severity (info/warning/alert), read, linkedEntityId
+- Bell icon in Header with unread badge
+- Notification drawer with filter by type
+- `GET /api/v1/notifications` + `PUT /api/v1/notifications/:id/read` + `DELETE /api/v1/notifications/clear`
+
+#### Local AI Model Setup (Ollama)
+```yaml
+# docker-compose.yml addition (optional service)
+ollama:
+  image: ollama/ollama
+  ports: ["11434:11434"]
+  volumes: ["ollama_data:/root/.ollama"]
+  profiles: ["ai"]  # opt-in: docker-compose --profile ai up
+```
+User pulls models: `ollama pull qwen2.5:0.5b && ollama pull moondream`
+
+---
+
+### Sprint 17 — Investment Intelligence + Multi-Currency (PLANNED)
+**Goal:** Kuber becomes a wealth co-pilot — tracks investments with AI-powered context, handles CAD/USD seamlessly.
+
+#### Investment Intelligence
+- YouTube transcript pipeline (via n8n): subscribe to channels (e.g. Ben Felix, Rational Reminder), pull transcripts weekly, extract ticker mentions + sentiment
+- Google News feed per holding: `GET /api/v1/investments/news?ticker=AAPL`
+- Wealth trajectory projections: Monte Carlo simulation on current portfolio + savings rate
+- RRSP / TFSA / 401k / IRA optimization hints based on income bracket + current contributions
+- Tax-loss harvesting alerts (CA + US rules)
+
+#### Multi-Currency
+- `Transaction.currency` field (default: household base currency)
+- `UserPreference.baseCurrency` (CAD or USD)
+- Live FX rates via Open Exchange Rates (free tier) or ECB feed
+- Currency toggle in Accounts and Reports
+- Historical FX for accurate net worth charting
+
+---
+
+### Sprint 18 — PWA + Mobile UX + Onboarding (PLANNED)
+**Goal:** Kuber works as a first-class mobile app (PWA), with a smooth onboarding flow for new users.
+
+#### PWA
+- `vite-plugin-pwa` — manifest, service worker, offline shell
+- Push notifications via Web Push API (notify on anomaly/alert even when tab closed)
+- Camera receipt capture — tap to photograph, moondream2 extracts merchant + amount + date
+- Voice input — Web Speech API → transcript → AI parse to transaction
+
+#### Onboarding Wizard
+- First-login flow: set base currency → add accounts → set income → configure AI provider → import first statement
+- Progress indicator, skip-able steps, re-accessible from Settings > Get Started
+
+---
+
 ## Sprint Log
+
+### Sprint 14 — Drop Zone + AI Ingest Pipeline (PLANNED — next up)
+**Goal:** Replace manual CSV column mapping with a smart Drop Zone that auto-detects bank format, deduplicates, and previews before import. Foundation for all AI ingestion features.
+
+**Status:** Architecture locked. Implementation begins after AUDITOR.md update.
+
+**Planned deliverables:**
+- [ ] `client/src/pages/import/ImportPage.tsx` — `/import` route
+- [ ] `client/src/pages/import/components/DropZone.tsx` — drag-drop + click upload
+- [ ] `client/src/pages/import/components/ImportPreview.tsx` — new/duplicate/flagged row table
+- [ ] `client/src/pages/import/components/ImportHistory.tsx` — import log
+- [ ] `server/src/lib/bankFormats.ts` — format registry (TD, RBC, CIBC, BMO, Scotiabank, Chase, BofA, Wells Fargo, Capital One, Amex)
+- [ ] `server/src/lib/pdfParser.ts` — pdf-parse + AI extraction + tesseract fallback
+- [ ] `server/src/lib/importDedup.ts` — SHA256 dedup hashing
+- [ ] `server/src/routes/import.ts` — parse / confirm / history / webhook endpoints
+- [ ] `ImportHistory` Prisma model + migration
+- [ ] Sidebar nav: Import item added
+- [ ] E2E tests for import flow
+
+---
 
 ### Sprint 13 — Release Prep: CHANGELOG, Container Registry, Self-Hosting Guide (2026-03-24)
 **Goal:** Ship v1.0.0-beta as a polished open source release.
