@@ -60,6 +60,7 @@ model Household {
   duplicateDismissals     DuplicateDismissal[]
   reportSchedule          ReportSchedule?
   importHistory           ImportHistory[]
+  operationCheckpoints    OperationCheckpoint[]
 
   @@map("households")
 }
@@ -574,4 +575,20 @@ model ImportHistory {
 
   @@index([householdId, createdAt])
   @@map("import_history")
+}
+
+model OperationCheckpoint {
+  id          String   @id @default(cuid())
+  householdId String
+  type        String   // "bulk-import" | "rule-apply-all" | "bulk-categorize" | "bulk-delete"
+  label       String   // human-readable description e.g. "Imported 47 rows from td-statement.csv"
+  snapshot    Json     // array of { id, amount, description, categoryId, merchantId, isHidden, date }
+  txnCount    Int
+  rolledBack  Boolean  @default(false)
+  expiresAt   DateTime // now + 7 days
+  createdAt   DateTime @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, createdAt])
+  @@map("operation_checkpoints")
 }

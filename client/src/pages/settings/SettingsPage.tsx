@@ -2494,6 +2494,8 @@ function ReportDigestSection() {
   );
 }
 
+import RecentOperationsSection from './components/RecentOperationsSection';
+
 // ─── Section: Data ────────────────────────────────────────────────────────────
 
 async function downloadFile(url: string, filename: string) {
@@ -2565,6 +2567,11 @@ function DataSection() {
               </Button>
             </div>
           </div>
+        </Card>
+
+        {/* Recent Operations / Rollback */}
+        <Card padding="lg">
+          <RecentOperationsSection />
         </Card>
 
         {/* Delete history */}

@@ -1,0 +1,62 @@
+{
+  "id": "weekly-import-reminder",
+  "name": "Weekly Bank Import Reminder",
+  "active": false,
+  "version": 1,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Toronto"
+  },
+  "nodes": [
+    {
+      "id": "node-cron-trigger",
+      "name": "Every Monday 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-send-email",
+      "name": "Send Reminder Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-credential-id",
+          "name": "SMTP Email"
+        }
+      },
+      "parameters": {
+        "fromEmail": "kuber@yourdomain.com",
+        "toEmail": "REPLACE_WITH_YOUR_EMAIL",
+        "subject": "Reminder: Import your bank statements into Kuber",
+        "emailType": "text",
+        "message": "Hi,\n\nThis is your weekly reminder to export your bank CSV and import it into Kuber.\n\nSteps:\n1. Log into your bank's online portal\n2. Export transactions as CSV (usually under Statements or Transaction History)\n3. Open Kuber at http://localhost:3000\n4. Go to Transactions → Import\n5. Upload the CSV file\n\nStay on top of your finances!\n\n— Kuber"
+      }
+    }
+  ],
+  "connections": {
+    "Every Monday 8am": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

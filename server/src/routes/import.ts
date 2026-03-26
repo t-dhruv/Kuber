@@ -10,6 +10,7 @@
 
 import { Router } from 'express';
 import multer from 'multer';
+import { createCheckpoint } from '../lib/checkpoint.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.js';
@@ -422,6 +423,23 @@ router.post('/confirm', async (req: AuthRequest, res) => {
         }
       }
     });
+
+    // Create rollback checkpoint
+    if (imported > 0) {
+      // We need the IDs of newly created transactions — re-query by hash match or by createdAt
+      // Simplest: query transactions created in the last few seconds for this account
+      const recentIds = await prisma.transaction.findMany({
+        where: { accountId, householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
+        select: { id: true },
+      });
+      await createCheckpoint(
+        prisma,
+        req.householdId!,
+        'bulk-import',
+        `Imported ${imported} rows from ${filename ?? 'unknown'}`,
+        recentIds.map((t) => t.id)
+      );
+    }
 
     // Record import history
     await prisma.importHistory.create({

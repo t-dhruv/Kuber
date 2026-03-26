@@ -71,8 +71,8 @@
 
 | Drop Zone Import | 🟢 Done | /import page — drag-drop CSV/PDF, bank auto-detect, dedup, preview, confirm |
 | AI Ingest Pipeline | 🟢 Done | bankFormats (10 banks), pdfParser, importDedup SHA256, ImportHistory model |
-| AI Streaming Bug | 🔴 Bug | Sprint 14.1 — SSE streaming broken on Budget + Advice pages (and possibly elsewhere) |
-| Investment Import | 🔴 Planned | Sprint 14.1 — import CSV/PDF transactions directly into investment accounts |
+| AI Streaming Fix | 🟢 Done | Sprint 14.1 — nginx SSE block, useAiStream hook, Budget Coach, X-Accel-Buffering |
+| Investment Import | 🟢 Done | Sprint 14.1 — Questrade/Wealthsimple/IBKR/TD Direct formats, HoldingLot upsert, BUY/SELL badges |
 | n8n Automation Flows | 🔴 Planned | Sprint 15 — Docker service + workflow templates for bank email/folder watch |
 | Bulk Operation Checkpoints | 🔴 Planned | Sprint 15 — snapshot before bulk import / rule-run; one-click rollback UI |
 | PDF Statement Parser | 🔴 Planned | Sprint 15 — pdf-parse + AI extraction + tesseract fallback |
@@ -105,7 +105,7 @@
 
 ---
 
-### Sprint 14.1 — Bug Fixes + Investment Import (NEXT UP)
+### Sprint 14.1 — Bug Fixes + Investment Import ✅ COMPLETE
 **Goal:** Fix AI streaming on Budget/Advice pages (and audit full app), add investment account support to Drop Zone import.
 
 #### Bug: AI Streaming broken on Budget and Advice pages
@@ -236,7 +236,7 @@ server: pdf-parse, @types/pdf-parse, tesseract.js (optional, lazy-loaded)
 
 ---
 
-### Sprint 15 — Bank Templates + n8n Flows + Bulk Checkpoints + Email Connector (PLANNED)
+### Sprint 15 — Bank Templates + n8n Flows + Bulk Checkpoints + Email Connector (NEXT UP)
 **Goal:** Harden the import pipeline with rollback safety, ship n8n automation templates, complete bank templates, and add email connector for Amazon/PayPal.
 
 #### n8n Automation Flows
