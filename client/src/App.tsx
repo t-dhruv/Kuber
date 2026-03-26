@@ -23,6 +23,7 @@ const AdvicePage = lazy(() => import('@/pages/advice'));
 const SettingsPage = lazy(() => import('@/pages/settings'));
 const RulesPage = lazy(() => import('@/pages/rules/RulesPage'));
 const WealthPage = lazy(() => import('@/pages/wealth/WealthPage'));
+const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
 
 // ─── Loading fallback ─────────────────────────────────────────────────────────
 
@@ -187,6 +188,14 @@ export default function App() {
           element={
             <Suspense fallback={<PageLoader />}>
               <WealthPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/import"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <ImportPage />
             </Suspense>
           }
         />

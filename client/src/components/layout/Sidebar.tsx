@@ -17,6 +17,7 @@ import {
   Coins,
   Zap,
   Layers,
+  Upload,
 } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { to: '/', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
   { to: '/accounts', icon: <CreditCard size={18} />, label: 'Accounts' },
   { to: '/transactions', icon: <ArrowLeftRight size={18} />, label: 'Transactions' },
+  { to: '/import', icon: <Upload size={18} />, label: 'Import' },
   { to: '/cash-flow', icon: <TrendingUp size={18} />, label: 'Cash Flow' },
   { to: '/reports', icon: <BarChart2 size={18} />, label: 'Reports' },
   { to: '/wealth', icon: <Layers size={18} />, label: 'Wealth' },

@@ -59,6 +59,7 @@ model Household {
   wealthAiCache           WealthAiCache?
   duplicateDismissals     DuplicateDismissal[]
   reportSchedule          ReportSchedule?
+  importHistory           ImportHistory[]
 
   @@map("households")
 }
@@ -556,4 +557,21 @@ model ReportSchedule {
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@map("report_schedules")
+}
+
+model ImportHistory {
+  id            String    @id @default(cuid())
+  householdId   String
+  filename      String
+  bankSource    String?
+  rowsTotal     Int
+  rowsImported  Int
+  rowsDuplicate Int       @default(0)
+  rowsSkipped   Int       @default(0)
+  status        String    @default("completed") // completed | partial | failed
+  createdAt     DateTime  @default(now())
+  household     Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, createdAt])
+  @@map("import_history")
 }
