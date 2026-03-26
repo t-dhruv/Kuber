@@ -81,8 +81,8 @@
 | TFSA / RRSP Tracker | 🟢 Done | Sprint 15.1 — TaxAccount model, CRA rules engine, /tax-accounts API, Settings UI tab |
 | Proactive AI Engine | 🟢 Done | Sprint 16 — anomaly detection, subscription auto-detect, missed payments, daily scheduler |
 | Notification Center | 🟢 Done | Sprint 16 — household-scoped model, /notifications API, bell+drawer UI with severity badges |
-| Auto-Categorization | 🔴 Planned | Sprint 16.1 — local qwen2.5:0.5b model, confidence scoring |
-| Receipt OCR | 🔴 Planned | Sprint 16.1 — moondream2 vision model, camera capture |
+| Auto-Categorization | 🟢 Done | Sprint 16.1 — AI batch categorizer, /auto-categorize API, notConfigured nudge, toolbar button |
+| Receipt OCR | 🟢 Done | Sprint 16.1 — /receipts/ocr vision endpoint, ReceiptOcrModal, tesseract PDF fallback |
 | Investment Intelligence | 🟢 Done | Sprint 17 — Yahoo Finance RSS per holding, Monte Carlo P10/P50/P90 projections table |
 | Multi-Currency | 🟢 Done | Sprint 17 — Transaction.currency field, fxRates.ts, /fx API, live rates widget in Settings |
 | PWA / Mobile | 🟢 Done | Sprint 18 — manifest, service worker, install prompt, onboarding wizard (4-step) |
