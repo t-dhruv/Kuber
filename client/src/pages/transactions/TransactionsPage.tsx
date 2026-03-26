@@ -1,15 +1,17 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Plus, ChevronRight, RotateCcw, X, Check,
-  ChevronLeft, ChevronRight as ChevronRightIcon, Upload,
+  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card,
 } from '@/components/ui';
 import { ImportModal } from './components/ImportModal';
+import { SplitTransactionModal } from './components/SplitTransactionModal';
+import { DuplicateReviewModal } from './components/DuplicateReviewModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +53,9 @@ interface Transaction {
   isRecurring: boolean;
   needsReview: boolean;
   isHidden: boolean;
+  isPending: boolean;
+  isSplit: boolean;
+  splitDetails?: Array<{ categoryId: string; amount: number; note?: string }> | null;
 }
 
 interface TransactionListResponse {
@@ -196,28 +201,57 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
   const [tagInput, setTagInput] = useState('');
 
   // Sync form when transaction changes
-  const txnId = transaction?.id;
-  const prevTxnId = useRef<string | undefined>();
-  if (txnId !== prevTxnId.current) {
-    prevTxnId.current = txnId;
+  useEffect(() => {
     if (transaction) {
       setForm({ ...transaction });
       setShowCategoryPicker(false);
       setTagInput('');
     }
-  }
+  }, [transaction?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveMutation = useMutation({
-    mutationFn: () => api.put(`/transactions/${transaction!.id}`, {
-      description: form.merchantName,
-      date: form.date,
-      amount: form.amount,
-      categoryId: form.categoryId,
-      notes: form.notes,
-      needsReview: form.needsReview,
-      isRecurring: form.isRecurring,
-      isHidden: form.isHidden,
-    }),
+    mutationFn: async () => {
+      // 1. Save core fields
+      await api.put(`/transactions/${transaction!.id}`, {
+        description: form.merchantName,
+        date: form.date,
+        amount: form.amount,
+        categoryId: form.categoryId,
+        notes: form.notes,
+        needsReview: form.needsReview,
+        isRecurring: form.isRecurring,
+        isHidden: form.isHidden,
+      });
+
+      // 2. Sync tags
+      const originalTagIds = new Set((transaction!.tags ?? []).map((t) => t.id));
+      const formTags = form.tags ?? [];
+
+      // Resolve new tags (id starts with 'new-') — create them first
+      const resolvedTags: Tag[] = [];
+      for (const tag of formTags) {
+        if (tag.id.startsWith('new-')) {
+          const created = await api.post('/settings/tags', { name: tag.name });
+          resolvedTags.push({ id: created.data.id, name: created.data.name });
+        } else {
+          resolvedTags.push(tag);
+        }
+      }
+
+      const resolvedTagIds = new Set(resolvedTags.map((t) => t.id));
+
+      // Add tags not in original
+      const toAdd = resolvedTags.filter((t) => !originalTagIds.has(t.id)).map((t) => t.id);
+      if (toAdd.length > 0) {
+        await api.post(`/transactions/${transaction!.id}/tags`, { tagIds: toAdd });
+      }
+
+      // Remove tags not in new set
+      const toRemove = [...originalTagIds].filter((id) => !resolvedTagIds.has(id));
+      for (const tagId of toRemove) {
+        await api.delete(`/transactions/${transaction!.id}/tags/${tagId}`);
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       onSaved();
@@ -434,6 +468,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>Needs Review</span>
                 <Toggle
+                  id="txn-needs-review"
                   checked={form.needsReview ?? false}
                   onChange={(e) => setForm((f) => ({ ...f, needsReview: e.target.checked }))}
                 />
@@ -441,6 +476,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>Is Recurring</span>
                 <Toggle
+                  id="txn-is-recurring"
                   checked={form.isRecurring ?? false}
                   onChange={(e) => setForm((f) => ({ ...f, isRecurring: e.target.checked }))}
                 />
@@ -448,6 +484,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>Hide from reports</span>
                 <Toggle
+                  id="txn-is-hidden"
                   checked={form.isHidden ?? false}
                   onChange={(e) => setForm((f) => ({ ...f, isHidden: e.target.checked }))}
                 />
@@ -621,6 +658,12 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
   const [localNeedsReview, setLocalNeedsReview] = useState(searchParams.get('needsReview') === 'true');
   const [localRecurring, setLocalRecurring] = useState(searchParams.get('recurring') === 'true');
   const [localHidden, setLocalHidden] = useState(searchParams.get('hidden') === 'true');
+  const [localType, setLocalType] = useState<'all' | 'income' | 'expense'>(
+    (searchParams.get('type') as 'income' | 'expense' | null) ?? 'all'
+  );
+  const [localPending, setLocalPending] = useState(searchParams.get('pending') === 'true');
+  const [localFrom, setLocalFrom] = useState(searchParams.get('from') ?? '');
+  const [localTo, setLocalTo] = useState(searchParams.get('to') ?? '');
 
   function applyFilters() {
     const next = new URLSearchParams(searchParams);
@@ -631,6 +674,10 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
     next.delete('needsReview');
     next.delete('recurring');
     next.delete('hidden');
+    next.delete('type');
+    next.delete('pending');
+    next.delete('from');
+    next.delete('to');
     next.set('page', '1');
 
     if (localAccountId) next.set('accountId', localAccountId);
@@ -640,6 +687,10 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
     if (localNeedsReview) next.set('needsReview', 'true');
     if (localRecurring) next.set('recurring', 'true');
     if (localHidden) next.set('hidden', 'true');
+    if (localType !== 'all') next.set('type', localType);
+    if (localPending) next.set('pending', 'true');
+    if (localFrom) next.set('from', localFrom);
+    if (localTo) next.set('to', localTo);
 
     setSearchParams(next);
     onClose();
@@ -653,6 +704,10 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
     setLocalNeedsReview(false);
     setLocalRecurring(false);
     setLocalHidden(false);
+    setLocalType('all');
+    setLocalPending(false);
+    setLocalFrom('');
+    setLocalTo('');
   }
 
   function toggleCategory(id: string) {
@@ -695,6 +750,49 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
 
         {/* Filter sections */}
         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1 }}>
+          {/* Date Range */}
+          <div>
+            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+              Date Range
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>From</label>
+                <input
+                  type="date"
+                  value={localFrom}
+                  onChange={(e) => setLocalFrom(e.target.value)}
+                  style={{
+                    width: '100%', padding: '0.4rem 0.5rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border)',
+                    backgroundColor: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: '0.8125rem', fontFamily: 'inherit',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>To</label>
+                <input
+                  type="date"
+                  value={localTo}
+                  onChange={(e) => setLocalTo(e.target.value)}
+                  style={{
+                    width: '100%', padding: '0.4rem 0.5rem',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-border)',
+                    backgroundColor: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                    fontSize: '0.8125rem', fontFamily: 'inherit',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Account */}
           <div>
             <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
@@ -758,6 +856,35 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
             </div>
           </div>
 
+          {/* Type filter pills */}
+          <div>
+            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+              Type
+            </div>
+            <div style={{ display: 'flex', gap: '0.375rem' }}>
+              {(['all', 'income', 'expense'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setLocalType(t)}
+                  style={{
+                    flex: 1,
+                    padding: '0.375rem 0',
+                    borderRadius: 'var(--radius-full)',
+                    border: '1px solid var(--color-border)',
+                    cursor: 'pointer',
+                    fontSize: '0.8125rem',
+                    fontWeight: 500,
+                    backgroundColor: localType === t ? 'var(--color-accent)' : 'var(--color-surface)',
+                    color: localType === t ? '#fff' : 'var(--color-text-secondary)',
+                    transition: 'background-color 0.15s, color 0.15s',
+                  }}
+                >
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Toggles */}
           <div>
             <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.625rem' }}>
@@ -768,6 +895,7 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
                 { label: 'Needs Review only', value: localNeedsReview, onChange: setLocalNeedsReview },
                 { label: 'Recurring only', value: localRecurring, onChange: setLocalRecurring },
                 { label: 'Show Hidden', value: localHidden, onChange: setLocalHidden },
+                { label: 'Include Pending', value: localPending, onChange: setLocalPending },
               ].map(({ label, value, onChange }) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{label}</span>
@@ -874,9 +1002,10 @@ interface TransactionRowProps {
   onSelect: (id: string, checked: boolean) => void;
   onOpen: (txn: Transaction) => void;
   onMerchantEdit: (id: string, merchant: string) => void;
+  onSplit: (txn: Transaction) => void;
 }
 
-function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit }: TransactionRowProps) {
+function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSplit }: TransactionRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(txn.merchantName);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -975,7 +1104,41 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit }: Tra
             Review
           </span>
         )}
+        {txn.isPending && (
+          <span style={{
+            fontSize: '0.6875rem', fontWeight: 600,
+            padding: '0.125rem 0.375rem', borderRadius: 'var(--radius-full)',
+            backgroundColor: 'var(--color-surface-hover)', color: 'var(--color-text-muted)',
+            border: '1px solid var(--color-border)',
+          }}>
+            Pending
+          </span>
+        )}
+        {txn.isSplit && (
+          <span style={{
+            fontSize: '0.6875rem', fontWeight: 600,
+            padding: '0.125rem 0.375rem', borderRadius: 'var(--radius-full)',
+            backgroundColor: 'var(--color-accent-light)', color: 'var(--color-accent)',
+          }}>
+            Split
+          </span>
+        )}
       </div>
+
+      {/* Split button — hidden on mobile */}
+      <button
+        className="hidden sm:flex"
+        onClick={(e) => { e.stopPropagation(); onSplit(txn); }}
+        title={txn.isSplit ? 'Edit split' : 'Split transaction'}
+        style={{
+          alignItems: 'center', gap: '0.25rem',
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: txn.isSplit ? 'var(--color-accent)' : 'var(--color-text-muted)',
+          padding: 4, flexShrink: 0,
+        }}
+      >
+        <Scissors size={14} />
+      </button>
 
       {/* Amount */}
       <div style={{
@@ -1075,6 +1238,8 @@ export default function TransactionsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [splitTxn, setSplitTxn] = useState<Transaction | null>(null);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
 
   const page = parseInt(searchParams.get('page') ?? '1', 10);
   const search = searchParams.get('search') ?? '';
@@ -1095,6 +1260,15 @@ export default function TransactionsPage() {
     queryKey: ['categories'],
     queryFn: () => api.get('/categories').then((r) => r.data),
   });
+
+  const { data: duplicatesData } = useQuery<{ count: number }>({
+    queryKey: ['transactions', 'duplicates', 'count'],
+    queryFn: () =>
+      api.get('/transactions/duplicates').then((r) => ({ count: r.data.count as number })),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const duplicateCount = duplicatesData?.count ?? 0;
 
   const accounts = accountsData?.groups?.flatMap((g) => g.accounts) ?? [];
   const categories = categoriesData ?? [];
@@ -1186,6 +1360,10 @@ export default function TransactionsPage() {
     searchParams.get('needsReview'),
     searchParams.get('recurring'),
     searchParams.get('hidden'),
+    searchParams.get('type'),
+    searchParams.get('pending'),
+    searchParams.get('from'),
+    searchParams.get('to'),
   ].filter(Boolean).length;
 
   const groups = groupByDate(transactions);
@@ -1292,6 +1470,35 @@ export default function TransactionsPage() {
         />
       )}
 
+      {/* Duplicate transactions warning banner */}
+      {duplicateCount > 0 && (
+        <button
+          onClick={() => setShowDuplicateModal(true)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            width: '100%',
+            padding: '0.625rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid #f59e0b',
+            backgroundColor: '#fffbeb',
+            color: '#92400e',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            textAlign: 'left',
+          }}
+        >
+          <span style={{ fontSize: '1rem' }}>⚠</span>
+          <span>
+            <strong>{duplicateCount}</strong> potential duplicate transaction
+            {duplicateCount !== 1 ? 's' : ''} found —{' '}
+            <span style={{ textDecoration: 'underline' }}>Review</span>
+          </span>
+        </button>
+      )}
+
       {/* Transaction list */}
       <div className="overflow-x-auto">
       <Card padding="none">
@@ -1366,6 +1573,7 @@ export default function TransactionsPage() {
                     onSelect={toggleSelect}
                     onOpen={setDrawerTxn}
                     onMerchantEdit={handleMerchantEdit}
+                    onSplit={setSplitTxn}
                   />
                   {idx < group.transactions.length - 1 && (
                     <div style={{ height: 1, backgroundColor: 'var(--color-border)', marginLeft: '0.75rem' }} />
@@ -1451,6 +1659,29 @@ export default function TransactionsPage() {
         onClose={() => setShowImportModal(false)}
         onImported={() => queryClient.invalidateQueries({ queryKey: ['transactions'] })}
       />
+
+      {/* Duplicate review modal */}
+      <DuplicateReviewModal
+        isOpen={showDuplicateModal}
+        onClose={() => {
+          setShowDuplicateModal(false);
+          queryClient.invalidateQueries({ queryKey: ['transactions', 'duplicates', 'count'] });
+        }}
+      />
+
+      {/* Split transaction modal */}
+      {splitTxn && (
+        <SplitTransactionModal
+          transaction={splitTxn}
+          categories={categories}
+          isOpen={!!splitTxn}
+          onClose={() => setSplitTxn(null)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['transactions'] });
+            setSplitTxn(null);
+          }}
+        />
+      )}
     </div>
   );
 }

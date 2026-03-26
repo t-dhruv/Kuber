@@ -41,10 +41,12 @@ const routeLabels: Record<string, string> = {
   '/transactions': 'Transactions',
   '/cash-flow': 'Cash Flow',
   '/reports': 'Reports',
+  '/wealth': 'Wealth',
   '/budget': 'Budget',
   '/recurring': 'Recurring',
   '/goals': 'Goals',
   '/investments': 'Investments',
+  '/rules': 'Rules',
   '/advice': 'AI Advice',
   '/settings': 'Settings',
 };

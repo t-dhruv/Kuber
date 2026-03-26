@@ -664,7 +664,7 @@ export default function WealthPage() {
   const handleNext = () => setMonth((m) => addMonths(m, 1));
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-6">
+    <div style={{ padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">

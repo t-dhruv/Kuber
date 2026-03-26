@@ -383,9 +383,7 @@ function Step3Preview({ file, accountId, dateFormat, mapping, onBack, onDone }: 
       formData.append('accountId', accountId);
       formData.append('dateFormat', dateFormat);
       formData.append('mapping', JSON.stringify(mapping));
-      const res = await api.post<PreviewResponse>('/transactions/import/preview', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await api.post<PreviewResponse>('/transactions/import/preview', formData);
       return res.data;
     },
     retry: false,
@@ -398,9 +396,7 @@ function Step3Preview({ file, accountId, dateFormat, mapping, onBack, onDone }: 
       formData.append('accountId', accountId);
       formData.append('dateFormat', dateFormat);
       formData.append('mapping', JSON.stringify(mapping));
-      const res = await api.post<ImportResponse>('/transactions/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await api.post<ImportResponse>('/transactions/import', formData);
       return res.data;
     },
     onSuccess: (data) => {
@@ -534,11 +530,20 @@ export function ImportModal({ open, onClose, onImported }: ImportModalProps) {
   const [dateFormat, setDateFormat] = useState('YYYY-MM-DD');
   const [mapping, setMapping] = useState<CsvMapping>({ date: '', description: '', amount: '' });
 
-  const accountsQuery = useQuery<Account[]>({
+  const accountsQuery = useQuery({
     queryKey: ['accounts'],
     queryFn: async () => {
-      const res = await api.get<Account[]>('/accounts');
+      const res = await api.get('/accounts');
       return res.data;
+    },
+    // select normalizes BOTH fresh fetches AND stale cache from TransactionsPage
+    // (which stores the full { groups, netWorth } object) to a flat Account[]
+    select: (data: unknown): Account[] => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data as Account[];
+      const d = data as { groups?: Array<{ accounts: Account[] }> };
+      if (d.groups) return d.groups.flatMap((g) => g.accounts);
+      return [];
     },
     enabled: open,
   });
