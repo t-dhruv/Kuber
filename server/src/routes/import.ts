@@ -21,16 +21,21 @@ import { parseDate } from '../lib/dateUtils.js';
 const router = Router();
 
 // Multer: accept CSV and PDF, 20 MB limit
+const ALLOWED_MIMES = new Set(['text/csv', 'application/pdf', 'text/plain', 'application/octet-stream']);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok =
-      file.mimetype === 'text/csv' ||
-      file.mimetype === 'application/pdf' ||
-      file.originalname.endsWith('.csv') ||
-      file.originalname.endsWith('.pdf');
-    ok ? cb(null, true) : cb(new Error('Only CSV and PDF files are accepted'));
+    // Check extension strictly (last segment only, lowercase)
+    const ext = file.originalname.split('.').pop()?.toLowerCase();
+    const validExt = ext === 'csv' || ext === 'pdf';
+    // Allow common MIME types (browsers vary on CSV MIME)
+    const validMime = ALLOWED_MIMES.has(file.mimetype);
+    if (validExt && validMime) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV and PDF files are accepted'));
+    }
   },
 });
 
@@ -217,7 +222,10 @@ router.post('/parse', upload.single('file'), async (req: AuthRequest, res) => {
     });
   } catch (err) {
     console.error('Import parse error:', err);
-    return res.status(500).json({ error: err instanceof Error ? err.message : 'Parse failed' });
+    const msg = err instanceof Error ? err.message : 'Parse failed';
+    // Don't leak internal file paths or stack traces
+    const safeMsg = msg.startsWith('PDF') || msg.startsWith('Only') ? msg : 'Failed to parse file';
+    return res.status(500).json({ error: safeMsg });
   }
 });
 
@@ -236,9 +244,9 @@ const ConfirmRowSchema = z.object({
 
 const ConfirmSchema = z.object({
   accountId: z.string(),
-  rows: z.array(ConfirmRowSchema),
-  filename: z.string().optional(),
-  bankSource: z.string().optional(),
+  rows: z.array(ConfirmRowSchema).max(5000, 'Cannot import more than 5000 rows at once'),
+  filename: z.string().max(255).optional(),
+  bankSource: z.string().max(50).optional(),
 });
 
 router.post('/confirm', async (req: AuthRequest, res) => {
@@ -253,12 +261,19 @@ router.post('/confirm', async (req: AuthRequest, res) => {
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
-    // Pre-load categories for case-insensitive matching
+    // Pre-load categories for matching
     const categories = await prisma.category.findMany({
       where: { householdId: req.householdId! },
       select: { id: true, name: true },
     });
     const categoryMap = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
+
+    // Pre-load existing merchants to avoid N+1 inside transaction
+    const existingMerchants = await prisma.merchant.findMany({
+      where: { householdId: req.householdId! },
+      select: { id: true, name: true },
+    });
+    const merchantCache = new Map(existingMerchants.map((m) => [m.name.toLowerCase(), m.id]));
 
     let imported = 0;
     let skipped = 0;
@@ -275,28 +290,29 @@ router.post('/confirm', async (req: AuthRequest, res) => {
             continue;
           }
 
-          // Resolve category
+          // Resolve category — require description to contain category name
+          // (first-word-only match is too aggressive and causes mis-categorizations)
           let resolvedCategoryId = row.categoryId ?? null;
           if (!resolvedCategoryId) {
-            // Try to match by description keyword in category names
             const descLower = row.description.toLowerCase();
             for (const [name, id] of categoryMap) {
-              if (descLower.includes(name) || name.includes(descLower.split(' ')[0])) {
+              if (descLower.includes(name)) {
                 resolvedCategoryId = id;
                 break;
               }
             }
           }
 
-          // Find or create merchant
+          // Resolve merchant from pre-loaded cache — create only if genuinely new
           const merchantName = row.description.split(/[#\d]/)[0].trim();
-          let merchant = await tx.merchant.findFirst({
-            where: { householdId: req.householdId!, name: { equals: merchantName, mode: 'insensitive' } },
-          });
-          if (!merchant && merchantName.length > 1) {
-            merchant = await tx.merchant.create({
+          const merchantKey = merchantName.toLowerCase();
+          let merchantId: string | null = merchantCache.get(merchantKey) ?? null;
+          if (!merchantId && merchantName.length > 2) {
+            const created = await tx.merchant.create({
               data: { householdId: req.householdId!, name: merchantName, displayName: merchantName },
             });
+            merchantId = created.id;
+            merchantCache.set(merchantKey, merchantId);
           }
 
           await tx.transaction.create({
@@ -308,7 +324,7 @@ router.post('/confirm', async (req: AuthRequest, res) => {
               originalDescription: row.description,
               amount: row.amount,
               categoryId: resolvedCategoryId,
-              merchantId: merchant?.id ?? null,
+              merchantId,
               notes: row.notes ?? null,
               needsReview: !resolvedCategoryId,
             },
@@ -381,8 +397,8 @@ const WebhookRowSchema = z.object({
 
 const WebhookSchema = z.object({
   accountId: z.string(),
-  source: z.string().optional(),
-  transactions: z.array(WebhookRowSchema),
+  source: z.string().max(50).optional(),
+  transactions: z.array(WebhookRowSchema).max(5000, 'Cannot import more than 5000 rows at once'),
 });
 
 router.post('/webhook', async (req: AuthRequest, res) => {
@@ -408,30 +424,35 @@ router.post('/webhook', async (req: AuthRequest, res) => {
       )
     );
 
-    let imported = 0;
+    // Filter out duplicates and invalid dates up-front
+    const toCreate: Array<{
+      householdId: string; accountId: string; date: Date;
+      description: string; originalDescription: string; amount: number; needsReview: boolean;
+    }> = [];
     let skipped = 0;
 
     for (const txn of transactions) {
       const hash = computeDedupHash(txn.date, txn.description, txn.amount);
       if (existingHashes.has(hash)) { skipped++; continue; }
-
       const txDate = new Date(txn.date);
       if (isNaN(txDate.getTime())) { skipped++; continue; }
-
-      await prisma.transaction.create({
-        data: {
-          householdId: req.householdId!,
-          accountId,
-          date: txDate,
-          description: txn.description,
-          originalDescription: txn.description,
-          amount: txn.amount,
-          needsReview: true,
-        },
+      existingHashes.add(hash); // prevent within-batch duplicates
+      toCreate.push({
+        householdId: req.householdId!,
+        accountId,
+        date: txDate,
+        description: txn.description,
+        originalDescription: txn.description,
+        amount: txn.amount,
+        needsReview: true,
       });
-      existingHashes.add(hash);
-      imported++;
     }
+
+    // Bulk insert — single DB roundtrip
+    if (toCreate.length > 0) {
+      await prisma.transaction.createMany({ data: toCreate });
+    }
+    const imported = toCreate.length;
 
     await prisma.importHistory.create({
       data: {

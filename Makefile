@@ -34,7 +34,7 @@ test-unit:
 	npm run test
 
 test-e2e:
-	npx playwright test tests/e2e/01-auth.spec.ts tests/e2e/02-accounts.spec.ts tests/e2e/03-transactions.spec.ts tests/e2e/04-import-export.spec.ts tests/e2e/05-budgets.spec.ts tests/e2e/06-goals.spec.ts tests/e2e/07-recurring.spec.ts tests/e2e/08-investments.spec.ts tests/e2e/09-rules.spec.ts tests/e2e/10-reports.spec.ts tests/e2e/11-settings.spec.ts tests/e2e/12-advisor.spec.ts
+	npx playwright test tests/e2e/01-auth.spec.ts tests/e2e/02-accounts.spec.ts tests/e2e/03-transactions.spec.ts tests/e2e/04-import-export.spec.ts tests/e2e/05-budgets.spec.ts tests/e2e/06-goals.spec.ts tests/e2e/07-recurring.spec.ts tests/e2e/08-investments.spec.ts tests/e2e/09-rules.spec.ts tests/e2e/10-reports.spec.ts tests/e2e/11-settings.spec.ts tests/e2e/12-advisor.spec.ts tests/e2e/13-import.spec.ts
 
 clean:
 	rm -rf client/dist server/dist node_modules client/node_modules server/node_modules shared/node_modules .turbo
