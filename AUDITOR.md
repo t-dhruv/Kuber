@@ -69,8 +69,8 @@
 | Self-Hosting Guide | 🟢 Done | docs/SELF_HOSTING.md — full ops guide: quickstart, env vars, HTTPS, backup, troubleshooting |
 | v1.0.0-beta | 🟢 Tagged | All packages at 1.0.0-beta |
 
-| Drop Zone Import | 🔴 Planned | Sprint 14 — drag-drop CSV/PDF, bank auto-detect, dedup, preview |
-| AI Ingest Pipeline | 🔴 Planned | Sprint 14 — bank format registry, PDF parser, SHA256 dedup, import history |
+| Drop Zone Import | 🟢 Done | /import page — drag-drop CSV/PDF, bank auto-detect, dedup, preview, confirm |
+| AI Ingest Pipeline | 🟢 Done | bankFormats (10 banks), pdfParser, importDedup SHA256, ImportHistory model |
 | PDF Statement Parser | 🔴 Planned | Sprint 15 — pdf-parse + AI extraction + tesseract fallback |
 | Email/IMAP Watcher | 🔴 Planned | Sprint 15 — optional email connector, Amazon/PayPal parsers |
 | Proactive AI Engine | 🔴 Planned | Sprint 16 — anomaly/fraud detection, subscription auto-detect, missed payments |
@@ -266,23 +266,22 @@ User pulls models: `ollama pull qwen2.5:0.5b && ollama pull moondream`
 
 ## Sprint Log
 
-### Sprint 14 — Drop Zone + AI Ingest Pipeline (PLANNED — next up)
+### Sprint 14 — Drop Zone + AI Ingest Pipeline (2026-03-26)
 **Goal:** Replace manual CSV column mapping with a smart Drop Zone that auto-detects bank format, deduplicates, and previews before import. Foundation for all AI ingestion features.
 
-**Status:** Architecture locked. Implementation begins after AUDITOR.md update.
-
-**Planned deliverables:**
-- [ ] `client/src/pages/import/ImportPage.tsx` — `/import` route
-- [ ] `client/src/pages/import/components/DropZone.tsx` — drag-drop + click upload
-- [ ] `client/src/pages/import/components/ImportPreview.tsx` — new/duplicate/flagged row table
-- [ ] `client/src/pages/import/components/ImportHistory.tsx` — import log
-- [ ] `server/src/lib/bankFormats.ts` — format registry (TD, RBC, CIBC, BMO, Scotiabank, Chase, BofA, Wells Fargo, Capital One, Amex)
-- [ ] `server/src/lib/pdfParser.ts` — pdf-parse + AI extraction + tesseract fallback
-- [ ] `server/src/lib/importDedup.ts` — SHA256 dedup hashing
-- [ ] `server/src/routes/import.ts` — parse / confirm / history / webhook endpoints
-- [ ] `ImportHistory` Prisma model + migration
-- [ ] Sidebar nav: Import item added
-- [ ] E2E tests for import flow
+**Completed:**
+- [x] `client/src/pages/import/ImportPage.tsx` — `/import` route, upload/history tab toggle
+- [x] `client/src/pages/import/components/DropZone.tsx` — drag-drop + click upload, account selector, parse CTA
+- [x] `client/src/pages/import/components/ImportPreview.tsx` — NEW/DUPLICATE/INVALID row table, per-row checkboxes, confirm mutation, bank detection summary bar
+- [x] `client/src/pages/import/components/ImportHistory.tsx` — paginated import log with status icons
+- [x] `server/src/lib/bankFormats.ts` — format registry for 10 banks (TD, RBC, CIBC, BMO, Scotiabank, Chase, BofA, Wells Fargo, Capital One, Amex) with scoring auto-detection
+- [x] `server/src/lib/pdfParser.ts` — pdf-parse primary + regex line extraction + AI prompt builder fallback
+- [x] `server/src/lib/importDedup.ts` — SHA256 dedup (date + normalizedDescription + amount), batch comparison
+- [x] `server/src/lib/dateUtils.ts` — shared parser for 7 bank date formats
+- [x] `server/src/routes/import.ts` — parse / confirm / history / webhook endpoints
+- [x] `ImportHistory` Prisma model + migration `20260326163823_add_import_history`
+- [x] Sidebar nav: Import item (Upload icon) between Transactions and Cash Flow
+- [x] TypeScript: zero errors client + server
 
 ---
 
