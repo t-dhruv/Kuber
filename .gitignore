@@ -40,3 +40,4 @@ server/prisma/*.db-journal
 coverage/
 playwright-report/
 test-results/
+tests/e2e/artifacts
