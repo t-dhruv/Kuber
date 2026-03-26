@@ -116,6 +116,8 @@ export interface ParsedRow {
   isDuplicate: boolean;
   status: 'new' | 'duplicate' | 'invalid';
   error?: string;
+  investmentType?: 'buy' | 'sell' | 'dividend' | 'transfer' | 'fee' | 'other';
+  ticker?: string | null;
 }
 
 export interface ParseResult {

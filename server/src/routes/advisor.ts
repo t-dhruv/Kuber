@@ -27,10 +27,11 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
   const householdId = req.householdId!;
   const userId = req.userId!;
 
-  // SSE headers
+  // SSE headers — disable all proxy/CDN buffering so tokens reach client immediately
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // disables nginx proxy_buffering for this response
   res.flushHeaders();
 
   let aborted = false;
@@ -336,6 +337,110 @@ router.get('/conversations/:id/messages', async (req: AuthRequest, res: Response
 });
 
 // ─── DELETE /api/v1/advisor/conversations/:id ─────────────────────────────────
+
+// ─── POST /api/v1/advisor/budget-coach/stream ─────────────────────────────────
+// Streaming budget coach: receives current month's budget data and asks for advice.
+// Uses the same SSE pattern as /chat/stream but without conversation persistence.
+
+const budgetCoachSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM'),
+  question: z.string().max(500).optional(),
+});
+
+router.post('/budget-coach/stream', async (req: AuthRequest, res: Response) => {
+  const parse = budgetCoachSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: parse.error.issues[0]?.message ?? 'Invalid request' });
+    return;
+  }
+
+  const { month, question } = parse.data;
+  const householdId = req.householdId!;
+
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  let aborted = false;
+  req.on('close', () => { aborted = true; });
+
+  try {
+    const client = await getAiClientForHousehold(householdId, prisma);
+    if (!client) {
+      res.write(`data: ${JSON.stringify({ error: 'No AI provider configured. Set one in Settings → Integrations.' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Fetch budget data for the requested month
+    const [year, mon] = month.split('-').map(Number);
+    const startDate = new Date(year, mon - 1, 1);
+    const endDate = new Date(year, mon, 0, 23, 59, 59);
+
+    const [budgets, transactions, categories] = await Promise.all([
+      prisma.budget.findMany({
+        where: { householdId },
+        include: { category: { select: { name: true, emoji: true } } },
+      }),
+      prisma.transaction.findMany({
+        where: { householdId, date: { gte: startDate, lte: endDate }, isHidden: false },
+        select: { amount: true, categoryId: true, description: true },
+      }),
+      prisma.category.findMany({
+        where: { householdId },
+        select: { id: true, name: true, type: true },
+      }),
+    ]);
+
+    // Aggregate actuals per category
+    const actualMap = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.categoryId) {
+        actualMap.set(t.categoryId, (actualMap.get(t.categoryId) ?? 0) + Math.abs(t.amount));
+      }
+    }
+
+    const totalIncome = transactions.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+    const totalSpent = transactions.filter((t) => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+
+    const budgetSummary = budgets.map((b) => {
+      const actual = actualMap.get(b.categoryId ?? '') ?? 0;
+      const over = actual > b.amount;
+      return `${b.category?.emoji ?? ''} ${b.category?.name ?? 'Unknown'}: budgeted $${b.amount.toFixed(0)}, spent $${actual.toFixed(0)}${over ? ' ⚠️ OVER' : ''}`;
+    }).join('\n');
+
+    const uncategorized = transactions.filter((t) => !t.categoryId && t.amount < 0).length;
+
+    const systemPrompt = `You are a helpful personal finance coach. Be concise, warm, and actionable. Focus on the most important 2-3 insights.`;
+    const userMsg = question
+      ? `${question}\n\nBudget for ${month}:\nIncome: $${totalIncome.toFixed(0)}\nTotal spent: $${totalSpent.toFixed(0)}\n${budgetSummary}\nUncategorized transactions: ${uncategorized}`
+      : `Review my ${month} budget and give me 2-3 specific, actionable tips:\nIncome: $${totalIncome.toFixed(0)}\nTotal spent: $${totalSpent.toFixed(0)}\n${budgetSummary}\nUncategorized transactions: ${uncategorized}`;
+
+    const messages: AiMessage[] = [{ role: 'user', content: userMsg }];
+
+    await client.completeStream(
+      { messages, systemPrompt, maxTokens: 512, temperature: 0.7 },
+      (token: string) => {
+        if (aborted) return;
+        res.write(`data: ${JSON.stringify({ token })}\n\n`);
+      }
+    );
+
+    if (!aborted) {
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    }
+    res.end();
+  } catch (err) {
+    console.error('[advisor/budget-coach/stream]', err);
+    if (!aborted) {
+      res.write(`data: ${JSON.stringify({ error: 'AI request failed. Please try again.' })}\n\n`);
+      res.end();
+    }
+  }
+});
 
 router.delete('/conversations/:id', async (req: AuthRequest, res: Response) => {
   try {

@@ -88,13 +88,16 @@ interface ParsedRow {
   isDuplicate: boolean;
   status: 'new' | 'duplicate' | 'invalid';
   error?: string;
+  investmentType?: InvestmentRowType;
+  ticker?: string | null;
 }
 
 async function parseUploadedFile(
   buffer: Buffer,
   filename: string,
   accountId: string,
-  householdId: string
+  householdId: string,
+  accountType?: string
 ): Promise<{ rows: ParsedRow[]; bankSource: string; confidence: number; totalRows: number }> {
   const isPdf = filename.toLowerCase().endsWith('.pdf');
 
@@ -169,7 +172,7 @@ async function parseUploadedFile(
         error: `Cannot parse date: ${row.date}`,
       };
     }
-    return {
+    const base: ParsedRow = {
       date: parsedDate,
       description: row.description,
       amount: row.amount,
@@ -178,9 +181,35 @@ async function parseUploadedFile(
       isDuplicate: row.isDuplicate,
       status: row.isDuplicate ? ('duplicate' as const) : ('new' as const),
     };
+    if (accountType === 'investment') {
+      base.investmentType = detectInvestmentType(row.description, row.amount);
+      base.ticker = extractTicker(row.description);
+    }
+    return base;
   });
 
   return { rows: finalRows, bankSource, confidence, totalRows };
+}
+
+// ---------------------------------------------------------------------------
+// Investment row type detection
+// ---------------------------------------------------------------------------
+type InvestmentRowType = 'buy' | 'sell' | 'dividend' | 'transfer' | 'fee' | 'other';
+
+function detectInvestmentType(description: string, amount: number): InvestmentRowType {
+  const d = description.toLowerCase();
+  if (/\bbuy\b|purchase|bought/.test(d) || (amount < 0 && /shares?|units?/.test(d))) return 'buy';
+  if (/\bsell\b|sold|proceeds/.test(d) || (amount > 0 && /shares?|units?/.test(d))) return 'sell';
+  if (/dividend|dist(ribution)?|reinvest/.test(d)) return 'dividend';
+  if (/transfer|deposit|withdrawal/.test(d)) return 'transfer';
+  if (/fee|commission|expense|mgmt/.test(d)) return 'fee';
+  return 'other';
+}
+
+// Simple ticker extraction from description (e.g. "BUY 10 VFV.TO @ $120.00" → "VFV.TO")
+function extractTicker(description: string): string | null {
+  const match = description.match(/\b([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\b/);
+  return match?.[1] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +233,8 @@ router.post('/parse', upload.single('file'), async (req: AuthRequest, res) => {
       req.file.buffer,
       req.file.originalname,
       accountId,
-      req.householdId!
+      req.householdId!,
+      account.type
     );
 
     const newCount = rows.filter((r) => r.status === 'new').length;
@@ -240,6 +270,10 @@ const ConfirmRowSchema = z.object({
   hash: z.string(),
   categoryId: z.string().optional(),
   notes: z.string().optional(),
+  investmentType: z.enum(['buy', 'sell', 'dividend', 'transfer', 'fee', 'other']).optional(),
+  ticker: z.string().nullable().optional(),
+  shares: z.number().optional(),
+  pricePerShare: z.number().optional(),
 });
 
 const ConfirmSchema = z.object({
@@ -279,6 +313,8 @@ router.post('/confirm', async (req: AuthRequest, res) => {
     let skipped = 0;
     const errors: Array<{ index: number; error: string }> = [];
 
+    const isInvestmentAccount = account.type === 'investment';
+
     await prisma.$transaction(async (tx) => {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
@@ -290,8 +326,58 @@ router.post('/confirm', async (req: AuthRequest, res) => {
             continue;
           }
 
-          // Resolve category — require description to contain category name
-          // (first-word-only match is too aggressive and causes mis-categorizations)
+          if (isInvestmentAccount && (row.investmentType === 'buy' || row.investmentType === 'sell')) {
+            // ── Investment buy/sell: upsert holding + create lot ──────────────
+            const ticker = row.ticker ?? extractTicker(row.description) ?? 'UNKNOWN';
+            const isBuy = row.investmentType === 'buy';
+            const shareDelta = row.shares ?? 1; // fallback: 1 share if not specified
+            const price = row.pricePerShare ?? Math.abs(row.amount) / shareDelta;
+
+            let holding = await tx.investmentHolding.findFirst({
+              where: { accountId, symbol: ticker },
+            });
+
+            if (!holding) {
+              holding = await tx.investmentHolding.create({
+                data: {
+                  accountId,
+                  symbol: ticker,
+                  name: ticker,
+                  shares: 0,
+                  costBasis: 0,
+                  currentPrice: price,
+                },
+              });
+            }
+
+            const newShares = isBuy ? holding.shares + shareDelta : holding.shares - shareDelta;
+            const newCostBasis = isBuy
+              ? holding.costBasis + shareDelta * price
+              : holding.costBasis - (holding.shares > 0 ? (shareDelta / holding.shares) * holding.costBasis : 0);
+
+            await tx.investmentHolding.update({
+              where: { id: holding.id },
+              data: {
+                shares: Math.max(0, newShares),
+                costBasis: Math.max(0, newCostBasis),
+                currentPrice: price,
+              },
+            });
+
+            await tx.holdingLot.create({
+              data: {
+                holdingId: holding.id,
+                date: txDate,
+                shares: isBuy ? shareDelta : -shareDelta,
+                pricePerShare: price,
+                note: row.description,
+                status: 'confirmed',
+              },
+            });
+          }
+
+          // Always create a transaction record (for cash flow tracking regardless of type)
+          // Resolve category
           let resolvedCategoryId = row.categoryId ?? null;
           if (!resolvedCategoryId) {
             const descLower = row.description.toLowerCase();

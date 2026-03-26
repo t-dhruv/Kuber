@@ -169,6 +169,60 @@ export const BANK_FORMATS: BankFormat[] = [
     amountStrategy: 'single',
     debitSign: 'positive', // Amex: positive = charge (debit), negative = credit/refund
   },
+  // ── Investment Brokerages ──────────────────────────────────────────────────
+  {
+    id: 'questrade-ca',
+    name: 'Questrade',
+    country: 'CA',
+    mapping: {
+      date: ['transaction date', 'settlement date'],
+      description: ['description', 'symbol', 'activity type'],
+      amount: ['net amount', 'amount'],
+      reference: ['transaction id'],
+    },
+    amountStrategy: 'single',
+    debitSign: 'negative',
+  },
+  {
+    id: 'wealthsimple-ca',
+    name: 'Wealthsimple',
+    country: 'CA',
+    mapping: {
+      date: ['date'],
+      description: ['activity', 'description', 'symbol'],
+      amount: ['amount', 'net amount'],
+      reference: ['id'],
+    },
+    amountStrategy: 'single',
+    debitSign: 'negative',
+  },
+  {
+    id: 'ibkr',
+    name: 'Interactive Brokers',
+    country: 'INTL',
+    mapping: {
+      date: ['date/time', 'settle date/time', 'date'],
+      description: ['symbol', 'description'],
+      amount: ['proceeds', 'amount', 'realized p/l'],
+      reference: ['trade id', 'order id'],
+    },
+    amountStrategy: 'single',
+    debitSign: 'negative',
+  },
+  {
+    id: 'td-direct-ca',
+    name: 'TD Direct Investing',
+    country: 'CA',
+    mapping: {
+      date: ['settlement date', 'transaction date'],
+      description: ['description', 'symbol'],
+      debit: ['debit'],
+      credit: ['credit'],
+    },
+    amountStrategy: 'debit-credit',
+    debitSign: 'positive',
+  },
+
   // ── Generic fallback ─────────────────────────────────────────────────────────
   {
     id: 'generic',

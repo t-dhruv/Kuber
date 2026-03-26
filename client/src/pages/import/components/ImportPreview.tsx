@@ -31,6 +31,10 @@ const BANK_NAMES: Record<string, string> = {
   'wellsfargo-us': 'Wells Fargo',
   'capitalone-us': 'Capital One',
   'amex-us': 'American Express',
+  'questrade-ca': 'Questrade',
+  'wealthsimple-ca': 'Wealthsimple',
+  ibkr: 'Interactive Brokers',
+  'td-direct-ca': 'TD Direct Investing',
   generic: 'Generic CSV',
   'pdf-extracted': 'PDF Statement',
 };
@@ -46,7 +50,13 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
     mutationFn: async () => {
       const rows = result.rows
         .filter((r) => selected.has(r.hash))
-        .map((r) => ({ date: r.date, description: r.description, amount: r.amount, hash: r.hash }));
+        .map((r) => ({
+          date: r.date,
+          description: r.description,
+          amount: r.amount,
+          hash: r.hash,
+          ...(r.investmentType ? { investmentType: r.investmentType, ticker: r.ticker } : {}),
+        }));
       const res = await api.post('/import/confirm', {
         accountId,
         rows,
@@ -217,7 +227,17 @@ interface RowTableProps {
   dimmed?: boolean;
 }
 
+const INV_TYPE_COLORS: Record<string, string> = {
+  buy: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  sell: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+  dividend: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  transfer: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  fee: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  other: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+};
+
 function RowTable({ rows, selected, onToggle, dimmed }: RowTableProps) {
+  const hasInvestmentData = rows.some((r) => r.investmentType);
   return (
     <div className={`rounded-lg border border-[color:var(--border)] overflow-hidden ${dimmed ? 'opacity-60' : ''}`}>
       <table className="w-full text-sm">
@@ -226,6 +246,7 @@ function RowTable({ rows, selected, onToggle, dimmed }: RowTableProps) {
             <th className="px-3 py-2 w-8" />
             <th className="px-3 py-2 text-left">Date</th>
             <th className="px-3 py-2 text-left">Description</th>
+            {hasInvestmentData && <th className="px-3 py-2 text-left">Type</th>}
             <th className="px-3 py-2 text-right">Amount</th>
           </tr>
         </thead>
@@ -246,7 +267,19 @@ function RowTable({ rows, selected, onToggle, dimmed }: RowTableProps) {
                 />
               </td>
               <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{row.date}</td>
-              <td className="px-3 py-2 max-w-xs truncate">{row.description}</td>
+              <td className="px-3 py-2 max-w-xs truncate">
+                {row.ticker && <span className="font-mono font-bold mr-1.5">{row.ticker}</span>}
+                {row.description}
+              </td>
+              {hasInvestmentData && (
+                <td className="px-3 py-2">
+                  {row.investmentType && (
+                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${INV_TYPE_COLORS[row.investmentType] ?? INV_TYPE_COLORS.other}`}>
+                      {row.investmentType.toUpperCase()}
+                    </span>
+                  )}
+                </td>
+              )}
               <td className={`px-3 py-2 text-right font-medium ${row.amount < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                 {row.amount < 0 ? '-' : '+'}${Math.abs(row.amount).toFixed(2)}
               </td>

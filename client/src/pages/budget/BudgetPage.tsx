@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Settings, Pencil, Plus, ChevronDown, ChevronUp, AlertTriangle, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings, Pencil, Plus, ChevronDown, ChevronUp, AlertTriangle, X, Sparkles, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button, Input, Select, Modal, ModalFooter, Skeleton, Card } from '@/components/ui';
+import { useAiStream } from '@/hooks/useAiStream';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -1585,10 +1586,74 @@ export default function BudgetPage() {
           )}
         </Card>
 
-        {/* Right column — Summary panel */}
-        <div style={{ position: 'sticky', top: '1rem' }}>
+        {/* Right column — Summary panel + AI Coach */}
+        <div style={{ position: 'sticky', top: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <SummaryPanel data={budgetData} />
+          <BudgetCoach month={`${year}-${String(month).padStart(2, '0')}`} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Budget AI Coach ──────────────────────────────────────────────────────────
+
+function BudgetCoach({ month }: { month: string }) {
+  const { streaming, content, error, ask, reset } = useAiStream({ endpoint: '/advisor/budget-coach/stream' });
+  const [asked, setAsked] = useState(false);
+
+  function handleAsk() {
+    setAsked(true);
+    ask({ month });
+  }
+
+  return (
+    <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[color:var(--border)]">
+        <Sparkles size={16} className="text-[color:var(--color-primary)]" />
+        <span className="font-medium text-sm">AI Budget Coach</span>
+        {asked && (
+          <button
+            onClick={() => { reset(); setAsked(false); }}
+            className="ml-auto text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
+          >
+            <RefreshCw size={14} />
+          </button>
+        )}
+      </div>
+
+      <div className="p-4">
+        {!asked && !content && (
+          <div className="text-center">
+            <p className="text-sm text-[color:var(--text-secondary)] mb-3">
+              Get personalised tips for this month's budget.
+            </p>
+            <Button variant="primary" onClick={handleAsk} className="w-full text-sm">
+              <Sparkles size={14} className="mr-1.5" />
+              Analyse my budget
+            </Button>
+          </div>
+        )}
+
+        {error && (
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        )}
+
+        {(streaming || content) && (
+          <div className="text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--text-primary)]">
+            {content}
+            {streaming && (
+              <span className="inline-block w-1.5 h-4 bg-[color:var(--color-primary)] ml-0.5 animate-pulse rounded-sm" />
+            )}
+          </div>
+        )}
+
+        {streaming && (
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-[color:var(--text-secondary)]">
+            <Loader2 size={12} className="animate-spin" />
+            Thinking…
+          </div>
+        )}
       </div>
     </div>
   );
