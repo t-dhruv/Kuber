@@ -77,8 +77,8 @@
 | Bulk Operation Checkpoints | 🟢 Done | Sprint 15 — OperationCheckpoint model, checkpoint.ts lib, rollback API, Settings UI |
 | PDF Statement Parser | ⚠️ Partial | Sprint 15 — pdf-parse + AI extraction done; tesseract fallback deferred |
 | Email/IMAP Watcher | 🔴 Planned | Sprint 15 — optional email connector, Amazon/PayPal parsers |
-| Asset & Debt Tracker | 🔴 Planned | Sprint 15.1 — manual asset entry (home, car, crypto), liability tracking, net worth breakdown |
-| TFSA / RRSP Tracker | 🔴 Planned | Sprint 15.1 — per-member contribution room, real-time balance from account transactions |
+| Asset & Debt Tracker | 🟢 Done | Sprint 15.1 — ManualAsset/Liability/Snapshot models, CRUD API, net-worth-breakdown endpoint |
+| TFSA / RRSP Tracker | 🟢 Done | Sprint 15.1 — TaxAccount model, CRA rules engine, /tax-accounts API, Settings UI tab |
 | Proactive AI Engine | 🔴 Planned | Sprint 16 — anomaly/fraud detection, subscription auto-detect, missed payments |
 | Auto-Categorization | 🔴 Planned | Sprint 16 — local qwen2.5:0.5b model, confidence scoring |
 | Receipt OCR | 🔴 Planned | Sprint 16 — moondream2 vision model, camera capture |

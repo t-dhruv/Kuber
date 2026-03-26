@@ -36,6 +36,7 @@ import { requireAuth } from './middleware/auth';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
 import { runAccountBalanceSnapshot } from './lib/accountBalanceJob';
 import { sendDigestEmail } from './lib/digestEmail';
+import { runProactiveChecks } from './lib/proactiveAi';
 import { prisma } from './lib/prisma';
 
 const app = express();
@@ -137,6 +138,20 @@ setInterval(async () => {
     console.error('[digest-job] Error running digest check:', err);
   }
 }, 60 * 60 * 1000); // every hour
+
+// Daily proactive AI checks (runs every 24h, simulating a 7am daily job)
+setInterval(async () => {
+  try {
+    const households = await prisma.household.findMany({ select: { id: true } });
+    for (const h of households) {
+      await runProactiveChecks(prisma, h.id).catch((err) =>
+        console.error(`[proactive-ai] checks failed for household ${h.id}:`, err)
+      );
+    }
+  } catch (err) {
+    console.error('[proactive-ai] Error running proactive checks:', err);
+  }
+}, 24 * 60 * 60 * 1000); // every 24 hours
 
 app.listen(PORT, () => {
   console.log(`Kuber server running on :${PORT}`);

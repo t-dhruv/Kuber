@@ -26,7 +26,6 @@ model User {
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   householdMembers    HouseholdMember[]
-  notifications       Notification[]
   preferences         UserPreference[]
   refreshTokens       RefreshToken[]
   auditLogs           AuditLog[]
@@ -61,6 +60,7 @@ model Household {
   reportSchedule          ReportSchedule?
   importHistory           ImportHistory[]
   operationCheckpoints    OperationCheckpoint[]
+  notifications           Notification[]
   manualAssets            ManualAsset[]
   manualLiabilities       ManualLiability[]
   taxAccounts             TaxAccount[]
@@ -480,16 +480,20 @@ model Rule {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  type      String
-  title     String
-  body      String
-  isRead    Boolean  @default(false)
-  metadata  Json?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String    @id @default(cuid())
+  householdId      String
+  userId           String?
+  type             String    // "anomaly" | "subscription" | "missed_payment" | "over_budget" | "info"
+  severity         String    @default("info") // "info" | "warning" | "alert"
+  title            String
+  body             String
+  read             Boolean   @default(false)
+  linkedEntityId   String?   // transaction ID, account ID, etc.
+  linkedEntityType String?   // "transaction" | "account" | "goal"
+  createdAt        DateTime  @default(now())
+  household        Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
+  @@index([householdId, read, createdAt])
   @@map("notifications")
 }
 
