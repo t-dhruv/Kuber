@@ -26,12 +26,14 @@ import auditRouter from './routes/audit';
 import networthRouter from './routes/networth';
 import adviceLibraryRouter from './routes/advice';
 import wealthRouter from './routes/wealth';
+import investmentIntelRouter from './routes/investmentIntel';
 import splitsRouter from './routes/splits';
 import importRouter from './routes/import';
 import checkpointRouter from './routes/checkpoints';
 import assetsRouter from './routes/assets';
 import liabilitiesRouter from './routes/liabilities';
 import taxAccountsRouter from './routes/taxAccounts';
+import fxRouter from './routes/fx';
 import { requireAuth } from './middleware/auth';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
 import { runAccountBalanceSnapshot } from './lib/accountBalanceJob';
@@ -91,12 +93,14 @@ app.use('/api/v1/advisor', requireAuth, advisorRouter);
 app.use('/api/v1/networth', requireAuth, networthRouter);
 app.use('/api/v1/advice', requireAuth, adviceLibraryRouter);
 app.use('/api/v1/wealth', requireAuth, wealthRouter);
+app.use('/api/v1/investment-intel', requireAuth, investmentIntelRouter);
 app.use('/api/v1/transactions', requireAuth, splitsRouter);
 app.use('/api/v1/import', requireAuth, importRouter);
 app.use('/api/v1/checkpoints', requireAuth, checkpointRouter);
 app.use('/api/v1/assets', requireAuth, assetsRouter);
 app.use('/api/v1/liabilities', requireAuth, liabilitiesRouter);
 app.use('/api/v1/tax-accounts', requireAuth, taxAccountsRouter);
+app.use('/api/v1/fx', requireAuth, fxRouter);
 
 function checkIfDigestDue(schedule: { frequency: string; lastSentAt: Date | null }, now: Date): boolean {
   const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday

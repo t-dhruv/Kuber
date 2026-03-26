@@ -79,10 +79,11 @@
 | Email/IMAP Watcher | 🔴 Planned | Sprint 15 — optional email connector, Amazon/PayPal parsers |
 | Asset & Debt Tracker | 🟢 Done | Sprint 15.1 — ManualAsset/Liability/Snapshot models, CRUD API, net-worth-breakdown endpoint |
 | TFSA / RRSP Tracker | 🟢 Done | Sprint 15.1 — TaxAccount model, CRA rules engine, /tax-accounts API, Settings UI tab |
-| Proactive AI Engine | 🔴 Planned | Sprint 16 — anomaly/fraud detection, subscription auto-detect, missed payments |
-| Auto-Categorization | 🔴 Planned | Sprint 16 — local qwen2.5:0.5b model, confidence scoring |
-| Receipt OCR | 🔴 Planned | Sprint 16 — moondream2 vision model, camera capture |
-| Investment Intelligence | 🔴 Planned | Sprint 17 — YouTube transcripts, Google News per holding, RRSP/TFSA hints |
+| Proactive AI Engine | 🟢 Done | Sprint 16 — anomaly detection, subscription auto-detect, missed payments, daily scheduler |
+| Notification Center | 🟢 Done | Sprint 16 — household-scoped model, /notifications API, bell+drawer UI with severity badges |
+| Auto-Categorization | 🔴 Planned | Sprint 16.1 — local qwen2.5:0.5b model, confidence scoring |
+| Receipt OCR | 🔴 Planned | Sprint 16.1 — moondream2 vision model, camera capture |
+| Investment Intelligence | 🔴 Planned | Sprint 17 — Google News per holding, Monte Carlo projections, RRSP/TFSA hints |
 | Multi-Currency | 🔴 Planned | Sprint 17 — CAD/USD, live FX rates |
 | PWA / Mobile | 🔴 Planned | Sprint 18 — manifest, service worker, voice input, onboarding wizard |
 

@@ -92,6 +92,10 @@ const CURRENCY_OPTIONS = [
   { value: 'GBP', label: 'GBP — British Pound' },
   { value: 'CAD', label: 'CAD — Canadian Dollar' },
   { value: 'AUD', label: 'AUD — Australian Dollar' },
+  { value: 'CHF', label: 'CHF — Swiss Franc' },
+  { value: 'JPY', label: 'JPY — Japanese Yen' },
+  { value: 'MXN', label: 'MXN — Mexican Peso' },
+  { value: 'NZD', label: 'NZD — New Zealand Dollar' },
   { value: 'INR', label: 'INR — Indian Rupee' },
 ];
 
@@ -859,6 +863,18 @@ function HouseholdSection() {
 
   const [householdName, setHouseholdName] = useState('');
   const [currency, setCurrency] = useState('USD');
+
+  const {
+    data: fxData,
+    isFetching: fxFetching,
+    refetch: refetchFx,
+    dataUpdatedAt: fxUpdatedAt,
+  } = useQuery<{ base: string; rates: Array<{ code: string; rate: number }> }>({
+    queryKey: ['fx', 'snapshot', currency],
+    queryFn: () => api.get(`/fx/snapshot?base=${currency}`).then((r) => r.data),
+    staleTime: 60 * 60 * 1000,
+    enabled: !!currency,
+  });
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Member');
   const [removeTarget, setRemoveTarget] = useState<HouseholdMember | null>(null);
@@ -932,6 +948,47 @@ function HouseholdSection() {
               Save
             </Button>
           </div>
+        </Card>
+
+        {/* Live FX Rates */}
+        <Card padding="lg">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <div style={{ fontWeight: 600, color: 'var(--color-text)' }}>Live FX Rates</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {fxUpdatedAt ? (
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  Updated {new Date(fxUpdatedAt).toLocaleTimeString()}
+                </span>
+              ) : null}
+              <Button variant="ghost" size="sm" loading={fxFetching} onClick={() => refetchFx()}>
+                Refresh
+              </Button>
+            </div>
+          </div>
+          {fxData ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.5rem' }}>
+              {fxData.rates.map((r) => (
+                <div
+                  key={r.code}
+                  style={{
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '0.375rem',
+                    background: 'var(--color-surface-elevated)',
+                    fontSize: '0.8125rem',
+                    color: 'var(--color-text)',
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>1 {fxData.base}</span>
+                  {' = '}
+                  <span style={{ color: 'var(--color-primary)' }}>{r.rate} {r.code}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+              {fxFetching ? 'Loading rates...' : 'Rates unavailable'}
+            </div>
+          )}
         </Card>
 
         {/* Members */}

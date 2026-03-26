@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
-  AlertTriangle,
   Sparkles,
   Pencil,
   Check,
@@ -13,6 +12,8 @@ import {
   ChevronUp,
   RefreshCw,
   Settings,
+  Newspaper,
+  Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Card, CardHeader, Button, Input, Skeleton, notify } from '@/components/ui';
@@ -618,6 +619,166 @@ function AiAnalysisPanel({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtCompact(n: number): string {
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000)}k`;
+  return `$${n}`;
+}
+
+// ─── Types: Investment Intel ───────────────────────────────────────────────────
+
+interface ProjectionHorizon {
+  years: number;
+  p10: number;
+  p50: number;
+  p90: number;
+}
+
+interface ProjectionsData {
+  totalValue: number;
+  monthlyContrib: number;
+  simulations: number;
+  horizons: ProjectionHorizon[];
+}
+
+interface NewsItem {
+  title: string;
+  link: string;
+  pubDate: string;
+  description: string;
+}
+
+// ─── Portfolio Projections ────────────────────────────────────────────────────
+
+function PortfolioProjections() {
+  const { data, isLoading, isError } = useQuery<ProjectionsData>({
+    queryKey: ['investment-projections'],
+    queryFn: () => api.get('/investment-intel/projections').then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return (
+    <Card className="p-5">
+      <CardHeader
+        title="Portfolio Projections"
+        description="Monte Carlo simulation (1,000 runs, 7% avg return, 15% std dev)"
+      />
+
+      {isLoading && (
+        <div className="flex items-center gap-2 mt-4 text-sm text-[var(--color-text-muted)]">
+          <Loader2 size={14} className="animate-spin" />
+          Running simulations…
+        </div>
+      )}
+
+      {isError && (
+        <p className="mt-4 text-sm text-[var(--color-danger,#ef4444)]">Could not load projections.</p>
+      )}
+
+      {data && data.totalValue === 0 && (
+        <p className="mt-4 text-sm text-[var(--color-text-muted)]">
+          No investment holdings found. Add holdings to see projections.
+        </p>
+      )}
+
+      {data && data.totalValue > 0 && (
+        <>
+          <div className="flex flex-wrap gap-4 mt-4 text-sm">
+            <span className="text-[var(--color-text-muted)]">
+              Current portfolio:{' '}
+              <span className="font-semibold text-[var(--color-text)]">{fmtCompact(data.totalValue)}</span>
+            </span>
+            {data.monthlyContrib > 0 && (
+              <span className="text-[var(--color-text-muted)]">
+                Monthly contributions:{' '}
+                <span className="font-semibold text-[var(--color-text)]">{fmtCompact(data.monthlyContrib)}/mo</span>
+              </span>
+            )}
+          </div>
+
+          <div className="overflow-x-auto mt-4 -mx-1 px-1">
+            <table className="w-full text-sm min-w-[400px]">
+              <thead>
+                <tr className="border-b border-[var(--color-border)]">
+                  <th className="text-left py-2 pr-4 text-[var(--color-text-muted)] font-medium">Years</th>
+                  <th className="text-right py-2 px-3 text-[var(--color-text-muted)] font-medium">Conservative (P10)</th>
+                  <th className="text-right py-2 px-3 text-[var(--color-accent)] font-medium">Expected (P50)</th>
+                  <th className="text-right py-2 pl-3 text-[var(--color-text-muted)] font-medium">Optimistic (P90)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]">
+                {data.horizons.map((h) => (
+                  <tr key={h.years} className="hover:bg-[var(--color-surface-hover)] transition-colors">
+                    <td className="py-2.5 pr-4 font-medium text-[var(--color-text)]">{h.years}yr</td>
+                    <td className="py-2.5 px-3 text-right text-[var(--color-text-secondary)]">{fmtCompact(h.p10)}</td>
+                    <td className="py-2.5 px-3 text-right font-semibold text-[var(--color-text)]">{fmtCompact(h.p50)}</td>
+                    <td className="py-2.5 pl-3 text-right text-[var(--color-success,#22c55e)]">{fmtCompact(h.p90)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ─── Holding News Widget ───────────────────────────────────────────────────────
+
+function HoldingNewsPanel({ ticker }: { ticker: string }) {
+  const { data, isLoading, isError } = useQuery<{ ticker: string; items: NewsItem[] }>({
+    queryKey: ['holding-news', ticker],
+    queryFn: () => api.get(`/investment-intel/news?ticker=${encodeURIComponent(ticker)}`).then((r) => r.data),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-3 px-4 text-sm text-[var(--color-text-muted)]">
+        <Loader2 size={13} className="animate-spin flex-shrink-0" />
+        Loading news for {ticker}…
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <p className="py-2 px-4 text-sm text-[var(--color-danger,#ef4444)]">Could not load news.</p>
+    );
+  }
+
+  const items = data?.items?.slice(0, 5) ?? [];
+
+  if (!items.length) {
+    return <p className="py-2 px-4 text-sm text-[var(--color-text-muted)]">No news found for {ticker}.</p>;
+  }
+
+  return (
+    <div className="flex flex-col divide-y divide-[var(--color-border)] px-4 pb-2">
+      {items.map((item, i) => (
+        <div key={i} className="py-2.5">
+          <a
+            href={item.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-[var(--color-accent)] hover:underline leading-snug"
+          >
+            {item.title}
+          </a>
+          {item.pubDate && (
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+              {new Date(item.pubDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Skeleton loader ──────────────────────────────────────────────────────────
 
 function WealthSkeleton() {
@@ -745,6 +906,9 @@ export default function WealthPage() {
           {showAiPanel && (
             <AiAnalysisPanel onDismiss={() => setShowAiPanel(false)} />
           )}
+
+          {/* ── Portfolio Projections ── */}
+          <PortfolioProjections />
         </>
       ) : analysis && analysis.income === null ? (
         <div className="flex flex-col items-center justify-center py-16 text-center text-[var(--color-text-muted)]">

@@ -182,6 +182,7 @@ model Transaction {
   description         String
   originalDescription String
   amount              Float
+  currency            String           @default("USD")
   categoryId          String?
   merchantId          String?
   notes               String?

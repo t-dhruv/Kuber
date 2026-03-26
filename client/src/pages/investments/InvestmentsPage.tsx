@@ -4,7 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
-import { Plus, ChevronRight, ChevronDown, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, ChevronRight, ChevronDown, Trash2, RefreshCw, Newspaper, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Card, Skeleton, Button, Modal, ModalFooter, Input, Select, notify,
@@ -552,6 +552,68 @@ function PendingLotsCard({ lots }: { lots: PendingLot[] }) {
 
 // ─── Expanded Holding Row ─────────────────────────────────────────────────────
 
+// ─── Holding News Panel ───────────────────────────────────────────────────────
+
+interface NewsItem {
+  title: string;
+  link: string;
+  pubDate: string;
+  description: string;
+}
+
+function HoldingNewsPanel({ ticker }: { ticker: string }) {
+  const { data, isLoading, isError } = useQuery<{ ticker: string; items: NewsItem[] }>({
+    queryKey: ['holding-news', ticker],
+    queryFn: () => api.get(`/investment-intel/news?ticker=${encodeURIComponent(ticker)}`).then((r) => r.data),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.5rem 0', fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+        <Loader2 size={13} className="animate-spin" />
+        Loading news for {ticker}…
+      </div>
+    );
+  }
+
+  if (isError) {
+    return <p style={{ fontSize: '0.8125rem', color: 'var(--color-danger, #ef4444)', margin: '0.375rem 0' }}>Could not load news.</p>;
+  }
+
+  const items = data?.items?.slice(0, 5) ?? [];
+
+  if (!items.length) {
+    return <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', margin: '0.375rem 0' }}>No news found for {ticker}.</p>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
+      {items.map((item, i) => (
+        <div key={i} style={{ padding: '0.375rem 0', borderBottom: i < items.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
+          <a
+            href={item.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-accent)', textDecoration: 'none', lineHeight: 1.4 }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none'; }}
+          >
+            {item.title}
+          </a>
+          {item.pubDate && (
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0.125rem 0 0' }}>
+              {new Date(item.pubDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Expanded Holding ─────────────────────────────────────────────────────────
+
 function ExpandedHolding({
   holding,
   onAddLot,
@@ -561,6 +623,7 @@ function ExpandedHolding({
   onAddLot: () => void;
   onSetRecurring: () => void;
 }) {
+  const [showNews, setShowNews] = useState(false);
   const queryClient = useQueryClient();
 
   const deleteLotMutation = useMutation({
@@ -685,6 +748,14 @@ function ExpandedHolding({
         <Button size="sm" variant="secondary" icon={<RefreshCw size={13} />} onClick={onSetRecurring}>
           Set Recurring
         </Button>
+        <Button
+          size="sm"
+          variant={showNews ? 'primary' : 'secondary'}
+          icon={<Newspaper size={13} />}
+          onClick={() => setShowNews((v) => !v)}
+        >
+          {showNews ? 'Hide News' : 'Latest News'}
+        </Button>
       </div>
 
       {/* Recurring schedules */}
@@ -764,6 +835,23 @@ function ExpandedHolding({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Latest News panel */}
+      {showNews && (
+        <div style={{ marginTop: '0.75rem' }}>
+          <div style={{
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+            marginBottom: '0.5rem',
+          }}>
+            Latest News — {holding.ticker}
+          </div>
+          <HoldingNewsPanel ticker={holding.ticker} />
         </div>
       )}
     </div>
