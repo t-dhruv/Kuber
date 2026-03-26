@@ -10,6 +10,7 @@ import {
   Button, Input, Select, Checkbox, Avatar, Card, CardDivider, Modal, ModalFooter, notify, Skeleton,
 } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { TaxAccountsSection } from './components/TaxAccountsSection';
 import { useAuthStore } from '@/stores/authStore';
 import { useTotpStatus, useTotpSetup, useTotpEnable, useTotpDisable } from '@/hooks/useAuth';
 
@@ -111,7 +112,8 @@ type NavSection =
   | 'integrations'
   | 'report-digest'
   | 'data'
-  | 'billing';
+  | 'billing'
+  | 'tax-accounts';
 
 const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'profile', label: 'Profile', icon: <User size={16} /> },
@@ -126,6 +128,7 @@ const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'report-digest', label: 'Report Digest', icon: <Receipt size={16} /> },
   { id: 'data', label: 'Data', icon: <Database size={16} /> },
   { id: 'billing', label: 'Billing', icon: <CreditCard size={16} /> },
+  { id: 'tax-accounts', label: 'Tax Accounts', icon: <Receipt size={16} /> },
 ];
 
 // ─── Section: Profile ─────────────────────────────────────────────────────────
@@ -2698,6 +2701,7 @@ export default function SettingsPage() {
       case 'report-digest': return <ReportDigestSection />;
       case 'data': return <DataSection />;
       case 'billing': return <BillingSection />;
+      case 'tax-accounts': return <TaxAccountsSection />;
     }
   }
 

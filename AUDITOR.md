@@ -73,9 +73,9 @@
 | AI Ingest Pipeline | 🟢 Done | bankFormats (10 banks), pdfParser, importDedup SHA256, ImportHistory model |
 | AI Streaming Fix | 🟢 Done | Sprint 14.1 — nginx SSE block, useAiStream hook, Budget Coach, X-Accel-Buffering |
 | Investment Import | 🟢 Done | Sprint 14.1 — Questrade/Wealthsimple/IBKR/TD Direct formats, HoldingLot upsert, BUY/SELL badges |
-| n8n Automation Flows | 🔴 Planned | Sprint 15 — Docker service + workflow templates for bank email/folder watch |
-| Bulk Operation Checkpoints | 🔴 Planned | Sprint 15 — snapshot before bulk import / rule-run; one-click rollback UI |
-| PDF Statement Parser | 🔴 Planned | Sprint 15 — pdf-parse + AI extraction + tesseract fallback |
+| n8n Automation Flows | 🟢 Done | Sprint 15 — Docker service (automation profile), 3 workflow templates, README setup guide |
+| Bulk Operation Checkpoints | 🟢 Done | Sprint 15 — OperationCheckpoint model, checkpoint.ts lib, rollback API, Settings UI |
+| PDF Statement Parser | ⚠️ Partial | Sprint 15 — pdf-parse + AI extraction done; tesseract fallback deferred |
 | Email/IMAP Watcher | 🔴 Planned | Sprint 15 — optional email connector, Amazon/PayPal parsers |
 | Asset & Debt Tracker | 🔴 Planned | Sprint 15.1 — manual asset entry (home, car, crypto), liability tracking, net worth breakdown |
 | TFSA / RRSP Tracker | 🔴 Planned | Sprint 15.1 — per-member contribution room, real-time balance from account transactions |
