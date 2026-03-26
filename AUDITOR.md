@@ -83,8 +83,8 @@
 | Notification Center | 🟢 Done | Sprint 16 — household-scoped model, /notifications API, bell+drawer UI with severity badges |
 | Auto-Categorization | 🔴 Planned | Sprint 16.1 — local qwen2.5:0.5b model, confidence scoring |
 | Receipt OCR | 🔴 Planned | Sprint 16.1 — moondream2 vision model, camera capture |
-| Investment Intelligence | 🔴 Planned | Sprint 17 — Google News per holding, Monte Carlo projections, RRSP/TFSA hints |
-| Multi-Currency | 🔴 Planned | Sprint 17 — CAD/USD, live FX rates |
+| Investment Intelligence | 🟢 Done | Sprint 17 — Yahoo Finance RSS per holding, Monte Carlo P10/P50/P90 projections table |
+| Multi-Currency | 🟢 Done | Sprint 17 — Transaction.currency field, fxRates.ts, /fx API, live rates widget in Settings |
 | PWA / Mobile | 🔴 Planned | Sprint 18 — manifest, service worker, voice input, onboarding wizard |
 
 **Legend:** 🟢 Done | ⚠️ Partial / Needs work | 🔴 Not done / Broken

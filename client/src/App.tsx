@@ -1,8 +1,12 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
 import { AppShell } from '@/components/layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import { OnboardingWizard, shouldShowOnboarding } from '@/components/onboarding/OnboardingWizard';
+import { api } from '@/lib/api';
 
 // ─── Lazy page imports ────────────────────────────────────────────────────────
 
@@ -41,6 +45,40 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AuthenticatedLayout() {
+  const [onboardingDone, setOnboardingDone] = useState(false);
+
+  // Check if user is new (no accounts) and onboarding not yet dismissed
+  const { data: accounts } = useQuery({
+    queryKey: ['accounts-onboarding'],
+    queryFn: () => api.get('/accounts').then((r) => r.data),
+    staleTime: Infinity,
+  });
+
+  const isNewUser =
+    shouldShowOnboarding() &&
+    (!accounts ||
+      (Array.isArray(accounts)
+        ? accounts.length === 0
+        : accounts?.groups?.length === 0 ||
+          accounts?.groups?.every(
+            (g: { accounts: unknown[] }) => g.accounts.length === 0,
+          )));
+
+  const showOnboarding = isNewUser && !onboardingDone;
+
+  return (
+    <ProtectedRoute>
+      <ErrorBoundary>
+        <AppShell />
+        {showOnboarding && (
+          <OnboardingWizard onDone={() => setOnboardingDone(true)} />
+        )}
+      </ErrorBoundary>
+    </ProtectedRoute>
+  );
+}
+
 // ─── Global Cmd+K search trigger ─────────────────────────────────────────────
 // The Cmd+K listener is also registered in Header; App.tsx re-exports the
 // setShowSearch toggle to ensure it works when the header hasn't mounted yet.
@@ -50,6 +88,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    <>
     <Routes>
       {/* Public routes */}
       <Route
@@ -86,15 +125,7 @@ export default function App() {
       />
 
       {/* Protected routes — nested under AppShell layout */}
-      <Route
-        element={
-          <ProtectedRoute>
-            <ErrorBoundary>
-              <AppShell />
-            </ErrorBoundary>
-          </ProtectedRoute>
-        }
-      >
+      <Route element={<AuthenticatedLayout />}>
         <Route
           path="/"
           element={
@@ -211,5 +242,7 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    <InstallPrompt />
+    </>
   );
 }
