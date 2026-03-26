@@ -3,11 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   User, Monitor, Bell, Shield, Home, Tag, Database, CreditCard,
   Pencil, Trash2, Plus, ChevronDown, ChevronRight, Upload, ShieldCheck, ShieldOff, Mail, Bot,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, Receipt,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Button, Input, Select, Checkbox, Avatar, Card, CardDivider, Modal, ModalFooter, notify,
+  Button, Input, Select, Checkbox, Avatar, Card, CardDivider, Modal, ModalFooter, notify, Skeleton,
 } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useAuthStore } from '@/stores/authStore';
@@ -57,6 +57,7 @@ interface Category {
   groupId: string | null;
   groupName: string | null;
   group?: { id: string; name: string } | null;
+  isTaxDeductible?: boolean;
 }
 
 interface CategoryGroup {
@@ -108,6 +109,7 @@ type NavSection =
   | 'tags'
   | 'merchants'
   | 'integrations'
+  | 'report-digest'
   | 'data'
   | 'billing';
 
@@ -121,6 +123,7 @@ const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'tags', label: 'Tags', icon: <Tag size={16} /> },
   { id: 'merchants', label: 'Merchants', icon: <CreditCard size={16} /> },
   { id: 'integrations', label: 'Integrations', icon: <Mail size={16} /> },
+  { id: 'report-digest', label: 'Report Digest', icon: <Receipt size={16} /> },
   { id: 'data', label: 'Data', icon: <Database size={16} /> },
   { id: 'billing', label: 'Billing', icon: <CreditCard size={16} /> },
 ];
@@ -1256,6 +1259,18 @@ function CategoriesSection() {
     },
   });
 
+  // Toggle tax deductible on a category
+  const toggleTaxMutation = useMutation({
+    mutationFn: ({ categoryId, isTaxDeductible }: { categoryId: string; isTaxDeductible: boolean }) =>
+      api.put(`/settings/categories/${categoryId}`, { isTaxDeductible }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'categories'] });
+    },
+    onError: () => {
+      notify.error('Failed to update tax setting');
+    },
+  });
+
   // Reset all buckets to defaults
   const resetBucketsMutation = useMutation({
     mutationFn: () => api.post('/wealth/category-buckets/reset'),
@@ -1496,6 +1511,30 @@ function CategoriesSection() {
                           {bucketMeta.label}
                         </button>
                       )}
+                      {/* Tax deductible toggle */}
+                      <button
+                        onClick={() => toggleTaxMutation.mutate({ categoryId: cat.id, isTaxDeductible: !cat.isTaxDeductible })}
+                        title={cat.isTaxDeductible ? 'Tax deductible (click to remove)' : 'Mark as tax deductible'}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          padding: '0.1875rem 0.4375rem',
+                          borderRadius: '9999px',
+                          fontSize: '0.6875rem',
+                          fontWeight: 600,
+                          border: '1px solid',
+                          borderColor: cat.isTaxDeductible ? 'var(--color-success)' : 'var(--color-border)',
+                          background: cat.isTaxDeductible ? 'color-mix(in srgb, var(--color-success) 12%, transparent)' : 'transparent',
+                          color: cat.isTaxDeductible ? 'var(--color-success)' : 'var(--color-text-secondary)',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                          opacity: toggleTaxMutation.isPending ? 0.5 : 1,
+                        }}
+                      >
+                        <Receipt size={10} />
+                        Tax
+                      </button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -2328,6 +2367,133 @@ function IntegrationsSection() {
   );
 }
 
+// ─── Section: Report Digest ───────────────────────────────────────────────────
+
+interface ReportSchedule {
+  householdId: string;
+  frequency: 'weekly' | 'monthly';
+  enabled: boolean;
+  lastSentAt: string | null;
+}
+
+function ReportDigestSection() {
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery<ReportSchedule>({
+    queryKey: ['settings', 'report-schedule'],
+    queryFn: () => api.get('/settings/report-schedule').then((r) => r.data),
+  });
+
+  const mutation = useMutation({
+    mutationFn: (body: { frequency: 'weekly' | 'monthly'; enabled: boolean }) =>
+      api.put('/settings/report-schedule', body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'report-schedule'] });
+      notify.success('Report digest settings saved');
+    },
+    onError: () => notify.error('Failed to save report digest settings'),
+  });
+
+  const enabled = data?.enabled ?? false;
+  const frequency = data?.frequency ?? 'weekly';
+
+  function handleToggle(newEnabled: boolean) {
+    mutation.mutate({ frequency, enabled: newEnabled });
+  }
+
+  function handleFrequency(newFreq: 'weekly' | 'monthly') {
+    mutation.mutate({ frequency: newFreq, enabled });
+  }
+
+  function lastSentLabel(): string | null {
+    if (!data?.lastSentAt) return null;
+    const ms = Date.now() - new Date(data.lastSentAt).getTime();
+    const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+    if (days === 0) return 'today';
+    if (days === 1) return '1 day ago';
+    return `${days} days ago`;
+  }
+
+  const lastSent = lastSentLabel();
+
+  return (
+    <div>
+      <SectionHeader
+        title="Report Digest"
+        description="Receive a periodic email summary of your finances."
+      />
+
+      <div style={{ maxWidth: 560 }}>
+        <Card padding="lg">
+          {isLoading ? (
+            <Skeleton height={120} />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Enable toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
+                    Enable digest emails
+                  </div>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', margin: 0 }}>
+                    You'll receive a summary of your finances including net worth change,
+                    top spending categories, budget status, and upcoming bills.
+                  </p>
+                </div>
+                <Checkbox
+                  checked={enabled}
+                  onChange={(e) => handleToggle(e.target.checked)}
+                  disabled={mutation.isPending}
+                />
+              </div>
+
+              {/* Frequency selector — only shown when enabled */}
+              {enabled && (
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      color: 'var(--color-text)',
+                      marginBottom: '0.5rem',
+                    }}
+                  >
+                    Frequency
+                  </label>
+                  <Select
+                    value={frequency}
+                    options={[
+                      { value: 'weekly', label: 'Weekly (every Monday)' },
+                      { value: 'monthly', label: 'Monthly (1st of each month)' },
+                    ]}
+                    onChange={(e) => handleFrequency(e.target.value as 'weekly' | 'monthly')}
+                    disabled={mutation.isPending}
+                  />
+                </div>
+              )}
+
+              {/* Last sent info */}
+              {lastSent && (
+                <div
+                  style={{
+                    fontSize: '0.8125rem',
+                    color: 'var(--color-text-secondary)',
+                    borderTop: '1px solid var(--color-border)',
+                    paddingTop: '0.75rem',
+                  }}
+                >
+                  Last sent: {lastSent}
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 // ─── Section: Data ────────────────────────────────────────────────────────────
 
 async function downloadFile(url: string, filename: string) {
@@ -2522,6 +2688,7 @@ export default function SettingsPage() {
       case 'tags': return <TagsSection />;
       case 'merchants': return <MerchantsSection />;
       case 'integrations': return <IntegrationsSection />;
+      case 'report-digest': return <ReportDigestSection />;
       case 'data': return <DataSection />;
       case 'billing': return <BillingSection />;
     }

@@ -1,9 +1,19 @@
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-function getTransport() {
+const FROM = process.env.SMTP_FROM ?? process.env.RESEND_FROM ?? 'Kuber <noreply@kuber.app>';
+const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:3000';
+
+// ─── Provider detection ────────────────────────────────────────────────────────
+
+function getResendClient(): Resend | null {
+  if (!process.env.RESEND_API_KEY) return null;
+  return new Resend(process.env.RESEND_API_KEY);
+}
+
+function getSmtpTransport(): ReturnType<typeof nodemailer.createTransport> | null {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null;
-
   return nodemailer.createTransport({
     host: SMTP_HOST,
     port: parseInt(SMTP_PORT ?? '587', 10),
@@ -12,17 +22,35 @@ function getTransport() {
   });
 }
 
-const FROM = process.env.SMTP_FROM ?? 'Kuber <noreply@kuber.app>';
-const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:3000';
+// ─── Core send ────────────────────────────────────────────────────────────────
 
-async function sendMail(opts: { to: string; subject: string; html: string; text: string }) {
-  const transport = getTransport();
-  if (!transport) {
-    console.log(`[email] SMTP not configured — would send "${opts.subject}" to ${opts.to}`);
+export async function sendMail(opts: { to: string; subject: string; html: string; text: string }) {
+  // Resend takes priority if API key is set
+  const resend = getResendClient();
+  if (resend) {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      text: opts.text,
+    });
+    if (error) throw new Error(`Resend error: ${error.message}`);
     return;
   }
-  await transport.sendMail({ from: FROM, ...opts });
+
+  // Fall back to SMTP
+  const transport = getSmtpTransport();
+  if (transport) {
+    await transport.sendMail({ from: FROM, ...opts });
+    return;
+  }
+
+  // Neither configured — log and continue
+  console.log(`[email] No email provider configured — would send "${opts.subject}" to ${opts.to}`);
 }
+
+// ─── Emails ───────────────────────────────────────────────────────────────────
 
 export async function sendPasswordResetEmail(to: string, token: string) {
   const url = `${CLIENT_URL}/reset-password?token=${token}`;
@@ -58,8 +86,8 @@ export async function sendAccountLockoutEmail(to: string, lockedUntil: Date) {
 export async function sendTestEmail(to: string) {
   await sendMail({
     to,
-    subject: 'Kuber SMTP test',
-    text: 'This is a test email from Kuber. Your SMTP configuration is working.',
-    html: '<div style="font-family:sans-serif"><h2>SMTP test</h2><p>Your Kuber email configuration is working correctly.</p></div>',
+    subject: 'Kuber email test',
+    text: 'This is a test email from Kuber. Your email configuration is working.',
+    html: '<div style="font-family:sans-serif"><h2>Email test</h2><p>Your Kuber email configuration is working correctly.</p></div>',
   });
 }

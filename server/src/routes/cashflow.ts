@@ -370,111 +370,249 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
+            emoji: true,
             type: true,
-            groupId: true,
-            group: { select: { id: true, name: true } },
+            bucketType: true,
           },
         },
       },
     });
 
-    // Aggregate income by category and expenses by category/group
-    const incomeByCategory = new Map<string, { id: string; name: string; amount: number }>();
-    const expenseByCategoryGroup = new Map<string, { id: string; name: string; amount: number }>();
-    const expenseByCategoryFull = new Map<
-      string,
-      { id: string; name: string; amount: number; groupId: string }
-    >();
+    // --- Income sources: group by category ---
+    type IncomeSource = { id: string; name: string; icon: string; amount: number };
+    const incomeMap = new Map<string, IncomeSource>();
+
+    // --- Expense categories: group by category, track bucketType ---
+    type ExpenseCategory = { id: string; name: string; icon: string; amount: number; bucketType: string };
+    const expenseCatMap = new Map<string, ExpenseCategory>();
 
     for (const t of transactions) {
       const catId = t.categoryId ?? '__uncategorized';
       const catName = t.category?.name ?? 'Uncategorized';
+      const catIcon = t.category?.emoji ?? '';
       const catType = t.category?.type ?? 'EXPENSE';
+      const bucketType = t.category?.bucketType ?? 'uncategorized';
 
       if (catType === 'INCOME' || t.amount > 0) {
-        const amt = t.amount > 0 ? t.amount : Math.abs(t.amount);
-        const existing = incomeByCategory.get(catId);
+        const amt = Math.abs(t.amount);
+        const existing = incomeMap.get(catId);
         if (existing) {
           existing.amount += amt;
         } else {
-          incomeByCategory.set(catId, { id: catId, name: catName, amount: amt });
+          incomeMap.set(catId, { id: catId, name: catName, icon: catIcon, amount: amt });
         }
-      } else {
+      } else if (t.amount < 0) {
         const amt = Math.abs(t.amount);
-        const groupId = t.category?.groupId ?? '__ungrouped';
-        const groupName = t.category?.group?.name ?? 'Uncategorized';
-
-        // Group level
-        const existingGroup = expenseByCategoryGroup.get(groupId);
-        if (existingGroup) {
-          existingGroup.amount += amt;
+        const existing = expenseCatMap.get(catId);
+        if (existing) {
+          existing.amount += amt;
         } else {
-          expenseByCategoryGroup.set(groupId, { id: groupId, name: groupName, amount: amt });
-        }
-
-        // Category level
-        const existingCat = expenseByCategoryFull.get(catId);
-        if (existingCat) {
-          existingCat.amount += amt;
-        } else {
-          expenseByCategoryFull.set(catId, { id: catId, name: catName, amount: amt, groupId });
-        }
-      }
-    }
-
-    // Build nodes
-    type SankeyNode = { id: string; name: string; type: 'income' | 'expense_group' | 'expense_category' };
-    const nodes: SankeyNode[] = [];
-    const links: Array<{ source: string; target: string; value: number }> = [];
-
-    for (const inc of incomeByCategory.values()) {
-      nodes.push({ id: `income_${inc.id}`, name: inc.name, type: 'income' });
-    }
-    for (const grp of expenseByCategoryGroup.values()) {
-      nodes.push({ id: `group_${grp.id}`, name: grp.name, type: 'expense_group' });
-    }
-    for (const cat of expenseByCategoryFull.values()) {
-      nodes.push({ id: `cat_${cat.id}`, name: cat.name, type: 'expense_category' });
-    }
-
-    // Total income and total expenses for proportional distribution
-    const totalIncome = Array.from(incomeByCategory.values()).reduce((s, c) => s + c.amount, 0);
-    const totalExpenses = Array.from(expenseByCategoryGroup.values()).reduce((s, g) => s + g.amount, 0);
-
-    // Links: income categories → expense groups (proportional)
-    for (const inc of incomeByCategory.values()) {
-      for (const grp of expenseByCategoryGroup.values()) {
-        // Proportional: income source contributes proportionally to each expense group
-        const value = totalIncome > 0
-          ? (inc.amount / totalIncome) * grp.amount
-          : 0;
-        if (value > 0) {
-          links.push({
-            source: `income_${inc.id}`,
-            target: `group_${grp.id}`,
-            value,
+          expenseCatMap.set(catId, {
+            id: catId,
+            name: catName,
+            icon: catIcon,
+            amount: amt,
+            bucketType,
           });
         }
       }
     }
 
-    // Links: expense groups → expense categories
-    for (const cat of expenseByCategoryFull.values()) {
-      const groupId = cat.groupId;
-      if (cat.amount > 0) {
-        links.push({
-          source: `group_${groupId}`,
-          target: `cat_${cat.id}`,
-          value: cat.amount,
+    // --- Build income sources sorted descending ---
+    const incomeSources: IncomeSource[] = Array.from(incomeMap.values())
+      .sort((a, b) => b.amount - a.amount);
+
+    const totalIncome = incomeSources.reduce((s, c) => s + c.amount, 0);
+
+    // --- Group expense categories into buckets ---
+    const BUCKET_ORDER: Array<'Needs' | 'Wants' | 'Savings' | 'Uncategorized'> = [
+      'Needs', 'Wants', 'Savings', 'Uncategorized',
+    ];
+
+    const bucketNameMap: Record<string, 'Needs' | 'Wants' | 'Savings' | 'Uncategorized'> = {
+      needs: 'Needs',
+      wants: 'Wants',
+      savings: 'Savings',
+      uncategorized: 'Uncategorized',
+    };
+
+    type Bucket = {
+      name: 'Needs' | 'Wants' | 'Savings' | 'Uncategorized';
+      amount: number;
+      categories: Array<{ id: string; name: string; icon: string; amount: number }>;
+    };
+
+    const bucketMap = new Map<string, Bucket>();
+
+    for (const cat of expenseCatMap.values()) {
+      const bucketLabel = bucketNameMap[cat.bucketType] ?? 'Uncategorized';
+      const existing = bucketMap.get(bucketLabel);
+      const catEntry = { id: cat.id, name: cat.name, icon: cat.icon, amount: cat.amount };
+      if (existing) {
+        existing.amount += cat.amount;
+        existing.categories.push(catEntry);
+      } else {
+        bucketMap.set(bucketLabel, {
+          name: bucketLabel,
+          amount: cat.amount,
+          categories: [catEntry],
         });
       }
     }
 
-    return res.json({ nodes, links });
+    // Sort categories within each bucket descending, then order buckets
+    const buckets: Bucket[] = BUCKET_ORDER
+      .filter(name => bucketMap.has(name))
+      .map(name => {
+        const bucket = bucketMap.get(name)!;
+        bucket.categories.sort((a, b) => b.amount - a.amount);
+        return bucket;
+      });
+
+    const totalSpending = buckets.reduce((s, b) => s + b.amount, 0);
+    const net = totalIncome - totalSpending;
+
+    return res.json({
+      totalIncome,
+      totalSpending,
+      net,
+      incomeSources,
+      buckets,
+    });
   } catch (err) {
     console.error('[cashflow/sankey]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// GET /api/v1/cashflow/forecast?days=30|60|90
+router.get('/forecast', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const daysParam = parseInt(req.query.days as string) || 30;
+    const days = [30, 60, 90].includes(daysParam) ? daysParam : 30;
+
+    const now = new Date();
+    // 1. Current balance: sum of all non-hidden accounts
+    const balanceAgg = await prisma.account.aggregate({
+      _sum: { balance: true },
+      where: { householdId, isHidden: false },
+    });
+    const currentBalance = balanceAgg._sum.balance ?? 0;
+
+    // 2. Historical daily averages from last 90 days
+    const historyStart = new Date(now);
+    historyStart.setDate(historyStart.getDate() - 90);
+
+    const historicalTxns = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        date: { gte: historyStart, lte: now },
+        isHidden: false,
+      },
+      select: { amount: true },
+    });
+
+    let totalIncome = 0;
+    let totalExpenses = 0;
+    for (const t of historicalTxns) {
+      if (t.amount > 0) totalIncome += t.amount;
+      else totalExpenses += Math.abs(t.amount);
+    }
+
+    const avgDailyIncome = historicalTxns.length > 0 ? totalIncome / 90 : 0;
+    const avgDailyExpense = historicalTxns.length > 0 ? totalExpenses / 90 : 0;
+
+    // 3. Known recurring items in the forecast window
+    const recurringItems = await prisma.recurringItem.findMany({
+      where: { householdId, isActive: true },
+    });
+
+    // Build a map of date -> adjustment
+    const recurringMap = new Map<string, number>();
+    const forecastEnd = new Date(now);
+    forecastEnd.setDate(forecastEnd.getDate() + days);
+
+    for (const item of recurringItems) {
+      let cursor = new Date(item.nextDate);
+      // Walk cursor backward if it's before today so we start from first future occurrence
+      while (cursor < now) {
+        cursor = advanceByFrequency(cursor, item.frequency);
+      }
+      // Now collect all occurrences within forecast window
+      while (cursor <= forecastEnd) {
+        const dateKey = cursor.toISOString().slice(0, 10);
+        recurringMap.set(dateKey, (recurringMap.get(dateKey) ?? 0) + item.amount);
+        cursor = advanceByFrequency(cursor, item.frequency);
+      }
+    }
+
+    // 4. Project forward day by day
+    const projections: Array<{ date: string; projected: number; dailyNet: number }> = [];
+    let balance = currentBalance;
+    let knownRecurringTotal = 0;
+
+    for (let d = 1; d <= days; d++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() + d);
+      const dateKey = date.toISOString().slice(0, 10);
+
+      const recurringAdj = recurringMap.get(dateKey) ?? 0;
+      const dailyNet = avgDailyIncome - avgDailyExpense + recurringAdj;
+      balance += dailyNet;
+      knownRecurringTotal += recurringAdj;
+
+      projections.push({
+        date: dateKey,
+        projected: Math.round(balance * 100) / 100,
+        dailyNet: Math.round(dailyNet * 100) / 100,
+      });
+    }
+
+    const projectedEndBalance = projections.length > 0
+      ? projections[projections.length - 1].projected
+      : currentBalance;
+
+    return res.json({
+      currentBalance: Math.round(currentBalance * 100) / 100,
+      projections,
+      summary: {
+        days,
+        projectedEndBalance: Math.round(projectedEndBalance * 100) / 100,
+        avgMonthlyIncome: Math.round(avgDailyIncome * 30 * 100) / 100,
+        avgMonthlyExpense: Math.round(avgDailyExpense * 30 * 100) / 100,
+        knownRecurringTotal: Math.round(knownRecurringTotal * 100) / 100,
+      },
+    });
+  } catch (err) {
+    console.error('[cashflow/forecast]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+function advanceByFrequency(date: Date, frequency: string): Date {
+  const next = new Date(date);
+  switch (frequency.toLowerCase()) {
+    case 'weekly':
+      next.setDate(next.getDate() + 7);
+      break;
+    case 'biweekly':
+      next.setDate(next.getDate() + 14);
+      break;
+    case 'monthly':
+      next.setMonth(next.getMonth() + 1);
+      break;
+    case 'quarterly':
+      next.setDate(next.getDate() + 90);
+      break;
+    case 'annually':
+    case 'yearly':
+      next.setFullYear(next.getFullYear() + 1);
+      break;
+    default:
+      next.setMonth(next.getMonth() + 1);
+  }
+  return next;
+}
 
 export default router;

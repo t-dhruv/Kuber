@@ -1,6 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import {
   PieChart,
   Pie,
@@ -13,10 +12,13 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Sankey,
-  Rectangle,
 } from "recharts";
-import { SlidersHorizontal, BookmarkPlus, ChevronDown, Trash2, Bookmark, X, BarChart2, GitMerge } from "lucide-react";
+import { ReportsSankeyChart, type SankeyData } from "./components/ReportsSankeyChart";
+import { BudgetVarianceChart } from "./components/BudgetVarianceChart";
+import { CashFlowForecast } from "./components/CashFlowForecast";
+import { SlidersHorizontal, BookmarkPlus, ChevronDown, Trash2, Bookmark, X, BarChart2, GitMerge, Receipt } from "lucide-react";
+import { ExportButtons } from "./components/ExportButtons";
+import { TaxSummaryTab } from "./components/TaxSummaryTab";
 import { api } from "@/lib/api";
 import { Card, CardDivider, Skeleton, Modal, ModalFooter, Button, Input, notify } from "@/components/ui";
 import { InstitutionLogo } from "@/components/ui/InstitutionLogo";
@@ -47,7 +49,7 @@ const DATE_PRESETS = [
 ] as const;
 
 type DatePreset = (typeof DATE_PRESETS)[number]["value"];
-type ReportTab = "cashflow" | "spending" | "income";
+type ReportTab = "cashflow" | "spending" | "income" | "forecast" | "tax" | "variance";
 type ChartType = "donut" | "pie" | "bar" | "line";
 type GroupBy = "category" | "merchant" | "account";
 
@@ -449,6 +451,9 @@ function TabBar({
     { value: "cashflow", label: "Cash Flow" },
     { value: "spending", label: "Spending" },
     { value: "income", label: "Income" },
+    { value: "variance", label: "Variance" },
+    { value: "forecast", label: "Forecast" },
+    { value: "tax", label: "Tax Summary" },
   ];
 
   return (
@@ -549,207 +554,7 @@ function KpiCards({
   );
 }
 
-// ─── Reports Sankey Chart ─────────────────────────────────────────────────────
-
-const SANKEY_COLORS = [
-  "#E5622A",
-  "#1971c2",
-  "#9c36b5",
-  "#0c8599",
-  "#e67700",
-  "#f06595",
-  "#5c7cfa",
-  "#f59f00",
-  "#868e96",
-  "#2f9e44",
-];
-
-const MAX_SANKEY_CATEGORIES = 8;
-
-function ReportsSankeyChart({
-  income,
-  net,
-  spendingItems,
-  startDate,
-  endDate,
-}: {
-  income: number;
-  net: number;
-  spendingItems: {
-    id: string;
-    name: string;
-    icon: string | null;
-    amount: number;
-  }[];
-  startDate: string;
-  endDate: string;
-}) {
-  const navigate = useNavigate();
-  const [hovered, setHovered] = useState<number | null>(null);
-  if (income <= 0 || spendingItems.length === 0) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: 220,
-          color: "var(--color-text-muted)",
-          fontSize: "0.875rem",
-        }}
-      >
-        No data for this period
-      </div>
-    );
-  }
-
-  // Take top N categories, group rest into "Other"
-  const sorted = [...spendingItems].sort((a, b) => b.amount - a.amount);
-  const topItems = sorted.slice(0, MAX_SANKEY_CATEGORIES);
-  const otherAmount = sorted
-    .slice(MAX_SANKEY_CATEGORIES)
-    .reduce((s, i) => s + i.amount, 0);
-  if (otherAmount > 0)
-    topItems.push({
-      id: "__other__",
-      name: "Other",
-      icon: null,
-      amount: Math.round(otherAmount * 100) / 100,
-    });
-
-  const hasSavings = net > 0;
-  const nodes = [
-    { name: "Income" },
-    ...topItems.map((i) => ({ name: i.name })),
-    ...(hasSavings ? [{ name: "Savings" }] : []),
-  ];
-
-  const links = [
-    ...topItems.map((item, i) => ({
-      source: 0,
-      target: i + 1,
-      value: Math.round(item.amount * 100) / 100,
-    })),
-    ...(hasSavings
-      ? [
-          {
-            source: 0,
-            target: nodes.length - 1,
-            value: Math.round(net * 100) / 100,
-          },
-        ]
-      : []),
-  ];
-
-  const validLinks = links.filter((l) => l.value > 0);
-  if (validLinks.length === 0) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: 220,
-          color: "var(--color-text-muted)",
-          fontSize: "0.875rem",
-        }}
-      >
-        No transactions in this period
-      </div>
-    );
-  }
-
-  const amtMap = new Map<string, number>([
-    ['Income', income],
-    ...topItems.map(i => [i.name, i.amount] as [string, number]),
-    ...(hasSavings ? [['Savings', net] as [string, number]] : []),
-  ]);
-
-  function handleNodeClick(index: number, name: string) {
-    if (index === 0) return; // Income node
-    if (hasSavings && index === nodes.length - 1) return; // Savings
-    navigate(`/transactions?search=${encodeURIComponent(name)}&startDate=${startDate}&endDate=${endDate}`);
-  }
-
-  return (
-    <div>
-      <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: "0.5rem", textAlign: "center" }}>
-        Click a category to view transactions
-      </p>
-      <div style={{ height: 320 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <Sankey
-            data={{ nodes, links: validLinks }}
-            nodePadding={10}
-            nodeWidth={18}
-            margin={{ top: 8, right: 140, bottom: 8, left: 80 }}
-            link={({ sourceX, sourceY, sourceControlX, targetControlX, targetX, targetY, linkWidth }: any) => (
-              <path
-                d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
-                fill="none"
-                stroke="var(--color-border)"
-                strokeWidth={linkWidth}
-                strokeOpacity={0.45}
-              />
-            )}
-            node={({ x, y, width, height, index, payload }: {
-              x: number; y: number; width: number; height: number; index: number; payload: { name: string };
-            }) => {
-              const isIncome = index === 0;
-              const isSavings = hasSavings && index === nodes.length - 1;
-              const isClickable = !isIncome && !isSavings;
-              const isHov = hovered === index;
-              const color = isIncome ? "var(--color-success)" : isSavings ? "#2f9e44" : SANKEY_COLORS[(index - 1) % SANKEY_COLORS.length];
-              const nodeAmt = amtMap.get(payload.name) ?? 0;
-              const amtStr = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Math.abs(nodeAmt));
-              return (
-                <g
-                  onClick={() => handleNodeClick(index, payload.name)}
-                  onMouseEnter={() => setHovered(index)}
-                  onMouseLeave={() => setHovered(null)}
-                  style={{ cursor: isClickable ? "pointer" : "default" }}
-                >
-                  <Rectangle x={x} y={y} width={width} height={Math.max(height, 4)} fill={color} fillOpacity={isHov ? 1 : 0.85} radius={3} />
-                  <text
-                    x={isIncome ? x - 8 : x + width + 8}
-                    y={y + height / 2 - (isHov ? 7 : 0)}
-                    textAnchor={isIncome ? "end" : "start"}
-                    dominantBaseline="middle"
-                    style={{ fontSize: "0.6875rem", fill: isHov ? "var(--color-text)" : "var(--color-text-secondary)", fontFamily: "inherit", fontWeight: isHov ? 600 : 400 }}
-                  >
-                    {payload.name}
-                  </text>
-                  {isHov && (
-                    <text
-                      x={isIncome ? x - 8 : x + width + 8}
-                      y={y + height / 2 + 8}
-                      textAnchor={isIncome ? "end" : "start"}
-                      dominantBaseline="middle"
-                      style={{ fontSize: "0.625rem", fill: color, fontFamily: "inherit", fontWeight: 600 }}
-                    >
-                      {amtStr}
-                    </text>
-                  )}
-                  {isHov && isClickable && (
-                    <text
-                      x={isIncome ? x - 8 : x + width + 8}
-                      y={y + height / 2 + 20}
-                      textAnchor={isIncome ? "end" : "start"}
-                      dominantBaseline="middle"
-                      style={{ fontSize: "0.5625rem", fill: "var(--color-accent)", fontFamily: "inherit" }}
-                    >
-                      View transactions →
-                    </text>
-                  )}
-                </g>
-              );
-            }}
-          />
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
+// ReportsSankeyChart is now imported from ./components/ReportsSankeyChart
 
 // ─── Cash Flow Tab ────────────────────────────────────────────────────────────
 
@@ -770,16 +575,11 @@ function CashFlowTab({
         .then((r) => r.data),
   });
 
-  const { data: spendingData } = useQuery<{
-    total: number;
-    items: { id: string; name: string; icon: string | null; amount: number }[];
-  }>({
-    queryKey: ["reports-spending-sankey", startDate, endDate, extraParams],
+  const { data: sankeyData } = useQuery<SankeyData>({
+    queryKey: ["reports-sankey", startDate, endDate, extraParams],
     queryFn: () =>
       api
-        .get(
-          `/reports/spending?startDate=${startDate}&endDate=${endDate}&groupBy=category${extraParams}`,
-        )
+        .get(`/cashflow/sankey?startDate=${startDate}&endDate=${endDate}${extraParams}`)
         .then((r) => r.data),
   });
 
@@ -1028,14 +828,22 @@ function CashFlowTab({
             )}
 
             {/* Sankey view */}
-            {cfChartView === "sankey" && (
-              <ReportsSankeyChart
-                income={data?.income ?? 0}
-                net={data?.net ?? 0}
-                spendingItems={spendingData?.items ?? []}
-                startDate={startDate}
-                endDate={endDate}
-              />
+            {cfChartView === "sankey" && sankeyData && (
+              <ReportsSankeyChart data={sankeyData} />
+            )}
+            {cfChartView === "sankey" && !sankeyData && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: 260,
+                  color: "var(--color-text-muted)",
+                  fontSize: "0.875rem",
+                }}
+              >
+                No money flow data for this period.
+              </div>
             )}
           </>
         )}
@@ -3087,6 +2895,17 @@ export default function ReportsPage() {
       {/* Tab bar */}
       <TabBar tab={tab} onChange={setTab} />
 
+      {/* Export toolbar — shown for data tabs (not forecast/tax which have their own export) */}
+      {(tab === "cashflow" || tab === "spending" || tab === "income") && (
+        <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "0.25rem" }}>
+          <ExportButtons
+            type={tab === "cashflow" ? "cashflow" : "spending"}
+            from={startDate}
+            to={endDate}
+          />
+        </div>
+      )}
+
       {/* Tab content */}
       {tab === "cashflow" && (
         <CashFlowTab startDate={startDate} endDate={endDate} extraParams={extraFilterParams} />
@@ -3097,6 +2916,9 @@ export default function ReportsPage() {
       {tab === "income" && (
         <CategoryTab mode="income" startDate={startDate} endDate={endDate} extraParams={extraFilterParams} />
       )}
+      {tab === "variance" && <BudgetVarianceChart from={startDate} to={endDate} />}
+      {tab === "forecast" && <CashFlowForecast />}
+      {tab === "tax" && <TaxSummaryTab />}
 
       <SaveViewModal
         open={saveModalOpen}

@@ -56,7 +56,9 @@ function formatTx(t: any) {
     isRecurring: t.isRecurring,
     needsReview: t.needsReview,
     isHidden: t.isHidden,
+    isPending: t.isPending,
     isSplit: t.isSplit,
+    splitDetails: t.splitDetails ?? null,
     notes: t.notes ?? null,
     tags: (t.tags ?? []).map((tt: any) => ({
       id: tt.tag.id,
@@ -81,11 +83,42 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
 
     // Filters
+    const ListQuerySchema = z.object({
+      accountId:   z.string().optional(),
+      categoryId:  z.string().optional(),
+      startDate:   z.string().optional(),
+      endDate:     z.string().optional(),
+      from:        z.string().optional(),
+      to:          z.string().optional(),
+      minAmount:   z.string().optional(),
+      maxAmount:   z.string().optional(),
+      search:      z.string().optional(),
+      isRecurring: z.string().optional(),
+      needsReview: z.string().optional(),
+      sort:        z.enum(['date', 'amount']).optional(),
+      order:       z.enum(['asc', 'desc']).optional(),
+      tagIds:      z.string().optional(),
+      type:        z.enum(['income', 'expense']).optional(),
+      pending:     z.enum(['true', 'false']).optional(),
+      limit:       z.string().optional(),
+      cursor:      z.string().optional(),
+      page:        z.string().optional(),
+      hidden:      z.string().optional(),
+      recurring:   z.string().optional(),
+    });
+
+    const parsed = ListQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid query params' });
+    }
+
     const {
       accountId,
       categoryId,
       startDate,
       endDate,
+      from,
+      to,
       minAmount,
       maxAmount,
       search,
@@ -94,7 +127,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       sort = 'date',
       order = 'desc',
       tagIds,
-    } = req.query as Record<string, string | undefined>;
+      type,
+      pending,
+    } = parsed.data;
 
     // Build where clause
     const where: any = { householdId };
@@ -102,16 +137,31 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     if (accountId) where.accountId = accountId;
     if (categoryId) where.categoryId = categoryId;
 
-    if (startDate || endDate) {
+    // Date filters: from/to take precedence, fall back to legacy startDate/endDate
+    const dateFrom = from ?? startDate;
+    const dateTo = to ?? endDate;
+    if (dateFrom || dateTo) {
       where.date = {};
-      if (startDate) where.date.gte = new Date(startDate);
-      if (endDate) where.date.lte = new Date(endDate);
+      if (dateFrom) where.date.gte = new Date(dateFrom);
+      if (dateTo) where.date.lte = new Date(dateTo);
     }
 
     if (minAmount !== undefined || maxAmount !== undefined) {
       where.amount = {};
       if (minAmount !== undefined) where.amount.gte = parseFloat(minAmount);
       if (maxAmount !== undefined) where.amount.lte = parseFloat(maxAmount);
+    }
+
+    // Type filter (income / expense)
+    if (type === 'income') {
+      where.amount = { ...(where.amount ?? {}), gt: 0 };
+    } else if (type === 'expense') {
+      where.amount = { ...(where.amount ?? {}), lt: 0 };
+    }
+
+    // Pending filter
+    if (pending !== undefined) {
+      where.isPending = pending === 'true';
     }
 
     if (search) {
@@ -727,7 +777,9 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { date, description, amount, accountId, categoryId, notes, tagIds, isRecurring } = req.body;
+    const { date, description, amount, accountId, notes, tagIds, isRecurring } = req.body;
+    // Normalize empty string categoryId to null to avoid Prisma FK constraint error
+    const categoryId = req.body.categoryId || null;
 
     // Validation
     if (!date) return res.status(400).json({ error: 'date is required' });
@@ -782,6 +834,41 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     return res.status(201).json(formatTx(tx));
   } catch (err) {
     console.error('[transactions/create]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/v1/transactions/:id/confirm  — marks isPending = false
+// Must be registered before /:id to avoid param collision.
+// ---------------------------------------------------------------------------
+router.put('/:id/confirm', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const householdId = req.householdId!;
+
+    const tx = await prisma.transaction.findFirst({ where: { id, householdId } });
+    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+
+    const updated = await prisma.transaction.update({
+      where: { id },
+      data: { isPending: false },
+      include: TX_INCLUDE,
+    });
+
+    logAudit({
+      householdId,
+      userId: req.userId!,
+      action: 'UPDATE',
+      entity: 'TRANSACTION',
+      entityId: id,
+      before: { isPending: true },
+      after: { isPending: false },
+    });
+
+    return res.json(formatTx(updated));
+  } catch (err) {
+    console.error('[transactions/confirm]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

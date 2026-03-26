@@ -333,12 +333,24 @@ router.post('/categories', async (req: AuthRequest, res: Response) => {
   }
 });
 
+const categoryUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  emoji: z.string().optional(),
+  groupId: z.string().optional().nullable(),
+  isTaxDeductible: z.boolean().optional(),
+});
+
 // PUT /api/v1/settings/categories/:id
 router.put('/categories/:id', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const { id } = req.params;
-    const { name, emoji, groupId } = req.body;
+
+    const parsed = categoryUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
+    }
+    const { name, emoji, groupId, isTaxDeductible } = parsed.data;
 
     const existing = await prisma.category.findFirst({
       where: { id, householdId },
@@ -351,6 +363,7 @@ router.put('/categories/:id', async (req: AuthRequest, res: Response) => {
     if (name !== undefined) updateData.name = name;
     if (emoji !== undefined) updateData.emoji = emoji;
     if (groupId !== undefined) updateData.groupId = groupId;
+    if (isTaxDeductible !== undefined) updateData.isTaxDeductible = isTaxDeductible;
 
     const category = await prisma.category.update({
       where: { id },

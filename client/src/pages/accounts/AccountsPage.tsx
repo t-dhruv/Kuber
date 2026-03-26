@@ -48,6 +48,7 @@ interface AccountsData {
 }
 
 type NetWorthRange = '1M' | '3M' | '6M' | '1Y' | 'ALL';
+type BalanceHistoryRange = '1M' | '3M' | '6M' | '1Y';
 
 interface NetWorthHistoryPoint {
   date: string;
@@ -853,6 +854,8 @@ function EditAccountModal({
 
 // ─── Account Detail Modal ─────────────────────────────────────────────────────
 
+const BALANCE_HISTORY_RANGES: BalanceHistoryRange[] = ['1M', '3M', '6M', '1Y'];
+
 function AccountDetailModal({
   account,
   onClose,
@@ -862,14 +865,22 @@ function AccountDetailModal({
   onClose: () => void;
   onEdit: () => void;
 }) {
+  const [historyRange, setHistoryRange] = useState<BalanceHistoryRange>('3M');
+
   const { data, isLoading } = useQuery<AccountDetail>({
     queryKey: ['accounts', account?.id],
     queryFn: () => api.get(`/accounts/${account!.id}`).then((r) => r.data),
     enabled: !!account,
   });
 
+  const { data: historyData, isLoading: historyLoading } = useQuery<{ date: string; balance: number }[]>({
+    queryKey: ['accounts', account?.id, 'history', historyRange],
+    queryFn: () => api.get(`/accounts/${account!.id}/history?range=${historyRange}`).then((r) => r.data),
+    enabled: !!account,
+  });
+
   const detail = data?.account ?? account;
-  const history = data?.balanceHistory ?? [];
+  const history = historyData ?? [];
   const txns = data?.recentTransactions ?? [];
 
   return (
@@ -902,11 +913,40 @@ function AccountDetailModal({
           </div>
 
           {/* Balance history chart */}
-          {history.length > 0 && (
-            <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Balance History
               </div>
+              <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: 'var(--color-surface-hover)', borderRadius: 'var(--radius-md)', padding: '0.2rem' }}>
+                {BALANCE_HISTORY_RANGES.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setHistoryRange(r)}
+                    style={{
+                      padding: '0.2rem 0.5rem',
+                      fontSize: '0.6875rem',
+                      fontWeight: 600,
+                      border: 'none',
+                      cursor: 'pointer',
+                      borderRadius: 'var(--radius-sm)',
+                      backgroundColor: historyRange === r ? 'var(--color-surface-elevated)' : 'transparent',
+                      color: historyRange === r ? 'var(--color-text)' : 'var(--color-text-muted)',
+                      transition: 'background 0.15s',
+                    }}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {historyLoading ? (
+              <Skeleton height={160} width="100%" />
+            ) : history.length === 0 ? (
+              <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+                No history yet — snapshots are taken daily.
+              </div>
+            ) : (
               <ResponsiveContainer width="100%" height={160}>
                 <AreaChart data={history} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
                   <defs>
@@ -916,8 +956,13 @@ function AccountDetailModal({
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                  <XAxis dataKey="date" hide />
-                  <YAxis hide />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
+                    tickFormatter={(d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis hide domain={['auto', 'auto']} />
                   <Tooltip
                     formatter={(value: number) => [fmtCurrency(value), 'Balance']}
                     labelFormatter={(label: string) => fmtDate(label)}
@@ -931,8 +976,8 @@ function AccountDetailModal({
                   <Area type="monotone" dataKey="balance" stroke="#E5622A" strokeWidth={2} fill="url(#acctGrad)" dot={false} />
                 </AreaChart>
               </ResponsiveContainer>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Recent transactions */}
           <div>

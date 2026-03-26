@@ -15,7 +15,7 @@ const YahooFinance = yahooFinanceModule as unknown as new (opts?: object) => {
     opts: { period1: string | Date; period2: string | Date; interval?: string }
   ): Promise<Array<{ date: Date; close: number }>>;
 };
-const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+const yf = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +35,7 @@ const cache = new Map<string, CachedQuote>();
 
 async function fetchFromYahoo(symbol: string): Promise<CachedQuote> {
   const q = await yf.quote(symbol);
+  if (!q) throw new Error(`No data returned for ${symbol}`);
   const price = q.regularMarketPrice ?? 0;
   return {
     price,

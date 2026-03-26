@@ -35,27 +35,30 @@ model User {
 }
 
 model Household {
-  id                String             @id @default(cuid())
-  name              String
-  currency          String             @default("USD")
-  fiscalYearStart   Int                @default(1)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  members           HouseholdMember[]
-  accounts          Account[]
-  categories        Category[]
-  budgets           Budget[]
-  recurringItems    RecurringItem[]
-  goals             Goal[]
-  rules             Rule[]
-  merchants         Merchant[]
-  tags              Tag[]
-  invites           HouseholdInvite[]
-  aiConfig          AiConfig?
-  conversations     Conversation[]
-  netWorthSnapshots NetWorthSnapshot[]
-  savedReports      SavedReport[]
-  wealthAiCache     WealthAiCache?
+  id                      String                   @id @default(cuid())
+  name                    String
+  currency                String                   @default("USD")
+  fiscalYearStart         Int                      @default(1)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  members                 HouseholdMember[]
+  accounts                Account[]
+  categories              Category[]
+  budgets                 Budget[]
+  recurringItems          RecurringItem[]
+  goals                   Goal[]
+  rules                   Rule[]
+  merchants               Merchant[]
+  tags                    Tag[]
+  invites                 HouseholdInvite[]
+  aiConfig                AiConfig?
+  conversations           Conversation[]
+  netWorthSnapshots       NetWorthSnapshot[]
+  accountBalanceSnapshots AccountBalanceSnapshot[]
+  savedReports            SavedReport[]
+  wealthAiCache           WealthAiCache?
+  duplicateDismissals     DuplicateDismissal[]
+  reportSchedule          ReportSchedule?
 
   @@map("households")
 }
@@ -141,25 +144,26 @@ model RefreshToken {
 }
 
 model Account {
-  id                  String              @id @default(cuid())
+  id                  String                   @id @default(cuid())
   householdId         String
   name                String
   type                String
   institution         String?
   institutionLogo     String?
   lastFour            String?
-  balance             Float               @default(0)
-  currency            String              @default("USD")
-  isHidden            Boolean             @default(false)
-  excludeFromNetWorth Boolean             @default(false)
+  balance             Float                    @default(0)
+  currency            String                   @default("USD")
+  isHidden            Boolean                  @default(false)
+  excludeFromNetWorth Boolean                  @default(false)
   lastSynced          DateTime?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  household           Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  household           Household                @relation(fields: [householdId], references: [id], onDelete: Cascade)
   transactions        Transaction[]
   recurringItems      RecurringItem[]
   goals               Goal[]
   investmentHoldings  InvestmentHolding[]
+  balanceSnapshots    AccountBalanceSnapshot[]
 
   @@map("accounts")
 }
@@ -190,6 +194,7 @@ model Transaction {
   goalAllocations     GoalAllocation[]
 
   @@index([householdId, date])
+  @@index([householdId, date, amount])
   @@index([accountId])
   @@index([categoryId])
   @@map("transactions")
@@ -204,8 +209,9 @@ model Category {
   groupId        String?
   group          CategoryGroup?  @relation(fields: [groupId], references: [id])
   sortOrder      Int             @default(0)
-  isSystem       Boolean         @default(false)
-  bucketType     String          @default("uncategorized") // needs | wants | savings | uncategorized
+  isSystem          Boolean         @default(false)
+  bucketType        String          @default("uncategorized") // needs | wants | savings | uncategorized
+  isTaxDeductible   Boolean         @default(false)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
@@ -509,4 +515,45 @@ model WealthAiCache {
   household   Household @relation(fields: [householdId], references: [id])
 
   @@map("wealth_ai_cache")
+}
+
+model DuplicateDismissal {
+  id             String    @id @default(cuid())
+  householdId    String
+  transactionId1 String
+  transactionId2 String
+  createdAt      DateTime  @default(now())
+  household      Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId1, transactionId2])
+  @@map("duplicate_dismissals")
+}
+
+model AccountBalanceSnapshot {
+  id          String    @id @default(cuid())
+  accountId   String
+  householdId String
+  date        DateTime  @db.Date
+  balance     Float
+  createdAt   DateTime  @default(now())
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, date])
+  @@index([householdId, date])
+  @@map("account_balance_snapshots")
+}
+
+model ReportSchedule {
+  id          String    @id @default(cuid())
+  householdId String    @unique
+  userId      String
+  frequency   String    @default("weekly") // 'weekly' | 'monthly'
+  enabled     Boolean   @default(false)
+  lastSentAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@map("report_schedules")
 }

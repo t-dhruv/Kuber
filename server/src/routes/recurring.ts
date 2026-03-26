@@ -169,7 +169,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         frequency,
         nextDate: new Date(nextDate),
         accountId,
-        categoryId: categoryId ?? null,
+        categoryId: categoryId || null,
       },
       include: {
         category: { select: { id: true, name: true, emoji: true } },
@@ -222,7 +222,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         ...(amount !== undefined && { amount: parseFloat(amount) }),
         ...(frequency !== undefined && { frequency }),
         ...(nextDate !== undefined && { nextDate: new Date(nextDate) }),
-        ...(categoryId !== undefined && { categoryId: categoryId ?? null }),
+        ...(categoryId !== undefined && { categoryId: categoryId || null }),
         ...(accountId !== undefined && { accountId }),
         ...(isActive !== undefined && { isActive }),
       },

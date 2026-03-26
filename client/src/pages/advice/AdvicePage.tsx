@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
 
 // ─── Shared Types ─────────────────────────────────────────────────────────────
 
@@ -505,7 +506,10 @@ function AdviceLibraryTab() {
     if (!topics || !selectedTopic) return;
     const fresh = topics.find((t) => t.id === selectedTopic.id);
     if (fresh) setSelectedTopic(fresh);
-  }, [topics]); // eslint-disable-line react-hooks/exhaustive-deps
+  // selectedTopic.id is a stable selector — we intentionally omit the full
+  // object from deps to avoid an update loop (setting state from derived state).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topics, selectedTopic?.id]);
 
   const filtered = (topics ?? []).filter(
     (t) => categoryFilter === 'all' || t.category === categoryFilter
@@ -698,17 +702,27 @@ function AdviceLibraryTab() {
 
 function AiChatTab({ onGoToSettings }: { onGoToSettings: () => void }) {
   const queryClient = useQueryClient();
+  const accessToken = useAuthStore((s) => s.accessToken);
 
   const [messages, setMessages] = useState<Message[]>([INITIAL_WELCOME]);
   const [input, setInput] = useState('');
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
   const [activeConvId, setActiveConvId] = useState<string | undefined>();
   const [deletingId, setDeletingId] = useState<string | undefined>();
   const [loadingConv, setLoadingConv] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cancel any in-flight SSE stream when the component unmounts
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   const { data: conversations } = useQuery<Conversation[]>({
     queryKey: ['advisor', 'conversations'],
@@ -718,7 +732,7 @@ function AiChatTab({ onGoToSettings }: { onGoToSettings: () => void }) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  }, [messages, loading, streamingContent]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -735,25 +749,83 @@ function AiChatTab({ onGoToSettings }: { onGoToSettings: () => void }) {
       setMessages((prev) => [...prev, userMsg]);
       setInput('');
       setLoading(true);
+      setStreamingContent('');
+
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
 
       try {
-        const resp = await api.post('/advisor/chat', {
-          message: trimmed,
-          conversationId,
+        const response = await fetch('/api/v1/advisor/chat/stream', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({ message: trimmed, conversationId }),
+          signal: abortController.signal,
         });
-        const body = resp.data as { conversationId: string; message: string; suggestions?: string[] };
-        const assistantMsg: Message = {
-          id: genId(),
-          role: 'assistant',
-          content: body.message ?? 'Sorry, I could not process that.',
-          suggestions: body.suggestions,
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-        if (body.conversationId) {
-          setConversationId(body.conversationId);
-          setActiveConvId(body.conversationId);
-          queryClient.invalidateQueries({ queryKey: ['advisor', 'conversations'] });
+
+        if (!response.ok || !response.body) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let accumulated = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() ?? '';
+
+          for (const part of parts) {
+            const line = part.startsWith('data: ') ? part.slice(6) : part;
+            if (!line.trim()) continue;
+
+            let evt: { token?: string; done?: boolean; conversationId?: string; messageId?: string; error?: string };
+            try {
+              evt = JSON.parse(line);
+            } catch {
+              continue;
+            }
+
+            if (evt.error) {
+              const errorMsg: Message = {
+                id: genId(),
+                role: 'assistant',
+                content: evt.error,
+                timestamp: new Date(),
+              };
+              setStreamingContent('');
+              setMessages((prev) => [...prev, errorMsg]);
+              return;
+            }
+
+            if (evt.token) {
+              accumulated += evt.token;
+              setStreamingContent(accumulated);
+            }
+
+            if (evt.done) {
+              const assistantMsg: Message = {
+                id: evt.messageId ?? genId(),
+                role: 'assistant',
+                content: accumulated,
+                timestamp: new Date(),
+              };
+              setStreamingContent('');
+              setMessages((prev) => [...prev, assistantMsg]);
+              if (evt.conversationId) {
+                setConversationId(evt.conversationId);
+                setActiveConvId(evt.conversationId);
+                queryClient.invalidateQueries({ queryKey: ['advisor', 'conversations'] });
+              }
+            }
+          }
         }
       } catch {
         const errorMsg: Message = {
@@ -762,13 +834,15 @@ function AiChatTab({ onGoToSettings }: { onGoToSettings: () => void }) {
           content: 'Sorry, I encountered an error. Please try again.',
           timestamp: new Date(),
         };
+        setStreamingContent('');
         setMessages((prev) => [...prev, errorMsg]);
       } finally {
         setLoading(false);
+        setStreamingContent('');
         setTimeout(() => inputRef.current?.focus(), 50);
       }
     },
-    [loading, conversationId, queryClient]
+    [loading, conversationId, queryClient, accessToken]
   );
 
   async function loadConversation(convId: string) {
@@ -831,6 +905,7 @@ function AiChatTab({ onGoToSettings }: { onGoToSettings: () => void }) {
     setConversationId(undefined);
     setActiveConvId(undefined);
     setInput('');
+    setStreamingContent('');
     setTimeout(() => inputRef.current?.focus(), 50);
   }
 
@@ -1091,7 +1166,68 @@ function AiChatTab({ onGoToSettings }: { onGoToSettings: () => void }) {
             ))
           )}
 
-          {loading && <TypingIndicator />}
+          {loading && streamingContent ? (
+            /* Streaming bubble — shows tokens as they arrive */
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'row',
+                gap: '0.5rem',
+                alignItems: 'flex-start',
+                padding: '0.25rem 1rem',
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--color-accent)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1rem',
+                  flexShrink: 0,
+                }}
+              >
+                ✨
+              </div>
+              <div style={{ maxWidth: '75%' }}>
+                <div
+                  style={{
+                    backgroundColor: 'var(--color-surface-hover)',
+                    color: 'var(--color-text)',
+                    borderRadius: 'var(--radius-sm) var(--radius-lg) var(--radius-lg) var(--radius-lg)',
+                    padding: '0.625rem 0.875rem',
+                    fontSize: '0.875rem',
+                    lineHeight: 1.55,
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {streamingContent}
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: '2px',
+                      height: '1em',
+                      backgroundColor: 'var(--color-accent)',
+                      marginLeft: '1px',
+                      verticalAlign: 'text-bottom',
+                      animation: 'streaming-cursor 0.8s step-end infinite',
+                    }}
+                  />
+                  <style>{`
+                    @keyframes streaming-cursor {
+                      0%, 100% { opacity: 1; }
+                      50% { opacity: 0; }
+                    }
+                  `}</style>
+                </div>
+              </div>
+            </div>
+          ) : loading ? (
+            <TypingIndicator />
+          ) : null}
 
           <div ref={messagesEndRef} />
         </div>

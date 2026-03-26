@@ -126,6 +126,53 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/v1/accounts/:id/history?range=1M|3M|6M|1Y
+router.get('/:id/history', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+
+    const account = await prisma.account.findUnique({ where: { id }, select: { id: true, householdId: true } });
+    if (!account || account.householdId !== householdId) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    const VALID_RANGES = ['1M', '3M', '6M', '1Y'] as const;
+    type Range = typeof VALID_RANGES[number];
+    const rawRange = String(req.query.range ?? '3M').toUpperCase();
+    const range: Range = (VALID_RANGES as readonly string[]).includes(rawRange)
+      ? (rawRange as Range)
+      : '3M';
+
+    const now = new Date();
+    const startDate = new Date(now);
+    if (range === '1M') startDate.setMonth(startDate.getMonth() - 1);
+    else if (range === '3M') startDate.setMonth(startDate.getMonth() - 3);
+    else if (range === '6M') startDate.setMonth(startDate.getMonth() - 6);
+    else startDate.setFullYear(startDate.getFullYear() - 1);
+
+    const snapshots = await prisma.accountBalanceSnapshot.findMany({
+      where: {
+        accountId: id,
+        householdId,
+        date: { gte: startDate },
+      },
+      orderBy: { date: 'asc' },
+      select: { date: true, balance: true },
+    });
+
+    return res.json(
+      snapshots.map((s) => ({
+        date: s.date.toISOString().slice(0, 10),
+        balance: s.balance,
+      })),
+    );
+  } catch (err) {
+    console.error('[accounts/GET /:id/history]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/v1/accounts/:id
 router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
@@ -212,7 +259,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'name is required' });
     }
-    if (!type || !VALID_ACCOUNT_TYPES.includes(type)) {
+    const normalizedType = typeof type === 'string' ? type.toUpperCase().replace(' ', '_') : type;
+    if (!normalizedType || !VALID_ACCOUNT_TYPES.includes(normalizedType)) {
       return res.status(400).json({ error: `type must be one of: ${VALID_ACCOUNT_TYPES.join(', ')}` });
     }
     if (balance === undefined || balance === null || typeof balance !== 'number') {
@@ -223,7 +271,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       data: {
         householdId,
         name: name.trim(),
-        type,
+        type: normalizedType,
         institution: institution ?? null,
         institutionLogo: institutionLogo ?? null,
         lastFour: lastFour ?? null,

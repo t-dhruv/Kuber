@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-24 (Sprint 13 complete — v1.0.0-beta released)
+> Last updated: 2026-03-25 (Monarch parity sprints complete — E2E 10/10 green)
 
 ---
 
@@ -37,7 +37,19 @@
 | Spending Cumulative Chart | 🟢 Done | Dashboard SpendingWidget: this month vs last month day-by-day |
 | Wealth Strategy | 🟢 Done | 50/30/20 dashboard: salary input, bucket cards, alerts, Where to Cut, Investment Ladder, AI coach |
 | Merchants Settings | 🟢 Done | Settings > Merchants: search, sort, inline edit, delete |
-| E2E Tests | 🟢 Done | Playwright setup + smoke tests (7) + auth tests (3); `npm run test:e2e` |
+| E2E Tests | 🟢 Done | Playwright setup + smoke tests (10) + auth tests; `npm run test:e2e` — 10/10 green |
+| 3-Tier Sankey | 🟢 Done | Income sources → Needs/Wants/Savings buckets → categories; pure SVG, hover tooltips |
+| Transaction Overhaul | 🟢 Done | Date range filter, type pills (Income/Expense), pending badge/toggle, split UI + backend |
+| PDF/Excel Export | 🟢 Done | Reports export via pdfkit + exceljs; spending/cashflow/tax report types |
+| Tax Categories | 🟢 Done | isTaxDeductible flag on categories, tax summary tab in Reports, Settings toggle |
+| Cash Flow Forecast | 🟢 Done | 30/60/90-day projection from recurring + historical; Recharts chart in Reports |
+| Duplicate Detection | 🟢 Done | Self-join query, high/medium confidence, DuplicateReviewModal, merge/dismiss |
+| Budget Variance | 🟢 Done | Actual vs budget bar chart per category, variance % table in Reports |
+| Digest Email | 🟢 Done | Weekly/monthly HTML digest; net worth, top spend, budget status, upcoming bills |
+| Report Scheduling | 🟢 Done | ReportSchedule model, Settings UI, hourly scheduler job |
+| AI SSE Streaming | 🟢 Done | POST /advisor/chat/stream SSE endpoint; AdvicePage streams tokens with blinking cursor |
+| Per-Account History | 🟢 Done | AccountBalanceSnapshot model + daily job + GET /accounts/:id/history + chart |
+| Resend Email | 🟢 Done | Resend SDK support in email.ts; takes priority over SMTP if RESEND_API_KEY set |
 | Unit Tests | 🟢 Done | 69 tests: csvExport (100%), netWorthJob (100%), priceCache (97%), wealthAnalysis (100%) |
 | CSV Import | 🟢 Done | 3-step modal: upload → column mapping → preview & import; server parses CSV, auto-matches categories/merchants |
 | Mobile Responsive | 🟢 Done | Sidebar drawer, Dashboard stacking, Transactions column hiding, Budget grid, Wealth overflow fixes |

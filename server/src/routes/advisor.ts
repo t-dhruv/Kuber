@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { getAiClientForHousehold } from '../lib/ai';
@@ -8,17 +9,164 @@ import type { AiMessage } from '../lib/ai/types';
 
 const router = Router();
 
+const chatBodySchema = z.object({
+  message: z.string().min(1, 'message is required'),
+  conversationId: z.string().optional(),
+});
+
+// ─── POST /api/v1/advisor/chat/stream ─────────────────────────────────────────
+
+router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
+  const parse = chatBodySchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: parse.error.issues[0]?.message ?? 'Invalid request' });
+    return;
+  }
+
+  const { message, conversationId } = parse.data;
+  const householdId = req.householdId!;
+  const userId = req.userId!;
+
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  let aborted = false;
+  req.on('close', () => {
+    aborted = true;
+  });
+
+  try {
+    // 1. Get or create conversation
+    let conversation = conversationId
+      ? await prisma.conversation.findFirst({
+          where: { id: conversationId, householdId },
+        })
+      : null;
+
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          householdId,
+          userId,
+          title: message.slice(0, 60),
+        },
+      });
+    }
+
+    const convId = conversation.id;
+
+    // 2. Fetch last 20 messages for history
+    const history = await prisma.conversationMessage.findMany({
+      where: { conversationId: convId },
+      orderBy: { createdAt: 'asc' },
+      take: 20,
+    });
+
+    // 3. Build financial context
+    const ctx = await getChatContext(prisma, householdId);
+
+    // 4. Build messages array
+    const systemPrompt = chatSystemPrompt(ctx);
+    const historyMessages: AiMessage[] = history.map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+    const messages: AiMessage[] = [
+      ...historyMessages,
+      { role: 'user', content: message },
+    ];
+
+    // 5. Call AI with streaming
+    let responseContent = '';
+    try {
+      const client = await getAiClientForHousehold(householdId, prisma);
+
+      const result = await client.completeStream(
+        { messages, systemPrompt, maxTokens: 1024, temperature: 0.7 },
+        (token: string) => {
+          if (aborted) return;
+          responseContent += token;
+          res.write(`data: ${JSON.stringify({ token })}\n\n`);
+        },
+      );
+
+      // Use the full result content as the canonical saved text (provider may differ slightly)
+      responseContent = result.content;
+    } catch (aiErr: unknown) {
+      const errMsg = aiErr instanceof Error ? aiErr.message : String(aiErr);
+      const isNotConfigured =
+        errMsg.includes('not configured') || errMsg.includes('provider not configured');
+
+      responseContent = isNotConfigured
+        ? "I'm not configured yet. Go to Settings → AI Advisor to choose your AI provider (Claude, OpenAI, Gemini, Ollama, or OpenRouter) and add your API key."
+        : 'I encountered an error processing your request. Please try again.';
+
+      if (!isNotConfigured) {
+        console.error('[advisor/chat/stream] AI error:', errMsg);
+      }
+
+      if (!aborted) {
+        res.write(`data: ${JSON.stringify({ error: responseContent })}\n\n`);
+        res.end();
+        return;
+      }
+      return;
+    }
+
+    if (aborted) return;
+
+    // 6. Save messages to DB
+    await prisma.conversationMessage.createMany({
+      data: [
+        { conversationId: convId, role: 'user', content: message },
+        { conversationId: convId, role: 'assistant', content: responseContent },
+      ],
+    });
+
+    // Update conversation timestamp / title
+    if (!conversationId) {
+      await prisma.conversation.update({
+        where: { id: convId },
+        data: { title: message.slice(0, 60), updatedAt: new Date() },
+      });
+    } else {
+      await prisma.conversation.update({
+        where: { id: convId },
+        data: { updatedAt: new Date() },
+      });
+    }
+
+    // 7. Get the saved assistant message id for the client
+    const savedMsg = await prisma.conversationMessage.findFirst({
+      where: { conversationId: convId, role: 'assistant' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.write(`data: ${JSON.stringify({ done: true, conversationId: convId, messageId: savedMsg?.id })}\n\n`);
+    res.end();
+  } catch (err) {
+    console.error('[advisor/chat/stream]', err);
+    if (!aborted) {
+      res.write(`data: ${JSON.stringify({ error: 'Internal server error' })}\n\n`);
+      res.end();
+    }
+  }
+});
+
 // ─── POST /api/v1/advisor/chat ────────────────────────────────────────────────
 
 router.post('/chat', async (req: AuthRequest, res: Response) => {
   try {
+    const parse = chatBodySchema.safeParse(req.body);
+    if (!parse.success) {
+      return res.status(400).json({ error: parse.error.issues[0]?.message ?? 'Invalid request' });
+    }
+    const { message, conversationId } = parse.data;
     const householdId = req.householdId!;
     const userId = req.userId!;
-    const { message, conversationId } = req.body as { message?: string; conversationId?: string };
-
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({ error: 'message is required' });
-    }
 
     // 1. Get or create conversation
     let conversation = conversationId

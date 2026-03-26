@@ -1002,4 +1002,138 @@ router.delete('/saved/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/v1/reports/tax-summary?year=2025
+router.get('/tax-summary', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const yearParam = req.query.year;
+    const year = yearParam ? parseInt(yearParam as string, 10) : new Date().getFullYear();
+
+    if (isNaN(year) || year < 2000 || year > 2100) {
+      return res.status(400).json({ error: 'year must be a valid 4-digit year' });
+    }
+
+    const start = new Date(year, 0, 1);
+    const end = new Date(year, 11, 31, 23, 59, 59);
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        isHidden: false,
+        date: { gte: start, lte: end },
+        category: { isTaxDeductible: true },
+      },
+      include: {
+        category: { select: { id: true, name: true, emoji: true } },
+      },
+    });
+
+    // Group by category
+    const categoryMap = new Map<string, { id: string; name: string; icon: string | null; amount: number; transactionCount: number }>();
+    for (const t of transactions) {
+      if (!t.category) continue;
+      const key = t.category.id;
+      const existing = categoryMap.get(key);
+      if (existing) {
+        existing.amount += Math.abs(t.amount);
+        existing.transactionCount += 1;
+      } else {
+        categoryMap.set(key, {
+          id: t.category.id,
+          name: t.category.name,
+          icon: t.category.emoji ?? null,
+          amount: Math.abs(t.amount),
+          transactionCount: 1,
+        });
+      }
+    }
+
+    const categories = Array.from(categoryMap.values()).sort((a, b) => b.amount - a.amount);
+    const totalDeductible = categories.reduce((sum, c) => sum + c.amount, 0);
+
+    return res.json({ year, totalDeductible, categories });
+  } catch (err) {
+    console.error('[reports/tax-summary GET]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/v1/reports/budget-variance?from=&to=
+router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { from, to } = req.query;
+
+    const range = parseDateRange(from, to);
+    if (!range) return res.status(400).json({ error: 'from and to query params are required (ISO format)' });
+
+    // Fetch all budgets for household with their category
+    const budgets = await prisma.budget.findMany({
+      where: { householdId },
+      include: { category: { select: { id: true, name: true, emoji: true } } },
+    });
+
+    // Fetch spending transactions in the date range grouped by category
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        date: { gte: range.start, lte: range.end },
+        amount: { lt: 0 },
+        isHidden: false,
+        isSplit: false,
+      },
+      select: { categoryId: true, amount: true, category: { select: { id: true, name: true, emoji: true } } },
+    });
+
+    // Build spending map: categoryId -> { name, emoji, actual }
+    const spendingMap = new Map<string, { name: string; emoji: string | null; actual: number }>();
+    for (const t of transactions) {
+      const key = t.categoryId ?? '__uncategorized__';
+      const name = t.category?.name ?? 'Uncategorized';
+      const emoji = t.category?.emoji ?? null;
+      const existing = spendingMap.get(key);
+      if (existing) {
+        existing.actual += Math.abs(t.amount);
+      } else {
+        spendingMap.set(key, { name, emoji, actual: Math.abs(t.amount) });
+      }
+    }
+
+    // Build budget map: categoryId -> budgeted amount
+    const budgetMap = new Map<string, { name: string; emoji: string | null; budgeted: number }>();
+    for (const b of budgets) {
+      budgetMap.set(b.categoryId, {
+        name: b.category.name,
+        emoji: b.category.emoji ?? null,
+        budgeted: b.amount,
+      });
+    }
+
+    // Merge: all budgeted categories + categories with spending but no budget
+    const allCategoryIds = new Set([...budgetMap.keys(), ...spendingMap.keys()]);
+    const categories = Array.from(allCategoryIds).map((catId) => {
+      const budget = budgetMap.get(catId);
+      const spending = spendingMap.get(catId);
+      const name = budget?.name ?? spending?.name ?? 'Uncategorized';
+      const emoji = budget?.emoji ?? spending?.emoji ?? null;
+      const budgeted = Math.round((budget?.budgeted ?? 0) * 100) / 100;
+      const actual = Math.round((spending?.actual ?? 0) * 100) / 100;
+      const variance = Math.round((budgeted - actual) * 100) / 100;
+      const variancePct = budgeted !== 0 ? Math.round((variance / budgeted) * 10000) / 100 : 0;
+      return { categoryId: catId, name, emoji, budgeted, actual, variance, variancePct };
+    }).sort((a, b) => Math.abs(b.actual) - Math.abs(a.actual));
+
+    const totals = {
+      budgeted: Math.round(categories.reduce((s, c) => s + c.budgeted, 0) * 100) / 100,
+      actual: Math.round(categories.reduce((s, c) => s + c.actual, 0) * 100) / 100,
+      variance: Math.round(categories.reduce((s, c) => s + c.variance, 0) * 100) / 100,
+    };
+
+    return res.json({ categories, totals });
+  } catch (err) {
+    console.error('[reports/budget-variance]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
