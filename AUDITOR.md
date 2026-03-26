@@ -85,7 +85,7 @@
 | Receipt OCR | 🔴 Planned | Sprint 16.1 — moondream2 vision model, camera capture |
 | Investment Intelligence | 🟢 Done | Sprint 17 — Yahoo Finance RSS per holding, Monte Carlo P10/P50/P90 projections table |
 | Multi-Currency | 🟢 Done | Sprint 17 — Transaction.currency field, fxRates.ts, /fx API, live rates widget in Settings |
-| PWA / Mobile | 🔴 Planned | Sprint 18 — manifest, service worker, voice input, onboarding wizard |
+| PWA / Mobile | 🟢 Done | Sprint 18 — manifest, service worker, install prompt, onboarding wizard (4-step) |
 
 **Legend:** 🟢 Done | ⚠️ Partial / Needs work | 🔴 Not done / Broken
 
@@ -237,7 +237,7 @@ server: pdf-parse, @types/pdf-parse, tesseract.js (optional, lazy-loaded)
 
 ---
 
-### Sprint 15 — Bank Templates + n8n Flows + Bulk Checkpoints + Email Connector (NEXT UP)
+### Sprint 15 — Bank Templates + n8n Flows + Bulk Checkpoints + Email Connector ✅ COMPLETE
 **Goal:** Harden the import pipeline with rollback safety, ship n8n automation templates, complete bank templates, and add email connector for Amazon/PayPal.
 
 #### n8n Automation Flows
