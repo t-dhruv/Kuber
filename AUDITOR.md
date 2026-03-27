@@ -75,8 +75,8 @@
 | Investment Import | 🟢 Done | Sprint 14.1 — Questrade/Wealthsimple/IBKR/TD Direct formats, HoldingLot upsert, BUY/SELL badges |
 | n8n Automation Flows | 🟢 Done | Sprint 15 — Docker service (automation profile), 3 workflow templates, README setup guide |
 | Bulk Operation Checkpoints | 🟢 Done | Sprint 15 — OperationCheckpoint model, checkpoint.ts lib, rollback API, Settings UI |
-| PDF Statement Parser | ⚠️ Partial | Sprint 15 — pdf-parse + AI extraction done; tesseract fallback deferred |
-| Email/IMAP Watcher | 🔴 Planned | Sprint 15 — optional email connector, Amazon/PayPal parsers |
+| PDF Statement Parser | 🟢 Done | Sprint 15 — pdf-parse + AI extraction done; tesseract fallback via optional dynamic import |
+| Email/IMAP Watcher | 🟢 Done | Sprint 15.2 — emailParser.ts (Amazon/PayPal/generic), imapWatcher.ts, /email-connector API, Settings UI with test+sync |
 | Asset & Debt Tracker | 🟢 Done | Sprint 15.1 — ManualAsset/Liability/Snapshot models, CRUD API, net-worth-breakdown endpoint |
 | TFSA / RRSP Tracker | 🟢 Done | Sprint 15.1 — TaxAccount model, CRA rules engine, /tax-accounts API, Settings UI tab |
 | Proactive AI Engine | 🟢 Done | Sprint 16 — anomaly detection, subscription auto-detect, missed payments, daily scheduler |

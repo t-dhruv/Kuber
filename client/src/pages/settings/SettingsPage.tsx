@@ -11,6 +11,7 @@ import {
 } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { TaxAccountsSection } from './components/TaxAccountsSection';
+import { EmailConnectorSection } from './components/EmailConnectorSection';
 import { useAuthStore } from '@/stores/authStore';
 import { useTotpStatus, useTotpSetup, useTotpEnable, useTotpDisable } from '@/hooks/useAuth';
 
@@ -2384,6 +2385,9 @@ function IntegrationsSection() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 560 }}>
         {/* AI Advisor */}
         <AiAdvisorCard />
+
+        {/* Email / IMAP Connector */}
+        <EmailConnectorSection />
 
         {/* SMTP */}
         <Card padding="lg">

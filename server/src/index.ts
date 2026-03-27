@@ -36,11 +36,13 @@ import taxAccountsRouter from './routes/taxAccounts';
 import fxRouter from './routes/fx';
 import autoCategorizeRouter from './routes/autoCategorize';
 import receiptsRouter from './routes/receipts';
+import emailConnectorRouter from './routes/emailConnector';
 import { requireAuth } from './middleware/auth';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
 import { runAccountBalanceSnapshot } from './lib/accountBalanceJob';
 import { sendDigestEmail } from './lib/digestEmail';
 import { runProactiveChecks } from './lib/proactiveAi';
+import { runImapCheckForAllHouseholds } from './lib/imapWatcher';
 import { prisma } from './lib/prisma';
 
 const app = express();
@@ -105,6 +107,7 @@ app.use('/api/v1/tax-accounts', requireAuth, taxAccountsRouter);
 app.use('/api/v1/fx', requireAuth, fxRouter);
 app.use('/api/v1/auto-categorize', requireAuth, autoCategorizeRouter);
 app.use('/api/v1/receipts', requireAuth, receiptsRouter);
+app.use('/api/v1/email-connector', requireAuth, emailConnectorRouter);
 
 function checkIfDigestDue(schedule: { frequency: string; lastSentAt: Date | null }, now: Date): boolean {
   const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday
@@ -160,6 +163,11 @@ setInterval(async () => {
     console.error('[proactive-ai] Error running proactive checks:', err);
   }
 }, 24 * 60 * 60 * 1000); // every 24 hours
+
+// Hourly email connector sync
+setInterval(async () => {
+  await runImapCheckForAllHouseholds(prisma).catch(console.error);
+}, 60 * 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`Kuber server running on :${PORT}`);
