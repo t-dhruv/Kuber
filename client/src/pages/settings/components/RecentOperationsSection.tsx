@@ -79,32 +79,32 @@ export default function RecentOperationsSection() {
       <div className="flex items-center gap-2">
         <ShieldCheck size={18} className="text-[color:var(--color-primary)]" />
         <h3 className="font-semibold">Recent Operations</h3>
-        <span className="text-xs text-[color:var(--text-secondary)] ml-1">(rollback available for 7 days)</span>
+        <span className="text-xs text-[color:var(--color-text-secondary)] ml-1">(rollback available for 7 days)</span>
       </div>
 
       {isLoading && (
-        <div className="flex items-center gap-2 text-sm text-[color:var(--text-secondary)]">
+        <div className="flex items-center gap-2 text-sm text-[color:var(--color-text-secondary)]">
           <Loader2 size={14} className="animate-spin" /> Loading…
         </div>
       )}
 
       {!isLoading && checkpoints.length === 0 && (
-        <p className="text-sm text-[color:var(--text-secondary)]">No recent bulk operations.</p>
+        <p className="text-sm text-[color:var(--color-text-secondary)]">No recent bulk operations.</p>
       )}
 
       {checkpoints.map((cp) => (
         <div
           key={cp.id}
-          className="flex items-center justify-between gap-4 p-3 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)]"
+          className="flex items-center justify-between gap-4 p-3 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)]"
         >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-[color:var(--surface-hover)] text-[color:var(--text-secondary)]">
+              <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-[color:var(--color-surface-hover)] text-[color:var(--color-text-secondary)]">
                 {TYPE_LABELS[cp.type] ?? cp.type}
               </span>
               <span className="text-sm font-medium truncate">{cp.label}</span>
             </div>
-            <div className="flex items-center gap-3 mt-1 text-xs text-[color:var(--text-secondary)]">
+            <div className="flex items-center gap-3 mt-1 text-xs text-[color:var(--color-text-secondary)]">
               <span className="flex items-center gap-1"><Clock size={11} />{timeAgo(cp.createdAt)}</span>
               <span>{cp.txnCount} transaction{cp.txnCount !== 1 ? 's' : ''}</span>
               <span className="opacity-60">{expiresIn(cp.expiresAt)}</span>

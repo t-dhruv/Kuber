@@ -206,7 +206,7 @@ export function EmailConnectorSection() {
       <div style={{
         display: 'flex', gap: '0.625rem', alignItems: 'flex-start',
         backgroundColor: 'var(--color-surface-hover)',
-        border: '1px solid var(--border)',
+        border: '1px solid var(--color-border)',
         borderRadius: 'var(--radius-md)',
         padding: '0.75rem 1rem',
         marginBottom: '1.25rem',
@@ -330,7 +330,7 @@ export function EmailConnectorSection() {
         {testResult && (
           <div style={{
             backgroundColor: 'var(--color-surface-hover)',
-            border: '1px solid var(--border)',
+            border: '1px solid var(--color-border)',
             borderRadius: 'var(--radius-md)',
             padding: '0.75rem 1rem',
             fontSize: '0.8125rem',

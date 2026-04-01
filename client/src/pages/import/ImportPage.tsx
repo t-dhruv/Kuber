@@ -66,7 +66,7 @@ export default function ImportPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Import Transactions</h1>
-          <p className="text-[color:var(--text-secondary)] text-sm mt-1">
+          <p className="text-[color:var(--color-text-secondary)] text-sm mt-1">
             Drop a CSV or PDF bank statement — Kuber auto-detects your bank format and flags duplicates.
           </p>
         </div>

@@ -1608,14 +1608,14 @@ function BudgetCoach({ month }: { month: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-[color:var(--border)]">
+    <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[color:var(--color-border)]">
         <Sparkles size={16} className="text-[color:var(--color-primary)]" />
         <span className="font-medium text-sm">AI Budget Coach</span>
         {asked && (
           <button
             onClick={() => { reset(); setAsked(false); }}
-            className="ml-auto text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]"
+            className="ml-auto text-[color:var(--color-text-secondary)] hover:text-[color:var(--color-text)]"
           >
             <RefreshCw size={14} />
           </button>
@@ -1625,7 +1625,7 @@ function BudgetCoach({ month }: { month: string }) {
       <div className="p-4">
         {!asked && !content && (
           <div className="text-center">
-            <p className="text-sm text-[color:var(--text-secondary)] mb-3">
+            <p className="text-sm text-[color:var(--color-text-secondary)] mb-3">
               Get personalised tips for this month's budget.
             </p>
             <Button variant="primary" onClick={handleAsk} className="w-full text-sm">
@@ -1640,7 +1640,7 @@ function BudgetCoach({ month }: { month: string }) {
         )}
 
         {(streaming || content) && (
-          <div className="text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--text-primary)]">
+          <div className="text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--color-text)]">
             {content}
             {streaming && (
               <span className="inline-block w-1.5 h-4 bg-[color:var(--color-primary)] ml-0.5 animate-pulse rounded-sm" />
@@ -1649,7 +1649,7 @@ function BudgetCoach({ month }: { month: string }) {
         )}
 
         {streaming && (
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-[color:var(--text-secondary)]">
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-[color:var(--color-text-secondary)]">
             <Loader2 size={12} className="animate-spin" />
             Thinking…
           </div>

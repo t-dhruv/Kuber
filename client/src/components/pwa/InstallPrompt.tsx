@@ -39,13 +39,13 @@ export function InstallPrompt() {
   if (!deferredPrompt || dismissed) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 z-50 bg-[color:var(--surface)] border border-[color:var(--border)] rounded-xl shadow-xl p-4 flex items-start gap-3">
+    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 z-50 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-xl shadow-xl p-4 flex items-start gap-3">
       <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center shrink-0">
         <Download size={20} className="text-indigo-600 dark:text-indigo-400" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-sm">Install Kuber</p>
-        <p className="text-xs text-[color:var(--text-secondary)] mt-0.5">Add to your home screen for quick access</p>
+        <p className="text-xs text-[color:var(--color-text-secondary)] mt-0.5">Add to your home screen for quick access</p>
         <button
           onClick={handleInstall}
           className="mt-2 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
@@ -53,7 +53,7 @@ export function InstallPrompt() {
           Install app
         </button>
       </div>
-      <button onClick={handleDismiss} className="p-0.5 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]">
+      <button onClick={handleDismiss} className="p-0.5 text-[color:var(--color-text-secondary)] hover:text-[color:var(--color-text)]">
         <X size={16} />
       </button>
     </div>

@@ -23,7 +23,7 @@ export function AiSetupNudge({
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2 text-xs text-[color:var(--text-secondary)] bg-[color:var(--surface-hover)] rounded-lg px-3 py-2">
+      <div className="flex items-center gap-2 text-xs text-[color:var(--color-text-secondary)] bg-[color:var(--color-surface-hover)] rounded-lg px-3 py-2">
         <Sparkles size={13} className="text-indigo-400 shrink-0" />
         <span>{message}</span>
         <Link to="/settings?tab=integrations" className="text-indigo-500 hover:underline whitespace-nowrap flex items-center gap-0.5 font-medium">

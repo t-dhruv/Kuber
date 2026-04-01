@@ -125,8 +125,6 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               )}
             </button>
           </Tooltip>
-          <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
-
           {/* Settings */}
           <Tooltip content="Settings" placement="bottom">
             <NavLink
@@ -151,6 +149,9 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
       {/* Global search modal */}
       <SearchModal open={showSearch} onClose={() => setShowSearch(false)} />
+
+      {/* Notification drawer — rendered outside header flex to avoid layout interference */}
+      <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
     </>
   );
 }

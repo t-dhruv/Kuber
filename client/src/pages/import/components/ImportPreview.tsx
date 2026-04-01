@@ -102,7 +102,7 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
   return (
     <div className="space-y-5">
       {/* Summary bar */}
-      <div className="bg-[color:var(--surface-hover)] rounded-xl p-4 flex flex-wrap gap-4 items-center justify-between">
+      <div className="bg-[color:var(--color-surface-hover)] rounded-xl p-4 flex flex-wrap gap-4 items-center justify-between">
         <div className="flex flex-wrap gap-4">
           <Stat label="Detected bank" value={bankLabel} />
           <Stat label="Confidence" value={`${result.confidence}%`} />
@@ -113,7 +113,7 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
             <Stat label="Invalid" value={String(invalidRows.length)} color="red" />
           )}
         </div>
-        <p className="text-sm text-[color:var(--text-secondary)]">{filename}</p>
+        <p className="text-sm text-[color:var(--color-text-secondary)]">{filename}</p>
       </div>
 
       {/* New rows table */}
@@ -131,9 +131,9 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
               >
                 Select all
               </button>
-              <span className="text-[color:var(--text-secondary)]">/</span>
+              <span className="text-[color:var(--color-text-secondary)]">/</span>
               <button
-                className="text-[color:var(--text-secondary)] hover:underline"
+                className="text-[color:var(--color-text-secondary)] hover:underline"
                 onClick={() => toggleAll(newRows, false)}
               >
                 Deselect all
@@ -148,7 +148,7 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
       {dupRows.length > 0 && (
         <div>
           <button
-            className="flex items-center gap-2 text-sm font-medium text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] mb-2"
+            className="flex items-center gap-2 text-sm font-medium text-[color:var(--color-text-secondary)] hover:text-[color:var(--color-text)] mb-2"
             onClick={() => setShowDuplicates((v) => !v)}
           >
             {showDuplicates ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -181,8 +181,8 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-between pt-2 border-t border-[color:var(--border)]">
-        <p className="text-sm text-[color:var(--text-secondary)]">
+      <div className="flex items-center justify-between pt-2 border-t border-[color:var(--color-border)]">
+        <p className="text-sm text-[color:var(--color-text-secondary)]">
           {selectedCount} row{selectedCount !== 1 ? 's' : ''} selected for import
         </p>
         <div className="flex gap-2">
@@ -211,10 +211,10 @@ function Stat({ label, value, color }: { label: string; value: string; color?: '
     ? 'text-green-600 dark:text-green-400'
     : color === 'red'
     ? 'text-red-600 dark:text-red-400'
-    : 'text-[color:var(--text-primary)]';
+    : 'text-[color:var(--color-text)]';
   return (
     <div>
-      <p className="text-xs text-[color:var(--text-secondary)]">{label}</p>
+      <p className="text-xs text-[color:var(--color-text-secondary)]">{label}</p>
       <p className={`font-semibold text-sm ${colorClass}`}>{value}</p>
     </div>
   );
@@ -239,10 +239,10 @@ const INV_TYPE_COLORS: Record<string, string> = {
 function RowTable({ rows, selected, onToggle, dimmed }: RowTableProps) {
   const hasInvestmentData = rows.some((r) => r.investmentType);
   return (
-    <div className={`rounded-lg border border-[color:var(--border)] overflow-hidden ${dimmed ? 'opacity-60' : ''}`}>
+    <div className={`rounded-lg border border-[color:var(--color-border)] overflow-hidden ${dimmed ? 'opacity-60' : ''}`}>
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-[color:var(--surface-hover)] text-[color:var(--text-secondary)] text-xs uppercase tracking-wide">
+          <tr className="bg-[color:var(--color-surface-hover)] text-[color:var(--color-text-secondary)] text-xs uppercase tracking-wide">
             <th className="px-3 py-2 w-8" />
             <th className="px-3 py-2 text-left">Date</th>
             <th className="px-3 py-2 text-left">Description</th>
@@ -254,7 +254,7 @@ function RowTable({ rows, selected, onToggle, dimmed }: RowTableProps) {
           {rows.map((row) => (
             <tr
               key={row.hash}
-              className="border-t border-[color:var(--border)] hover:bg-[color:var(--surface-hover)] cursor-pointer"
+              className="border-t border-[color:var(--color-border)] hover:bg-[color:var(--color-surface-hover)] cursor-pointer"
               onClick={() => onToggle(row.hash)}
             >
               <td className="px-3 py-2">

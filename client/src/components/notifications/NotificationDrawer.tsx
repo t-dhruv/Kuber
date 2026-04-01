@@ -107,9 +107,9 @@ export function NotificationDrawer({ open, onClose }: Props) {
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-sm z-50 bg-[color:var(--surface)] border-l border-[color:var(--border)] shadow-2xl flex flex-col">
+      <div className="fixed right-0 top-0 h-full w-full max-w-sm z-50 bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--border)]">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-2">
             <Bell size={18} />
             <h2 className="font-semibold">Notifications</h2>
@@ -119,13 +119,13 @@ export function NotificationDrawer({ open, onClose }: Props) {
               </span>
             )}
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-[color:var(--surface-hover)] rounded">
+          <button onClick={onClose} className="p-1 hover:bg-[var(--color-surface-hover)] rounded">
             <X size={18} />
           </button>
         </div>
 
         {/* Actions bar */}
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-[color:var(--border)]">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-[var(--color-border)]">
           <Button
             variant="secondary"
             onClick={() => runChecks.mutate()}
@@ -158,12 +158,12 @@ export function NotificationDrawer({ open, onClose }: Props) {
         {/* Notifications list */}
         <div className="flex-1 overflow-y-auto">
           {isLoading && (
-            <div className="flex items-center justify-center h-32 text-[color:var(--text-secondary)]">
+            <div className="flex items-center justify-center h-32 text-[var(--color-text-secondary)]">
               <Loader2 size={20} className="animate-spin" />
             </div>
           )}
           {!isLoading && items.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-48 text-[color:var(--text-secondary)] gap-2">
+            <div className="flex flex-col items-center justify-center h-48 text-[var(--color-text-secondary)] gap-2">
               <Bell size={32} className="opacity-30" />
               <p className="text-sm">No notifications yet</p>
               <p className="text-xs opacity-60">Click &quot;Analyse now&quot; to scan for insights</p>
@@ -174,17 +174,17 @@ export function NotificationDrawer({ open, onClose }: Props) {
             return (
               <div
                 key={n.id}
-                className={`flex gap-3 px-4 py-3 border-b border-[color:var(--border)] cursor-pointer transition-colors
+                className={`flex gap-3 px-4 py-3 border-b border-[var(--color-border)] cursor-pointer transition-colors
                   ${n.read ? 'opacity-60' : style.bg}
                   ${!n.read ? style.border : ''}
-                  hover:bg-[color:var(--surface-hover)]`}
+                  hover:bg-[var(--color-surface-hover)]`}
                 onClick={() => { if (!n.read) markRead.mutate(n.id); }}
               >
                 {style.icon}
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${n.read ? '' : 'text-[color:var(--text-primary)]'}`}>{n.title}</p>
-                  <p className="text-xs text-[color:var(--text-secondary)] mt-0.5 leading-relaxed">{n.body}</p>
-                  <p className="text-xs text-[color:var(--text-secondary)] opacity-60 mt-1">{timeAgo(n.createdAt)}</p>
+                  <p className="text-sm font-medium">{n.title}</p>
+                  <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{n.body}</p>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">{timeAgo(n.createdAt)}</p>
                 </div>
                 {!n.read && <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0 mt-1.5" />}
               </div>

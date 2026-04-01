@@ -1506,27 +1506,27 @@ export default function TransactionsPage() {
 
       {/* Auto-categorize panel */}
       {showAutoCatPanel && (
-        <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 flex flex-col gap-3">
+        <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4 flex flex-col gap-3">
           {autoCatStatusFetching && (
-            <p className="text-sm text-[color:var(--text-secondary)]">Checking AI status…</p>
+            <p className="text-sm text-[color:var(--color-text-secondary)]">Checking AI status…</p>
           )}
           {!autoCatStatusFetching && autoCatStatus?.notConfigured && (
             <>
               <AiSetupNudge message="Auto-categorize requires an AI provider. Set one up to automatically categorize your uncategorized transactions." />
               <div className="flex justify-end">
-                <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--text-secondary)] hover:underline">Dismiss</button>
+                <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--color-text-secondary)] hover:underline">Dismiss</button>
               </div>
             </>
           )}
           {!autoCatStatusFetching && autoCatStatus && !autoCatStatus.notConfigured && (
             <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-[color:var(--text-secondary)]">
+              <p className="text-sm text-[color:var(--color-text-secondary)]">
                 {autoCatStatus.uncategorizedCount > 0
                   ? `Auto-categorize ${autoCatStatus.uncategorizedCount} uncategorized transaction${autoCatStatus.uncategorizedCount !== 1 ? 's' : ''}?`
                   : 'All transactions are already categorized.'}
               </p>
               <div className="flex items-center gap-2">
-                <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--text-secondary)] hover:underline">Cancel</button>
+                <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--color-text-secondary)] hover:underline">Cancel</button>
                 {autoCatStatus.uncategorizedCount > 0 && (
                   <Button
                     variant="primary"

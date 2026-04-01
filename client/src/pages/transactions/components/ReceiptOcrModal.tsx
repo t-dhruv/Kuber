@@ -86,13 +86,13 @@ export function ReceiptOcrModal({ onClose, accountId }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-[color:var(--surface)] rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[color:var(--border)]">
+      <div className="bg-[color:var(--color-surface)] rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[color:var(--color-border)]">
           <div className="flex items-center gap-2">
             <Camera size={18} />
             <h2 className="font-semibold">Scan Receipt</h2>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--surface-hover)]">
+          <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--color-surface-hover)]">
             <X size={18} />
           </button>
         </div>
@@ -106,12 +106,12 @@ export function ReceiptOcrModal({ onClose, accountId }: Props) {
           {/* Upload area */}
           {!file && (
             <div
-              className="border-2 border-dashed border-[color:var(--border)] rounded-xl p-8 text-center cursor-pointer hover:border-indigo-400 transition-colors"
+              className="border-2 border-dashed border-[color:var(--color-border)] rounded-xl p-8 text-center cursor-pointer hover:border-indigo-400 transition-colors"
               onClick={() => fileRef.current?.click()}
             >
-              <Upload size={28} className="mx-auto text-[color:var(--text-secondary)] mb-2" />
+              <Upload size={28} className="mx-auto text-[color:var(--color-text-secondary)] mb-2" />
               <p className="text-sm font-medium">Drop receipt photo or click to upload</p>
-              <p className="text-xs text-[color:var(--text-secondary)] mt-1">JPG, PNG, HEIC, WebP</p>
+              <p className="text-xs text-[color:var(--color-text-secondary)] mt-1">JPG, PNG, HEIC, WebP</p>
               <input
                 ref={fileRef}
                 type="file"
@@ -126,11 +126,11 @@ export function ReceiptOcrModal({ onClose, accountId }: Props) {
           {file && (
             <div className="space-y-3">
               {preview && (
-                <img src={preview} alt="Receipt" className="w-full max-h-48 object-contain rounded-lg border border-[color:var(--border)]" />
+                <img src={preview} alt="Receipt" className="w-full max-h-48 object-contain rounded-lg border border-[color:var(--color-border)]" />
               )}
 
               {ocrMutation.isPending && (
-                <div className="flex items-center gap-2 text-sm text-[color:var(--text-secondary)]">
+                <div className="flex items-center gap-2 text-sm text-[color:var(--color-text-secondary)]">
                   <Loader2 size={15} className="animate-spin" /> Extracting details…
                 </div>
               )}
@@ -148,16 +148,16 @@ export function ReceiptOcrModal({ onClose, accountId }: Props) {
               {/* Editable form */}
               <div className="space-y-2">
                 <input
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-hover)]"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-hover)]"
                   placeholder="Description / Merchant"
                   value={form.description}
                   onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))}
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[color:var(--text-secondary)]">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[color:var(--color-text-secondary)]">$</span>
                     <input
-                      className="w-full pl-6 pr-3 py-2 text-sm rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-hover)]"
+                      className="w-full pl-6 pr-3 py-2 text-sm rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-hover)]"
                       placeholder="Amount"
                       type="number"
                       value={form.amount}
@@ -165,7 +165,7 @@ export function ReceiptOcrModal({ onClose, accountId }: Props) {
                     />
                   </div>
                   <input
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-hover)]"
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-hover)]"
                     type="date"
                     value={form.date}
                     onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))}
@@ -177,7 +177,7 @@ export function ReceiptOcrModal({ onClose, accountId }: Props) {
         </div>
 
         <div className="flex justify-between items-center px-5 pb-5">
-          <button onClick={() => { setFile(null); setPreview(null); setOcrResult(null); }} className="text-sm text-[color:var(--text-secondary)] hover:underline">
+          <button onClick={() => { setFile(null); setPreview(null); setOcrResult(null); }} className="text-sm text-[color:var(--color-text-secondary)] hover:underline">
             {file ? 'Change photo' : 'Cancel'}
           </button>
           <Button

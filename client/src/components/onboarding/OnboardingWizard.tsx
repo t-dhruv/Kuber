@@ -128,9 +128,9 @@ export function OnboardingWizard({ onDone }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-[color:var(--surface)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+      <div className="bg-[color:var(--color-surface)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
         {/* Progress bar */}
-        <div className="h-1 bg-[color:var(--border)]">
+        <div className="h-1 bg-[color:var(--color-border)]">
           <div
             className="h-full bg-indigo-500 transition-all duration-500"
             style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
@@ -143,13 +143,13 @@ export function OnboardingWizard({ onDone }: Props) {
             {STEPS.map((s, i) => (
               <div
                 key={s.id}
-                className={`w-2 h-2 rounded-full transition-colors ${i <= step ? 'bg-indigo-500' : 'bg-[color:var(--border)]'}`}
+                className={`w-2 h-2 rounded-full transition-colors ${i <= step ? 'bg-indigo-500' : 'bg-[color:var(--color-border)]'}`}
               />
             ))}
           </div>
           <button
             onClick={handleDone}
-            className="p-1 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)] rounded"
+            className="p-1 text-[color:var(--color-text-secondary)] hover:text-[color:var(--color-text)] rounded"
           >
             <X size={18} />
           </button>
@@ -160,21 +160,21 @@ export function OnboardingWizard({ onDone }: Props) {
           <div className="flex flex-col items-center text-center py-4 gap-3">
             {currentStep.icon}
             <h2 className="text-xl font-bold">{currentStep.title}</h2>
-            <p className="text-[color:var(--text-secondary)] text-sm leading-relaxed">{currentStep.description}</p>
+            <p className="text-[color:var(--color-text-secondary)] text-sm leading-relaxed">{currentStep.description}</p>
           </div>
 
           {/* Step 1: Account form */}
           {step === 1 && (
             <div className="space-y-3 mt-2">
               <input
-                className="w-full px-3 py-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-hover)] text-sm"
+                className="w-full px-3 py-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-hover)] text-sm"
                 placeholder="Account name (e.g. TD Chequing)"
                 value={accountData.name}
                 onChange={(e) => setAccountData((d) => ({ ...d, name: e.target.value }))}
               />
               <div className="grid grid-cols-2 gap-2">
                 <select
-                  className="px-3 py-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-hover)] text-sm"
+                  className="px-3 py-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-hover)] text-sm"
                   value={accountData.type}
                   onChange={(e) => setAccountData((d) => ({ ...d, type: e.target.value }))}
                 >
@@ -184,7 +184,7 @@ export function OnboardingWizard({ onDone }: Props) {
                   <option value="investment">Investment</option>
                 </select>
                 <select
-                  className="px-3 py-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-hover)] text-sm"
+                  className="px-3 py-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-hover)] text-sm"
                   value={accountData.currency}
                   onChange={(e) => setAccountData((d) => ({ ...d, currency: e.target.value }))}
                 >
@@ -192,7 +192,7 @@ export function OnboardingWizard({ onDone }: Props) {
                 </select>
               </div>
               <input
-                className="w-full px-3 py-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-hover)] text-sm"
+                className="w-full px-3 py-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-hover)] text-sm"
                 placeholder="Current balance (e.g. 2500)"
                 type="number"
                 value={accountData.balance}
@@ -205,15 +205,15 @@ export function OnboardingWizard({ onDone }: Props) {
           {step === 2 && (
             <div className="space-y-3 mt-2">
               <input
-                className="w-full px-3 py-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-hover)] text-sm"
+                className="w-full px-3 py-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-hover)] text-sm"
                 placeholder="Category name (e.g. Groceries)"
                 value={budgetData.categoryName}
                 onChange={(e) => setBudgetData((d) => ({ ...d, categoryName: e.target.value }))}
               />
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--text-secondary)] text-sm">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-text-secondary)] text-sm">$</span>
                 <input
-                  className="w-full pl-7 pr-3 py-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-hover)] text-sm"
+                  className="w-full pl-7 pr-3 py-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-hover)] text-sm"
                   placeholder="Monthly budget amount"
                   type="number"
                   value={budgetData.amount}
@@ -232,7 +232,7 @@ export function OnboardingWizard({ onDone }: Props) {
                 'Set goals, budgets, and recurring items',
                 'Track investments, assets, TFSA/RRSP room',
               ].map((tip) => (
-                <div key={tip} className="flex items-start gap-2 text-sm text-[color:var(--text-secondary)]">
+                <div key={tip} className="flex items-start gap-2 text-sm text-[color:var(--color-text-secondary)]">
                   <CheckCircle2 size={15} className="text-green-500 mt-0.5 shrink-0" />
                   <span>{tip}</span>
                 </div>
@@ -245,7 +245,7 @@ export function OnboardingWizard({ onDone }: Props) {
         <div className="px-6 pb-6 flex items-center justify-between">
           <button
             onClick={handleDone}
-            className="text-sm text-[color:var(--text-secondary)] hover:underline"
+            className="text-sm text-[color:var(--color-text-secondary)] hover:underline"
           >
             Skip setup
           </button>

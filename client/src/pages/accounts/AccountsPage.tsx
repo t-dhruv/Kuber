@@ -4,7 +4,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line,
 } from 'recharts';
-import { ChevronDown, ChevronRight, RefreshCw, Plus, MoreHorizontal, Pencil, EyeOff, MinusCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, Plus, MoreHorizontal, Pencil, EyeOff, MinusCircle, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Card, Button, Input, Select, Modal, ModalFooter, Skeleton, InstitutionLogo, LogoPicker,
@@ -1065,6 +1065,245 @@ function AccountsSkeleton() {
   );
 }
 
+// ─── Assets & Liabilities Tab ─────────────────────────────────────────────────
+
+interface ManualAsset {
+  id: string;
+  name: string;
+  type: string;
+  currentValue: number;
+  purchaseValue?: number | null;
+  notes?: string | null;
+  currency: string;
+}
+
+interface ManualLiability {
+  id: string;
+  name: string;
+  type: string;
+  currentBalance: number;
+  originalAmount: number;
+  interestRate?: number | null;
+  monthlyPayment?: number | null;
+  notes?: string | null;
+  currency: string;
+}
+
+const ASSET_TYPES = ['real_estate', 'vehicle', 'crypto', 'collectible', 'other'];
+const LIABILITY_TYPES = ['mortgage', 'auto_loan', 'student_loan', 'credit_card', 'other'];
+
+function labelType(t: string) {
+  return t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function AssetsLiabilitiesTab() {
+  const qc = useQueryClient();
+  const [showAssetForm, setShowAssetForm] = useState(false);
+  const [showLiabForm, setShowLiabForm] = useState(false);
+  const [editAsset, setEditAsset] = useState<ManualAsset | null>(null);
+  const [editLiab, setEditLiab] = useState<ManualLiability | null>(null);
+
+  const [assetForm, setAssetForm] = useState({ name: '', type: 'other', currentValue: '', purchaseValue: '', notes: '' });
+  const [liabForm, setLiabForm] = useState({ name: '', type: 'other', currentBalance: '', originalAmount: '', interestRate: '', monthlyPayment: '', notes: '' });
+
+  const { data: assets = [], isLoading: assetsLoading } = useQuery<ManualAsset[]>({
+    queryKey: ['manual-assets'],
+    queryFn: () => api.get('/assets').then((r) => r.data),
+  });
+
+  const { data: liabilities = [], isLoading: liabsLoading } = useQuery<ManualLiability[]>({
+    queryKey: ['manual-liabilities'],
+    queryFn: () => api.get('/liabilities').then((r) => r.data),
+  });
+
+  const createAsset = useMutation({
+    mutationFn: (d: object) => api.post('/assets', d).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); notify.success('Asset added'); resetAssetForm(); },
+    onError: () => notify.error('Failed to add asset'),
+  });
+
+  const updateAsset = useMutation({
+    mutationFn: ({ id, ...d }: { id: string } & object) => api.put(`/assets/${id}`, d).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); notify.success('Asset updated'); resetAssetForm(); },
+    onError: () => notify.error('Failed to update asset'),
+  });
+
+  const deleteAsset = useMutation({
+    mutationFn: (id: string) => api.delete(`/assets/${id}`).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); notify.success('Asset deleted'); },
+    onError: () => notify.error('Failed to delete asset'),
+  });
+
+  const createLiab = useMutation({
+    mutationFn: (d: object) => api.post('/liabilities', d).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); notify.success('Liability added'); resetLiabForm(); },
+    onError: () => notify.error('Failed to add liability'),
+  });
+
+  const updateLiab = useMutation({
+    mutationFn: ({ id, ...d }: { id: string } & object) => api.put(`/liabilities/${id}`, d).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); notify.success('Liability updated'); resetLiabForm(); },
+    onError: () => notify.error('Failed to update liability'),
+  });
+
+  const deleteLiab = useMutation({
+    mutationFn: (id: string) => api.delete(`/liabilities/${id}`).then((r) => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); notify.success('Liability deleted'); },
+    onError: () => notify.error('Failed to delete liability'),
+  });
+
+  function resetAssetForm() { setAssetForm({ name: '', type: 'other', currentValue: '', purchaseValue: '', notes: '' }); setShowAssetForm(false); setEditAsset(null); }
+  function resetLiabForm() { setLiabForm({ name: '', type: 'other', currentBalance: '', originalAmount: '', interestRate: '', monthlyPayment: '', notes: '' }); setShowLiabForm(false); setEditLiab(null); }
+
+  function openEditAsset(a: ManualAsset) {
+    setAssetForm({ name: a.name, type: a.type, currentValue: String(a.currentValue), purchaseValue: String(a.purchaseValue ?? ''), notes: a.notes ?? '' });
+    setEditAsset(a);
+    setShowAssetForm(true);
+  }
+
+  function openEditLiab(l: ManualLiability) {
+    setLiabForm({ name: l.name, type: l.type, currentBalance: String(l.currentBalance), originalAmount: String(l.originalAmount), interestRate: String(l.interestRate ?? ''), monthlyPayment: String(l.monthlyPayment ?? ''), notes: l.notes ?? '' });
+    setEditLiab(l);
+    setShowLiabForm(true);
+  }
+
+  function submitAsset() {
+    const payload = {
+      name: assetForm.name,
+      type: assetForm.type,
+      currentValue: parseFloat(assetForm.currentValue) || 0,
+      ...(assetForm.purchaseValue ? { purchaseValue: parseFloat(assetForm.purchaseValue) } : {}),
+      ...(assetForm.notes ? { notes: assetForm.notes } : {}),
+    };
+    if (editAsset) updateAsset.mutate({ id: editAsset.id, ...payload });
+    else createAsset.mutate(payload);
+  }
+
+  function submitLiab() {
+    const payload = {
+      name: liabForm.name,
+      type: liabForm.type,
+      currentBalance: parseFloat(liabForm.currentBalance) || 0,
+      originalAmount: parseFloat(liabForm.originalAmount) || 0,
+      ...(liabForm.interestRate ? { interestRate: parseFloat(liabForm.interestRate) } : {}),
+      ...(liabForm.monthlyPayment ? { monthlyPayment: parseFloat(liabForm.monthlyPayment) } : {}),
+      ...(liabForm.notes ? { notes: liabForm.notes } : {}),
+    };
+    if (editLiab) updateLiab.mutate({ id: editLiab.id, ...payload });
+    else createLiab.mutate(payload);
+  }
+
+  const totalAssets = assets.reduce((s, a) => s + a.currentValue, 0);
+  const totalLiabs = liabilities.reduce((s, l) => s + l.currentBalance, 0);
+
+  const rowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0', borderBottom: '1px solid var(--color-border)' };
+  const actionBtns: React.CSSProperties = { display: 'flex', gap: '0.25rem' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Summary bar */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+        {[
+          { label: 'Manual Assets', value: totalAssets, color: 'var(--color-success)' },
+          { label: 'Manual Liabilities', value: totalLiabs, color: 'var(--color-danger)' },
+          { label: 'Net', value: totalAssets - totalLiabs, color: (totalAssets - totalLiabs) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' },
+        ].map((s) => (
+          <Card key={s.label} padding="md">
+            <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>{s.label}</div>
+            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: s.color }}>{fmtCurrency(s.value)}</div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Assets section */}
+      <Card padding="lg">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Manual Assets</h3>
+          <Button size="sm" icon={<Plus size={13} />} onClick={() => { resetAssetForm(); setShowAssetForm(true); }}>Add Asset</Button>
+        </div>
+        {assetsLoading ? <Skeleton height={60} /> : assets.length === 0 ? (
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>No manual assets yet. Add your home, car, crypto, or other assets.</p>
+        ) : assets.map((a) => (
+          <div key={a.id} style={rowStyle}>
+            <div>
+              <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{a.name}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{labelType(a.type)}</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontWeight: 600, color: 'var(--color-success)' }}>{fmtCurrency(a.currentValue)}</span>
+              <div style={actionBtns}>
+                <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => openEditAsset(a)} />
+                <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => deleteAsset.mutate(a.id)} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      {/* Liabilities section */}
+      <Card padding="lg">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Manual Liabilities</h3>
+          <Button size="sm" icon={<Plus size={13} />} onClick={() => { resetLiabForm(); setShowLiabForm(true); }}>Add Liability</Button>
+        </div>
+        {liabsLoading ? <Skeleton height={60} /> : liabilities.length === 0 ? (
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>No manual liabilities yet. Add mortgages, loans, or other debts.</p>
+        ) : liabilities.map((l) => (
+          <div key={l.id} style={rowStyle}>
+            <div>
+              <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{l.name}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{labelType(l.type)}{l.interestRate ? ` · ${l.interestRate}% APR` : ''}</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontWeight: 600, color: 'var(--color-danger)' }}>{fmtCurrency(l.currentBalance)}</span>
+              <div style={actionBtns}>
+                <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => openEditLiab(l)} />
+                <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => deleteLiab.mutate(l.id)} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      {/* Asset form modal */}
+      {showAssetForm && (
+        <Modal open onClose={resetAssetForm} title={editAsset ? 'Edit Asset' : 'Add Asset'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <Input label="Name" value={assetForm.name} onChange={(e) => setAssetForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Primary Home" />
+            <Select label="Type" value={assetForm.type} onChange={(e) => setAssetForm((f) => ({ ...f, type: e.target.value }))} options={ASSET_TYPES.map((t) => ({ value: t, label: labelType(t) }))} />
+            <Input label="Current Value" type="number" value={assetForm.currentValue} onChange={(e) => setAssetForm((f) => ({ ...f, currentValue: e.target.value }))} placeholder="0.00" />
+            <Input label="Purchase Value (optional)" type="number" value={assetForm.purchaseValue} onChange={(e) => setAssetForm((f) => ({ ...f, purchaseValue: e.target.value }))} placeholder="0.00" />
+            <Input label="Notes (optional)" value={assetForm.notes} onChange={(e) => setAssetForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Any notes..." />
+          </div>
+          <ModalFooter>
+            <Button variant="ghost" onClick={resetAssetForm}>Cancel</Button>
+            <Button onClick={submitAsset} disabled={!assetForm.name || !assetForm.currentValue}>{editAsset ? 'Save' : 'Add Asset'}</Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* Liability form modal */}
+      {showLiabForm && (
+        <Modal open onClose={resetLiabForm} title={editLiab ? 'Edit Liability' : 'Add Liability'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <Input label="Name" value={liabForm.name} onChange={(e) => setLiabForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Mortgage" />
+            <Select label="Type" value={liabForm.type} onChange={(e) => setLiabForm((f) => ({ ...f, type: e.target.value }))} options={LIABILITY_TYPES.map((t) => ({ value: t, label: labelType(t) }))} />
+            <Input label="Current Balance" type="number" value={liabForm.currentBalance} onChange={(e) => setLiabForm((f) => ({ ...f, currentBalance: e.target.value }))} placeholder="0.00" />
+            <Input label="Original Amount" type="number" value={liabForm.originalAmount} onChange={(e) => setLiabForm((f) => ({ ...f, originalAmount: e.target.value }))} placeholder="0.00" />
+            <Input label="Interest Rate % (optional)" type="number" value={liabForm.interestRate} onChange={(e) => setLiabForm((f) => ({ ...f, interestRate: e.target.value }))} placeholder="e.g. 5.5" />
+            <Input label="Monthly Payment (optional)" type="number" value={liabForm.monthlyPayment} onChange={(e) => setLiabForm((f) => ({ ...f, monthlyPayment: e.target.value }))} placeholder="0.00" />
+            <Input label="Notes (optional)" value={liabForm.notes} onChange={(e) => setLiabForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Any notes..." />
+          </div>
+          <ModalFooter>
+            <Button variant="ghost" onClick={resetLiabForm}>Cancel</Button>
+            <Button onClick={submitLiab} disabled={!liabForm.name || !liabForm.currentBalance}>{editLiab ? 'Save' : 'Add Liability'}</Button>
+          </ModalFooter>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AccountsPage() {
@@ -1075,6 +1314,7 @@ export default function AccountsPage() {
     queryFn: () => api.get('/accounts').then((r) => r.data),
   });
 
+  const [activeTab, setActiveTab] = useState<'accounts' | 'assets'>('accounts');
   const [showAdd, setShowAdd] = useState(false);
   const [editAccount, setEditAccount] = useState<Account | null>(null);
   const [detailAccount, setDetailAccount] = useState<Account | null>(null);
@@ -1103,25 +1343,40 @@ export default function AccountsPage() {
           Accounts
         </h1>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<RefreshCw size={14} />}
-            onClick={() => notify.info('Manual refresh is not available')}
-          >
-            Refresh all
-          </Button>
-          <Button
-            size="sm"
-            icon={<Plus size={14} />}
-            onClick={() => setShowAdd(true)}
-          >
-            Add account
-          </Button>
+          {activeTab === 'accounts' && <>
+            <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />} onClick={() => notify.info('Manual refresh is not available')}>Refresh all</Button>
+            <Button size="sm" icon={<Plus size={14} />} onClick={() => setShowAdd(true)}>Add account</Button>
+          </>}
         </div>
       </div>
 
-      {isLoading ? (
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--color-border)', marginBottom: '1.25rem' }}>
+        {([['accounts', 'Accounts'], ['assets', 'Assets & Debt']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            style={{
+              padding: '0.5rem 1.25rem',
+              fontSize: '0.875rem',
+              fontWeight: activeTab === key ? 600 : 400,
+              color: activeTab === key ? 'var(--color-primary)' : 'var(--color-text-muted)',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === key ? '2px solid var(--color-primary)' : '2px solid transparent',
+              marginBottom: '-2px',
+              cursor: 'pointer',
+              transition: 'color 0.15s',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'assets' ? (
+        <AssetsLiabilitiesTab />
+      ) : isLoading ? (
         <AccountsSkeleton />
       ) : isError || !data ? (
         <div style={{
