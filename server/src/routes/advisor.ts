@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
-import { getAiClientForHousehold } from '../lib/ai';
+import { getAiClient, getAiClientForHousehold } from '../lib/ai';
 import { getChatContext } from '../lib/ai/context';
 import { chatSystemPrompt } from '../lib/ai/prompts';
 import type { AiMessage } from '../lib/ai/types';
@@ -34,40 +34,54 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
   res.setHeader('X-Accel-Buffering', 'no'); // disables nginx proxy_buffering for this response
   res.flushHeaders();
 
+  const controller = new AbortController();
   let aborted = false;
+
   req.on('close', () => {
     aborted = true;
+    controller.abort();
   });
 
+  // SSE keepalive — prevents proxy timeouts during long AI responses
+  const keepalive = setInterval(() => {
+    if (!aborted) res.write(':keepalive\n\n');
+  }, 15_000);
+
+  const cleanup = () => clearInterval(keepalive);
+
   try {
-    // 1. Get or create conversation
+    // 1. Check AI config first — fail fast before building context
+    const aiConfig = await prisma.aiConfig.findUnique({ where: { householdId } });
+    if (!aiConfig || aiConfig.provider === 'none') {
+      res.write(`data: ${JSON.stringify({ error: "I'm not configured yet. Go to Settings → AI Advisor to choose your AI provider (Claude, OpenAI, Gemini, Ollama, or OpenRouter) and add your API key." })}\n\n`);
+      cleanup();
+      res.end();
+      return;
+    }
+    const client = getAiClient(aiConfig);
+
+    // 2. Get or create conversation
     let conversation = conversationId
-      ? await prisma.conversation.findFirst({
-          where: { id: conversationId, householdId },
-        })
+      ? await prisma.conversation.findFirst({ where: { id: conversationId, householdId } })
       : null;
 
     if (!conversation) {
       conversation = await prisma.conversation.create({
-        data: {
-          householdId,
-          userId,
-          title: message.slice(0, 60),
-        },
+        data: { householdId, userId, title: message.slice(0, 60) },
       });
     }
 
     const convId = conversation.id;
 
-    // 2. Fetch last 20 messages for history
-    const history = await prisma.conversationMessage.findMany({
-      where: { conversationId: convId },
-      orderBy: { createdAt: 'asc' },
-      take: 20,
-    });
-
-    // 3. Build financial context
-    const ctx = await getChatContext(prisma, householdId);
+    // 3. Fetch last 20 messages for history + financial context in parallel
+    const [history, ctx] = await Promise.all([
+      prisma.conversationMessage.findMany({
+        where: { conversationId: convId },
+        orderBy: { createdAt: 'asc' },
+        take: 20,
+      }),
+      getChatContext(prisma, householdId),
+    ]);
 
     // 4. Build messages array
     const systemPrompt = chatSystemPrompt(ctx);
@@ -80,76 +94,62 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
       { role: 'user', content: message },
     ];
 
-    // 5. Call AI with streaming
+    // 5. Stream AI response — accumulate tokens via onToken callback
     let responseContent = '';
-    try {
-      const client = await getAiClientForHousehold(householdId, prisma);
-
-      const result = await client.completeStream(
-        { messages, systemPrompt, maxTokens: 1024, temperature: 0.7 },
+    const streamTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('AI request timed out after 60s')), 60_000)
+    );
+    await Promise.race([
+      client.completeStream(
+        { messages, systemPrompt, maxTokens: 2048, temperature: 0.7, signal: controller.signal },
         (token: string) => {
           if (aborted) return;
           responseContent += token;
           res.write(`data: ${JSON.stringify({ token })}\n\n`);
         },
-      );
+      ),
+      streamTimeout,
+    ]);
 
-      // Use the full result content as the canonical saved text (provider may differ slightly)
-      responseContent = result.content;
-    } catch (aiErr: unknown) {
-      const errMsg = aiErr instanceof Error ? aiErr.message : String(aiErr);
-      const isNotConfigured =
-        errMsg.includes('not configured') || errMsg.includes('provider not configured');
+    if (aborted) { cleanup(); return; }
 
-      responseContent = isNotConfigured
-        ? "I'm not configured yet. Go to Settings → AI Advisor to choose your AI provider (Claude, OpenAI, Gemini, Ollama, or OpenRouter) and add your API key."
-        : 'I encountered an error processing your request. Please try again.';
-
-      if (!isNotConfigured) {
-        console.error('[advisor/chat/stream] AI error:', errMsg);
-      }
-
-      if (!aborted) {
-        res.write(`data: ${JSON.stringify({ error: responseContent })}\n\n`);
-        res.end();
-        return;
-      }
-      return;
-    }
-
-    if (aborted) return;
-
-    // 6. Save messages to DB
-    await prisma.conversationMessage.createMany({
-      data: [
-        { conversationId: convId, role: 'user', content: message },
-        { conversationId: convId, role: 'assistant', content: responseContent },
-      ],
-    });
-
-    // Update conversation timestamp / title
-    if (!conversationId) {
-      await prisma.conversation.update({
-        where: { id: convId },
-        data: { title: message.slice(0, 60), updatedAt: new Date() },
+    // 6. Save messages to DB — wrapped so a DB error doesn't crash the SSE response
+    try {
+      await prisma.conversationMessage.createMany({
+        data: [
+          { conversationId: convId, role: 'user', content: message },
+          { conversationId: convId, role: 'assistant', content: responseContent },
+        ],
       });
-    } else {
-      await prisma.conversation.update({
-        where: { id: convId },
-        data: { updatedAt: new Date() },
-      });
+
+      // Update conversation timestamp / title
+      if (!conversationId) {
+        await prisma.conversation.update({
+          where: { id: convId },
+          data: { title: message.slice(0, 60), updatedAt: new Date() },
+        });
+      } else {
+        await prisma.conversation.update({
+          where: { id: convId },
+          data: { updatedAt: new Date() },
+        });
+      }
+    } catch (dbErr) {
+      console.error('[advisor/chat/stream] DB save error:', dbErr);
     }
 
     // 7. Get the saved assistant message id for the client
     const savedMsg = await prisma.conversationMessage.findFirst({
       where: { conversationId: convId, role: 'assistant' },
       orderBy: { createdAt: 'desc' },
-    });
+    }).catch(() => null);
 
     res.write(`data: ${JSON.stringify({ done: true, conversationId: convId, messageId: savedMsg?.id })}\n\n`);
+    cleanup();
     res.end();
   } catch (err) {
     console.error('[advisor/chat/stream]', err);
+    cleanup();
     if (!aborted) {
       res.write(`data: ${JSON.stringify({ error: 'Internal server error' })}\n\n`);
       res.end();
@@ -368,12 +368,13 @@ router.post('/budget-coach/stream', async (req: AuthRequest, res: Response) => {
   req.on('close', () => { aborted = true; });
 
   try {
-    const client = await getAiClientForHousehold(householdId, prisma);
-    if (!client) {
-      res.write(`data: ${JSON.stringify({ error: 'No AI provider configured. Set one in Settings → Integrations.' })}\n\n`);
+    const aiConfig = await prisma.aiConfig.findUnique({ where: { householdId } });
+    if (!aiConfig || aiConfig.provider === 'none') {
+      res.write(`data: ${JSON.stringify({ error: "I'm not configured yet. Go to Settings → AI Advisor to choose your AI provider." })}\n\n`);
       res.end();
       return;
     }
+    const client = getAiClient(aiConfig);
 
     // Fetch budget data for the requested month
     const [year, mon] = month.split('-').map(Number);
@@ -421,13 +422,19 @@ router.post('/budget-coach/stream', async (req: AuthRequest, res: Response) => {
 
     const messages: AiMessage[] = [{ role: 'user', content: userMsg }];
 
-    await client.completeStream(
-      { messages, systemPrompt, maxTokens: 512, temperature: 0.7 },
-      (token: string) => {
-        if (aborted) return;
-        res.write(`data: ${JSON.stringify({ token })}\n\n`);
-      }
+    const budgetStreamTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('AI request timed out after 30s')), 30_000)
     );
+    await Promise.race([
+      client.completeStream(
+        { messages, systemPrompt, maxTokens: 512, temperature: 0.7 },
+        (token: string) => {
+          if (aborted) return;
+          res.write(`data: ${JSON.stringify({ token })}\n\n`);
+        },
+      ),
+      budgetStreamTimeout,
+    ]);
 
     if (!aborted) {
       res.write(`data: ${JSON.stringify({ done: true })}\n\n`);

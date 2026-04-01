@@ -1,4 +1,4 @@
-export type AiProvider = 'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'none';
+export type AiProvider = 'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'ollama' | 'none';
 
 export interface AiMessage {
   role: 'user' | 'assistant' | 'system';
@@ -10,6 +10,7 @@ export interface AiCompletionOptions {
   systemPrompt?: string;
   maxTokens?: number;
   temperature?: number;
+  signal?: AbortSignal;
 }
 
 export interface AiCompletionResult {

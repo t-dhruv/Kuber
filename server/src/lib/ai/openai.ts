@@ -54,7 +54,7 @@ export class OpenAiProvider implements AiProviderClient {
       max_tokens:  opts.maxTokens ?? 1024,
       temperature: opts.temperature ?? 0.3,
       stream: true,
-    });
+    }, { signal: opts.signal });
 
     for await (const chunk of stream) {
       const token = chunk.choices[0]?.delta?.content ?? '';

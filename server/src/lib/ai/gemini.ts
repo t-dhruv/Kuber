@@ -50,6 +50,7 @@ export class GeminiProvider implements AiProviderClient {
 
     let fullContent = '';
     for await (const chunk of result.stream) {
+      if (opts.signal?.aborted) break;
       const token = chunk.text();
       if (token) { onToken(token); fullContent += token; }
     }

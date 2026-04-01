@@ -22,6 +22,7 @@ export interface ChatContext {
     gainLossPct: number;
     allocation: Array<{ assetClass: string; value: number; pct: number }>;
   };
+  recentTransactions: Array<{ date: string; description: string; amount: number; category?: string }>;
 }
 
 export async function getChatContext(prisma: PrismaClient, householdId: string): Promise<ChatContext> {
@@ -29,7 +30,7 @@ export async function getChatContext(prisma: PrismaClient, householdId: string):
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-  const [household, accounts, transactions, budgets, goals, holdings] = await Promise.all([
+  const [household, accounts, transactions, budgets, goals, holdings, latestTransactions] = await Promise.all([
     prisma.household.findUnique({ where: { id: householdId } }),
     prisma.account.findMany({ where: { householdId, isHidden: false } }),
     prisma.transaction.findMany({
@@ -42,6 +43,12 @@ export async function getChatContext(prisma: PrismaClient, householdId: string):
     }),
     prisma.goal.findMany({ where: { householdId } }),
     prisma.investmentHolding.findMany({ where: { account: { householdId } } }),
+    prisma.transaction.findMany({
+      where: { householdId, isHidden: false },
+      orderBy: { date: 'desc' },
+      take: 10,
+      include: { category: true },
+    }),
   ]);
 
   const netWorth = accounts.reduce((s, a) => s + a.balance, 0);
@@ -67,9 +74,9 @@ export async function getChatContext(prisma: PrismaClient, householdId: string):
     });
 
   const budgetRows = budgets.slice(0, 15).map(b => {
-    const spent = categorySpend.get(b.categoryId)?.spent ?? 0;
+    const spent = (b.categoryId ? categorySpend.get(b.categoryId)?.spent : undefined) ?? 0;
     return {
-      category: b.category?.name ?? b.categoryId,
+      category: b.category?.name ?? b.categoryId ?? b.name ?? 'Uncategorized',
       budgeted: b.amount,
       spent:    Math.round(spent * 100) / 100,
       remaining: Math.round((b.amount - spent) * 100) / 100,
@@ -99,6 +106,13 @@ export async function getChatContext(prisma: PrismaClient, householdId: string):
     pct:   totalValue > 0 ? Math.round((value / totalValue) * 100) : 0,
   }));
 
+  const recentTransactions = latestTransactions.map(t => ({
+    date: t.date.toISOString().split('T')[0],
+    description: t.description,
+    amount: Math.round(t.amount * 100) / 100,
+    category: t.category?.name,
+  }));
+
   return {
     householdName: household?.name ?? 'Household',
     currency: household?.currency ?? 'CAD',
@@ -121,6 +135,7 @@ export async function getChatContext(prisma: PrismaClient, householdId: string):
         : 0,
       allocation,
     },
+    recentTransactions,
   };
 }
 
@@ -253,7 +268,7 @@ export async function getBudgetContext(
     monthlySpending: spending,
     currentBudgets: budgets.map(b => ({
       categoryId: b.categoryId,
-      category:   b.category?.name ?? b.categoryId,
+      category:   b.category?.name ?? b.categoryId ?? b.name ?? 'Uncategorized',
       amount:     b.amount,
     })),
   };

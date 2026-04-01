@@ -2,6 +2,7 @@ import type { AiConfig } from '@prisma/client';
 import { decrypt } from '../encryption';
 import { AnthropicProvider } from './anthropic';
 import { GeminiProvider } from './gemini';
+import { OllamaProvider } from './ollama';
 import { OpenAiProvider } from './openai';
 import { OpenRouterProvider } from './openrouter';
 import type { AiConfigData, AiProvider, AiProviderClient } from './types';
@@ -39,6 +40,7 @@ export function getAiClient(config: AiConfig): AiProviderClient {
     case 'openai':      client = new OpenAiProvider(apiKey, data.model); break;
     case 'gemini':      client = new GeminiProvider(apiKey, data.model); break;
     case 'openrouter':  client = new OpenRouterProvider(data); break;
+    case 'ollama':      client = new OllamaProvider(data); break;
     default: throw new Error(`Unknown AI provider: ${provider}`);
   }
 
