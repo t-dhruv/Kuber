@@ -27,9 +27,9 @@ services:
       JWT_SECRET: dev_jwt_secret_change_in_prod
       JWT_REFRESH_SECRET: dev_refresh_secret_change_in_prod
       NODE_ENV: development
-      PORT: 4000
+      PORT: 9002
     ports:
-      - "4000:4000"
+      - "9002:9002"
     depends_on:
       postgres:
         condition: service_healthy

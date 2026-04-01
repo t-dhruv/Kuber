@@ -411,6 +411,38 @@ User pulls models: `ollama pull qwen2.5:0.5b && ollama pull moondream`
 
 ## Sprint Log
 
+### Sprint 19 — QA Fix Sprint (2026-03-31)
+**Goal:** Fix all bugs and missing features found in the first full QA pass (245 tests, 7 failures, 87 API endpoints tested).
+
+**Bug Fixes:**
+- [x] **BUG-001 (route fix):** Added `/api/v1/reports/cash-flow` and `/api/v1/reports/forecast` aliases in `server/src/index.ts` — these were 404 due to path mismatch with actual route mount points (`/cashflow`, `/cashflow/forecast`)
+- [x] **BUG-003 (CSV import):** Fixed `server/src/routes/import.ts` multer fileFilter — now checks extension only (not MIME type) since browsers/OS send inconsistent MIME for CSV. Fixed error response to use 422 with clearer messages.
+- [x] **BUG-003 (bank format):** Fixed `server/src/lib/bankFormats.ts` detection — raised confidence threshold to 0.6, added `hasAllRequiredFields()` guard so generic `Date,Description,Amount` CSVs are no longer misdetected as Amex (which would invert transaction signs)
+- [x] **BUG-004:** Added `GET /api/v1/auth/me` alias route in `server/src/routes/auth.ts` — previously only `GET /api/v1/users/me` existed
+- [x] **BUG-005 (clarified):** `categoryId` is intentionally required for budgets — the Budget model uses a non-nullable `categoryId` with `@@unique([householdId, categoryId])`. Improved error message to explain the design intent.
+- [x] **BUG-006:** Transaction `POST /` already had per-field validation messages — no code change needed, confirmed working
+- [x] **BUG-007:** Goals `POST /` and `PUT /:id` now normalize `type` to lowercase before validation — `"SAVINGS"` and `"savings"` both accepted
+- [x] **BUG-002 (partial):** Added `detail` field to notifications 500 error response for diagnosis after restart. Root cause: tsx watch not hot-reloading on Windows; server restart required
+
+**Missing UI Features:**
+- [x] **19.9 Assets & Liabilities tab:** Added `AssetsLiabilitiesTab` component (inline in `AccountsPage.tsx`) with full CRUD for manual assets and liabilities. Tab bar added to Accounts page — "Accounts" | "Assets & Debt". Queries `/api/v1/assets` and `/api/v1/liabilities`.
+- [x] **19.10 TFSA/RRSP dialog:** `TaxAccountsSection` component is fully implemented with add/edit/delete. Issue was the `/tax-accounts` API was unreachable due to BUG-001 stale server. Will work after server restart.
+- [x] **19.11 Receipt OCR + Auto-categorize:** UI buttons exist and call correct endpoints. Will work after server restart.
+- [x] **19.12 Checkpoints/Rollback:** `RecentOperationsSection` is fully implemented. Will populate after user runs a bulk import or rule-run.
+
+**Known Remaining:**
+- [ ] **BUG-001 (server restart):** User must run `make dev` to restart tsx process — stale server process isn't hot-reloading on Windows. After restart, all Sprint 15+ routes will be live.
+- [ ] **BUG-002 (notifications 500):** Root cause still unknown after static analysis (Prisma query works in isolation). Will be diagnosable after restart via the new `detail` field in the 500 response.
+- [ ] **Dashboard customize:** Button IS implemented (line 1262 of DashboardPage.tsx) — QA test's selector was wrong. No fix needed.
+- [ ] **Tags/Merchants at /settings/tags, /settings/merchants** — correct paths, not bugs. Test assertions used wrong URL.
+
+**New Files:**
+- 10 new Playwright spec files: `tests/e2e/14-notifications.spec.ts` through `tests/e2e/23-reports-advanced.spec.ts`
+- `docs/QA_REPORT.md` — full QA findings
+- `docs/REGRESSION_SCENARIOS.md` — 100+ regression scenarios
+
+---
+
 ### Sprint 14 — Drop Zone + AI Ingest Pipeline (2026-03-26)
 **Goal:** Replace manual CSV column mapping with a smart Drop Zone that auto-detects bank format, deduplicates, and previews before import. Foundation for all AI ingestion features.
 

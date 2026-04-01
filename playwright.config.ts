@@ -7,7 +7,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:9001',
     trace: 'on-first-retry',
   },
   projects: [
