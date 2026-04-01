@@ -67,7 +67,15 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Allow embedding for dev
 }));
 app.use(cors({ origin: clientUrl, credentials: true }));
-app.use(compression() as any);
+// Skip compression for SSE streaming endpoints — compression buffers the response
+// which breaks token-by-token delivery to the client
+app.use(compression({
+  filter: (req, res) => {
+    if (res.getHeader('Content-Type') === 'text/event-stream') return false;
+    if (req.path.includes('/stream')) return false;
+    return compression.filter(req, res);
+  },
+}) as any);
 app.use(express.json());
 app.use(cookieParser());
 
@@ -82,6 +90,8 @@ app.use('/api/v1/transactions', requireAuth, duplicatesRouter);
 app.use('/api/v1/transactions', requireAuth, transactionsRouter);
 app.use('/api/v1/budgets', requireAuth, budgetsRouter);
 app.use('/api/v1/cashflow', requireAuth, cashflowRouter);
+app.use('/api/v1/reports/cash-flow', requireAuth, cashflowRouter);
+app.use('/api/v1/reports/forecast', requireAuth, cashflowRouter);
 app.use('/api/v1/reports', requireAuth, reportsRouter);
 app.use('/api/v1/reports/export', requireAuth, exportsRouter);
 app.use('/api/v1/recurring', requireAuth, recurringRouter);

@@ -1102,11 +1102,13 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
     // Build budget map: categoryId -> budgeted amount
     const budgetMap = new Map<string, { name: string; emoji: string | null; budgeted: number }>();
     for (const b of budgets) {
-      budgetMap.set(b.categoryId, {
-        name: b.category.name,
-        emoji: b.category.emoji ?? null,
-        budgeted: b.amount,
-      });
+      if (b.categoryId) {
+        budgetMap.set(b.categoryId, {
+          name: b.category?.name ?? 'Uncategorized',
+          emoji: b.category?.emoji ?? null,
+          budgeted: b.amount,
+        });
+      }
     }
 
     // Merge: all budgeted categories + categories with spending but no budget

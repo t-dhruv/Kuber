@@ -8,10 +8,12 @@ const router = Router();
 // GET /api/v1/notifications — list unread + recent (last 30 days)
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
+    const householdId = req.householdId;
+    if (!householdId) return res.status(401).json({ error: 'Unauthorized' });
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const items = await prisma.notification.findMany({
       where: {
-        householdId: req.householdId!,
+        householdId,
         createdAt: { gte: thirtyDaysAgo },
       },
       orderBy: { createdAt: 'desc' },
@@ -21,7 +23,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     return res.json({ items, unreadCount });
   } catch (err) {
     console.error('[notifications GET]', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return res.status(500).json({ error: 'Internal server error', detail: msg });
   }
 });
 

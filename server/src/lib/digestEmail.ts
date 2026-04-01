@@ -82,11 +82,11 @@ export async function sendDigestEmail(householdId: string): Promise<void> {
   });
 
   const budgetRows = budgets.map((b) => {
-    const catSpending = categoryMap.get(b.categoryId);
+    const catSpending = b.categoryId ? categoryMap.get(b.categoryId) : undefined;
     const actual = catSpending?.total ?? 0;
     const variance = b.amount - actual;
     const isOver = variance < 0;
-    return { name: b.category.name, emoji: b.category.emoji, budgeted: b.amount, actual, variance, isOver };
+    return { name: b.category?.name ?? b.name ?? 'Uncategorized', emoji: b.category?.emoji ?? null, budgeted: b.amount, actual, variance, isOver };
   }).sort((a, b) => a.variance - b.variance); // most over budget first
 
   // 4. Upcoming recurring bills (next 7 days)

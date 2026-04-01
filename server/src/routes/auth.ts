@@ -7,6 +7,8 @@ import { toDataURL } from 'qrcode';
 import { prisma } from '../lib/prisma';
 import { createRefreshToken, invalidateFamily, hashToken } from '../lib/token';
 import { sendPasswordResetEmail, sendAccountLockoutEmail } from '../lib/email';
+import { requireAuth } from '../middleware/auth';
+import type { AuthRequest } from '../middleware/auth';
 import type { UserDto } from '@kuber/shared';
 
 const router = Router();
@@ -507,6 +509,19 @@ router.get('/2fa/status', async (req: Request, res: Response) => {
     return res.json({ totpEnabled: user.totpEnabled, backupCodesRemaining: user.backupCodes.length });
   } catch (err) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+});
+
+// GET /api/v1/auth/me — alias for /api/v1/users/me (for API consumers using the auth prefix)
+router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const dto = toUserDto(user, req.householdId!);
+    return res.json(dto);
+  } catch (err) {
+    console.error('[auth/me GET]', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

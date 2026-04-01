@@ -22,17 +22,15 @@ import { parseDate } from '../lib/dateUtils.js';
 const router = Router();
 
 // Multer: accept CSV and PDF, 20 MB limit
-const ALLOWED_MIMES = new Set(['text/csv', 'application/pdf', 'text/plain', 'application/octet-stream']);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    // Check extension strictly (last segment only, lowercase)
+    // Check by extension only — browsers/OS send inconsistent MIME types for CSV
+    // (e.g. application/vnd.ms-excel, application/csv, text/plain are all valid CSV)
     const ext = file.originalname.split('.').pop()?.toLowerCase();
     const validExt = ext === 'csv' || ext === 'pdf';
-    // Allow common MIME types (browsers vary on CSV MIME)
-    const validMime = ALLOWED_MIMES.has(file.mimetype);
-    if (validExt && validMime) {
+    if (validExt) {
       cb(null, true);
     } else {
       cb(new Error('Only CSV and PDF files are accepted'));
@@ -254,9 +252,11 @@ router.post('/parse', upload.single('file'), async (req: AuthRequest, res) => {
   } catch (err) {
     console.error('Import parse error:', err);
     const msg = err instanceof Error ? err.message : 'Parse failed';
-    // Don't leak internal file paths or stack traces
-    const safeMsg = msg.startsWith('PDF') || msg.startsWith('Only') ? msg : 'Failed to parse file';
-    return res.status(500).json({ error: safeMsg });
+    // Pass through user-facing messages; suppress internal details like file paths or stack traces
+    const safeMsg = /^(PDF|Only|Cannot parse|Failed to|No rows|Unsupported)/i.test(msg)
+      ? msg
+      : 'Failed to parse file. Check the format and try again.';
+    return res.status(422).json({ error: safeMsg });
   }
 });
 

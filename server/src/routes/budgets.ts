@@ -158,17 +158,17 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     // Build a map of categoryId -> budget record
     const budgetByCategory = new Map<string, { amount: number; budgetType: string }>();
     for (const b of budgets) {
-      budgetByCategory.set(b.categoryId, { amount: b.amount, budgetType: b.budgetType });
+      if (b.categoryId) budgetByCategory.set(b.categoryId, { amount: b.amount, budgetType: b.budgetType });
     }
 
     const categoryById = new Map(allCategories.map(c => [c.id, c]));
 
     // Set of categoryIds that have a budget row
-    const budgetedCategoryIds = new Set(budgets.map(b => b.categoryId));
+    const budgetedCategoryIds = new Set(budgets.map(b => b.categoryId).filter(Boolean));
 
     // Collect all category IDs to include in main budget view: those with budget rows + actual spend
     const allCategoryIds = new Set<string>([
-      ...budgets.map(b => b.categoryId),
+      ...budgets.map(b => b.categoryId).filter((id): id is string => !!id),
       ...Array.from(actualByCategory.keys()),
     ]);
 
@@ -299,16 +299,15 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { categoryId, amount, budgetType } = req.body as {
+    const { categoryId, name, amount, budgetType } = req.body as {
       categoryId?: string;
+      name?: string;
       amount?: number;
       budgetType?: string;
-      month?: number;
-      year?: number;
     };
 
-    if (!categoryId || typeof categoryId !== 'string') {
-      return res.status(400).json({ error: 'categoryId is required' });
+    if (!categoryId && !name) {
+      return res.status(400).json({ error: 'Provide either categoryId (category budget) or name (catch-all budget)' });
     }
     if (amount === undefined || amount === null || typeof amount !== 'number' || amount < 0) {
       return res.status(400).json({ error: 'amount must be a non-negative number' });
@@ -317,39 +316,40 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: `budgetType must be one of: ${VALID_BUDGET_TYPES.join(', ')}` });
     }
 
-    // Verify category belongs to this household
-    const category = await prisma.category.findFirst({
-      where: { id: categoryId, householdId },
-    });
-    if (!category) {
-      return res.status(400).json({ error: 'Category not found or does not belong to this household' });
+    // If categoryId provided, verify it belongs to this household
+    if (categoryId) {
+      const category = await prisma.category.findFirst({ where: { id: categoryId, householdId } });
+      if (!category) {
+        return res.status(400).json({ error: 'Category not found or does not belong to this household' });
+      }
     }
 
     const resolvedBudgetType = (budgetType as BudgetType) ?? 'FLEXIBLE';
 
-    // Upsert: unique constraint is (householdId, categoryId)
-    const budget = await prisma.budget.upsert({
-      where: {
-        householdId_categoryId: { householdId, categoryId },
-      },
-      update: {
-        amount,
-        budgetType: resolvedBudgetType,
-        updatedAt: new Date(),
-      },
-      create: {
-        householdId,
-        categoryId,
-        amount,
-        period: 'monthly',
-        budgetType: resolvedBudgetType,
-      },
-      include: {
-        category: { select: { id: true, name: true, emoji: true, type: true } },
-      },
-    });
+    // Upsert by categoryId if present, otherwise create new
+    let budget;
+    if (categoryId) {
+      const existing = await prisma.budget.findFirst({ where: { householdId, categoryId } });
+      if (existing) {
+        budget = await prisma.budget.update({
+          where: { id: existing.id },
+          data: { amount, budgetType: resolvedBudgetType },
+          include: { category: { select: { id: true, name: true, emoji: true, type: true } } },
+        });
+      } else {
+        budget = await prisma.budget.create({
+          data: { householdId, categoryId, amount, period: 'monthly', budgetType: resolvedBudgetType },
+          include: { category: { select: { id: true, name: true, emoji: true, type: true } } },
+        });
+      }
+    } else {
+      budget = await prisma.budget.create({
+        data: { householdId, name: name!, amount, period: 'monthly', budgetType: resolvedBudgetType },
+        include: { category: { select: { id: true, name: true, emoji: true, type: true } } },
+      });
+    }
 
-    logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'BUDGET', entityId: budget.id, after: { categoryId, amount, budgetType: resolvedBudgetType } });
+    logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'BUDGET', entityId: budget.id, after: { categoryId, name, amount, budgetType: resolvedBudgetType } });
     return res.json(budget);
   } catch (err) {
     console.error('[budgets/POST]', err);

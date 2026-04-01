@@ -6,7 +6,13 @@ import { toCSV, setCsvHeaders } from '../lib/csvExport';
 
 const router = Router();
 
-const VALID_ACCOUNT_TYPES = ['CHECKING', 'SAVINGS', 'CREDIT_CARD', 'INVESTMENT', 'LOAN', 'OTHER'];
+const VALID_ACCOUNT_TYPES = [
+  'CHECKING', 'SAVINGS', 'CREDIT_CARD', 'INVESTMENT', 'LOAN', 'OTHER',
+  // Canadian registered accounts
+  'TFSA', 'RRSP', 'FHSA', 'RESP',
+  // US retirement accounts
+  '401K', 'IRA', 'ROTH_IRA',
+];
 
 function formatAccount(account: {
   id: string;

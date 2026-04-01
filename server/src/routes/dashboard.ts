@@ -167,7 +167,7 @@ router.get('/budget-summary', async (req: AuthRequest, res: Response) => {
       return res.json({ totalBudget: 0, totalSpent: 0, categories: [] });
     }
 
-    const categoryIds = budgets.map(b => b.categoryId);
+    const categoryIds = budgets.map(b => b.categoryId).filter((id): id is string => !!id);
 
     const transactions = await prisma.transaction.findMany({
       where: {
@@ -193,15 +193,15 @@ router.get('/budget-summary', async (req: AuthRequest, res: Response) => {
 
     const categories = budgets.map(b => {
       const budget = b.amount;
-      const spent = spentByCategory.get(b.categoryId) ?? 0;
+      const spent = (b.categoryId ? spentByCategory.get(b.categoryId) : undefined) ?? 0;
       const remaining = Math.max(0, budget - spent);
       const percent = budget > 0 ? (spent / budget) * 100 : 0;
       totalBudget += budget;
       totalSpent += spent;
       return {
-        id: b.categoryId,
-        name: b.category.name,
-        icon: b.category.emoji ?? null,
+        id: b.categoryId ?? null,
+        name: b.category?.name ?? b.name ?? 'Uncategorized',
+        icon: b.category?.emoji ?? null,
         color: null,
         budget,
         spent,
