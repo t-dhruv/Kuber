@@ -47,7 +47,7 @@ services:
     container_name: kuber_client
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "9001:80"
     depends_on:
       - server
 
