@@ -23,7 +23,7 @@ services:
   server:
     build:
       context: .
-      dockerfile: server/Dockerfile
+      dockerfile: Dockerfile.server
     container_name: kuber_server
     restart: unless-stopped
     environment:
@@ -45,7 +45,7 @@ services:
   client:
     build:
       context: .
-      dockerfile: client/Dockerfile
+      dockerfile: Dockerfile.client
     container_name: kuber_client
     restart: unless-stopped
     ports:
