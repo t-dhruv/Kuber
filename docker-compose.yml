@@ -21,7 +21,9 @@ services:
       - kuber_net
 
   server:
-    build: ./server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     container_name: kuber_server
     restart: unless-stopped
     environment:
@@ -41,7 +43,9 @@ services:
       - kuber_net
 
   client:
-    build: ./client
+    build:
+      context: .
+      dockerfile: client/Dockerfile
     container_name: kuber_client
     restart: unless-stopped
     ports:
