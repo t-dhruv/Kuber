@@ -33,7 +33,7 @@ COPY --from=server-builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=server-builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 WORKDIR /app/server
 EXPOSE 9002
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/index.js"]
 
 # ─── Client: install + build ──────────────────────────────────────────────────
 FROM base AS client-builder
