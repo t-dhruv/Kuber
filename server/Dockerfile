@@ -4,10 +4,10 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files for dependency install
-COPY package.json package-lock.json ./
+COPY package.json ./
 
 # Install all dependencies (including devDeps for build)
-RUN npm ci
+RUN npm install
 
 # Copy source files
 COPY prisma ./prisma
@@ -23,11 +23,11 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json ./
+# Copy package file
+COPY package.json ./
 
 # Install production dependencies only
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # Copy compiled output from builder
 COPY --from=builder /app/dist ./dist
@@ -39,7 +39,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
-EXPOSE 4000
+EXPOSE 9002
 
 # Run migrations then start the server
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
