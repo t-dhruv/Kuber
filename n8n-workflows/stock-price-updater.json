@@ -1,0 +1,121 @@
+{
+  "id": "stock-price-updater",
+  "name": "Stock Price Updater → Kuber",
+  "active": false,
+  "version": 1,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "node-schedule",
+      "name": "Market Hours Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/30 14-20 * * 1-5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-split-tickers",
+      "name": "Split Tickers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "const tickers = ($env.KUBER_WATCH_TICKERS || '').split(',').map(t => t.trim().toUpperCase()).filter(Boolean);\nreturn tickers.map(symbol => ({ json: { symbol } }));"
+      }
+    },
+    {
+      "id": "node-fetch-price",
+      "name": "Fetch Yahoo Finance Quote",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://query1.finance.yahoo.com/v8/finance/chart/{{ $json.symbol }}?interval=1d&range=1d",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "node-extract-price",
+      "name": "Extract Price",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "parameters": {
+        "jsCode": "const result = $input.item.json;\nconst meta = result?.chart?.result?.[0]?.meta;\nconst symbol = meta?.symbol || '';\nconst price = meta?.regularMarketPrice || 0;\nif (!symbol || !price) return [];\nreturn [{ json: { symbol, price } }];"
+      }
+    },
+    {
+      "id": "node-aggregate",
+      "name": "Aggregate Prices",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "prices"
+      }
+    },
+    {
+      "id": "node-patch-prices",
+      "name": "PATCH Prices to Kuber",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 300],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.KUBER_WEBHOOK_URL }}/api/v1/investments/holdings/prices",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.KUBER_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ $json.prices }}"
+      }
+    }
+  ],
+  "connections": {
+    "Market Hours Schedule": {
+      "main": [[{ "node": "Split Tickers", "type": "main", "index": 0 }]]
+    },
+    "Split Tickers": {
+      "main": [[{ "node": "Fetch Yahoo Finance Quote", "type": "main", "index": 0 }]]
+    },
+    "Fetch Yahoo Finance Quote": {
+      "main": [[{ "node": "Extract Price", "type": "main", "index": 0 }]]
+    },
+    "Extract Price": {
+      "main": [[{ "node": "Aggregate Prices", "type": "main", "index": 0 }]]
+    },
+    "Aggregate Prices": {
+      "main": [[{ "node": "PATCH Prices to Kuber", "type": "main", "index": 0 }]]
+    }
+  }
+}

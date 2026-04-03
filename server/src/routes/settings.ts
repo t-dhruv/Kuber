@@ -851,6 +851,26 @@ router.post('/ai-config/test', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/v1/settings/watch-tickers
+router.get('/watch-tickers', async (req: AuthRequest, res: Response) => {
+  const pref = await prisma.userPreference.findFirst({
+    where: { userId: req.userId!, key: 'watch_tickers' },
+  });
+  return res.json({ tickers: pref?.value ?? '' });
+});
+
+// PUT /api/v1/settings/watch-tickers
+router.put('/watch-tickers', async (req: AuthRequest, res: Response) => {
+  const parse = z.object({ tickers: z.string().max(500) }).safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'Invalid tickers' });
+  await prisma.userPreference.upsert({
+    where: { userId_key: { userId: req.userId!, key: 'watch_tickers' } },
+    update: { value: parse.data.tickers },
+    create: { userId: req.userId!, key: 'watch_tickers', value: parse.data.tickers },
+  });
+  return res.json({ tickers: parse.data.tickers });
+});
+
 // POST /api/v1/settings/email/test
 router.post('/email/test', async (req: AuthRequest, res: Response) => {
   try {

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   User, Monitor, Bell, Shield, Home, Tag, Database, CreditCard,
   Pencil, Trash2, Plus, ChevronDown, ChevronRight, Upload, ShieldCheck, ShieldOff, Mail, Bot,
-  CheckCircle2, XCircle, Receipt,
+  CheckCircle2, XCircle, Receipt, Zap,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
@@ -12,6 +12,7 @@ import {
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { TaxAccountsSection } from './components/TaxAccountsSection';
 import { EmailConnectorSection } from './components/EmailConnectorSection';
+import { AutomationSection } from './components/AutomationSection';
 import { useAuthStore } from '@/stores/authStore';
 import { useTotpStatus, useTotpSetup, useTotpEnable, useTotpDisable } from '@/hooks/useAuth';
 
@@ -118,7 +119,8 @@ type NavSection =
   | 'report-digest'
   | 'data'
   | 'billing'
-  | 'tax-accounts';
+  | 'tax-accounts'
+  | 'automation';
 
 const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'profile', label: 'Profile', icon: <User size={16} /> },
@@ -134,6 +136,7 @@ const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'data', label: 'Data', icon: <Database size={16} /> },
   { id: 'billing', label: 'Billing', icon: <CreditCard size={16} /> },
   { id: 'tax-accounts', label: 'Tax Accounts', icon: <Receipt size={16} /> },
+  { id: 'automation', label: 'Automation', icon: <Zap size={16} /> },
 ];
 
 // ─── Section: Profile ─────────────────────────────────────────────────────────
@@ -2763,6 +2766,7 @@ export default function SettingsPage() {
       case 'data': return <DataSection />;
       case 'billing': return <BillingSection />;
       case 'tax-accounts': return <TaxAccountsSection />;
+      case 'automation': return <AutomationSection />;
     }
   }
 

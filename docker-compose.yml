@@ -17,6 +17,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - kuber_net
 
   server:
     build: ./server
@@ -35,6 +37,8 @@ services:
         condition: service_healthy
     volumes:
       - ./server/src:/app/src
+    networks:
+      - kuber_net
 
   client:
     build: ./client
@@ -62,6 +66,10 @@ services:
       - N8N_PORT=5678
       - WEBHOOK_URL=http://localhost:5678/
       - GENERIC_TIMEZONE=America/Toronto
+      - KUBER_WEBHOOK_URL=http://kuber_server:9002
+      - KUBER_API_TOKEN=${KUBER_API_TOKEN:-}
+      - KUBER_WATCH_TICKERS=${KUBER_WATCH_TICKERS:-}
+      - N8N_RUNNERS_ENABLED=true
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n-workflows:/home/node/workflows:ro
@@ -71,3 +79,6 @@ services:
 volumes:
   kuber_pgdata:
   n8n_data:
+
+networks:
+  kuber_net:

@@ -107,7 +107,7 @@ export function useChatStream(): UseChatStreamReturn {
         },
         body: JSON.stringify({
           message: text,
-          conversationId: conversationIdRef.current,
+          ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
         }),
         signal: controller.signal,
       });

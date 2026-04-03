@@ -29,6 +29,7 @@ model User {
   preferences         UserPreference[]
   refreshTokens       RefreshToken[]
   auditLogs           AuditLog[]
+  apiTokens           ApiToken[]
 
   @@map("users")
 }
@@ -64,6 +65,8 @@ model Household {
   manualAssets            ManualAsset[]
   manualLiabilities       ManualLiability[]
   taxAccounts             TaxAccount[]
+  apiTokens               ApiToken[]
+  investmentIntel         InvestmentIntel[]
 
   @@map("households")
 }
@@ -655,6 +658,39 @@ model ImportHistory {
 
   @@index([householdId, createdAt])
   @@map("import_history")
+}
+
+model ApiToken {
+  id          String    @id @default(cuid())
+  householdId String
+  userId      String
+  name        String
+  tokenHash   String    @unique
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@map("api_tokens")
+}
+
+model InvestmentIntel {
+  id          String    @id @default(cuid())
+  householdId String
+  source      String
+  title       String
+  summary     String    @db.Text
+  url         String?
+  ticker      String?
+  sentiment   String?
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, createdAt])
+  @@map("investment_intel")
 }
 
 model OperationCheckpoint {

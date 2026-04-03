@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { getQuotes, getQuote, getLiveBenchmarks, BenchmarkPeriod } from '../lib/priceCache';
@@ -971,6 +972,28 @@ router.post('/lots/:id/skip', async (req: AuthRequest, res: Response) => {
     console.error('[investments/lots/:id/skip]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// ── PATCH /holdings/prices — bulk price update from n8n ──────────────────────
+const priceUpdateSchema = z.array(z.object({
+  symbol: z.string().min(1).max(20),
+  price: z.number().positive(),
+  currency: z.string().length(3).optional(),
+}));
+
+router.patch('/holdings/prices', async (req: AuthRequest, res: Response) => {
+  const parse = priceUpdateSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: parse.error.issues[0]?.message });
+  const householdId = req.householdId!;
+  let updated = 0;
+  for (const { symbol, price } of parse.data) {
+    const result = await prisma.investmentHolding.updateMany({
+      where: { symbol: { equals: symbol, mode: 'insensitive' }, account: { householdId } },
+      data: { currentPrice: price, updatedAt: new Date() },
+    });
+    updated += result.count;
+  }
+  return res.json({ updated });
 });
 
 export default router;

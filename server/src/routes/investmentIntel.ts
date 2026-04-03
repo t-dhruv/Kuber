@@ -1,8 +1,9 @@
 /**
  * investmentIntel.ts
- * Investment intelligence endpoints — news per holding, Monte Carlo projections.
+ * Investment intelligence endpoints — news per holding, Monte Carlo projections, n8n intel feed.
  */
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.js';
 
@@ -146,6 +147,47 @@ router.get('/projections', async (req: AuthRequest, res: Response) => {
     console.error('[investment-intel/projections]', err);
     return res.status(500).json({ error: 'Projection failed' });
   }
+});
+
+// ── POST /api/v1/investment-intel/feed — receive intel from n8n ──────────────
+const feedSchema = z.object({
+  source: z.enum(['news', 'youtube', 'manual']),
+  title: z.string().min(1).max(500),
+  summary: z.string().min(1),
+  url: z.string().url().optional(),
+  ticker: z.string().max(20).optional(),
+  sentiment: z.enum(['bullish', 'bearish', 'neutral']).optional(),
+  publishedAt: z.string().datetime().optional(),
+});
+
+router.post('/feed', async (req: AuthRequest, res: Response) => {
+  const parse = feedSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: parse.error.issues[0]?.message });
+  const { source, title, summary, url, ticker, sentiment, publishedAt } = parse.data;
+  const intel = await prisma.investmentIntel.create({
+    data: {
+      householdId: req.householdId!,
+      source, title, summary,
+      url: url ?? null,
+      ticker: ticker ?? null,
+      sentiment: sentiment ?? null,
+      publishedAt: publishedAt ? new Date(publishedAt) : null,
+    },
+  });
+  return res.status(201).json(intel);
+});
+
+// ── GET /api/v1/investment-intel/feed — list intel items ─────────────────────
+router.get('/feed', async (req: AuthRequest, res: Response) => {
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
+  const items = await prisma.investmentIntel.findMany({
+    where: { householdId: req.householdId! },
+    orderBy: { createdAt: 'desc' },
+    skip: (page - 1) * limit,
+    take: limit,
+  });
+  return res.json(items);
 });
 
 export default router;

@@ -37,6 +37,7 @@ import fxRouter from './routes/fx';
 import autoCategorizeRouter from './routes/autoCategorize';
 import receiptsRouter from './routes/receipts';
 import emailConnectorRouter from './routes/emailConnector';
+import apiTokensRouter from './routes/apiTokens';
 import { requireAuth } from './middleware/auth';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
 import { runAccountBalanceSnapshot } from './lib/accountBalanceJob';
@@ -118,6 +119,7 @@ app.use('/api/v1/fx', requireAuth, fxRouter);
 app.use('/api/v1/auto-categorize', requireAuth, autoCategorizeRouter);
 app.use('/api/v1/receipts', requireAuth, receiptsRouter);
 app.use('/api/v1/email-connector', requireAuth, emailConnectorRouter);
+app.use('/api/v1/settings/api-tokens', requireAuth, apiTokensRouter);
 
 function checkIfDigestDue(schedule: { frequency: string; lastSentAt: Date | null }, now: Date): boolean {
   const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday
