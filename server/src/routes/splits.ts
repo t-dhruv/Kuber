@@ -115,7 +115,7 @@ router.delete('/:id/split', async (req: AuthRequest, res: Response) => {
       where: { id },
       data: {
         isSplit: false,
-        splitDetails: Prisma.JsonNull,
+        splitDetails: Prisma.DbNull,
       },
     });
 

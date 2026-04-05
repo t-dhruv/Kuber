@@ -25,7 +25,7 @@ export async function createCheckpoint(
       householdId,
       type,
       label,
-      snapshot: txns as unknown as import('@prisma/client').Prisma.JsonArray,
+      snapshot: txns as unknown as import('@prisma/client').Prisma.JsonValue[],
       txnCount: txns.length,
       expiresAt,
     },
