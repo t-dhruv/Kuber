@@ -73,7 +73,7 @@ function layoutColumn(
 
   const totalGap = GAP * (items.length - 1)
   const usableHeight = AVAILABLE_HEIGHT - totalGap
-  let nodes: LayoutNode[] = []
+  const nodes: LayoutNode[] = []
   let stackHeight = 0
 
   for (const item of items) {

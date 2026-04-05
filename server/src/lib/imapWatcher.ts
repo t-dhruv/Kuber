@@ -26,7 +26,7 @@ export async function fetchReceiptEmails(
 ): Promise<Array<{ description: string; amount: number; date: string; reference?: string; source: string }>> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let imapSimple: any = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   let simpleParser: ((source: string | Buffer) => Promise<{ text?: string; html?: string }>) | null = null;
 
   try {
