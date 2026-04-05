@@ -35,16 +35,13 @@ jobs:
         run: npm run lint
 
       - name: Typecheck (server)
-        run: npx tsc --noEmit
-        working-directory: server
+        run: npm exec --workspace=server -- tsc --noEmit
 
       - name: Typecheck (client)
-        run: npx tsc --noEmit
-        working-directory: client
+        run: npm exec --workspace=client -- tsc --noEmit
 
       - name: Unit tests (server)
-        run: npm run test
-        working-directory: server
+        run: npm run test --workspace=server
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://kuber:kuber_test@localhost:5432/kuber_test
