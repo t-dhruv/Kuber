@@ -37,26 +37,18 @@ export function TaxSummaryTab() {
   const hasData = data && data.categories.length > 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <div className="flex flex-col gap-5">
       {/* Header with year selector and export */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Receipt size={18} style={{ color: 'var(--color-accent)' }} />
-          <span style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--color-text)' }}>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <Receipt size={18} className="text-[var(--color-accent)]" />
+          <span className="font-semibold text-base text-[var(--color-text)]">
             Tax-Deductible Expenses
           </span>
           <select
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            style={{
-              fontSize: '0.875rem',
-              padding: '0.25rem 0.5rem',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
-              cursor: 'pointer',
-            }}
+            className="text-sm px-2 py-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] cursor-pointer"
           >
             {YEAR_OPTIONS.map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -68,67 +60,59 @@ export function TaxSummaryTab() {
 
       {/* Total KPI */}
       <Card style={{ padding: '1.25rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="flex items-center justify-between">
           <div>
-            <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>
+            <div className="text-[0.8125rem] text-[var(--color-text-secondary)] mb-1">
               Total Deductible ({year})
             </div>
             {isLoading ? (
               <Skeleton style={{ width: 140, height: 32 }} />
             ) : (
-              <div style={{ fontSize: '1.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+              <div className="text-[1.875rem] font-bold text-[var(--color-text)]">
                 {fmtCurrency(data?.totalDeductible ?? 0)}
               </div>
             )}
           </div>
-          <Receipt size={36} style={{ color: 'var(--color-accent)', opacity: 0.2 }} />
+          <Receipt size={36} className="text-[var(--color-accent)] opacity-20" />
         </div>
       </Card>
 
       {/* Category table */}
       <Card style={{ overflow: 'hidden' }}>
         {isLoading ? (
-          <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div className="p-4 flex flex-col gap-3">
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} style={{ width: '100%', height: 44 }} />
             ))}
           </div>
         ) : !hasData ? (
-          <div style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
-            <Receipt size={40} style={{ color: 'var(--color-text-secondary)', opacity: 0.4, margin: '0 auto 1rem' }} />
-            <div style={{ fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+          <div className="py-12 px-6 text-center">
+            <Receipt size={40} className="text-[var(--color-text-secondary)] opacity-40 mx-auto mb-4" />
+            <div className="font-semibold text-[var(--color-text)] mb-2">
               No tax-deductible categories configured
             </div>
-            <div style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+            <div className="text-sm text-[var(--color-text-secondary)] mb-4">
               Mark categories as tax-deductible in Settings to track them here.
             </div>
             <Link
               to="/settings?section=categories"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                color: 'var(--color-accent)',
-                textDecoration: 'none',
-              }}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--color-accent)] no-underline"
             >
               <Settings size={14} />
               Go to Settings &rsaquo; Categories
             </Link>
           </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="w-full border-collapse">
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface-raised)' }}>
-                <th style={{ padding: '0.625rem 1rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+              <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-raised)]">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--color-text-secondary)]">
                   Category
                 </th>
-                <th style={{ padding: '0.625rem 1rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+                <th className="px-4 py-2.5 text-right text-xs font-semibold text-[var(--color-text-secondary)]">
                   Transactions
                 </th>
-                <th style={{ padding: '0.625rem 1rem', textAlign: 'right', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+                <th className="px-4 py-2.5 text-right text-xs font-semibold text-[var(--color-text-secondary)]">
                   Amount
                 </th>
               </tr>
@@ -137,36 +121,36 @@ export function TaxSummaryTab() {
               {data.categories.map((cat, idx) => (
                 <tr
                   key={cat.id}
-                  style={{ borderBottom: idx < data.categories.length - 1 ? '1px solid var(--color-border)' : 'none' }}
+                  className={idx < data.categories.length - 1 ? 'border-b border-[var(--color-border)]' : ''}
                 >
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-[0.625rem]">
                       {cat.icon ? (
-                        <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>{cat.icon}</span>
+                        <span className="text-xl leading-none">{cat.icon}</span>
                       ) : (
-                        <Receipt size={16} style={{ color: 'var(--color-text-secondary)' }} />
+                        <Receipt size={16} className="text-[var(--color-text-secondary)]" />
                       )}
-                      <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>
+                      <span className="text-sm font-medium text-[var(--color-text)]">
                         {cat.name}
                       </span>
                     </div>
                   </td>
-                  <td style={{ padding: '0.75rem 1rem', textAlign: 'right', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                  <td className="px-4 py-3 text-right text-sm text-[var(--color-text-secondary)]">
                     {cat.transactionCount}
                   </td>
-                  <td style={{ padding: '0.75rem 1rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                  <td className="px-4 py-3 text-right text-sm font-semibold text-[var(--color-text)]">
                     {fmtCurrency(cat.amount)}
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr style={{ borderTop: '2px solid var(--color-border)', background: 'var(--color-surface-raised)' }}>
-                <td style={{ padding: '0.75rem 1rem', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+              <tr className="border-t-2 border-[var(--color-border)] bg-[var(--color-surface-raised)]">
+                <td className="px-4 py-3 text-sm font-bold text-[var(--color-text)]">
                   Total
                 </td>
-                <td style={{ padding: '0.75rem 1rem' }} />
-                <td style={{ padding: '0.75rem 1rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-accent)' }}>
+                <td className="px-4 py-3" />
+                <td className="px-4 py-3 text-right text-sm font-bold text-[var(--color-accent)]">
                   {fmtCurrency(data.totalDeductible)}
                 </td>
               </tr>

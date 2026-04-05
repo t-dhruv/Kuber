@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
+import { createCheckpoint } from '../lib/checkpoint.js';
 
 const router = Router();
 
@@ -225,8 +226,9 @@ router.put('/reorder', async (req: AuthRequest, res: Response) => {
 
 router.post('/:id/apply', async (req: AuthRequest, res: Response) => {
   try {
+    const householdId = req.householdId!;
     const rule = await prisma.rule.findFirst({
-      where: { id: req.params.id, householdId: req.householdId! },
+      where: { id: req.params.id, householdId },
     });
     if (!rule) return res.status(404).json({ error: 'Rule not found' });
 
@@ -234,20 +236,36 @@ router.post('/:id/apply', async (req: AuthRequest, res: Response) => {
     const actions = rule.actions as Action[];
 
     const transactions = await prisma.transaction.findMany({
-      where: { householdId: req.householdId!, isHidden: false },
+      where: { householdId, isHidden: false },
       include: { merchant: { select: { displayName: true, name: true } } },
     });
+
+    // Snapshot affected transactions before mutating
+    const affectedIds = transactions
+      .filter((tx) => {
+        const merchantName = tx.merchant?.displayName ?? tx.merchant?.name ?? tx.description;
+        return ruleMatches(conditions, { description: tx.description, merchantName, amount: tx.amount });
+      })
+      .map((tx) => tx.id);
+
+    const checkpointId = await createCheckpoint(
+      prisma,
+      householdId,
+      'rule-apply-all',
+      `Rule applied to ${affectedIds.length} transaction${affectedIds.length !== 1 ? 's' : ''}`,
+      affectedIds,
+    );
 
     let matched = 0;
     for (const tx of transactions) {
       const merchantName = tx.merchant?.displayName ?? tx.merchant?.name ?? tx.description;
       if (ruleMatches(conditions, { description: tx.description, merchantName, amount: tx.amount })) {
-        await applyActionsToTransaction(tx.id, actions, req.householdId!);
+        await applyActionsToTransaction(tx.id, actions, householdId);
         matched++;
       }
     }
 
-    return res.json({ matched, message: `Rule applied to ${matched} transaction(s)` });
+    return res.json({ matched, checkpointId, message: `Rule applied to ${matched} transaction(s)` });
   } catch (err) {
     console.error('[rules/apply]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -258,15 +276,38 @@ router.post('/:id/apply', async (req: AuthRequest, res: Response) => {
 
 router.post('/apply-all', async (req: AuthRequest, res: Response) => {
   try {
+    const householdId = req.householdId!;
+
     const rules = await prisma.rule.findMany({
-      where: { householdId: req.householdId!, isActive: true },
+      where: { householdId, isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
 
     const transactions = await prisma.transaction.findMany({
-      where: { householdId: req.householdId!, isHidden: false },
+      where: { householdId, isHidden: false },
       include: { merchant: { select: { displayName: true, name: true } } },
     });
+
+    // Determine which transactions will be affected before mutating
+    const affectedIds: string[] = [];
+    for (const rule of rules) {
+      const conditions = rule.conditions as Condition[];
+      for (const tx of transactions) {
+        const merchantName = tx.merchant?.displayName ?? tx.merchant?.name ?? tx.description;
+        if (ruleMatches(conditions, { description: tx.description, merchantName, amount: tx.amount })) {
+          if (!affectedIds.includes(tx.id)) affectedIds.push(tx.id);
+        }
+      }
+    }
+
+    // Snapshot affected transactions before any mutations
+    const checkpointId = await createCheckpoint(
+      prisma,
+      householdId,
+      'rule-apply-all',
+      `Rule run — ${rules.length} rule${rules.length !== 1 ? 's' : ''} across ${affectedIds.length} transaction${affectedIds.length !== 1 ? 's' : ''}`,
+      affectedIds,
+    );
 
     let totalMatched = 0;
     for (const rule of rules) {
@@ -275,13 +316,13 @@ router.post('/apply-all', async (req: AuthRequest, res: Response) => {
       for (const tx of transactions) {
         const merchantName = tx.merchant?.displayName ?? tx.merchant?.name ?? tx.description;
         if (ruleMatches(conditions, { description: tx.description, merchantName, amount: tx.amount })) {
-          await applyActionsToTransaction(tx.id, actions, req.householdId!);
+          await applyActionsToTransaction(tx.id, actions, householdId);
           totalMatched++;
         }
       }
     }
 
-    return res.json({ matched: totalMatched, rulesRun: rules.length });
+    return res.json({ matched: totalMatched, rulesRun: rules.length, checkpointId });
   } catch (err) {
     console.error('[rules/apply-all]', err);
     return res.status(500).json({ error: 'Internal server error' });

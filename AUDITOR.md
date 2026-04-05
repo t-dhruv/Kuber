@@ -411,6 +411,23 @@ User pulls models: `ollama pull qwen2.5:0.5b && ollama pull moondream`
 
 ## Sprint Log
 
+### Sprint 20 — Accessibility Polish (2026-04-04)
+**Goal:** Complete WCAG 2.1 AA accessibility pass across the entire frontend.
+
+**Completed:**
+- Global `:focus-visible` ring style added to index.css (2px offset, accent color)
+- Contrast fix: `--color-text-muted` raised from #adb5bd → #868e96 for 4.5:1 ratio on surface
+- `aria-describedby` wired on Input, Select, and Textarea components (links hint/error text)
+- `aria-label` added to all icon-only buttons across all pages (accounts, transactions, budget, goals, investments, recurring, cash flow, dashboard, advice)
+- `role="img"` + `aria-label` on all Recharts `<ResponsiveContainer>` wrappers
+- FilterBar `aria-selected` state corrected (was always `false`)
+- Sidebar `<aside>` always has `aria-label="Main navigation"`; inner `<nav>` has `aria-label="App navigation"`
+- OverflowMenu keyboard navigation: Enter/Space opens, ArrowDown cycles items, Escape closes
+- SearchModal result rows made keyboard accessible (role="option", tabIndex, Enter/ArrowUp/ArrowDown)
+- Skip-to-content link added as first DOM element in AppShell (visible on focus)
+- `<main id="main-content" role="main">` landmark added in AppShell
+- `index.html` title confirmed as "Kuber — Personal Finance"
+
 ### Sprint 19 — QA Fix Sprint (2026-03-31)
 **Goal:** Fix all bugs and missing features found in the first full QA pass (245 tests, 7 failures, 87 API endpoints tested).
 

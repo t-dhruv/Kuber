@@ -48,6 +48,8 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
 
   const mutation = useMutation({
     mutationFn: async () => {
+      const now = new Date();
+      const batchId = `import-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       const rows = result.rows
         .filter((r) => selected.has(r.hash))
         .map((r) => ({
@@ -62,6 +64,7 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
         rows,
         filename,
         bankSource: result.bankSource,
+        batchId,
       });
       return res.data as { imported: number; skipped: number };
     },

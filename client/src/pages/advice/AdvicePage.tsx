@@ -57,48 +57,50 @@ function TopicDetailPanel({
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}
+      className="fixed inset-0 z-50 flex items-start justify-end bg-black/40"
       onClick={onClose}
     >
       <div
-        style={{ width: 480, maxWidth: '100vw', height: '100vh', backgroundColor: 'var(--color-surface)', boxShadow: '-4px 0 24px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        className="w-[480px] max-w-[100vw] h-screen bg-[var(--color-surface)] flex flex-col overflow-hidden"
+        style={{ boxShadow: '-4px 0 24px rgba(0,0,0,0.18)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1.75rem' }}>{topic.icon}</span>
-              <h2 style={{ fontSize: '1.0625rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>{topic.title}</h2>
+        <div className="px-6 py-5 border-b border-[var(--color-border)] shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <span className="text-[1.75rem]">{topic.icon}</span>
+              <h2 className="text-[1.0625rem] font-bold text-[var(--color-text)] m-0">{topic.title}</h2>
             </div>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '1.1rem', padding: '0.25rem 0.375rem', borderRadius: 'var(--radius-sm)' }}>✕</button>
+            <button onClick={onClose} aria-label="Close" className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] text-[1.1rem] px-1.5 py-1 rounded-[var(--radius-sm)]">✕</button>
           </div>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', margin: '0 0 1rem' }}>{topic.description}</p>
+          <p className="text-[0.8125rem] text-[var(--color-text-secondary)] mt-0 mb-4">{topic.description}</p>
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Progress</span>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)' }}>{topic.completedCount} of {topic.totalTasks} tasks complete</span>
+            <div className="flex justify-between mb-1.5">
+              <span className="text-xs text-[var(--color-text-muted)]">Progress</span>
+              <span className="text-xs font-semibold text-[var(--color-text)]">{topic.completedCount} of {topic.totalTasks} tasks complete</span>
             </div>
-            <div style={{ height: 6, borderRadius: 'var(--radius-full)', backgroundColor: 'var(--color-border)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${pct}%`, borderRadius: 'var(--radius-full)', backgroundColor: pct === 100 ? 'var(--color-success, #22c55e)' : 'var(--color-accent)', transition: 'width 0.3s ease' }} />
+            <div className="h-[6px] rounded-[var(--radius-full)] bg-[var(--color-border)] overflow-hidden">
+              <div className="h-full rounded-[var(--radius-full)] transition-[width] duration-300 ease-in-out" style={{ width: `${pct}%`, backgroundColor: pct === 100 ? 'var(--color-success, #22c55e)' : 'var(--color-accent)' }} />
             </div>
           </div>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1.5rem' }}>
+        <div className="flex-1 overflow-y-auto px-6 py-3">
           {topic.tasks.map((task) => {
             const done = task.completedAt !== null;
             return (
-              <div key={task.id} style={{ display: 'flex', gap: '0.875rem', padding: '0.875rem 0', borderBottom: '1px solid var(--color-border)', alignItems: 'flex-start' }}>
+              <div key={task.id} className="flex gap-3.5 py-3.5 border-b border-[var(--color-border)] items-start">
                 <button
                   onClick={() => onToggleTask(topic.id, task.id)}
-                  style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 'var(--radius-sm)', border: done ? 'none' : '2px solid var(--color-border)', backgroundColor: done ? 'var(--color-accent)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '0.125rem', transition: 'background 0.15s, border 0.15s' }}
+                  className="shrink-0 w-5 h-5 rounded-[var(--radius-sm)] cursor-pointer flex items-center justify-center mt-[0.125rem] transition-[background,border] duration-150"
+                  style={{ border: done ? 'none' : '2px solid var(--color-border)', backgroundColor: done ? 'var(--color-accent)' : 'transparent' }}
                   title={done ? 'Mark incomplete' : 'Mark complete'}
                 >
                   {done && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                 </button>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.875rem', fontWeight: 600, color: done ? 'var(--color-text-muted)' : 'var(--color-text)', textDecoration: done ? 'line-through' : 'none', marginBottom: '0.25rem' }}>{task.title}</div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>{task.description}</div>
-                  {done && task.completedAt && <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>Completed {new Date(task.completedAt).toLocaleDateString()}</div>}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold mb-1" style={{ color: done ? 'var(--color-text-muted)' : 'var(--color-text)', textDecoration: done ? 'line-through' : 'none' }}>{task.title}</div>
+                  <div className="text-[0.8125rem] text-[var(--color-text-muted)] leading-[1.5]">{task.description}</div>
+                  {done && task.completedAt && <div className="text-[0.6875rem] text-[var(--color-text-muted)] mt-1">Completed {new Date(task.completedAt).toLocaleDateString()}</div>}
                 </div>
               </div>
             );
@@ -147,46 +149,64 @@ function AdviceLibraryTab() {
 
   const filtered = (topics ?? []).filter((t) => categoryFilter === 'all' || t.category === categoryFilter);
 
-  if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200, color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>Loading advice topics...</div>;
-  if (isError) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 200, color: 'var(--color-danger, #ef4444)', fontSize: '0.875rem' }}>Failed to load advice topics.</div>;
+  if (isLoading) return <div className="flex justify-center items-center h-[200px] text-[var(--color-text-muted)] text-sm">Loading advice topics...</div>;
+  if (isError) return <div className="flex justify-center items-center h-[200px] text-[var(--color-danger,#ef4444)] text-sm">Failed to load advice topics.</div>;
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         {CATEGORIES.map((cat) => {
           const active = categoryFilter === cat.value;
           return (
-            <button key={cat.value} onClick={() => setCategoryFilter(cat.value)} style={{ padding: '0.3rem 0.875rem', borderRadius: 'var(--radius-full)', border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`, backgroundColor: active ? 'var(--color-accent)' : 'transparent', color: active ? '#fff' : 'var(--color-text)', fontSize: '0.8125rem', fontWeight: active ? 600 : 400, cursor: 'pointer', transition: 'all 0.15s' }}>{cat.label}</button>
+            <button
+              key={cat.value}
+              onClick={() => setCategoryFilter(cat.value)}
+              className="rounded-[var(--radius-full)] text-[0.8125rem] cursor-pointer transition-all duration-150"
+              style={{
+                padding: '0.3rem 0.875rem',
+                border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                backgroundColor: active ? 'var(--color-accent)' : 'transparent',
+                color: active ? '#fff' : 'var(--color-text)',
+                fontWeight: active ? 600 : 400,
+              }}
+            >{cat.label}</button>
           );
         })}
       </div>
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem', padding: '3rem 0' }}>No topics in this category yet.</div>
+        <div className="text-center text-[var(--color-text-muted)] text-sm py-12">No topics in this category yet.</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
           {filtered.map((topic) => {
             const pct = topic.totalTasks > 0 ? Math.round((topic.completedCount / topic.totalTasks) * 100) : 0;
             const done = topic.completedCount === topic.totalTasks && topic.totalTasks > 0;
             return (
-              <div key={topic.id} style={{ backgroundColor: 'var(--color-surface)', border: `1px solid ${done ? 'var(--color-accent)' : 'var(--color-border)'}`, borderRadius: 'var(--radius-lg)', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ fontSize: '1.75rem', flexShrink: 0 }}>{topic.icon}</span>
+              <div
+                key={topic.id}
+                className="bg-[var(--color-surface)] rounded-[var(--radius-lg)] p-5 flex flex-col gap-3"
+                style={{ border: `1px solid ${done ? 'var(--color-accent)' : 'var(--color-border)'}` }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-[1.75rem] shrink-0">{topic.icon}</span>
                   <div>
-                    <div style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-text)' }}>{topic.title}</div>
-                    <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-accent)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '0.125rem' }}>{topic.category.replace('-', ' ')}</div>
+                    <div className="text-[0.9375rem] font-bold text-[var(--color-text)]">{topic.title}</div>
+                    <div className="text-[0.6875rem] font-semibold text-[var(--color-accent)] uppercase tracking-[0.04em] mt-[0.125rem]">{topic.category.replace('-', ' ')}</div>
                   </div>
                 </div>
-                <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0, flex: 1 }}>{topic.description}</p>
+                <p className="text-[0.8125rem] text-[var(--color-text-muted)] leading-[1.5] m-0 flex-1">{topic.description}</p>
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                    <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)' }}>{topic.completedCount}/{topic.totalTasks} tasks</span>
-                    {done && <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-success, #22c55e)' }}>Complete</span>}
+                  <div className="flex justify-between mb-[0.3rem]">
+                    <span className="text-[0.6875rem] text-[var(--color-text-muted)]">{topic.completedCount}/{topic.totalTasks} tasks</span>
+                    {done && <span className="text-[0.6875rem] font-semibold text-[var(--color-success,#22c55e)]">Complete</span>}
                   </div>
-                  <div style={{ height: 5, borderRadius: 'var(--radius-full)', backgroundColor: 'var(--color-border)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, borderRadius: 'var(--radius-full)', backgroundColor: done ? 'var(--color-success, #22c55e)' : 'var(--color-accent)', transition: 'width 0.3s ease' }} />
+                  <div className="h-[5px] rounded-[var(--radius-full)] bg-[var(--color-border)] overflow-hidden">
+                    <div className="h-full rounded-[var(--radius-full)] transition-[width] duration-300 ease-in-out" style={{ width: `${pct}%`, backgroundColor: done ? 'var(--color-success, #22c55e)' : 'var(--color-accent)' }} />
                   </div>
                 </div>
-                <button onClick={() => setSelectedTopic(topic)} style={{ padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-accent)', backgroundColor: 'transparent', color: 'var(--color-accent)', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}>View checklist</button>
+                <button
+                  onClick={() => setSelectedTopic(topic)}
+                  className="py-2 px-4 rounded-[var(--radius-md)] border border-[var(--color-accent)] bg-transparent text-[var(--color-accent)] text-[0.8125rem] font-semibold cursor-pointer transition-all duration-150"
+                >View checklist</button>
               </div>
             );
           })}
@@ -203,9 +223,15 @@ function AiChatTab() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { messages, conversationId, isStreaming, error, send, cancel, startNewConversation, loadConversation } = useChatStream();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const { data: aiSettings } = useQuery<{ provider: string }>({
+    queryKey: ['settings', 'ai'],
+    queryFn: () => api.get('/settings/ai').then((r) => r.data),
+    retry: false,
+  });
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -223,7 +249,7 @@ function AiChatTab() {
     }
   }, [conversationId, queryClient]);
 
-  const isNotConfigured = messages.some((m) => m.role === 'assistant' && m.content.includes('Settings → AI Advisor'));
+  const isNotConfigured = !aiSettings?.provider || aiSettings.provider === 'none';
   const hasMessages = messages.length > 0;
 
   // Determine conversation title
@@ -335,23 +361,18 @@ export default function AdvicePage() {
   const [tab, setTab] = useState<Tab>('chat');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Tab header */}
-      <div style={{ display: 'flex', gap: '0.25rem', padding: '0.75rem 1rem', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
+      <div className="flex gap-1 px-4 py-3 border-b border-[var(--color-border)] shrink-0">
         {([['chat', '✨ AI Advisor'], ['library', '📚 Advice Library']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
+            className="py-1.5 px-3.5 rounded-[var(--radius-md)] border-none text-sm cursor-pointer transition-all duration-150"
             style={{
-              padding: '0.375rem 0.875rem',
-              borderRadius: 'var(--radius-md)',
-              border: 'none',
               backgroundColor: tab === key ? 'var(--color-accent)' : 'transparent',
               color: tab === key ? '#fff' : 'var(--color-text-muted)',
-              fontSize: '0.875rem',
               fontWeight: tab === key ? 600 : 400,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
             }}
           >
             {label}
@@ -360,7 +381,7 @@ export default function AdvicePage() {
       </div>
 
       {/* Tab content */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="flex-1 overflow-hidden flex flex-col">
         {tab === 'chat' ? <AiChatTab /> : <AdviceLibraryTab />}
       </div>
     </div>

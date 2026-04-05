@@ -1,20 +1,8 @@
 import { useState, FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
 import { useLogin, useTotpValidate, useTotpBackup } from "@/hooks/useAuth";
-
-// ─── Shared input style ───────────────────────────────────────────────────────
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "0.625rem 0.875rem",
-  borderRadius: "var(--radius-md)",
-  border: "1px solid var(--color-border-strong)",
-  backgroundColor: "var(--color-bg)",
-  color: "var(--color-text)",
-  fontSize: "0.9375rem",
-  outline: "none",
-  boxSizing: "border-box",
-};
+import { Input } from "@/components/ui";
 
 function ErrorBox({ message }: { message: string }) {
   return (
@@ -40,8 +28,9 @@ function PasswordStep({
 }: {
   onRequireTotp: (tempToken: string) => void;
 }) {
-  const [email, setEmail] = useState("demo@kuber.app");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const login = useLogin();
 
   function handleSubmit(e: FormEvent) {
@@ -62,63 +51,43 @@ function PasswordStep({
     : null;
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
-      <div style={{ marginBottom: "1rem" }}>
-        <label
-          htmlFor="email"
-          style={{
-            display: "block",
-            fontSize: "0.875rem",
-            fontWeight: "500",
-            color: "var(--color-text)",
-            marginBottom: "0.375rem",
-          }}
-        >
-          Email
-        </label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          style={inputStyle}
-        />
-      </div>
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <Input
+        id="email"
+        label="Email"
+        type="email"
+        autoComplete="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@example.com"
+      />
 
-      <div style={{ marginBottom: "1.5rem" }}>
-        <label
-          htmlFor="password"
-          style={{
-            display: "block",
-            fontSize: "0.875rem",
-            fontWeight: "500",
-            color: "var(--color-text)",
-            marginBottom: "0.375rem",
-          }}
-        >
-          Password
-        </label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="••••••••"
-          style={inputStyle}
-        />
-        <div style={{ textAlign: "right", marginTop: "0.5rem" }}>
+      <div>
+        <div className="relative">
+          <Input
+            id="password"
+            label="Password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="absolute right-3 top-[2.1rem] text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)] transition-colors"
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+        <div className="text-right mt-1.5">
           <Link
             to="/forgot-password"
-            style={{
-              fontSize: "0.8125rem",
-              color: "var(--color-accent)",
-              textDecoration: "none",
-            }}
+            className="text-xs text-[color:var(--color-accent)] hover:underline"
           >
             Forgot password?
           </Link>
@@ -198,20 +167,9 @@ function TotpStep({
       {!showBackup ? (
         <form onSubmit={handleTotp} noValidate>
           <div style={{ marginBottom: "1.5rem" }}>
-            <label
-              htmlFor="totp"
-              style={{
-                display: "block",
-                fontSize: "0.875rem",
-                fontWeight: "500",
-                color: "var(--color-text)",
-                marginBottom: "0.375rem",
-              }}
-            >
-              Authenticator code
-            </label>
-            <input
+            <Input
               id="totp"
+              label="Authenticator code"
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -221,12 +179,7 @@ function TotpStep({
               }
               placeholder="000000"
               maxLength={6}
-              style={{
-                ...inputStyle,
-                letterSpacing: "0.4em",
-                textAlign: "center",
-                fontSize: "1.375rem",
-              }}
+              className="text-center tracking-widest text-2xl"
               autoFocus
             />
           </div>
@@ -257,25 +210,13 @@ function TotpStep({
       ) : (
         <form onSubmit={handleBackup} noValidate>
           <div style={{ marginBottom: "1.5rem" }}>
-            <label
-              htmlFor="backup"
-              style={{
-                display: "block",
-                fontSize: "0.875rem",
-                fontWeight: "500",
-                color: "var(--color-text)",
-                marginBottom: "0.375rem",
-              }}
-            >
-              Backup code
-            </label>
-            <input
+            <Input
               id="backup"
+              label="Backup code"
               type="text"
               value={backupCode}
               onChange={(e) => setBackupCode(e.target.value.trim())}
               placeholder="xxxxxxxxxx"
-              style={inputStyle}
               autoFocus
             />
           </div>

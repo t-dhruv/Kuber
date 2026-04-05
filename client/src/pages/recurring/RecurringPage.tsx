@@ -166,27 +166,16 @@ function OverflowMenu({
   }, [open]);
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        style={{
-          background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem 0.375rem',
-          borderRadius: 'var(--radius-sm)', color: 'var(--color-text-muted)',
-          display: 'flex', alignItems: 'center',
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
-        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+        className="bg-transparent border-none cursor-pointer py-1 px-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] flex items-center hover:bg-[var(--color-surface-hover)]"
         aria-label="More options"
       >
         <MoreHorizontal size={16} />
       </button>
       {open && (
-        <div style={{
-          position: 'absolute', right: 0, top: '100%', marginTop: '0.25rem',
-          backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)',
-          minWidth: 140, zIndex: 50,
-        }}>
+        <div className="absolute right-0 top-full mt-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-[var(--shadow-md)] min-w-[140px] z-50">
           {[
             { label: 'Edit', icon: <Pencil size={13} />, action: onEdit },
             {
@@ -199,15 +188,7 @@ function OverflowMenu({
             <button
               key={item.label}
               onClick={() => { item.action(); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                width: '100%', padding: '0.5rem 0.75rem', background: 'none', border: 'none',
-                cursor: 'pointer', fontSize: '0.8125rem',
-                color: (item as any).danger ? 'var(--color-danger)' : 'var(--color-text)',
-                textAlign: 'left',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              className={`flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-left hover:bg-[var(--color-surface-hover)] ${(item as any).danger ? 'text-[var(--color-danger)]' : 'text-[var(--color-text)]'}`}
             >
               {item.icon}
               {item.label}
@@ -317,7 +298,7 @@ function RecurringModal({
       size="md"
     >
       <form onSubmit={handleSubmit}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="flex flex-col gap-4">
           <Input
             label="Name"
             placeholder="Netflix, Rent, Gym..."
@@ -365,8 +346,8 @@ function RecurringModal({
               onChange={(e) => set('categoryId', e.target.value)}
             />
           )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>Active</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-[var(--color-text)]">Active</span>
             <Toggle
               checked={form.isActive}
               onChange={(e) => set('isActive', e.target.checked)}
@@ -403,7 +384,7 @@ function MonthlyView({
 }) {
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div className="flex flex-col gap-4">
         <Skeleton height={80} width="100%" />
         <Skeleton height={200} width="100%" />
         <Skeleton height={160} width="100%" />
@@ -414,7 +395,7 @@ function MonthlyView({
   if (isError || !data) {
     return (
       <Card padding="lg">
-        <p style={{ color: 'var(--color-danger)', fontSize: '0.875rem' }}>Failed to load monthly summary.</p>
+        <p className="text-[var(--color-danger)] text-sm">Failed to load monthly summary.</p>
       </Card>
     );
   }
@@ -428,15 +409,15 @@ function MonthlyView({
     : 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div className="flex flex-col gap-4">
       {/* Summary bar */}
       <Card padding="lg">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+        <div className="flex flex-col gap-[0.875rem]">
           {/* Income row */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', width: 72 }}>Income</span>
-              <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-success)' }}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] w-[72px]">Income</span>
+              <span className="text-base font-bold text-[var(--color-success)]">
                 {fmtCurrency(data.totalIncome)}
               </span>
             </div>
@@ -446,22 +427,21 @@ function MonthlyView({
           </div>
 
           {/* Expenses row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', width: 72, flexShrink: 0 }}>Expenses</span>
-            <div style={{ flex: 1, minWidth: 160 }}>
-              <div style={{ height: 8, backgroundColor: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', width: `${expensePct}%`,
-                  backgroundColor: 'var(--color-accent)', borderRadius: 'var(--radius-full)',
-                  transition: 'width 0.4s ease',
-                }} />
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] w-[72px] shrink-0">Expenses</span>
+            <div className="flex-1 min-w-[160px]">
+              <div className="h-2 bg-[var(--color-border)] rounded-[var(--radius-full)] overflow-hidden">
+                <div
+                  className="h-full bg-[var(--color-accent)] rounded-[var(--radius-full)] transition-[width] duration-[0.4s] ease-in-out"
+                  style={{ width: `${expensePct}%` }}
+                />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+              <div className="flex justify-between mt-1 text-xs text-[var(--color-text-secondary)]">
                 <span>{fmtCurrency(expensesPaid)} paid</span>
                 <span>{fmtCurrency(expensesRemaining)} remaining</span>
               </div>
             </div>
-            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', flexShrink: 0 }}>
+            <span className="text-sm font-semibold text-[var(--color-text)] shrink-0">
               Total: {fmtCurrency(data.totalExpenses)}
             </span>
           </div>
@@ -470,70 +450,54 @@ function MonthlyView({
 
       {/* Upcoming (unpaid expenses) */}
       <Card padding="lg">
-        <div style={{ marginBottom: '0.75rem' }}>
-          <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        <div className="mb-3">
+          <span className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em]">
             Upcoming
           </span>
         </div>
 
         {unpaidExpenses.length === 0 ? (
-          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', padding: '0.5rem 0' }}>
+          <p className="text-sm text-[var(--color-text-muted)] py-2">
             No upcoming items this month.
           </p>
         ) : (
           <>
             {/* Header */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 100px 90px 36px',
-              gap: '0.5rem',
-              padding: '0 0 0.5rem',
-              borderBottom: '1px solid var(--color-border)',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: 'var(--color-text-muted)',
-            }}>
+            <div className="grid gap-2 pb-2 border-b border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-muted)]" style={{ gridTemplateColumns: '1fr 100px 90px 36px' }}>
               <span>Name</span>
               <span>Due</span>
-              <span style={{ textAlign: 'right' }}>Amount</span>
+              <span className="text-right">Amount</span>
               <span />
             </div>
 
             {unpaidExpenses.map((item, idx) => (
               <div key={item.id}>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 100px 90px 36px',
-                  gap: '0.5rem',
-                  padding: '0.625rem 0',
-                  alignItems: 'center',
-                  fontSize: '0.8125rem',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 500, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div className="grid gap-2 py-[0.625rem] items-center text-[0.8125rem]" style={{ gridTemplateColumns: '1fr 100px 90px 36px' }}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="min-w-0">
+                      <div className="font-medium text-[var(--color-text)] whitespace-nowrap overflow-hidden text-ellipsis">
                         {item.name}
                       </div>
                     </div>
                   </div>
-                  <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem' }}>
+                  <span className="text-[var(--color-text-secondary)] text-xs">
                     {formatDaysUntil(item.daysUntil)}
                   </span>
-                  <span style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-danger)' }}>
+                  <span className="text-right font-semibold text-[var(--color-danger)]">
                     -{fmtCurrency(item.amount)}
                   </span>
                   <span />
                 </div>
                 {idx < unpaidExpenses.length - 1 && (
-                  <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
+                  <div className="h-px bg-[var(--color-border)]" />
                 )}
               </div>
             ))}
 
             {/* Total row */}
-            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.625rem', marginTop: '0.25rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-              <span style={{ color: 'var(--color-text-secondary)' }}>Upcoming total</span>
-              <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+            <div className="border-t border-[var(--color-border)] pt-[0.625rem] mt-1 flex justify-between text-sm">
+              <span className="text-[var(--color-text-secondary)]">Upcoming total</span>
+              <span className="font-semibold text-[var(--color-text)]">
                 {fmtCurrency(expensesRemaining)}
               </span>
             </div>
@@ -543,70 +507,53 @@ function MonthlyView({
 
       {/* Completed (paid expenses) */}
       <Card padding="lg">
-        <div style={{ marginBottom: '0.75rem' }}>
-          <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        <div className="mb-3">
+          <span className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em]">
             Completed ✓
           </span>
         </div>
 
         {paidExpenses.length === 0 ? (
-          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', padding: '0.5rem 0' }}>
+          <p className="text-sm text-[var(--color-text-muted)] py-2">
             No completed items yet.
           </p>
         ) : (
           <>
             {/* Header */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 100px 90px',
-              gap: '0.5rem',
-              padding: '0 0 0.5rem',
-              borderBottom: '1px solid var(--color-border)',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: 'var(--color-text-muted)',
-            }}>
+            <div className="grid gap-2 pb-2 border-b border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-muted)]" style={{ gridTemplateColumns: '1fr 100px 90px' }}>
               <span>Name</span>
               <span>Next Date</span>
-              <span style={{ textAlign: 'right' }}>Amount</span>
+              <span className="text-right">Amount</span>
             </div>
 
             {paidExpenses.map((item, idx) => (
               <div key={item.id}>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 100px 90px',
-                  gap: '0.5rem',
-                  padding: '0.625rem 0',
-                  alignItems: 'center',
-                  fontSize: '0.8125rem',
-                  opacity: 0.8,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                    <span style={{ color: 'var(--color-success)', fontSize: '0.875rem', fontWeight: 700 }}>✓</span>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 500, color: 'var(--color-text-muted)', textDecoration: 'line-through', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div className="grid gap-2 py-[0.625rem] items-center text-[0.8125rem] opacity-80" style={{ gridTemplateColumns: '1fr 100px 90px' }}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[var(--color-success)] text-sm font-bold">✓</span>
+                    <div className="min-w-0">
+                      <div className="font-medium text-[var(--color-text-muted)] line-through whitespace-nowrap overflow-hidden text-ellipsis">
                         {item.name}
                       </div>
                     </div>
                   </div>
-                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                  <span className="text-[var(--color-text-muted)] text-xs">
                     {fmtDate(item.nextDate)}
                   </span>
-                  <span style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+                  <span className="text-right font-semibold text-[var(--color-text-muted)]">
                     {fmtCurrency(item.amount)}
                   </span>
                 </div>
                 {idx < paidExpenses.length - 1 && (
-                  <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
+                  <div className="h-px bg-[var(--color-border)]" />
                 )}
               </div>
             ))}
 
             {/* Total row */}
-            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.625rem', marginTop: '0.25rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-              <span style={{ color: 'var(--color-text-secondary)' }}>Completed total</span>
-              <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>
+            <div className="border-t border-[var(--color-border)] pt-[0.625rem] mt-1 flex justify-between text-sm">
+              <span className="text-[var(--color-text-secondary)]">Completed total</span>
+              <span className="font-semibold text-[var(--color-text)]">
                 {fmtCurrency(expensesPaid)}
               </span>
             </div>
@@ -637,7 +584,7 @@ function AllRecurringView({
   if (isLoading) {
     return (
       <Card padding="lg">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div className="flex flex-col gap-3">
           {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} height={44} width="100%" />)}
         </div>
       </Card>
@@ -647,7 +594,7 @@ function AllRecurringView({
   if (isError || !data) {
     return (
       <Card padding="lg">
-        <p style={{ color: 'var(--color-danger)', fontSize: '0.875rem' }}>Failed to load recurring items.</p>
+        <p className="text-[var(--color-danger)] text-sm">Failed to load recurring items.</p>
       </Card>
     );
   }
@@ -655,9 +602,9 @@ function AllRecurringView({
   if (data.length === 0) {
     return (
       <Card padding="lg">
-        <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--color-text-muted)' }}>
-          <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🔄</div>
-          <p style={{ fontSize: '0.875rem' }}>No recurring items yet. Add your first one above.</p>
+        <div className="text-center py-10 px-4 text-[var(--color-text-muted)]">
+          <div className="text-[2rem] mb-3">🔄</div>
+          <p className="text-sm">No recurring items yet. Add your first one above.</p>
         </div>
       </Card>
     );
@@ -666,18 +613,9 @@ function AllRecurringView({
   return (
     <Card padding="lg">
       {/* Table header */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 90px 100px 110px 140px 120px 80px 80px',
-        gap: '0.5rem',
-        paddingBottom: '0.5rem',
-        borderBottom: '1px solid var(--color-border)',
-        fontSize: '0.75rem',
-        fontWeight: 600,
-        color: 'var(--color-text-muted)',
-      }}>
+      <div className="grid gap-2 pb-2 border-b border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-muted)]" style={{ gridTemplateColumns: '1fr 90px 100px 110px 140px 120px 80px 80px' }}>
         <span>Name</span>
-        <span style={{ textAlign: 'right' }}>Amount</span>
+        <span className="text-right">Amount</span>
         <span>Frequency</span>
         <span>Next Date</span>
         <span>Account</span>
@@ -688,69 +626,56 @@ function AllRecurringView({
 
       {data.map((item, idx) => (
         <div key={item.id}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 90px 100px 110px 140px 120px 80px 80px',
-            gap: '0.5rem',
-            padding: '0.625rem 0',
-            alignItems: 'center',
-            fontSize: '0.8125rem',
-          }}>
-            <div style={{ fontWeight: 500, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div className="grid gap-2 py-[0.625rem] items-center text-[0.8125rem]" style={{ gridTemplateColumns: '1fr 90px 100px 110px 140px 120px 80px 80px' }}>
+            <div className="font-medium text-[var(--color-text)] whitespace-nowrap overflow-hidden text-ellipsis">
               {item.name}
             </div>
-            <span style={{ textAlign: 'right', fontWeight: 600, color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+            <span className="text-right font-semibold" style={{ color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
               {item.amount < 0 ? '-' : '+'}{fmtCurrency(item.amount)}
             </span>
-            <span style={{ color: 'var(--color-text-secondary)' }}>{FREQUENCY_LABELS[item.frequency]}</span>
-            <span style={{ color: 'var(--color-text-secondary)' }}>{fmtDate(item.nextDate)}</span>
-            <span style={{ color: 'var(--color-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span className="text-[var(--color-text-secondary)]">{FREQUENCY_LABELS[item.frequency]}</span>
+            <span className="text-[var(--color-text-secondary)]">{fmtDate(item.nextDate)}</span>
+            <span className="text-[var(--color-text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis">
               {accountLabel(item)}
             </span>
-            <span style={{ color: 'var(--color-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span className="text-[var(--color-text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis">
               {item.categoryIcon ? `${item.categoryIcon} ` : ''}{item.categoryName}
             </span>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              padding: '0.125rem 0.5rem', borderRadius: 'var(--radius-full)',
-              fontSize: '0.6875rem', fontWeight: 600,
-              backgroundColor: item.isActive ? 'var(--color-success-light)' : 'var(--color-border)',
-              color: item.isActive ? 'var(--color-success)' : 'var(--color-text-muted)',
-            }}>
+            <span
+              className="inline-flex items-center py-0.5 px-2 rounded-[var(--radius-full)] text-[0.6875rem] font-semibold"
+              style={{
+                backgroundColor: item.isActive ? 'var(--color-success-light)' : 'var(--color-border)',
+                color: item.isActive ? 'var(--color-success)' : 'var(--color-text-muted)',
+              }}
+            >
               {item.isActive ? 'Active' : 'Paused'}
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => onToggle(item)}
                 title={item.isActive ? 'Pause' : 'Resume'}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '0.25rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center' }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-surface-hover)]"
               >
                 {item.isActive ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
               </button>
               <button
                 onClick={() => onEdit(item)}
                 title="Edit"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: '0.25rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center' }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-surface-hover)]"
               >
                 <Pencil size={14} />
               </button>
               <button
                 onClick={() => onDelete(item)}
                 title="Delete"
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', padding: '0.25rem', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center' }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-danger-light)')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                className="bg-transparent border-none cursor-pointer text-[var(--color-danger)] p-1 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-danger-light)]"
               >
                 <Trash2 size={14} />
               </button>
             </div>
           </div>
           {idx < data.length - 1 && (
-            <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
+            <div className="h-px bg-[var(--color-border)]" />
           )}
         </div>
       ))}
@@ -840,50 +765,38 @@ function CalendarView({
   return (
     <Card padding="lg">
       {/* Calendar header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+      <div className="flex items-center justify-between mb-4">
         <button
           onClick={prevMonth}
-          style={{
-            width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)',
-            backgroundColor: 'var(--color-surface)', cursor: 'pointer', color: 'var(--color-text-secondary)', fontSize: '0.875rem',
-          }}
+          className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] cursor-pointer text-[var(--color-text-secondary)] text-sm"
         >
           ‹
         </button>
-        <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}>
+        <span className="text-base font-bold text-[var(--color-text)]">
           {MONTH_NAMES_FULL[calMonth - 1]} {calYear}
         </span>
         <button
           onClick={nextMonth}
-          style={{
-            width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)',
-            backgroundColor: 'var(--color-surface)', cursor: 'pointer', color: 'var(--color-text-secondary)', fontSize: '0.875rem',
-          }}
+          className="w-7 h-7 flex items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] cursor-pointer text-[var(--color-text-secondary)] text-sm"
         >
           ›
         </button>
       </div>
 
       {/* Day-of-week headers */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', marginBottom: '2px' }}>
+      <div className="grid grid-cols-7 gap-[2px] mb-[2px]">
         {DAY_NAMES.map((d) => (
-          <div key={d} style={{
-            textAlign: 'center', fontSize: '0.6875rem', fontWeight: 600,
-            color: 'var(--color-text-muted)', padding: '0.25rem 0',
-            textTransform: 'uppercase', letterSpacing: '0.04em',
-          }}>
+          <div key={d} className="text-center text-[0.6875rem] font-semibold text-[var(--color-text-muted)] py-1 uppercase tracking-[0.04em]">
             {d}
           </div>
         ))}
       </div>
 
       {/* Calendar grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px' }}>
+      <div className="grid grid-cols-7 gap-[2px]">
         {cells.map((date, idx) => {
           if (!date) {
-            return <div key={`pad-${idx}`} style={{ minHeight: 80, backgroundColor: 'var(--color-surface-hover)', borderRadius: 'var(--radius-sm)', opacity: 0.4 }} />;
+            return <div key={`pad-${idx}`} className="min-h-[80px] bg-[var(--color-surface-hover)] rounded-[var(--radius-sm)] opacity-40" />;
           }
           const day = date.getDate();
           const isToday = date.getTime() === today.getTime();
@@ -892,24 +805,21 @@ function CalendarView({
           return (
             <div
               key={day}
+              className="min-h-[80px] py-1 flex flex-col gap-[2px] rounded-[var(--radius-sm)]"
               style={{
-                minHeight: 80,
                 padding: '0.25rem 0.3125rem',
                 backgroundColor: isToday ? 'rgba(99,102,241,0.07)' : 'var(--color-surface)',
                 border: isToday ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
               }}
             >
-              <span style={{
-                fontSize: '0.75rem',
-                fontWeight: isToday ? 700 : 500,
-                color: isToday ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                alignSelf: 'flex-end',
-                lineHeight: 1,
-              }}>
+              <span
+                className="self-end leading-none"
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: isToday ? 700 : 500,
+                  color: isToday ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                }}
+              >
                 {day}
               </span>
               {items.map((item) => {
@@ -919,21 +829,16 @@ function CalendarView({
                   <div
                     key={item.id}
                     title={`${item.name} — ${fmtCurrency(item.amount)}`}
+                    className="text-[0.625rem] font-semibold whitespace-nowrap overflow-hidden text-ellipsis leading-[1.6]"
                     style={{
-                      fontSize: '0.625rem',
-                      fontWeight: 600,
                       padding: '1px 4px',
                       borderRadius: 3,
                       backgroundColor: colors.bg,
                       color: colors.text,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      lineHeight: 1.6,
                     }}
                   >
                     {item.categoryIcon ? `${item.categoryIcon} ` : ''}{item.name}
-                    <span style={{ opacity: 0.7 }}> {fmtCurrency(item.amount)}</span>
+                    <span className="opacity-70"> {fmtCurrency(item.amount)}</span>
                   </div>
                 );
               })}
@@ -943,11 +848,11 @@ function CalendarView({
       </div>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: '1rem', marginTop: '0.875rem', flexWrap: 'wrap' }}>
+      <div className="flex gap-4 mt-[0.875rem] flex-wrap">
         {(['upcoming', 'overdue', 'paid'] as const).map((s) => (
-          <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-            <div style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: chipColors[s].bg, border: `1px solid ${chipColors[s].text}` }} />
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', textTransform: 'capitalize' }}>{s}</span>
+          <div key={s} className="flex items-center gap-1.5">
+            <div className="w-[10px] h-[10px] rounded-[2px]" style={{ backgroundColor: chipColors[s].bg, border: `1px solid ${chipColors[s].text}` }} />
+            <span className="text-xs text-[var(--color-text-secondary)] capitalize">{s}</span>
           </div>
         ))}
       </div>
@@ -980,7 +885,7 @@ function DeleteConfirmModal({
 
   return (
     <Modal open={open} onClose={onClose} title="Delete Recurring Item" size="sm">
-      <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+      <p className="text-sm text-[var(--color-text-secondary)]">
         Delete <strong>{item?.name}</strong>? This cannot be undone.
       </p>
       <ModalFooter>
@@ -1064,28 +969,23 @@ export default function RecurringPage() {
   }
 
   return (
-    <div style={{ padding: '1.5rem 0' }}>
+    <div className="py-6">
       {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, flex: '0 0 auto' }}>
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <h1 className="text-2xl font-bold text-[var(--color-text)] m-0 shrink-0">
           Recurring
         </h1>
 
         {/* View toggle */}
-        <div style={{
-          display: 'flex', background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)', overflow: 'hidden', flex: '0 0 auto',
-        }}>
+        <div className="flex bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] overflow-hidden shrink-0">
           {(['monthly', 'all', 'calendar'] as ViewMode[]).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
+              className="py-1.5 px-[0.875rem] border-none cursor-pointer text-[0.8125rem] font-medium transition-[background] duration-[0.15s]"
               style={{
-                padding: '0.375rem 0.875rem', border: 'none', cursor: 'pointer',
-                fontSize: '0.8125rem', fontWeight: 500,
                 backgroundColor: view === v ? 'var(--color-accent)' : 'transparent',
                 color: view === v ? '#fff' : 'var(--color-text-secondary)',
-                transition: 'background 0.15s',
               }}
             >
               {v === 'monthly' ? 'Monthly' : v === 'all' ? 'All recurring' : 'Calendar'}
@@ -1093,7 +993,7 @@ export default function RecurringPage() {
           ))}
         </div>
 
-        <div style={{ flex: 1 }} />
+        <div className="flex-1" />
 
         <Button variant="secondary" size="sm" icon={<Settings size={14} />}>
           Manage recurring

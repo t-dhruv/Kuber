@@ -127,6 +127,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
                       confirmDelete === conv.id ? 'opacity-100 text-red-500' : 'text-[var(--color-text-muted)]'
                     }`}
                     title={confirmDelete === conv.id ? 'Click again to confirm delete' : 'Delete conversation'}
+                    aria-label={confirmDelete === conv.id ? 'Confirm delete conversation' : 'Delete conversation'}
                   >
                     {confirmDelete === conv.id ? (
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

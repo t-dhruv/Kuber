@@ -4,7 +4,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line,
 } from 'recharts';
-import { ChevronDown, ChevronRight, RefreshCw, Plus, MoreHorizontal, Pencil, EyeOff, MinusCircle, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, Plus, MoreHorizontal, Pencil, EyeOff, MinusCircle, Trash2, X, ExternalLink } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Card, Button, Input, Select, Modal, ModalFooter, Skeleton, InstitutionLogo, LogoPicker,
@@ -187,10 +187,12 @@ function OverflowMenu({
   onEdit,
   onHide,
   onExclude,
+  onDelete,
 }: {
   onEdit: () => void;
   onHide: () => void;
   onExclude: () => void;
+  onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -200,69 +202,66 @@ function OverflowMenu({
     function handleClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKeyUp);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKeyUp);
+    };
   }, [open]);
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} className="relative">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
-        style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: '0.25rem',
-          borderRadius: 'var(--radius-sm)',
-          color: 'var(--color-text-muted)',
-          display: 'flex',
-          alignItems: 'center',
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(true);
+          }
         }}
+        className="bg-transparent border-0 cursor-pointer p-1 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] flex items-center focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-1"
         aria-label="Account options"
+        aria-haspopup="true"
+        aria-expanded={open}
       >
         <MoreHorizontal size={16} />
       </button>
       {open && (
-        <div style={{
-          position: 'absolute',
-          right: 0,
-          top: '100%',
-          zIndex: 20,
-          backgroundColor: 'var(--color-surface-elevated)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: 'var(--shadow-md)',
-          minWidth: 180,
-          overflow: 'hidden',
-        }}>
+        <div className="absolute right-0 top-full z-20 bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-[var(--shadow-md)] min-w-[180px] overflow-hidden">
           {[
-            { icon: <Pencil size={14} />, label: 'Edit', action: onEdit },
-            { icon: <EyeOff size={14} />, label: 'Hide account', action: onHide },
-            { icon: <MinusCircle size={14} />, label: 'Exclude from net worth', action: onExclude },
-          ].map(({ icon, label, action }) => (
+            { icon: <Pencil size={14} />, label: 'Edit', action: onEdit, danger: false },
+            { icon: <EyeOff size={14} />, label: 'Hide account', action: onHide, danger: false },
+            { icon: <MinusCircle size={14} />, label: 'Exclude from net worth', action: onExclude, danger: false },
+          ].map(({ icon, label, action, danger }) => (
             <button
               key={label}
+              tabIndex={0}
               onClick={(e) => { e.stopPropagation(); action(); setOpen(false); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                width: '100%',
-                padding: '0.5rem 0.875rem',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '0.8125rem',
-                color: 'var(--color-text)',
-                textAlign: 'left',
-              }}
+              className="flex items-center gap-2 w-full px-3.5 py-2 bg-transparent border-0 cursor-pointer text-[0.8125rem] text-left focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-1"
+              style={{ color: danger ? 'var(--color-danger)' : 'var(--color-text)' }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
-              <span style={{ color: 'var(--color-text-secondary)' }}>{icon}</span>
+              <span style={{ color: danger ? 'var(--color-danger)' : 'var(--color-text-secondary)' }}>{icon}</span>
               {label}
             </button>
           ))}
+          <div className="h-px bg-[var(--color-border)] my-1" />
+          <button
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); onDelete(); setOpen(false); }}
+            className="flex items-center gap-2 w-full px-3.5 py-2 bg-transparent border-0 cursor-pointer text-[0.8125rem] text-[var(--color-danger)] text-left focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-1"
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            <Trash2 size={14} />
+            Delete account
+          </button>
         </div>
       )}
     </div>
@@ -275,11 +274,13 @@ function AccountRow({
   account,
   onClick,
   onEdit,
+  onDelete,
   monthChange,
 }: {
   account: Account;
   onClick: () => void;
   onEdit: () => void;
+  onDelete: () => void;
   monthChange?: number;
 }) {
   const displayName = account.institution
@@ -290,17 +291,7 @@ function AccountRow({
 
   return (
     <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.75rem',
-        padding: '0 0',
-        height: 48,
-        cursor: 'pointer',
-        borderRadius: 'var(--radius-md)',
-        paddingLeft: '0.5rem',
-        paddingRight: '0.5rem',
-      }}
+      className="flex items-center gap-3 h-12 cursor-pointer rounded-[var(--radius-md)] px-2"
       onClick={onClick}
       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -309,36 +300,22 @@ function AccountRow({
       <InstitutionLogo name={account.institution ?? account.name} logoSlug={account.institutionLogo ?? undefined} size={32} />
 
       {/* Name + last four */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: '0.875rem',
-          fontWeight: 500,
-          color: 'var(--color-text)',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-[var(--color-text)] truncate">
           {account.name}
         </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+        <div className="text-xs text-[var(--color-text-muted)]">
           {displayName}
         </div>
       </div>
 
       {/* Balance + optional 1M change */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, marginRight: '0.25rem' }}>
-        <div style={{
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          color: balanceColor(account.balance, account.type),
-        }}>
+      <div className="flex flex-col items-end shrink-0 mr-1">
+        <div className="text-sm font-semibold" style={{ color: balanceColor(account.balance, account.type) }}>
           {fmtCurrency(account.balance, account.currency)}
         </div>
         {monthChange !== undefined && (
-          <div style={{
-            fontSize: '0.6875rem',
-            color: monthChange >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
-          }}>
+          <div className="text-[0.6875rem]" style={{ color: monthChange >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
             {fmtChange(monthChange)}
           </div>
         )}
@@ -349,6 +326,7 @@ function AccountRow({
         onEdit={onEdit}
         onHide={() => notify.info(`${account.name} hidden`)}
         onExclude={() => notify.info(`${account.name} excluded from net worth`)}
+        onDelete={onDelete}
       />
     </div>
   );
@@ -361,11 +339,13 @@ function AccountGroup({
   accounts,
   onAccountClick,
   onEditAccount,
+  onDeleteAccount,
 }: {
   type: AccountType;
   accounts: Account[];
   onAccountClick: (account: Account) => void;
   onEditAccount: (account: Account) => void;
+  onDeleteAccount: (account: Account) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   if (accounts.length === 0) return null;
@@ -378,50 +358,38 @@ function AccountGroup({
       {/* Group header */}
       <div
         onClick={() => setCollapsed((v) => !v)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          padding: '0.75rem 1rem',
-          backgroundColor: 'var(--color-surface-hover)',
-          cursor: 'pointer',
-          userSelect: 'none',
-        }}
+        className="flex items-center gap-2 py-3 px-4 bg-[var(--color-surface-hover)] cursor-pointer select-none"
       >
-        <span style={{ color: 'var(--color-text-muted)', flexShrink: 0 }}>
+        <span className="text-[var(--color-text-muted)] shrink-0">
           {collapsed
             ? <ChevronRight size={16} />
             : <ChevronDown size={16} />
           }
         </span>
-        <span style={{ flex: 1, fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        <span className="flex-1 text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em]">
           {GROUP_LABELS[type]}
         </span>
-        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', marginRight: '0.75rem' }}>
+        <span className="text-sm font-semibold text-[var(--color-text)] mr-3">
           {fmtCurrency(total)}
         </span>
-        <span style={{
-          fontSize: '0.75rem',
-          color: change >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
-          minWidth: 60,
-          textAlign: 'right',
-        }}>
+        <span className="text-xs min-w-[60px] text-right" style={{ color: change >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
           {fmtChange(change)}
         </span>
       </div>
 
       {/* Account rows */}
       {!collapsed && (
-        <div style={{ padding: '0.25rem 0.5rem 0.5rem' }}>
+        <div className="pt-1 px-2 pb-2">
           {accounts.map((account, idx) => (
             <div key={account.id}>
               <AccountRow
                 account={account}
                 onClick={() => onAccountClick(account)}
                 onEdit={() => onEditAccount(account)}
+                onDelete={() => onDeleteAccount(account)}
               />
               {idx < accounts.length - 1 && (
-                <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '0 0.5rem' }} />
+                <div className="h-px bg-[var(--color-border)] mx-2" />
               )}
             </div>
           ))}
@@ -452,38 +420,32 @@ function NetWorthChart() {
   return (
     <Card padding="lg">
       {/* Header: current net worth + range tabs */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
         <div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>Net Worth</div>
+          <div className="text-xs text-[var(--color-text-muted)] mb-1">Net Worth</div>
           {isLoading ? (
             <Skeleton height={36} width={160} />
           ) : (
-            <div style={{ fontSize: '2rem', fontWeight: 700, color: (current?.netWorth ?? 0) >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>
+            <div className="text-[2rem] font-bold" style={{ color: (current?.netWorth ?? 0) >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>
               {fmtCurrency(current?.netWorth ?? 0)}
             </div>
           )}
           {!isLoading && change && change.since && (
-            <div style={{ fontSize: '0.8125rem', color: changePositive ? 'var(--color-success)' : 'var(--color-danger)', marginTop: '0.25rem' }}>
+            <div className="text-[0.8125rem] mt-1" style={{ color: changePositive ? 'var(--color-success)' : 'var(--color-danger)' }}>
               {fmtChange(change.amount)} ({fmtPercent(change.percent)}) since {fmtDate(change.since)}
             </div>
           )}
         </div>
         {/* Range tabs */}
-        <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: 'var(--color-surface-hover)', borderRadius: 'var(--radius-md)', padding: '0.25rem' }}>
+        <div className="flex gap-1 bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] p-1">
           {NW_RANGES.map((r) => (
             <button
               key={r}
               onClick={() => setRange(r)}
+              className="py-1 px-2.5 text-xs font-semibold border-0 cursor-pointer rounded-[var(--radius-sm)] transition-[background] duration-150"
               style={{
-                padding: '0.25rem 0.625rem',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                border: 'none',
-                cursor: 'pointer',
-                borderRadius: 'var(--radius-sm)',
                 backgroundColor: range === r ? 'var(--color-surface-elevated)' : 'transparent',
                 color: range === r ? 'var(--color-text)' : 'var(--color-text-muted)',
-                transition: 'background 0.15s',
               }}
             >
               {r}
@@ -496,7 +458,7 @@ function NetWorthChart() {
       {isLoading ? (
         <Skeleton height={160} width="100%" />
       ) : history.length === 0 ? (
-        <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+        <div className="h-40 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
           No history yet — data will appear after the first snapshot.
         </div>
       ) : (
@@ -540,25 +502,18 @@ function NetWorthChart() {
 
       {/* Assets vs Liabilities breakdown */}
       {!isLoading && current && (
-        <div style={{
-          display: 'flex',
-          gap: '1.5rem',
-          marginTop: '1rem',
-          paddingTop: '1rem',
-          borderTop: '1px solid var(--color-border)',
-          flexWrap: 'wrap',
-        }}>
-          <div style={{ flex: 1, minWidth: 100 }}>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>Assets</div>
-            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-success)' }}>{fmtCurrency(current.assets)}</div>
+        <div className="flex gap-6 mt-4 pt-4 border-t border-[var(--color-border)] flex-wrap">
+          <div className="flex-1 min-w-[100px]">
+            <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.04em] mb-1">Assets</div>
+            <div className="text-base font-bold text-[var(--color-success)]">{fmtCurrency(current.assets)}</div>
           </div>
-          <div style={{ flex: 1, minWidth: 100 }}>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>Liabilities</div>
-            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-danger)' }}>{fmtCurrency(current.liabilities)}</div>
+          <div className="flex-1 min-w-[100px]">
+            <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.04em] mb-1">Liabilities</div>
+            <div className="text-base font-bold text-[var(--color-danger)]">{fmtCurrency(current.liabilities)}</div>
           </div>
-          <div style={{ flex: 1, minWidth: 100 }}>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>Net Worth</div>
-            <div style={{ fontSize: '1rem', fontWeight: 700, color: current.netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>{fmtCurrency(current.netWorth)}</div>
+          <div className="flex-1 min-w-[100px]">
+            <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.04em] mb-1">Net Worth</div>
+            <div className="text-base font-bold" style={{ color: current.netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>{fmtCurrency(current.netWorth)}</div>
           </div>
         </div>
       )}
@@ -583,46 +538,33 @@ function NetWorthSummary({
   return (
     <Card padding="lg">
       {/* Stat row */}
-      <div style={{ display: 'flex', gap: '2rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+      <div className="flex gap-8 mb-4 flex-wrap">
         <div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>Assets</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-success)' }}>
+          <div className="text-xs text-[var(--color-text-muted)] mb-1">Assets</div>
+          <div className="text-xl font-bold text-[var(--color-success)]">
             {fmtCurrency(totalAssets)}
           </div>
         </div>
         <div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>Liabilities</div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-danger)' }}>
+          <div className="text-xs text-[var(--color-text-muted)] mb-1">Liabilities</div>
+          <div className="text-xl font-bold text-[var(--color-danger)]">
             {fmtCurrency(Math.abs(totalLiabilities))}
           </div>
         </div>
-        <div style={{ marginLeft: 'auto' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem', textAlign: 'right' }}>Net Worth</div>
-          <div style={{
-            fontSize: '1.5rem',
-            fontWeight: 700,
-            color: netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)',
-            textAlign: 'right',
-          }}>
+        <div className="ml-auto">
+          <div className="text-xs text-[var(--color-text-muted)] mb-1 text-right">Net Worth</div>
+          <div className="text-2xl font-bold text-right" style={{ color: netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>
             {fmtCurrency(netWorth)}
           </div>
         </div>
       </div>
 
       {/* Stacked bar */}
-      <div style={{
-        height: 10,
-        borderRadius: 'var(--radius-full)',
-        overflow: 'hidden',
-        backgroundColor: 'var(--color-danger)',
-        display: 'flex',
-      }}>
-        <div style={{
-          width: `${assetPct}%`,
-          backgroundColor: 'var(--color-success)',
-          borderRadius: 'var(--radius-full)',
-          transition: 'width 0.4s ease',
-        }} />
+      <div className="h-2.5 rounded-[var(--radius-full)] overflow-hidden bg-[var(--color-danger)] flex">
+        <div
+          className="bg-[var(--color-success)] rounded-[var(--radius-full)] transition-[width] duration-[400ms] ease-[ease]"
+          style={{ width: `${assetPct}%` }}
+        />
       </div>
     </Card>
   );
@@ -644,7 +586,7 @@ function AccountForm({
   hideBalance?: boolean;
 }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div className="flex flex-col gap-4">
       <Input
         label="Account Name"
         value={values.name}
@@ -667,7 +609,7 @@ function AccountForm({
         placeholder="e.g. Chase Bank"
       />
       <div>
-        <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: 6 }}>
+        <div className="text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
           Logo
         </div>
         <LogoPicker
@@ -676,7 +618,7 @@ function AccountForm({
           onChange={onLogoChange}
         />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+      <div className="grid grid-cols-2 gap-3">
         <Input
           label="Last Four Digits"
           value={values.lastFour}
@@ -852,18 +794,20 @@ function EditAccountModal({
   );
 }
 
-// ─── Account Detail Modal ─────────────────────────────────────────────────────
+// ─── Account Detail Drawer ────────────────────────────────────────────────────
 
 const BALANCE_HISTORY_RANGES: BalanceHistoryRange[] = ['1M', '3M', '6M', '1Y'];
 
-function AccountDetailModal({
+function AccountDetailDrawer({
   account,
   onClose,
   onEdit,
+  onDelete,
 }: {
   account: Account | null;
   onClose: () => void;
   onEdit: () => void;
+  onDelete: () => void;
 }) {
   const [historyRange, setHistoryRange] = useState<BalanceHistoryRange>('3M');
 
@@ -879,151 +823,186 @@ function AccountDetailModal({
     enabled: !!account,
   });
 
+  // Close on backdrop click
+  useEffect(() => {
+    if (!account) return;
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [account, onClose]);
+
   const detail = data?.account ?? account;
   const history = historyData ?? [];
   const txns = data?.recentTransactions ?? [];
 
   return (
-    <Modal open={!!account} onClose={onClose} title={account?.name ?? ''} size="lg">
-      {isLoading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <Skeleton height={32} width={160} />
-          <Skeleton height={200} width="100%" />
-          {[1, 2, 3].map((i) => <Skeleton key={i} height={40} width="100%" />)}
-        </div>
-      ) : (
-        <>
-          {/* Header stats */}
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-black/40 transition-opacity duration-200"
+        style={{ opacity: account ? 1 : 0, pointerEvents: account ? 'auto' : 'none' }}
+      />
+      {/* Drawer panel */}
+      <div
+        className="fixed top-0 right-0 bottom-0 z-50 w-[420px] max-w-full bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[-4px_0_24px_rgba(0,0,0,0.12)] flex flex-col transition-transform duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+        style={{ transform: account ? 'translateX(0)' : 'translateX(100%)' }}
+      >
+        {/* Drawer header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)] shrink-0">
+          <div className="flex items-center gap-3">
+            {account && <InstitutionLogo name={account.institution ?? account.name} logoSlug={account.institutionLogo ?? undefined} size={32} />}
             <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
-                {detail?.institution ?? ''}{detail?.lastFour ? ` ••${detail.lastFour}` : ''}
-              </div>
-              <div style={{
-                fontSize: '1.75rem',
-                fontWeight: 700,
-                color: detail && detail.balance < 0 ? 'var(--color-danger)' : 'var(--color-text)',
-              }}>
-                {detail ? fmtCurrency(detail.balance, detail.currency) : '—'}
-              </div>
+              <div className="text-base font-semibold text-[var(--color-text)]">{account?.name}</div>
+              {account?.institution && (
+                <div className="text-xs text-[var(--color-text-muted)]">
+                  {account.institution}{account.lastFour ? ` ••${account.lastFour}` : ''}
+                </div>
+              )}
             </div>
-            <Button variant="outline" size="sm" icon={<Pencil size={14} />} onClick={onEdit}>
-              Edit
-            </Button>
           </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="bg-transparent border-0 cursor-pointer p-1 text-[var(--color-text-muted)] flex rounded-[var(--radius-sm)]"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
-          {/* Balance history chart */}
-          <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Balance History
-              </div>
-              <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: 'var(--color-surface-hover)', borderRadius: 'var(--radius-md)', padding: '0.2rem' }}>
-                {BALANCE_HISTORY_RANGES.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setHistoryRange(r)}
-                    style={{
-                      padding: '0.2rem 0.5rem',
-                      fontSize: '0.6875rem',
-                      fontWeight: 600,
-                      border: 'none',
-                      cursor: 'pointer',
-                      borderRadius: 'var(--radius-sm)',
-                      backgroundColor: historyRange === r ? 'var(--color-surface-elevated)' : 'transparent',
-                      color: historyRange === r ? 'var(--color-text)' : 'var(--color-text-muted)',
-                      transition: 'background 0.15s',
-                    }}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto p-5">
+          {isLoading ? (
+            <div className="flex flex-col gap-3">
+              <Skeleton height={48} width={160} />
+              <Skeleton height={180} width="100%" />
+              {[1, 2, 3].map((i) => <Skeleton key={i} height={44} width="100%" />)}
             </div>
-            {historyLoading ? (
-              <Skeleton height={160} width="100%" />
-            ) : history.length === 0 ? (
-              <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
-                No history yet — snapshots are taken daily.
+          ) : (
+            <>
+              {/* Balance hero */}
+              <div className="mb-6">
+                <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em] mb-1">
+                  Current Balance
+                </div>
+                <div className="text-[2rem] font-bold" style={{ color: detail && detail.balance < 0 ? 'var(--color-danger)' : 'var(--color-text)' }}>
+                  {detail ? fmtCurrency(detail.balance, detail.currency) : '—'}
+                </div>
+                <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                  {detail?.type?.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                  {detail?.currency !== 'USD' ? ` · ${detail?.currency}` : ''}
+                </div>
               </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={160}>
-                <AreaChart data={history} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-                  <defs>
-                    <linearGradient id="acctGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#E5622A" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#E5622A" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
-                    tickFormatter={(d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis hide domain={['auto', 'auto']} />
-                  <Tooltip
-                    formatter={(value: number) => [fmtCurrency(value), 'Balance']}
-                    labelFormatter={(label: string) => fmtDate(label)}
-                    contentStyle={{
-                      backgroundColor: 'var(--color-surface)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-md)',
-                      fontSize: '0.8125rem',
-                    }}
-                  />
-                  <Area type="monotone" dataKey="balance" stroke="#E5622A" strokeWidth={2} fill="url(#acctGrad)" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </div>
 
-          {/* Recent transactions */}
-          <div>
-            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
-              Recent Transactions
-            </div>
-            {txns.length === 0 ? (
-              <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', padding: '0.5rem 0' }}>
-                No transactions found.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {txns.map((txn, idx) => (
-                  <div key={txn.id}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0' }}>
-                      <div style={{
-                        width: 32, height: 32, borderRadius: 'var(--radius-full)',
-                        backgroundColor: 'var(--color-accent)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#fff', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0,
-                      }}>
-                        {(txn.merchantName ?? '?')[0].toUpperCase()}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {txn.merchantName}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                          {txn.categoryName ?? '—'} · {fmtDate(txn.date)}
-                        </div>
-                      </div>
-                      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: txn.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)', flexShrink: 0 }}>
-                        {txn.amount < 0 ? '-' : '+'}{fmtCurrency(Math.abs(txn.amount))}
-                      </span>
-                    </div>
-                    {idx < txns.length - 1 && (
-                      <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
-                    )}
+              {/* Balance history chart */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="text-[0.6875rem] font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em]">
+                    Balance History
                   </div>
-                ))}
+                  <div className="flex gap-[0.2rem] bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] p-[0.2rem]">
+                    {BALANCE_HISTORY_RANGES.map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setHistoryRange(r)}
+                        className="text-[0.6875rem] font-semibold border-0 cursor-pointer rounded-[var(--radius-sm)] transition-[background] duration-150"
+                        style={{
+                          padding: '0.15rem 0.45rem',
+                          backgroundColor: historyRange === r ? 'var(--color-surface-elevated)' : 'transparent',
+                          color: historyRange === r ? 'var(--color-text)' : 'var(--color-text-muted)',
+                        }}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {historyLoading ? (
+                  <Skeleton height={140} width="100%" />
+                ) : history.length === 0 ? (
+                  <div className="h-[140px] flex items-center justify-center text-[var(--color-text-muted)] text-[0.8125rem] bg-[var(--color-surface-hover)] rounded-[var(--radius-md)]">
+                    No history yet — snapshots are taken daily.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={140}>
+                    <AreaChart data={history} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+                      <defs>
+                        <linearGradient id="acctGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#E5622A" stopOpacity={0.2} />
+                          <stop offset="95%" stopColor="#E5622A" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }}
+                        tickFormatter={(d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        interval="preserveStartEnd" />
+                      <YAxis hide domain={['auto', 'auto']} />
+                      <Tooltip
+                        formatter={(value: number) => [fmtCurrency(value), 'Balance']}
+                        labelFormatter={(label: string) => fmtDate(label)}
+                        contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem' }}
+                      />
+                      <Area type="monotone" dataKey="balance" stroke="#E5622A" strokeWidth={2} fill="url(#acctGrad)" dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
               </div>
-            )}
-          </div>
-        </>
-      )}
-    </Modal>
+
+              {/* Recent transactions */}
+              <div>
+                <div className="text-[0.6875rem] font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em] mb-2.5">
+                  Recent Transactions
+                </div>
+                {txns.length === 0 ? (
+                  <div className="text-[var(--color-text-muted)] text-sm py-4 text-center">
+                    No transactions yet.
+                  </div>
+                ) : (
+                  <div className="flex flex-col border border-[var(--color-border)] rounded-[var(--radius-md)] overflow-hidden">
+                    {txns.map((txn, idx) => (
+                      <div key={txn.id}>
+                        <div className="flex items-center gap-3 py-2.5 px-3.5">
+                          <div className="w-[30px] h-[30px] rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-white text-[0.6875rem] font-bold shrink-0">
+                            {(txn.merchantName ?? '?')[0].toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[0.8125rem] font-medium text-[var(--color-text)] truncate">
+                              {txn.merchantName}
+                            </div>
+                            <div className="text-[0.6875rem] text-[var(--color-text-muted)]">
+                              {txn.categoryName ?? '—'} · {fmtDate(txn.date)}
+                            </div>
+                          </div>
+                          <span className="text-[0.8125rem] font-semibold shrink-0" style={{ color: txn.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                            {txn.amount < 0 ? '-' : '+'}{fmtCurrency(Math.abs(txn.amount))}
+                          </span>
+                        </div>
+                        {idx < txns.length - 1 && <div className="h-px bg-[var(--color-border)]" />}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Drawer footer actions */}
+        <div className="px-5 py-4 border-t border-[var(--color-border)] flex gap-2 shrink-0">
+          <Button variant="outline" icon={<Pencil size={14} />} onClick={onEdit} style={{ flex: 1 }}>
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            icon={<Trash2 size={14} />}
+            onClick={onDelete}
+            style={{ color: 'var(--color-danger)', flex: 1 }}
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -1031,12 +1010,12 @@ function AccountDetailModal({
 
 function AccountsSkeleton() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div className="flex flex-col gap-4">
       <Card padding="lg">
-        <div style={{ display: 'flex', gap: '2rem', marginBottom: '1rem' }}>
+        <div className="flex gap-8 mb-4">
           <Skeleton height={40} width={120} />
           <Skeleton height={40} width={120} />
-          <div style={{ marginLeft: 'auto' }}>
+          <div className="ml-auto">
             <Skeleton height={48} width={140} />
           </div>
         </div>
@@ -1044,14 +1023,14 @@ function AccountsSkeleton() {
       </Card>
       {[1, 2, 3].map((i) => (
         <Card key={i} padding="none" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '0.75rem 1rem', backgroundColor: 'var(--color-surface-hover)' }}>
+          <div className="py-3 px-4 bg-[var(--color-surface-hover)]">
             <Skeleton height={16} width={120} />
           </div>
-          <div style={{ padding: '0.5rem 1rem' }}>
+          <div className="py-2 px-4">
             {[1, 2].map((j) => (
-              <div key={j} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', height: 48 }}>
+              <div key={j} className="flex items-center gap-3 h-12">
                 <Skeleton width={32} height={32} rounded />
-                <div style={{ flex: 1 }}>
+                <div className="flex-1">
                   <Skeleton height={13} width="50%" style={{ marginBottom: '0.25rem' }} />
                   <Skeleton height={11} width="35%" />
                 </div>
@@ -1196,42 +1175,39 @@ function AssetsLiabilitiesTab() {
   const totalAssets = assets.reduce((s, a) => s + a.currentValue, 0);
   const totalLiabs = liabilities.reduce((s, l) => s + l.currentBalance, 0);
 
-  const rowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0', borderBottom: '1px solid var(--color-border)' };
-  const actionBtns: React.CSSProperties = { display: 'flex', gap: '0.25rem' };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <div className="flex flex-col gap-5">
       {/* Summary bar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+      <div className="grid grid-cols-3 gap-3">
         {[
           { label: 'Manual Assets', value: totalAssets, color: 'var(--color-success)' },
           { label: 'Manual Liabilities', value: totalLiabs, color: 'var(--color-danger)' },
           { label: 'Net', value: totalAssets - totalLiabs, color: (totalAssets - totalLiabs) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' },
         ].map((s) => (
           <Card key={s.label} padding="md">
-            <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>{s.label}</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: s.color }}>{fmtCurrency(s.value)}</div>
+            <div className="text-[0.6875rem] uppercase tracking-[0.05em] text-[var(--color-text-muted)] mb-1">{s.label}</div>
+            <div className="text-xl font-bold" style={{ color: s.color }}>{fmtCurrency(s.value)}</div>
           </Card>
         ))}
       </div>
 
       {/* Assets section */}
       <Card padding="lg">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Manual Assets</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="m-0 text-base font-semibold">Manual Assets</h3>
           <Button size="sm" icon={<Plus size={13} />} onClick={() => { resetAssetForm(); setShowAssetForm(true); }}>Add Asset</Button>
         </div>
         {assetsLoading ? <Skeleton height={60} /> : assets.length === 0 ? (
-          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>No manual assets yet. Add your home, car, crypto, or other assets.</p>
+          <p className="text-[var(--color-text-muted)] text-sm m-0">No manual assets yet. Add your home, car, crypto, or other assets.</p>
         ) : assets.map((a) => (
-          <div key={a.id} style={rowStyle}>
+          <div key={a.id} className="flex items-center justify-between py-2.5 border-b border-[var(--color-border)]">
             <div>
-              <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{a.name}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{labelType(a.type)}</div>
+              <div className="font-medium text-[0.9rem]">{a.name}</div>
+              <div className="text-xs text-[var(--color-text-muted)]">{labelType(a.type)}</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontWeight: 600, color: 'var(--color-success)' }}>{fmtCurrency(a.currentValue)}</span>
-              <div style={actionBtns}>
+            <div className="flex items-center gap-3">
+              <span className="font-semibold text-[var(--color-success)]">{fmtCurrency(a.currentValue)}</span>
+              <div className="flex gap-1">
                 <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => openEditAsset(a)} />
                 <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => deleteAsset.mutate(a.id)} />
               </div>
@@ -1242,21 +1218,21 @@ function AssetsLiabilitiesTab() {
 
       {/* Liabilities section */}
       <Card padding="lg">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Manual Liabilities</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="m-0 text-base font-semibold">Manual Liabilities</h3>
           <Button size="sm" icon={<Plus size={13} />} onClick={() => { resetLiabForm(); setShowLiabForm(true); }}>Add Liability</Button>
         </div>
         {liabsLoading ? <Skeleton height={60} /> : liabilities.length === 0 ? (
-          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>No manual liabilities yet. Add mortgages, loans, or other debts.</p>
+          <p className="text-[var(--color-text-muted)] text-sm m-0">No manual liabilities yet. Add mortgages, loans, or other debts.</p>
         ) : liabilities.map((l) => (
-          <div key={l.id} style={rowStyle}>
+          <div key={l.id} className="flex items-center justify-between py-2.5 border-b border-[var(--color-border)]">
             <div>
-              <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{l.name}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{labelType(l.type)}{l.interestRate ? ` · ${l.interestRate}% APR` : ''}</div>
+              <div className="font-medium text-[0.9rem]">{l.name}</div>
+              <div className="text-xs text-[var(--color-text-muted)]">{labelType(l.type)}{l.interestRate ? ` · ${l.interestRate}% APR` : ''}</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontWeight: 600, color: 'var(--color-danger)' }}>{fmtCurrency(l.currentBalance)}</span>
-              <div style={actionBtns}>
+            <div className="flex items-center gap-3">
+              <span className="font-semibold text-[var(--color-danger)]">{fmtCurrency(l.currentBalance)}</span>
+              <div className="flex gap-1">
                 <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => openEditLiab(l)} />
                 <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => deleteLiab.mutate(l.id)} />
               </div>
@@ -1268,7 +1244,7 @@ function AssetsLiabilitiesTab() {
       {/* Asset form modal */}
       {showAssetForm && (
         <Modal open onClose={resetAssetForm} title={editAsset ? 'Edit Asset' : 'Add Asset'}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div className="flex flex-col gap-3">
             <Input label="Name" value={assetForm.name} onChange={(e) => setAssetForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Primary Home" />
             <Select label="Type" value={assetForm.type} onChange={(e) => setAssetForm((f) => ({ ...f, type: e.target.value }))} options={ASSET_TYPES.map((t) => ({ value: t, label: labelType(t) }))} />
             <Input label="Current Value" type="number" value={assetForm.currentValue} onChange={(e) => setAssetForm((f) => ({ ...f, currentValue: e.target.value }))} placeholder="0.00" />
@@ -1285,7 +1261,7 @@ function AssetsLiabilitiesTab() {
       {/* Liability form modal */}
       {showLiabForm && (
         <Modal open onClose={resetLiabForm} title={editLiab ? 'Edit Liability' : 'Add Liability'}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div className="flex flex-col gap-3">
             <Input label="Name" value={liabForm.name} onChange={(e) => setLiabForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Mortgage" />
             <Select label="Type" value={liabForm.type} onChange={(e) => setLiabForm((f) => ({ ...f, type: e.target.value }))} options={LIABILITY_TYPES.map((t) => ({ value: t, label: labelType(t) }))} />
             <Input label="Current Balance" type="number" value={liabForm.currentBalance} onChange={(e) => setLiabForm((f) => ({ ...f, currentBalance: e.target.value }))} placeholder="0.00" />
@@ -1318,31 +1294,44 @@ export default function AccountsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [editAccount, setEditAccount] = useState<Account | null>(null);
   const [detailAccount, setDetailAccount] = useState<Account | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/accounts/${id}`),
+    onSuccess: () => {
+      notify.success('Account deleted');
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['networth'] });
+      setDeleteTarget(null);
+      setDetailAccount(null);
+    },
+    onError: () => notify.error('Failed to delete account'),
+  });
 
   const grouped = data?.groups ? buildGroupMap(data.groups) : null;
 
-  // When edit is triggered from detail modal, close detail and open edit
   function handleEditFromDetail() {
     const acct = detailAccount;
     setDetailAccount(null);
     setEditAccount(acct);
   }
 
+  function handleDeleteFromDetail() {
+    setDeleteTarget(detailAccount);
+  }
+
+  function handleDeleteFromRow(account: Account) {
+    setDeleteTarget(account);
+  }
+
   return (
-    <div style={{ padding: '1rem 0' }}>
+    <div className="py-4">
       {/* Page header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '1.5rem',
-        flexWrap: 'wrap',
-        gap: '0.75rem',
-      }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <h1 className="text-2xl font-bold text-[var(--color-text)] m-0">
           Accounts
         </h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="flex gap-2">
           {activeTab === 'accounts' && <>
             <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />} onClick={() => notify.info('Manual refresh is not available')}>Refresh all</Button>
             <Button size="sm" icon={<Plus size={14} />} onClick={() => setShowAdd(true)}>Add account</Button>
@@ -1351,22 +1340,16 @@ export default function AccountsPage() {
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--color-border)', marginBottom: '1.25rem' }}>
+      <div className="flex border-b-2 border-[var(--color-border)] mb-5">
         {([['accounts', 'Accounts'], ['assets', 'Assets & Debt']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
+            className="py-2 px-5 text-sm bg-transparent border-0 cursor-pointer -mb-0.5 transition-[color] duration-150"
             style={{
-              padding: '0.5rem 1.25rem',
-              fontSize: '0.875rem',
               fontWeight: activeTab === key ? 600 : 400,
               color: activeTab === key ? 'var(--color-primary)' : 'var(--color-text-muted)',
-              background: 'none',
-              border: 'none',
               borderBottom: activeTab === key ? '2px solid var(--color-primary)' : '2px solid transparent',
-              marginBottom: '-2px',
-              cursor: 'pointer',
-              transition: 'color 0.15s',
             }}
           >
             {label}
@@ -1379,18 +1362,13 @@ export default function AccountsPage() {
       ) : isLoading ? (
         <AccountsSkeleton />
       ) : isError || !data ? (
-        <div style={{
-          padding: '2rem',
-          textAlign: 'center',
-          color: 'var(--color-danger)',
-          fontSize: '0.875rem',
-        }}>
+        <div className="p-8 text-center text-[var(--color-danger)] text-sm">
           Failed to load accounts.
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)', gap: '1rem', alignItems: 'start' }}>
+        <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)' }}>
           {/* Left column: net worth chart + groups */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="flex flex-col gap-4">
             <NetWorthChart />
             <NetWorthSummary
               totalAssets={data.netWorth.assets}
@@ -1407,45 +1385,38 @@ export default function AccountsPage() {
                   accounts={accounts}
                   onAccountClick={setDetailAccount}
                   onEditAccount={setEditAccount}
+                  onDeleteAccount={handleDeleteFromRow}
                 />
               );
             })}
           </div>
 
           {/* Right column: summary stats */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="flex flex-col gap-4">
             <Card padding="lg">
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '1rem' }}>
+              <div className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em] mb-4">
                 Summary
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div className="flex flex-col gap-3">
                 {GROUP_ORDER.map((type) => {
                   const accounts = grouped?.get(type) ?? [];
                   if (accounts.length === 0) return null;
                   const total = groupTotal(accounts);
                   return (
-                    <div key={type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                    <div key={type} className="flex justify-between items-center">
+                      <span className="text-sm text-[var(--color-text-secondary)]">
                         {GROUP_LABELS[type]}
                       </span>
-                      <span style={{
-                        fontSize: '0.875rem',
-                        fontWeight: 600,
-                        color: isLiability(type) && total > 0 ? 'var(--color-danger)' : total < 0 ? 'var(--color-danger)' : 'var(--color-text)',
-                      }}>
+                      <span className="text-sm font-semibold" style={{ color: isLiability(type) && total > 0 ? 'var(--color-danger)' : total < 0 ? 'var(--color-danger)' : 'var(--color-text)' }}>
                         {fmtCurrency(total)}
                       </span>
                     </div>
                   );
                 })}
-                <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '0.25rem 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>Net Worth</span>
-                  <span style={{
-                    fontSize: '1rem',
-                    fontWeight: 700,
-                    color: data.netWorth.total >= 0 ? 'var(--color-text)' : 'var(--color-danger)',
-                  }}>
+                <div className="h-px bg-[var(--color-border)] my-1" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-[var(--color-text)]">Net Worth</span>
+                  <span className="text-base font-bold" style={{ color: data.netWorth.total >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>
                     {fmtCurrency(data.netWorth.total)}
                   </span>
                 </div>
@@ -1453,24 +1424,17 @@ export default function AccountsPage() {
             </Card>
 
             <Card padding="lg">
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '1rem' }}>
+              <div className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em] mb-4">
                 Account Count
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div className="flex flex-col gap-2">
                 {GROUP_ORDER.map((type) => {
                   const count = grouped?.get(type)?.length ?? 0;
                   if (count === 0) return null;
                   return (
-                    <div key={type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>{GROUP_LABELS[type]}</span>
-                      <span style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        padding: '0.125rem 0.5rem',
-                        borderRadius: 'var(--radius-full)',
-                        backgroundColor: 'var(--color-surface-hover)',
-                        color: 'var(--color-text-secondary)',
-                      }}>
+                    <div key={type} className="flex justify-between items-center">
+                      <span className="text-sm text-[var(--color-text-secondary)]">{GROUP_LABELS[type]}</span>
+                      <span className="text-xs font-semibold py-0.5 px-2 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]">
                         {count}
                       </span>
                     </div>
@@ -1485,11 +1449,34 @@ export default function AccountsPage() {
       {/* Modals */}
       <AddAccountModal open={showAdd} onClose={() => setShowAdd(false)} />
       <EditAccountModal account={editAccount} onClose={() => setEditAccount(null)} />
-      <AccountDetailModal
+      <AccountDetailDrawer
         account={detailAccount}
         onClose={() => setDetailAccount(null)}
         onEdit={handleEditFromDetail}
+        onDelete={handleDeleteFromDetail}
       />
+
+      {/* Delete confirmation */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Account" size="sm">
+        <p className="text-sm text-[var(--color-text-secondary)] mb-1">
+          Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+        </p>
+        <p className="text-[0.8125rem] text-[var(--color-text-muted)]">
+          All transactions for this account will be hidden. This cannot be undone.
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleteMutation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            loading={deleteMutation.isPending}
+            style={{ backgroundColor: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+          >
+            Delete Account
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

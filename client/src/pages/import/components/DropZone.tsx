@@ -6,10 +6,28 @@
  */
 
 import { useState, useRef, useCallback } from 'react';
-import { Upload, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, FileText, AlertCircle, Loader2, Download } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui';
 import type { ParseResult } from '../ImportPage';
+
+const SAMPLE_CSV = `Date,Description,Amount,Reference
+2024-03-01,Grocery Store,-52.40,TXN001
+2024-03-02,Salary Deposit,3500.00,TXN002
+2024-03-03,Netflix Subscription,-15.99,TXN003
+2024-03-05,Electric Bill,-120.00,TXN004
+2024-03-07,Coffee Shop,-4.75,TXN005
+`;
+
+function downloadSample() {
+  const blob = new Blob([SAMPLE_CSV], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'kuber-sample-transactions.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 interface Account {
   id: string;
@@ -157,8 +175,18 @@ export default function DropZone({ accounts, onParsed }: Props) {
       )}
 
       {/* Tips */}
-      <div className="bg-[color:var(--color-surface-hover)] rounded-lg p-4 text-sm space-y-1">
-        <p className="font-medium">Tips</p>
+      <div className="bg-[color:var(--color-surface-hover)] rounded-lg p-4 text-sm space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="font-medium">Tips</p>
+          <button
+            type="button"
+            onClick={downloadSample}
+            className="flex items-center gap-1 text-xs text-[color:var(--color-primary)] hover:underline"
+          >
+            <Download size={12} />
+            Download sample CSV
+          </button>
+        </div>
         <ul className="text-[color:var(--color-text-secondary)] space-y-0.5 list-disc list-inside">
           <li>Download CSV export from your bank's online portal</li>
           <li>Kuber auto-detects TD, RBC, CIBC, BMO, Scotiabank, Chase, BofA, Wells Fargo, Capital One & Amex</li>

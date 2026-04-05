@@ -160,13 +160,13 @@ test.describe('Reports — Advanced', () => {
   });
 
   test('23.10 API spending report returns 200 with data', async ({ page }) => {
-    const loginResponse = await page.request.post('http://localhost:4000/api/v1/auth/login', {
+    const loginResponse = await page.request.post('http://localhost:9002/api/v1/auth/login', {
       data: { email: 'demo@kuber.app', password: 'password123' },
     });
     const { accessToken } = await loginResponse.json();
 
     const resp = await page.request.get(
-      'http://localhost:4000/api/v1/reports/spending?startDate=2026-01-01&endDate=2026-03-31',
+      'http://localhost:9002/api/v1/reports/spending?startDate=2026-01-01&endDate=2026-03-31',
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     expect(resp.status()).toBe(200);

@@ -91,11 +91,11 @@ test.describe('Multi-Currency', () => {
     const hasFX = await fxWidget.isVisible({ timeout: 3_000 }).catch(() => false);
     if (!hasFX) {
       // Try the FX API directly
-      const loginResponse = await page.request.post('http://localhost:4000/api/v1/auth/login', {
+      const loginResponse = await page.request.post('http://localhost:9002/api/v1/auth/login', {
         data: { email: 'demo@kuber.app', password: 'password123' },
       });
       const { accessToken } = await loginResponse.json();
-      const resp = await page.request.get('http://localhost:4000/api/v1/fx/rates', {
+      const resp = await page.request.get('http://localhost:9002/api/v1/fx/rates', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       // FX endpoint may 404 if server not updated

@@ -157,30 +157,30 @@ export function TaxAccountsSection() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+      <div className="flex justify-between items-center mb-5">
         <div>
-          <div style={{ fontSize: '1rem', fontWeight: 600 }}>Tax-Advantaged Accounts</div>
-          <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>
+          <div className="text-base font-semibold">Tax-Advantaged Accounts</div>
+          <div className="text-[0.8125rem] text-[var(--color-text-muted)] mt-0.5">
             Track TFSA, RRSP, FHSA, RESP contribution room and avoid over-contributions.
           </div>
         </div>
         {!showForm && (
           <Button size="sm" onClick={() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); }}>
-            <Plus size={14} style={{ marginRight: 4 }} /> Add Account
+            <Plus size={14} className="mr-1" /> Add Account
           </Button>
         )}
       </div>
 
       {/* Inline form */}
       {showForm && (
-        <Card style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
-          <div style={{ fontWeight: 600, marginBottom: '1rem' }}>
+        <Card className="p-5 mb-5">
+          <div className="font-semibold mb-4">
             {editId ? 'Edit Tax Account' : 'Add Tax Account'}
           </div>
           <form onSubmit={handleSubmit}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                <label className="text-[0.8125rem] font-medium block mb-1">
                   Account Name *
                 </label>
                 <Input
@@ -190,13 +190,13 @@ export function TaxAccountsSection() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                <label className="text-[0.8125rem] font-medium block mb-1">
                   Account Type *
                 </label>
                 <select
                   value={form.type}
                   onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', fontSize: '0.875rem' }}
+                  className="w-full px-3 py-2 rounded border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-sm"
                 >
                   {TAX_ACCOUNT_TYPES.map((t) => (
                     <option key={t} value={t}>{t}</option>
@@ -204,7 +204,7 @@ export function TaxAccountsSection() {
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                <label className="text-[0.8125rem] font-medium block mb-1">
                   Member Name
                 </label>
                 <Input
@@ -215,7 +215,7 @@ export function TaxAccountsSection() {
               </div>
               {form.type === 'TFSA' && (
                 <div>
-                  <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                  <label className="text-[0.8125rem] font-medium block mb-1">
                     Birth Year (for room calculation)
                   </label>
                   <Input
@@ -229,13 +229,13 @@ export function TaxAccountsSection() {
                 </div>
               )}
               <div>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                <label className="text-[0.8125rem] font-medium block mb-1">
                   Linked Account (optional)
                 </label>
                 <select
                   value={form.linkedAccountId}
                   onChange={(e) => setForm((f) => ({ ...f, linkedAccountId: e.target.value }))}
-                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', fontSize: '0.875rem' }}
+                  className="w-full px-3 py-2 rounded border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-sm"
                 >
                   <option value="">None</option>
                   {linkedAccounts.map((a) => (
@@ -244,7 +244,7 @@ export function TaxAccountsSection() {
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                <label className="text-[0.8125rem] font-medium block mb-1">
                   Total Room Ever (cumulative)
                 </label>
                 <Input
@@ -256,7 +256,7 @@ export function TaxAccountsSection() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                <label className="text-[0.8125rem] font-medium block mb-1">
                   Contributions YTD
                 </label>
                 <Input
@@ -268,7 +268,7 @@ export function TaxAccountsSection() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>
+                <label className="text-[0.8125rem] font-medium block mb-1">
                   Withdrawals YTD
                 </label>
                 <Input
@@ -279,8 +279,8 @@ export function TaxAccountsSection() {
                   min={0}
                 />
               </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>
+              <div className="col-span-2">
+                <label className="text-[0.8125rem] font-medium block mb-1">
                   Notes
                 </label>
                 <Input
@@ -290,7 +290,7 @@ export function TaxAccountsSection() {
                 />
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+            <div className="flex gap-2 mt-4">
               <Button type="submit" disabled={isBusy}>
                 {isBusy ? 'Saving…' : editId ? 'Save Changes' : 'Add Account'}
               </Button>
@@ -302,13 +302,13 @@ export function TaxAccountsSection() {
 
       {/* Accounts list */}
       {isLoading ? (
-        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>Loading…</div>
+        <div className="text-[var(--color-text-muted)] text-sm">Loading…</div>
       ) : accounts.length === 0 ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem', border: '1px dashed var(--color-border)', borderRadius: 8 }}>
+        <div className="p-8 text-center text-[var(--color-text-muted)] text-sm border border-dashed border-[var(--color-border)] rounded-lg">
           No tax accounts yet. Add one to start tracking contribution room.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className="flex flex-col gap-2">
           {accounts.map((acc) => {
             const pctUsed = acc.totalRoomEver > 0
               ? Math.min(100, Math.round((acc.contributionsYtd / acc.totalRoomEver) * 100))
@@ -321,73 +321,59 @@ export function TaxAccountsSection() {
             return (
               <div
                 key={acc.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  padding: '0.875rem 1rem',
-                  borderRadius: 8,
-                  border: '1px solid var(--color-border)',
-                  background: bg,
-                }}
+                className="flex items-center gap-4 px-4 py-3.5 rounded-lg border border-[var(--color-border)]"
+                style={{ background: bg }}
               >
                 {/* Type badge */}
-                <span style={{
-                  padding: '0.2rem 0.5rem',
-                  borderRadius: 4,
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  background: color,
-                  color: '#fff',
-                  minWidth: 48,
-                  textAlign: 'center',
-                  flexShrink: 0,
-                }}>
+                <span
+                  className="text-xs font-bold text-white min-w-[48px] text-center shrink-0 px-2 py-0.5 rounded"
+                  style={{ background: color }}
+                >
                   {acc.type}
                 </span>
 
                 {/* Name + member */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{acc.name}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-[0.9375rem]">{acc.name}</div>
                   {acc.memberName && (
-                    <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>{acc.memberName}</div>
+                    <div className="text-[0.8125rem] text-[var(--color-text-muted)]">{acc.memberName}</div>
                   )}
                 </div>
 
                 {/* Stats */}
-                <div style={{ display: 'flex', gap: '2rem', fontSize: '0.8125rem', textAlign: 'right', flexShrink: 0 }}>
+                <div className="flex gap-8 text-[0.8125rem] text-right shrink-0">
                   <div>
-                    <div style={{ color: 'var(--color-text-muted)' }}>Contributed YTD</div>
-                    <div style={{ fontWeight: 600 }}>{fmtCad(acc.contributionsYtd)}</div>
+                    <div className="text-[var(--color-text-muted)]">Contributed YTD</div>
+                    <div className="font-semibold">{fmtCad(acc.contributionsYtd)}</div>
                   </div>
                   <div>
-                    <div style={{ color: 'var(--color-text-muted)' }}>Room Remaining</div>
-                    <div style={{ fontWeight: 600, color }}>{fmtCad(roomRemaining)}</div>
+                    <div className="text-[var(--color-text-muted)]">Room Remaining</div>
+                    <div className="font-semibold" style={{ color }}>{fmtCad(roomRemaining)}</div>
                   </div>
                   <div>
-                    <div style={{ color: 'var(--color-text-muted)' }}>Used</div>
-                    <div style={{ fontWeight: 600, color }}>{pctUsed}%</div>
+                    <div className="text-[var(--color-text-muted)]">Used</div>
+                    <div className="font-semibold" style={{ color }}>{pctUsed}%</div>
                   </div>
                   {overContrib > 0 && (
                     <div>
-                      <div style={{ color: 'var(--color-text-muted)' }}>Over by</div>
-                      <div style={{ fontWeight: 700, color: '#ef4444' }}>{fmtCad(overContrib)}</div>
+                      <div className="text-[var(--color-text-muted)]">Over by</div>
+                      <div className="font-bold text-[#ef4444]">{fmtCad(overContrib)}</div>
                     </div>
                   )}
                 </div>
 
                 {/* Actions */}
-                <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
+                <div className="flex gap-1 shrink-0">
                   <button
                     onClick={() => openEdit(acc)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: 'var(--color-text-muted)' }}
+                    className="bg-transparent border-none cursor-pointer p-1 text-[var(--color-text-muted)]"
                     title="Edit"
                   >
                     <Pencil size={15} />
                   </button>
                   <button
                     onClick={() => setConfirmDelete(acc.id)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: 'var(--color-text-muted)' }}
+                    className="bg-transparent border-none cursor-pointer p-1 text-[var(--color-text-muted)]"
                     title="Delete"
                   >
                     <Trash2 size={15} />
@@ -401,17 +387,13 @@ export function TaxAccountsSection() {
 
       {/* Confirm delete */}
       {confirmDelete && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 50,
-          background: 'rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <div style={{ background: 'var(--color-surface)', borderRadius: 10, padding: '1.5rem', maxWidth: 360, width: '100%' }}>
-            <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Delete Tax Account?</div>
-            <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+          <div className="bg-[var(--color-surface)] rounded-[10px] p-6 max-w-[360px] w-full">
+            <div className="font-semibold mb-2">Delete Tax Account?</div>
+            <div className="text-sm text-[var(--color-text-muted)] mb-5">
               This will permanently remove this tax account record.
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <div className="flex gap-2 justify-end">
               <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(null)}>Cancel</Button>
               <Button
                 variant="danger"

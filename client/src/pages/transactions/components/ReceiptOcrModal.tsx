@@ -92,7 +92,7 @@ export function ReceiptOcrModal({ onClose, accountId }: Props) {
             <Camera size={18} />
             <h2 className="font-semibold">Scan Receipt</h2>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[color:var(--color-surface-hover)]">
+          <button onClick={onClose} aria-label="Close receipt scanner" className="p-1 rounded hover:bg-[color:var(--color-surface-hover)]">
             <X size={18} />
           </button>
         </div>

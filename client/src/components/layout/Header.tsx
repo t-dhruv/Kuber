@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { useLocation, NavLink } from 'react-router-dom';
-import { Menu, Search, Bell, Settings } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { useLocation, NavLink, useNavigate } from 'react-router-dom';
+import { Menu, Search, Bell, Settings, LogOut, User } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
@@ -48,10 +48,31 @@ interface HeaderProps {
 
 export function Header({ onToggleSidebar }: HeaderProps) {
   const location = useLocation();
-  const { user } = useAuthStore();
+  const { user, clearAuth } = useAuthStore();
+  const navigate = useNavigate();
   const pageLabel = getPageLabel(location.pathname);
   const [notifOpen, setNotifOpen] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleLogout = () => {
+    clearAuth();
+    navigate('/login');
+  };
+
+  // Close user menu on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    if (userMenuOpen) {
+      document.addEventListener('mousedown', handler);
+    }
+    return () => document.removeEventListener('mousedown', handler);
+  }, [userMenuOpen]);
 
   // Fetch unread count via the notifications list query (shared with drawer)
   const { data: notifData } = useQuery<NotificationsResponse>({
@@ -136,13 +157,62 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             </NavLink>
           </Tooltip>
 
-          {/* User avatar */}
-          <div className="ml-1">
-            <Avatar
-              name={user ? `${user.firstName} ${user.lastName}` : 'User'}
-              size="sm"
-              className="cursor-pointer"
-            />
+          {/* User avatar + dropdown menu */}
+          <div className="ml-1 relative" ref={userMenuRef}>
+            <Tooltip content="Account" placement="bottom" disabled={userMenuOpen}>
+              <button
+                onClick={() => setUserMenuOpen((v) => !v)}
+                className="rounded-full focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+                aria-label="Open user menu"
+                aria-expanded={userMenuOpen}
+              >
+                <Avatar
+                  name={user ? `${user.firstName} ${user.lastName}` : 'User'}
+                  size="sm"
+                  className="cursor-pointer"
+                />
+              </button>
+            </Tooltip>
+
+            {/* Dropdown */}
+            {userMenuOpen && (
+              <div
+                className="absolute right-0 top-full mt-2 w-52 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] z-50 overflow-hidden"
+                role="menu"
+              >
+                {/* User info */}
+                <div className="px-4 py-3 border-b border-[var(--color-border)]">
+                  <p className="text-sm font-semibold text-[var(--color-text)] truncate">
+                    {user ? `${user.firstName} ${user.lastName}` : 'User'}
+                  </p>
+                  <p className="text-xs text-[var(--color-text-muted)] truncate mt-0.5">
+                    {user?.email ?? ''}
+                  </p>
+                </div>
+
+                {/* Menu items */}
+                <div className="py-1">
+                  <NavLink
+                    to="/settings"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] transition-colors"
+                    role="menuitem"
+                  >
+                    <User size={14} />
+                    Profile &amp; Settings
+                  </NavLink>
+
+                  <button
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 transition-colors"
+                    role="menuitem"
+                  >
+                    <LogOut size={14} />
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>

@@ -141,35 +141,22 @@ export function SplitTransactionModal({ transaction, categories, isOpen, onClose
       size="lg"
     >
       {/* Original amount */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '0.75rem 1rem',
-        backgroundColor: 'var(--color-bg)',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--color-border)',
-        marginBottom: '1.25rem',
-      }}>
-        <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+      <div className="flex justify-between items-center px-4 py-3 bg-[var(--color-bg)] rounded-[var(--radius-md)] border border-[var(--color-border)] mb-5">
+        <span className="text-sm text-[var(--color-text-secondary)]">
           Original amount
         </span>
-        <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>
+        <span className="text-base font-bold text-[var(--color-text)] [font-variant-numeric:tabular-nums]">
           {fmtCurrency(originalAmount)}
         </span>
       </div>
 
       {/* Split rows */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+      <div className="flex flex-col gap-3 mb-4">
         {rows.map((row, idx) => (
-          <div key={row._id} style={{
-            display: 'flex', gap: '0.5rem', alignItems: 'flex-end',
-            padding: '0.75rem',
-            backgroundColor: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-          }}>
+          <div key={row._id} className="flex gap-2 items-end p-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)]">
             {/* Category */}
-            <div style={{ flex: '1 1 160px', minWidth: 0 }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>
+            <div className="flex-[1_1_160px] min-w-0">
+              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
                 Category
               </label>
               <Select
@@ -181,8 +168,8 @@ export function SplitTransactionModal({ transaction, categories, isOpen, onClose
             </div>
 
             {/* Amount */}
-            <div style={{ flex: '0 0 100px' }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>
+            <div className="flex-[0_0_100px]">
+              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
                 Amount ($)
               </label>
               <input
@@ -192,20 +179,13 @@ export function SplitTransactionModal({ transaction, categories, isOpen, onClose
                 value={row.amount}
                 onChange={(e) => updateRow(idx, 'amount', e.target.value)}
                 placeholder="0.00"
-                style={{
-                  width: '100%', padding: '0.4rem 0.625rem',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border)',
-                  backgroundColor: 'var(--color-surface)',
-                  color: 'var(--color-text)', fontSize: '0.875rem',
-                  fontFamily: 'inherit', boxSizing: 'border-box',
-                }}
+                className="w-full py-[0.4rem] px-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-sm font-[inherit] box-border"
               />
             </div>
 
             {/* Note */}
-            <div style={{ flex: '1 1 120px', minWidth: 0 }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: '0.25rem' }}>
+            <div className="flex-[1_1_120px] min-w-0">
+              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
                 Note (optional)
               </label>
               <input
@@ -213,14 +193,7 @@ export function SplitTransactionModal({ transaction, categories, isOpen, onClose
                 value={row.note}
                 onChange={(e) => updateRow(idx, 'note', e.target.value)}
                 placeholder="Note..."
-                style={{
-                  width: '100%', padding: '0.4rem 0.625rem',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border)',
-                  backgroundColor: 'var(--color-surface)',
-                  color: 'var(--color-text)', fontSize: '0.875rem',
-                  fontFamily: 'inherit', boxSizing: 'border-box',
-                }}
+                className="w-full py-[0.4rem] px-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-sm font-[inherit] box-border"
               />
             </div>
 
@@ -229,11 +202,10 @@ export function SplitTransactionModal({ transaction, categories, isOpen, onClose
               onClick={() => removeRow(idx)}
               disabled={rows.length <= 2}
               title="Remove row"
+              className="shrink-0 bg-transparent border-none p-1.5 rounded-[var(--radius-sm)]"
               style={{
-                flexShrink: 0,
-                background: 'none', border: 'none', cursor: rows.length <= 2 ? 'not-allowed' : 'pointer',
+                cursor: rows.length <= 2 ? 'not-allowed' : 'pointer',
                 color: rows.length <= 2 ? 'var(--color-text-muted)' : 'var(--color-danger)',
-                padding: '0.375rem', borderRadius: 'var(--radius-sm)',
                 opacity: rows.length <= 2 ? 0.4 : 1,
               }}
             >
@@ -246,38 +218,31 @@ export function SplitTransactionModal({ transaction, categories, isOpen, onClose
       {/* Add row */}
       <button
         onClick={addRow}
-        style={{
-          display: 'flex', alignItems: 'center', gap: '0.375rem',
-          background: 'none', border: '1px dashed var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          color: 'var(--color-accent)', fontSize: '0.875rem', fontWeight: 500,
-          cursor: 'pointer', padding: '0.5rem 0.75rem', width: '100%',
-          justifyContent: 'center', marginBottom: '1.25rem',
-        }}
+        className="flex items-center gap-1.5 bg-transparent border border-dashed border-[var(--color-border)] rounded-[var(--radius-md)] text-[var(--color-accent)] text-sm font-medium cursor-pointer py-2 px-3 w-full justify-center mb-5"
       >
         <Plus size={14} />
         Add split line
       </button>
 
       {/* Running total */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '0.75rem 1rem',
-        backgroundColor: isBalanced ? 'var(--color-success-light, #f0fdf4)' : 'var(--color-warning-light)',
-        border: `1px solid ${isBalanced ? 'var(--color-success, #22c55e)' : 'var(--color-warning)'}`,
-        borderRadius: 'var(--radius-md)',
-      }}>
-        <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>
+      <div
+        className="flex justify-between items-center px-4 py-3 rounded-[var(--radius-md)]"
+        style={{
+          backgroundColor: isBalanced ? 'var(--color-success-light, #f0fdf4)' : 'var(--color-warning-light)',
+          border: `1px solid ${isBalanced ? 'var(--color-success, #22c55e)' : 'var(--color-warning)'}`,
+        }}
+      >
+        <span className="text-sm font-medium text-[var(--color-text)]">
           {isBalanced
             ? 'Amounts balance'
             : remainingCents > 0
               ? `$${(remainingCents / 100).toFixed(2)} remaining to allocate`
               : `Over by $${(remainingCents / 100).toFixed(2)}`}
         </span>
-        <span style={{
-          fontSize: '0.875rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-          color: isBalanced ? 'var(--color-success, #16a34a)' : 'var(--color-warning)',
-        }}>
+        <span
+          className="text-sm font-bold [font-variant-numeric:tabular-nums]"
+          style={{ color: isBalanced ? 'var(--color-success, #16a34a)' : 'var(--color-warning)' }}
+        >
           {fmtCurrency(splitTotal)} / {fmtCurrency(originalAmount)}
         </span>
       </div>

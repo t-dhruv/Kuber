@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 import authRouter from './routes/auth';
 import usersRouter from './routes/users';
 import dashboardRouter from './routes/dashboard';
@@ -46,10 +47,45 @@ import { runProactiveChecks } from './lib/proactiveAi';
 import { runImapCheckForAllHouseholds } from './lib/imapWatcher';
 import { prisma } from './lib/prisma';
 
+// ── Startup env validation ────────────────────────────────────────────────────
+const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'DATABASE_URL'] as const;
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    console.error(`[startup] Missing required environment variable: ${key}`);
+    process.exit(1);
+  }
+}
+
+if (process.env.NODE_ENV === 'production' && !process.env.CLIENT_URL) {
+  console.error('[startup] CLIENT_URL must be set in production');
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT ?? 4000;
 
 const clientUrl = process.env.CLIENT_URL ?? 'http://localhost:3000';
+
+// ── Rate limiters ─────────────────────────────────────────────────────────────
+// Auth endpoints: strict limit to slow brute-force attacks
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
+// General API: generous limit to prevent abuse
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  skip: () => process.env.NODE_ENV === 'test',
+});
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -65,7 +101,7 @@ app.use(helmet({
       baseUri: ["'self'"],
     },
   },
-  crossOriginEmbedderPolicy: false, // Allow embedding for dev
+  crossOriginEmbedderPolicy: process.env.NODE_ENV === 'production',
 }));
 app.use(cors({ origin: clientUrl, credentials: true }));
 // Skip compression for SSE streaming endpoints — compression buffers the response
@@ -77,8 +113,13 @@ app.use(compression({
     return compression.filter(req, res);
   },
 }) as any);
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+
+// Apply rate limiters
+app.use('/api/v1/auth', authLimiter);
+app.use('/api/', apiLimiter);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', name: 'Kuber API' }));
@@ -181,7 +222,7 @@ setInterval(async () => {
   await runImapCheckForAllHouseholds(prisma).catch(console.error);
 }, 60 * 60 * 1000);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Kuber server running on :${PORT}`);
   takeNetWorthSnapshot().catch((err) =>
     console.error('[networth-job] startup snapshot failed:', err),
@@ -190,3 +231,25 @@ app.listen(PORT, () => {
     console.error('[account-balance-job] startup snapshot failed:', err),
   );
 });
+
+// ── Graceful shutdown ─────────────────────────────────────────────────────────
+async function shutdown(signal: string) {
+  console.log(`[shutdown] ${signal} received — shutting down gracefully`);
+  server.close(async () => {
+    try {
+      await prisma.$disconnect();
+      console.log('[shutdown] Database disconnected. Bye.');
+    } catch (err) {
+      console.error('[shutdown] Error disconnecting database:', err);
+    }
+    process.exit(0);
+  });
+  // Force exit after 10s if connections don't drain
+  setTimeout(() => {
+    console.error('[shutdown] Forced exit after timeout');
+    process.exit(1);
+  }, 10_000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

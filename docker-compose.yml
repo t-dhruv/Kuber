@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: kuber_dev
       POSTGRES_DB: kuber_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - kuber_pgdata:/var/lib/postgresql/data
     healthcheck:

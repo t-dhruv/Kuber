@@ -70,12 +70,12 @@ test.describe('Duplicate Detection', () => {
 
   test('20.6 API GET /transactions/duplicates returns correctly', async ({ page }) => {
     // Test the API directly through page.request
-    const loginResponse = await page.request.post('http://localhost:4000/api/v1/auth/login', {
+    const loginResponse = await page.request.post('http://localhost:9002/api/v1/auth/login', {
       data: { email: 'demo@kuber.app', password: 'password123' },
     });
     const { accessToken } = await loginResponse.json();
 
-    const resp = await page.request.get('http://localhost:4000/api/v1/transactions/duplicates', {
+    const resp = await page.request.get('http://localhost:9002/api/v1/transactions/duplicates', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     expect(resp.status()).toBe(200);

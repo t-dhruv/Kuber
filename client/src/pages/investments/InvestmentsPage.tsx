@@ -351,8 +351,9 @@ function PerformanceChart({ data, isLoading }: { data?: HistoryPoint[]; isLoadin
         <Skeleton height={220} width="100%" />
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={data ?? []} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <div role="img" aria-label="Portfolio performance chart">
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={data ?? []} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
               <XAxis
                 dataKey="date"
@@ -387,7 +388,8 @@ function PerformanceChart({ data, isLoading }: { data?: HistoryPoint[]; isLoadin
                 activeDot={{ r: 4 }}
               />
             </LineChart>
-          </ResponsiveContainer>
+            </ResponsiveContainer>
+          </div>
           <div style={{
             textAlign: 'center',
             marginTop: '0.375rem',
@@ -1103,8 +1105,9 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
     <Card padding="lg">
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flexShrink: 0 }}>
-          <ResponsiveContainer width={260} height={260}>
-            <PieChart>
+          <div role="img" aria-label="Portfolio allocation pie chart">
+            <ResponsiveContainer width={260} height={260}>
+              <PieChart>
               <Pie
                 data={segments}
                 dataKey="value"
@@ -1121,7 +1124,8 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
                 ))}
               </Pie>
             </PieChart>
-          </ResponsiveContainer>
+            </ResponsiveContainer>
+          </div>
           <div style={{
             position: 'absolute',
             top: '50%',

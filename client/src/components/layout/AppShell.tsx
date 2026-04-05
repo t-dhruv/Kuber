@@ -50,6 +50,14 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
+      {/* Skip nav */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-[var(--color-accent)] focus:text-white focus:rounded-[var(--radius-md)] focus:text-sm focus:font-medium"
+      >
+        Skip to main content
+      </a>
+
       {/* Mobile backdrop */}
       {mobileOpen && (
         <div
@@ -82,7 +90,7 @@ export function AppShell() {
             }
           }}
         />
-        <main className="flex-1 overflow-auto p-4 md:p-6">
+        <main id="main-content" role="main" className="flex-1 overflow-auto p-4 md:p-6">
           <Outlet />
         </main>
       </div>

@@ -181,40 +181,29 @@ export function EmailConnectorSection() {
   return (
     <Card padding="lg">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+      <div className="flex items-center gap-2 mb-2">
         <Mail size={18} color="var(--color-primary)" />
-        <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>Email / IMAP Connector</span>
+        <span className="font-semibold text-[var(--color-text)]">Email / IMAP Connector</span>
       </div>
 
-      <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', margin: '0 0 1rem 0' }}>
+      <p className="text-sm text-[var(--color-text-secondary)] m-0 mb-4">
         Automatically import transactions from Amazon order emails and PayPal receipts.
       </p>
 
       {/* Status badge */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
-        <span style={{
-          width: 8, height: 8, borderRadius: '50%',
-          backgroundColor: isConfigured ? 'var(--color-success, #22c55e)' : 'var(--color-text-muted)',
-          display: 'inline-block', flexShrink: 0,
-        }} />
-        <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+      <div className="flex items-center gap-2 mb-5">
+        <span
+          className="w-2 h-2 rounded-full inline-block shrink-0"
+          style={{ backgroundColor: isConfigured ? 'var(--color-success, #22c55e)' : 'var(--color-text-muted)' }}
+        />
+        <span className="text-[0.8125rem] text-[var(--color-text-secondary)]">
           {isConfigured ? `Connected — ${config?.user}` : 'Not configured'}
         </span>
       </div>
 
       {/* Info banner */}
-      <div style={{
-        display: 'flex', gap: '0.625rem', alignItems: 'flex-start',
-        backgroundColor: 'var(--color-surface-hover)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',
-        padding: '0.75rem 1rem',
-        marginBottom: '1.25rem',
-        fontSize: '0.8125rem',
-        color: 'var(--color-text-secondary)',
-        lineHeight: 1.5,
-      }}>
-        <Info size={14} style={{ flexShrink: 0, marginTop: 2, color: 'var(--color-primary)' }} />
+      <div className="flex gap-2.5 items-start bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-[var(--radius-md)] px-4 py-3 mb-5 text-[0.8125rem] text-[var(--color-text-secondary)] leading-relaxed">
+        <Info size={14} className="shrink-0 mt-0.5 text-[var(--color-primary)]" />
         <span>
           Parses <strong>Amazon order confirmations</strong> (subject: "Your Amazon.com order") and{' '}
           <strong>PayPal payment receipts</strong> (subject: "You sent a payment") from your inbox.
@@ -223,20 +212,20 @@ export function EmailConnectorSection() {
       </div>
 
       {/* Form */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+      <div className="flex flex-col gap-3.5">
 
         {/* Host + Port row */}
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle}>IMAP Host</label>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className={labelClass}>IMAP Host</label>
             <Input
               value={host}
               onChange={(e) => setHost(e.target.value)}
               placeholder="imap.gmail.com"
             />
           </div>
-          <div style={{ width: 100 }}>
-            <label style={labelStyle}>Port</label>
+          <div className="w-[100px]">
+            <label className={labelClass}>Port</label>
             <Input
               type="number"
               value={String(port)}
@@ -248,7 +237,7 @@ export function EmailConnectorSection() {
 
         {/* Username */}
         <div>
-          <label style={labelStyle}>Username / Email</label>
+          <label className={labelClass}>Username / Email</label>
           <Input
             value={user}
             onChange={(e) => setUser(e.target.value)}
@@ -258,15 +247,15 @@ export function EmailConnectorSection() {
 
         {/* Password */}
         <div>
-          <label style={labelStyle}>
+          <label className={labelClass}>
             Password
             {isConfigured && (
-              <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: '0.5rem' }}>
+              <span className="font-normal text-[var(--color-text-muted)] ml-2">
                 — leave blank to keep existing
               </span>
             )}
           </label>
-          <div style={{ position: 'relative' }}>
+          <div className="relative">
             <Input
               type={showPassword ? 'text' : 'password'}
               value={password}
@@ -276,12 +265,7 @@ export function EmailConnectorSection() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              style={{
-                position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)',
-                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                color: 'var(--color-text-secondary)',
-                display: 'flex', alignItems: 'center',
-              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 bg-transparent border-none cursor-pointer p-0 text-[var(--color-text-secondary)] flex items-center"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -290,20 +274,20 @@ export function EmailConnectorSection() {
         </div>
 
         {/* TLS */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="flex items-center gap-2">
           <Checkbox
             checked={tls}
             onChange={(e) => setTls((e.target as HTMLInputElement).checked)}
             id="imap-tls"
           />
-          <label htmlFor="imap-tls" style={{ fontSize: '0.8125rem', color: 'var(--color-text)', cursor: 'pointer' }}>
+          <label htmlFor="imap-tls" className="text-[0.8125rem] text-[var(--color-text)] cursor-pointer">
             Use TLS (recommended — port 993)
           </label>
         </div>
 
         {/* Folder */}
         <div>
-          <label style={labelStyle}>Folder</label>
+          <label className={labelClass}>Folder</label>
           <Input
             value={folder}
             onChange={(e) => setFolder(e.target.value)}
@@ -313,14 +297,14 @@ export function EmailConnectorSection() {
 
         {/* Account */}
         <div>
-          <label style={labelStyle}>Destination Account</label>
+          <label className={labelClass}>Destination Account</label>
           <Select
             value={accountId}
             onChange={(e) => setAccountId(e.target.value)}
             options={accountOptions}
           />
           {!accountId && (
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">
               Select an account to enable saving.
             </p>
           )}
@@ -328,28 +312,25 @@ export function EmailConnectorSection() {
 
         {/* Test result */}
         {testResult && (
-          <div style={{
-            backgroundColor: 'var(--color-surface-hover)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: '0.75rem 1rem',
-            fontSize: '0.8125rem',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: testResult.preview.length ? '0.625rem' : 0 }}>
+          <div className="bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-[var(--radius-md)] px-4 py-3 text-[0.8125rem]">
+            <div className={`flex items-center gap-2 ${testResult.preview.length ? 'mb-2.5' : ''}`}>
               {testResult.success
                 ? <CheckCircle2 size={14} color="var(--color-success, #22c55e)" />
                 : <XCircle size={14} color="var(--color-danger, #ef4444)" />}
-              <span style={{ color: testResult.success ? 'var(--color-success, #22c55e)' : 'var(--color-danger, #ef4444)', fontWeight: 500 }}>
+              <span
+                className="font-medium"
+                style={{ color: testResult.success ? 'var(--color-success, #22c55e)' : 'var(--color-danger, #ef4444)' }}
+              >
                 {testResult.success ? `Connection successful — found ${testResult.found} matching email${testResult.found !== 1 ? 's' : ''}` : 'Connection failed'}
               </span>
             </div>
             {testResult.preview.length > 0 && (
-              <div style={{ color: 'var(--color-text-secondary)' }}>
-                <div style={{ fontWeight: 500, marginBottom: '0.375rem' }}>Preview:</div>
+              <div className="text-[var(--color-text-secondary)]">
+                <div className="font-medium mb-1.5">Preview:</div>
                 {testResult.preview.map((tx, i) => (
-                  <div key={i} style={{ display: 'flex', gap: '0.5rem', paddingLeft: '0.5rem' }}>
+                  <div key={i} className="flex gap-2 pl-2">
                     <span>{tx.description}</span>
-                    <span style={{ color: 'var(--color-danger, #ef4444)' }}>${Math.abs(tx.amount).toFixed(2)}</span>
+                    <span className="text-[var(--color-danger,#ef4444)]">${Math.abs(tx.amount).toFixed(2)}</span>
                     <span>{tx.date}</span>
                   </div>
                 ))}
@@ -360,19 +341,15 @@ export function EmailConnectorSection() {
 
         {/* Sync result */}
         {syncResult && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '0.5rem',
-            fontSize: '0.8125rem',
-            color: 'var(--color-success, #22c55e)',
-          }}>
+          <div className="flex items-center gap-2 text-[0.8125rem] text-[var(--color-success,#22c55e)]">
             <CheckCircle2 size={14} />
             Imported {syncResult.imported} transaction{syncResult.imported !== 1 ? 's' : ''} (found {syncResult.found} emails)
           </div>
         )}
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.25rem', alignItems: 'center' }}>
-          <div title={!canSave ? 'Select an account first' : undefined} style={{ display: 'inline-flex' }}>
+        <div className="flex gap-3 flex-wrap mt-1 items-center">
+          <div title={!canSave ? 'Select an account first' : undefined} className="inline-flex">
             <Button
               variant="primary"
               size="sm"
@@ -411,7 +388,7 @@ export function EmailConnectorSection() {
               size="sm"
               loading={removeMutation.isPending}
               onClick={() => removeMutation.mutate()}
-              style={{ color: 'var(--color-danger, #ef4444)', marginLeft: 'auto' }}
+              className="ml-auto text-[var(--color-danger,#ef4444)]"
             >
               Remove
             </Button>
@@ -424,10 +401,4 @@ export function EmailConnectorSection() {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const labelStyle: React.CSSProperties = {
-  fontSize: '0.8125rem',
-  fontWeight: 500,
-  color: 'var(--color-text)',
-  display: 'block',
-  marginBottom: '0.375rem',
-};
+const labelClass = 'text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5';

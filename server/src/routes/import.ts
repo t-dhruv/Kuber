@@ -282,6 +282,7 @@ const ConfirmSchema = z.object({
   rows: z.array(ConfirmRowSchema).max(5000, 'Cannot import more than 5000 rows at once'),
   filename: z.string().max(255).optional(),
   bankSource: z.string().max(50).optional(),
+  batchId: z.string().max(64).optional(),
 });
 
 router.post('/confirm', async (req: AuthRequest, res) => {
@@ -289,7 +290,7 @@ router.post('/confirm', async (req: AuthRequest, res) => {
     const body = ConfirmSchema.safeParse(req.body);
     if (!body.success) return res.status(400).json({ error: body.error.flatten() });
 
-    const { accountId, rows, filename, bankSource } = body.data;
+    const { accountId, rows, filename, bankSource, batchId } = body.data;
 
     const account = await prisma.account.findFirst({
       where: { id: accountId, householdId: req.householdId! },
@@ -371,7 +372,7 @@ router.post('/confirm', async (req: AuthRequest, res) => {
                 date: txDate,
                 shares: isBuy ? shareDelta : -shareDelta,
                 pricePerShare: price,
-                note: row.description,
+                note: [row.description, batchId ? `[batch:${batchId}]` : null].filter(Boolean).join(' '),
                 status: 'confirmed',
               },
             });
@@ -402,6 +403,8 @@ router.post('/confirm', async (req: AuthRequest, res) => {
             merchantCache.set(merchantKey, merchantId);
           }
 
+          const batchNote = batchId ? `[batch:${batchId}]` : null;
+          const notes = [row.notes, batchNote].filter(Boolean).join(' ') || null;
           await tx.transaction.create({
             data: {
               householdId: req.householdId!,
@@ -412,7 +415,7 @@ router.post('/confirm', async (req: AuthRequest, res) => {
               amount: row.amount,
               categoryId: resolvedCategoryId,
               merchantId,
-              notes: row.notes ?? null,
+              notes,
               needsReview: !resolvedCategoryId,
             },
           });

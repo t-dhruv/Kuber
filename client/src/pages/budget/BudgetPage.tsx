@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Settings, Pencil, Plus, ChevronDown, ChevronUp, AlertTriangle, X, Sparkles, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
-import { Button, Input, Select, Modal, ModalFooter, Skeleton, Card } from '@/components/ui';
+import { Button, Input, Select, Modal, ModalFooter, Skeleton, Card, toast } from '@/components/ui';
 import { useAiStream } from '@/hooks/useAiStream';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
@@ -148,66 +148,35 @@ function EditableBudgetCell({
 
   if (editing) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', alignItems: 'flex-end' }}>
+      <div className="flex flex-col gap-1.5 items-end">
         <input
           ref={inputRef}
           type="number"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={handleKeyDown}
-          style={{
-            width: '90px',
-            padding: '2px 6px',
-            fontSize: '0.875rem',
-            border: '1px solid var(--color-accent)',
-            borderRadius: 'var(--radius-sm)',
-            backgroundColor: 'var(--color-surface)',
-            color: 'var(--color-text)',
-            outline: 'none',
-            textAlign: 'right',
-          }}
+          className="w-[90px] text-sm border border-[var(--color-accent)] rounded-[var(--radius-sm)] bg-[var(--color-surface)] text-[var(--color-text)] outline-none text-right px-1.5 py-0.5"
         />
         <select
           value={draftType}
           onChange={(e) => setDraftType(e.target.value as BudgetType)}
           onBlur={commit}
-          style={{
-            fontSize: '0.6875rem',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            backgroundColor: 'var(--color-surface)',
-            color: 'var(--color-text-secondary)',
-            padding: '1px 4px',
-            cursor: 'pointer',
-            maxWidth: '120px',
-          }}
+          className="text-[0.6875rem] border border-[var(--color-border)] rounded-[var(--radius-sm)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] px-1 py-px cursor-pointer max-w-[120px]"
         >
           {BUDGET_TYPE_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{BUDGET_TYPE_LABELS[o.value as BudgetType]}</option>
           ))}
         </select>
-        <div style={{ display: 'flex', gap: '0.25rem' }}>
+        <div className="flex gap-1">
           <button
             onClick={commit}
-            style={{
-              fontSize: '0.6875rem', padding: '1px 8px',
-              border: '1px solid var(--color-accent)',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--color-accent)',
-              color: '#fff', cursor: 'pointer',
-            }}
+            className="text-[0.6875rem] px-2 py-px border border-[var(--color-accent)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-white cursor-pointer"
           >
             Save
           </button>
           <button
             onClick={() => setEditing(false)}
-            style={{
-              fontSize: '0.6875rem', padding: '1px 8px',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'transparent',
-              color: 'var(--color-text-muted)', cursor: 'pointer',
-            }}
+            className="text-[0.6875rem] px-2 py-px border border-[var(--color-border)] rounded-[var(--radius-sm)] bg-transparent text-[var(--color-text-muted)] cursor-pointer"
           >
             Cancel
           </button>
@@ -221,26 +190,17 @@ function EditableBudgetCell({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={startEdit}
-      style={{
-        display: 'inline-flex',
-        flexDirection: 'column',
-        alignItems: 'flex-end',
-        gap: '0.125rem',
-        cursor: 'pointer',
-        padding: '2px 4px',
-        borderRadius: 'var(--radius-sm)',
-        borderBottom: hovered ? '1px dashed var(--color-border-strong)' : '1px dashed transparent',
-        transition: 'border-color 0.15s',
-      }}
+      className="inline-flex flex-col items-end gap-px cursor-pointer px-1 py-0.5 rounded-[var(--radius-sm)] transition-[border-color] duration-150"
+      style={{ borderBottom: hovered ? '1px dashed var(--color-border-strong)' : '1px dashed transparent' }}
     >
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.875rem', color: 'var(--color-text)' }}>
+      <div className="inline-flex items-center gap-1 text-sm text-[var(--color-text)]">
         {hovered && (
-          <Pencil size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+          <Pencil size={11} className="text-[var(--color-text-muted)] shrink-0" />
         )}
         {fmtCurrency(value)}
       </div>
       {budgetType && (
-        <span style={{ fontSize: '0.625rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <span className="text-[0.625rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em]">
           {BUDGET_TYPE_LABELS[budgetType]}
         </span>
       )}
@@ -256,23 +216,14 @@ function ProgressBar({ actual, budget }: { actual: number; budget: number }) {
   const label = budget > 0 ? `${Math.round((actual / budget) * 100)}%` : '—';
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-      <div style={{
-        flex: 1,
-        height: 5,
-        backgroundColor: 'var(--color-border)',
-        borderRadius: 'var(--radius-full)',
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          height: '100%',
-          width: `${pct * 100}%`,
-          backgroundColor: color,
-          borderRadius: 'var(--radius-full)',
-          transition: 'width 0.3s ease',
-        }} />
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-[5px] bg-[var(--color-border)] rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-[width] duration-300 ease-in-out"
+          style={{ width: `${pct * 100}%`, backgroundColor: color }}
+        />
       </div>
-      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: '2.5rem', textAlign: 'right' }}>
+      <span className="text-xs text-[var(--color-text-muted)] min-w-10 text-right">
         {label}
       </span>
     </div>
@@ -325,6 +276,7 @@ function AddBudgetModal({
       queryClient.invalidateQueries({ queryKey: ['budgets', year, month] });
       onClose();
     },
+    onError: () => toast.error('Failed to save budget'),
   });
 
   function handleSubmit() {
@@ -339,10 +291,10 @@ function AddBudgetModal({
       title={preselectedCategoryName ? `Add budget for ${preselectedCategoryName}` : 'Add Budget'}
       size="sm"
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div className="flex flex-col gap-4">
         {!preselectedCategoryId && (
           <div>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
+            <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
               Category
             </label>
             <Select
@@ -358,7 +310,7 @@ function AddBudgetModal({
         )}
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
+          <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
             Budget amount
           </label>
           <Input
@@ -372,7 +324,7 @@ function AddBudgetModal({
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
+          <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
             Budget type
           </label>
           <Select
@@ -446,6 +398,7 @@ function AddCategoryModal({
       setAmount('');
       setBudgetType('FLEXIBLE');
     },
+    onError: () => toast.error('Failed to save budget'),
   });
 
   function handleSubmit() {
@@ -460,9 +413,9 @@ function AddCategoryModal({
       title={`Add category to ${groupName}`}
       size="sm"
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div className="flex flex-col gap-4">
         <div>
-          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
+          <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
             Category
           </label>
           <Select
@@ -477,7 +430,7 @@ function AddCategoryModal({
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
+          <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
             Budget amount
           </label>
           <Input
@@ -491,7 +444,7 @@ function AddCategoryModal({
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
+          <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
             Budget type
           </label>
           <Select
@@ -548,49 +501,33 @@ function BudgetRow({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets', year, month] });
     },
+    onError: () => toast.error('Failed to save budget'),
   });
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        backgroundColor: hovered ? 'var(--color-surface-hover)' : 'transparent',
-        borderRadius: 'var(--radius-sm)',
-        transition: 'background-color 0.1s',
-        padding: '0 0.5rem',
-      }}
+      className="rounded-[var(--radius-sm)] transition-colors duration-100 px-2"
+      style={{ backgroundColor: hovered ? 'var(--color-surface-hover)' : 'transparent' }}
     >
       {/* Main row — responsive: name+amount on mobile, full 4-col on sm+ */}
       <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_100px_90px] items-center gap-2 min-h-[44px]">
         {/* Name */}
         <div
           onClick={() => onNavigateToTransactions?.(item.id)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            cursor: 'pointer',
-            overflow: 'hidden',
-          }}
+          className="flex items-center gap-2 cursor-pointer overflow-hidden"
         >
           {item.icon && (
-            <span style={{ fontSize: '1rem', flexShrink: 0 }}>{item.icon}</span>
+            <span className="text-base shrink-0">{item.icon}</span>
           )}
-          <span style={{
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: 'var(--color-text)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}>
+          <span className="text-sm font-medium text-[var(--color-text)] whitespace-nowrap overflow-hidden text-ellipsis">
             {item.name}
           </span>
         </div>
 
         {/* Budget (editable with type selector) */}
-        <div style={{ textAlign: 'right' }}>
+        <div className="text-right">
           <EditableBudgetCell
             value={item.budgeted}
             budgetType={item.budgetType}
@@ -599,18 +536,18 @@ function BudgetRow({
         </div>
 
         {/* Actual — hidden on mobile */}
-        <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', color: 'var(--color-text)' }}>
+        <div className="hidden sm:block text-right text-sm text-[var(--color-text)]">
           {fmtCurrency(item.actual)}
         </div>
 
         {/* Remaining — hidden on mobile */}
-        <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, color: remainingColor(item.remaining) }}>
+        <div className="hidden sm:block text-right text-sm font-medium" style={{ color: remainingColor(item.remaining) }}>
           {fmtCurrency(item.remaining)}
         </div>
       </div>
 
       {/* Progress bar row */}
-      <div style={{ paddingBottom: '4px' }}>
+      <div className="pb-1">
         <ProgressBar actual={item.actual} budget={item.budgeted} />
       </div>
     </div>
@@ -645,62 +582,39 @@ function BudgetTypeSection({
   const totalRemaining = totalBudgeted - totalActual;
 
   return (
-    <div style={{ marginBottom: '1.5rem' }}>
+    <div className="mb-6">
       {/* Section header — clickable to collapse */}
       <button
         onClick={() => setExpanded((v) => !v)}
+        className="w-full border-none cursor-pointer p-2 rounded-[var(--radius-md)] grid gap-3 items-center bg-[var(--color-surface-subtle,var(--color-border))]"
         style={{
-          width: '100%',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: '0.5rem',
-          borderRadius: 'var(--radius-md)',
-          display: 'grid',
           gridTemplateColumns: '1fr auto auto auto auto',
-          gap: '0.75rem',
-          alignItems: 'center',
-          backgroundColor: 'var(--color-surface-subtle, var(--color-border))',
           marginBottom: expanded ? '0.25rem' : 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+        <div className="flex items-center gap-1.5">
           {expanded ? (
-            <ChevronUp size={14} style={{ color: 'var(--color-text-muted)' }} />
+            <ChevronUp size={14} className="text-[var(--color-text-muted)]" />
           ) : (
-            <ChevronDown size={14} style={{ color: 'var(--color-text-muted)' }} />
+            <ChevronDown size={14} className="text-[var(--color-text-muted)]" />
           )}
-          <span style={{
-            fontSize: '0.6875rem',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: 'var(--color-text-secondary)',
-          }}>
+          <span className="text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">
             {title}
           </span>
-          <span style={{
-            fontSize: '0.6875rem',
-            color: 'var(--color-text-muted)',
-            fontWeight: 400,
-          }}>
+          <span className="text-[0.6875rem] text-[var(--color-text-muted)] font-normal">
             ({categories.length})
           </span>
         </div>
-        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'right' }}>
+        <span className="text-xs text-[var(--color-text-muted)] text-right">
           Budgeted
         </span>
-        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', textAlign: 'right', minWidth: '80px' }}>
+        <span className="text-[0.8125rem] font-semibold text-[var(--color-text)] text-right min-w-[80px]">
           {fmtCurrency(totalBudgeted)}
         </span>
-        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'right' }}>
+        <span className="text-xs text-[var(--color-text-muted)] text-right">
           Spent
         </span>
-        <span style={{
-          fontSize: '0.8125rem', fontWeight: 600,
-          color: remainingColor(totalRemaining),
-          textAlign: 'right', minWidth: '80px',
-        }}>
+        <span className="text-[0.8125rem] font-semibold text-right min-w-[80px]" style={{ color: remainingColor(totalRemaining) }}>
           {fmtCurrency(totalActual)}
         </span>
       </button>
@@ -710,15 +624,15 @@ function BudgetTypeSection({
           {/* Column headers */}
           <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_100px_90px] gap-2 px-2 mb-0.5">
             <div />
-            <div style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>Budget</div>
-            <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>Actual</div>
-            <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}>Remaining</div>
+            <div className="text-right text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">Budget</div>
+            <div className="hidden sm:block text-right text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">Actual</div>
+            <div className="hidden sm:block text-right text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">Remaining</div>
           </div>
 
-          <div style={{ height: 1, backgroundColor: 'var(--color-border)', marginBottom: '0.25rem' }} />
+          <div className="h-px bg-[var(--color-border)] mb-1" />
 
           {categories.length === 0 ? (
-            <div style={{ padding: '0.75rem 0.5rem', fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+            <div className="py-3 px-2 text-[0.8125rem] text-[var(--color-text-muted)]">
               No categories in this section.
             </div>
           ) : (
@@ -734,38 +648,27 @@ function BudgetTypeSection({
           )}
 
           {/* Totals footer */}
-          <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '0.25rem 0' }} />
+          <div className="h-px bg-[var(--color-border)] my-1" />
           <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_100px_90px] gap-2 items-center px-2 py-1.5">
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+            <span className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)]">
               Total {title}:
             </span>
-            <span style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+            <span className="text-right text-sm font-semibold text-[var(--color-text)]">
               {fmtCurrency(totalBudgeted)}
             </span>
-            <span className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+            <span className="hidden sm:block text-right text-sm font-semibold text-[var(--color-text)]">
               {fmtCurrency(totalActual)}
             </span>
-            <span className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: remainingColor(totalRemaining) }}>
+            <span className="hidden sm:block text-right text-sm font-semibold" style={{ color: remainingColor(totalRemaining) }}>
               {fmtCurrency(totalRemaining)}
             </span>
           </div>
 
           {/* Add category button */}
-          <div style={{ padding: '0.25rem 0.5rem 0' }}>
+          <div className="pt-1 px-2">
             <button
               onClick={() => setAddModalOpen(true)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.25rem',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '0.8125rem',
-                color: 'var(--color-accent)',
-                fontWeight: 500,
-                padding: '0.25rem 0',
-              }}
+              className="inline-flex items-center gap-1 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--color-accent)] font-medium py-1"
             >
               <Plus size={14} />
               Add category
@@ -812,45 +715,31 @@ function BudgetGroupSection({
   const existingIds = group.categories.map((c) => c.id);
 
   return (
-    <div style={{ marginBottom: '1.5rem' }}>
+    <div className="mb-6">
       {/* Section header */}
       <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_100px_90px] gap-2 items-center px-2 mb-1">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{
-            fontSize: '0.6875rem',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: 'var(--color-text-secondary)',
-          }}>
+        <div className="flex items-center gap-2">
+          <span className="text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">
             {group.name}
           </span>
           <button
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--color-text-muted)',
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-            }}
+            className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-0 flex items-center"
             title={`${group.name} settings`}
           >
             <Settings size={12} />
           </button>
         </div>
-        <div style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-secondary)' }}>Budget</div>
-        <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-secondary)' }}>Actual</div>
-        <div className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-secondary)' }}>Remaining</div>
+        <div className="text-right text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">Budget</div>
+        <div className="hidden sm:block text-right text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">Actual</div>
+        <div className="hidden sm:block text-right text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">Remaining</div>
       </div>
 
       {/* Divider */}
-      <div style={{ height: 1, backgroundColor: 'var(--color-border)', marginBottom: '0.25rem' }} />
+      <div className="h-px bg-[var(--color-border)] mb-1" />
 
       {/* Rows */}
       {group.categories.length === 0 ? (
-        <div style={{ padding: '0.75rem 0.5rem', fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+        <div className="py-3 px-2 text-[0.8125rem] text-[var(--color-text-muted)]">
           No categories yet.
         </div>
       ) : (
@@ -866,38 +755,27 @@ function BudgetGroupSection({
       )}
 
       {/* Totals row */}
-      <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '0.25rem 0' }} />
+      <div className="h-px bg-[var(--color-border)] my-1" />
       <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_120px_100px_90px] gap-2 items-center px-2 py-1.5">
-        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+        <span className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)]">
           Total {group.name}:
         </span>
-        <span style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+        <span className="text-right text-sm font-semibold text-[var(--color-text)]">
           {fmtCurrency(totalBudget)}
         </span>
-        <span className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+        <span className="hidden sm:block text-right text-sm font-semibold text-[var(--color-text)]">
           {fmtCurrency(totalActual)}
         </span>
-        <span className="hidden sm:block" style={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: remainingColor(totalRemaining) }}>
+        <span className="hidden sm:block text-right text-sm font-semibold" style={{ color: remainingColor(totalRemaining) }}>
           {fmtCurrency(totalRemaining)}
         </span>
       </div>
 
       {/* Add category button */}
-      <div style={{ padding: '0.25rem 0.5rem 0' }}>
+      <div className="pt-1 px-2">
         <button
           onClick={() => setAddModalOpen(true)}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.25rem',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            color: 'var(--color-accent)',
-            fontWeight: 500,
-            padding: '0.25rem 0',
-          }}
+          className="inline-flex items-center gap-1 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--color-accent)] font-medium py-1"
         >
           <Plus size={14} />
           Add category
@@ -939,31 +817,16 @@ function UnbudgetedAlert({
   if (dismissed || categories.length === 0) return null;
 
   return (
-    <div style={{
-      marginBottom: '1rem',
-      border: '1px solid var(--color-warning)',
-      borderRadius: 'var(--radius-md)',
-      backgroundColor: 'var(--color-warning-light, rgba(245,158,11,0.08))',
-      overflow: 'hidden',
-    }}>
+    <div className="mb-4 border border-[var(--color-warning)] rounded-[var(--radius-md)] bg-[var(--color-warning-light,rgba(245,158,11,0.08))] overflow-hidden">
       {/* Banner row */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.625rem',
-        padding: '0.625rem 0.875rem',
-      }}>
-        <AlertTriangle size={15} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
-        <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 500 }}>
+      <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+        <AlertTriangle size={15} className="text-[var(--color-warning)] shrink-0" />
+        <span className="flex-1 text-sm text-[var(--color-text)] font-medium">
           {categories.length} {categories.length === 1 ? 'category has' : 'categories have'} spending but no budget set.
         </span>
         <button
           onClick={() => setExpanded((v) => !v)}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: '0.8125rem', color: 'var(--color-warning)', fontWeight: 500,
-          }}
+          className="inline-flex items-center gap-1 bg-transparent border-none cursor-pointer text-[0.8125rem] text-[var(--color-warning)] font-medium"
         >
           {expanded ? 'Hide' : 'View unbudgeted categories'}
           {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -971,11 +834,7 @@ function UnbudgetedAlert({
         <button
           onClick={() => setDismissed(true)}
           aria-label="Dismiss"
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--color-text-muted)', padding: '0.125rem',
-            display: 'flex', alignItems: 'center',
-          }}
+          className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-px flex items-center"
         >
           <X size={14} />
         </button>
@@ -983,23 +842,17 @@ function UnbudgetedAlert({
 
       {/* Expanded list */}
       {expanded && (
-        <div style={{ borderTop: '1px solid var(--color-warning)', backgroundColor: 'var(--color-surface)' }}>
+        <div className="border-t border-[var(--color-warning)] bg-[var(--color-surface)]">
           {categories.map((cat) => (
             <div
               key={cat.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.5rem 0.875rem',
-                borderBottom: '1px solid var(--color-border)',
-              }}
+              className="flex items-center gap-3 px-3.5 py-2 border-b border-[var(--color-border)]"
             >
-              {cat.icon && <span style={{ fontSize: '1rem' }}>{cat.icon}</span>}
-              <span style={{ flex: 1, fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>
+              {cat.icon && <span className="text-base">{cat.icon}</span>}
+              <span className="flex-1 text-sm font-medium text-[var(--color-text)]">
                 {cat.name}
               </span>
-              <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+              <span className="text-sm text-[var(--color-text-secondary)]">
                 {fmtCurrency(cat.actual)} spent
               </span>
               <button
@@ -1007,16 +860,7 @@ function UnbudgetedAlert({
                   setSelectedCategory(cat);
                   setAddModalOpen(true);
                 }}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
-                  padding: '0.25rem 0.625rem',
-                  border: '1px solid var(--color-accent)',
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: 'transparent',
-                  color: 'var(--color-accent)',
-                  cursor: 'pointer',
-                  fontSize: '0.8125rem', fontWeight: 500,
-                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 border border-[var(--color-accent)] rounded-[var(--radius-sm)] bg-transparent text-[var(--color-accent)] cursor-pointer text-[0.8125rem] font-medium"
               >
                 <Plus size={12} />
                 Add Budget
@@ -1053,57 +897,48 @@ function LeftToBudgetBanner({
   const srStyle = savingsRateStyle(data.savingsRate);
 
   return (
-    <div style={{
-      marginBottom: '1rem',
-      padding: '0.875rem 1.25rem',
-      border: `1px solid ${positive ? 'var(--color-success)' : 'var(--color-danger)'}`,
-      borderRadius: 'var(--radius-md)',
-      backgroundColor: positive
-        ? 'var(--color-success-light, rgba(16,185,129,0.08))'
-        : 'var(--color-danger-light, rgba(239,68,68,0.08))',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '1rem',
-      flexWrap: 'wrap',
-    }}>
+    <div
+      className="mb-4 py-3.5 px-5 rounded-[var(--radius-md)] flex items-center gap-4 flex-wrap"
+      style={{
+        border: `1px solid ${positive ? 'var(--color-success)' : 'var(--color-danger)'}`,
+        backgroundColor: positive
+          ? 'var(--color-success-light, rgba(16,185,129,0.08))'
+          : 'var(--color-danger-light, rgba(239,68,68,0.08))',
+      }}
+    >
       {/* Main amount */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <span style={{
-            fontSize: '1.5rem',
-            fontWeight: 700,
-            color: positive ? 'var(--color-success)' : 'var(--color-danger)',
-          }}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span
+            className="text-2xl font-bold"
+            style={{ color: positive ? 'var(--color-success)' : 'var(--color-danger)' }}
+          >
             {fmtCurrency(Math.abs(leftToBudget))}
           </span>
-          <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+          <span className="text-sm font-medium text-[var(--color-text-secondary)]">
             {positive ? 'left to budget' : 'over budget'}
           </span>
         </div>
-        <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+        <div className="text-[0.8125rem] text-[var(--color-text-muted)] mt-1">
           {fmtCurrency(data.income.actual)} income
           {' '}&minus;{' '}
           {fmtCurrency(data.expenses.actual)} expenses
           {' '}={' '}
-          <span style={{ color: positive ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 500 }}>
+          <span className="font-medium" style={{ color: positive ? 'var(--color-success)' : 'var(--color-danger)' }}>
             {fmtCurrency(leftToBudget)}
           </span>
         </div>
       </div>
 
       {/* Savings rate badge */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
-        <span style={{
-          fontSize: '1.25rem',
-          fontWeight: 700,
-          padding: '0.25rem 0.75rem',
-          borderRadius: 'var(--radius-full)',
-          backgroundColor: srStyle.bg,
-          color: srStyle.color,
-        }}>
+      <div className="flex flex-col items-center gap-1">
+        <span
+          className="text-xl font-bold py-1 px-3 rounded-full"
+          style={{ backgroundColor: srStyle.bg, color: srStyle.color }}
+        >
           {Math.round(data.savingsRate)}%
         </span>
-        <span style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <span className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.06em]">
           Savings Rate
         </span>
       </div>
@@ -1117,10 +952,10 @@ function SummaryPanel({ data }: { data?: BudgetData }) {
   if (!data) {
     return (
       <Card padding="lg">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div className="flex flex-col gap-3">
           <Skeleton height={48} width="60%" />
           <Skeleton height={16} width="40%" />
-          <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '0.5rem 0' }} />
+          <div className="h-px bg-[var(--color-border)] my-2" />
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} height={20} width="100%" />)}
         </div>
       </Card>
@@ -1147,34 +982,30 @@ function SummaryPanel({ data }: { data?: BudgetData }) {
   return (
     <Card padding="lg">
       {/* Left to budget */}
-      <div style={{ marginBottom: '1.25rem', textAlign: 'center' }}>
-        <div style={{
-          fontSize: '1.875rem',
-          fontWeight: 700,
-          color: positive ? 'var(--color-success)' : 'var(--color-danger)',
-          lineHeight: 1.1,
-        }}>
+      <div className="mb-5 text-center">
+        <div
+          className="font-bold leading-tight"
+          style={{
+            fontSize: '1.875rem',
+            color: positive ? 'var(--color-success)' : 'var(--color-danger)',
+          }}
+        >
           {fmtCurrency(Math.abs(leftToBudget))}
         </div>
-        <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginTop: '0.25rem' }}>
+        <div className="text-[0.8125rem] text-[var(--color-text-secondary)] mt-1">
           {positive ? 'Left to budget' : 'Over budget'}
         </div>
       </div>
 
-      <div style={{ height: 1, backgroundColor: 'var(--color-border)', marginBottom: '1rem' }} />
+      <div className="h-px bg-[var(--color-border)] mb-4" />
 
       {/* Summary table */}
-      <div style={{ marginBottom: '1rem' }}>
+      <div className="mb-4">
         {/* Header */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 70px 70px',
-          gap: '0.25rem',
-          marginBottom: '0.375rem',
-        }}>
-          <span style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)' }}></span>
+        <div className="grid gap-1 mb-1.5" style={{ gridTemplateColumns: '1fr 70px 70px' }}>
+          <span className="text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-[var(--color-text-muted)]"></span>
           {(['Budget', 'Actual'] as const).map((h) => (
-            <span key={h} style={{ fontSize: '0.6875rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', textAlign: 'right' }}>
+            <span key={h} className="text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-[var(--color-text-muted)] text-right">
               {h}
             </span>
           ))}
@@ -1197,27 +1028,23 @@ function SummaryPanel({ data }: { data?: BudgetData }) {
         )}
 
         {/* Divider */}
-        <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '0.375rem 0' }} />
+        <div className="h-px bg-[var(--color-border)] my-1.5" />
 
         {/* Total expenses row */}
         <SummaryRow label="Total Expenses" budget={data.expenses.budgeted} actual={data.expenses.actual} bold />
       </div>
 
-      <div style={{ height: 1, backgroundColor: 'var(--color-border)', marginBottom: '0.875rem' }} />
+      <div className="h-px bg-[var(--color-border)] mb-3.5" />
 
       {/* Savings rate */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-[var(--color-text-secondary)] font-medium">
           Savings Rate
         </span>
-        <span style={{
-          fontSize: '0.8125rem',
-          fontWeight: 700,
-          padding: '0.1875rem 0.625rem',
-          borderRadius: 'var(--radius-full)',
-          backgroundColor: srStyle.bg,
-          color: srStyle.color,
-        }}>
+        <span
+          className="text-[0.8125rem] font-bold py-px px-2.5 rounded-full"
+          style={{ backgroundColor: srStyle.bg, color: srStyle.color }}
+        >
           {Math.round(data.savingsRate)}%
         </span>
       </div>
@@ -1236,25 +1063,13 @@ function SummaryRow({
   actual: number;
   bold?: boolean;
 }) {
-  const textStyle: React.CSSProperties = {
-    fontSize: '0.8125rem',
-    fontWeight: bold ? 600 : 400,
-    color: 'var(--color-text)',
-  };
-
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 70px 70px',
-      gap: '0.25rem',
-      padding: '0.25rem 0',
-      alignItems: 'center',
-    }}>
-      <span style={{ ...textStyle, color: bold ? 'var(--color-text)' : 'var(--color-text-secondary)' }}>
+    <div className="grid gap-1 py-1 items-center" style={{ gridTemplateColumns: '1fr 70px 70px' }}>
+      <span className={`text-[0.8125rem] ${bold ? 'font-semibold text-[var(--color-text)]' : 'font-normal text-[var(--color-text-secondary)]'}`}>
         {label}
       </span>
-      <span style={{ ...textStyle, textAlign: 'right' }}>{fmtCurrency(budget)}</span>
-      <span style={{ ...textStyle, textAlign: 'right' }}>{fmtCurrency(actual)}</span>
+      <span className={`text-[0.8125rem] text-right text-[var(--color-text)] ${bold ? 'font-semibold' : 'font-normal'}`}>{fmtCurrency(budget)}</span>
+      <span className={`text-[0.8125rem] text-right text-[var(--color-text)] ${bold ? 'font-semibold' : 'font-normal'}`}>{fmtCurrency(actual)}</span>
     </div>
   );
 }
@@ -1327,56 +1142,27 @@ export default function BudgetPage() {
   const byType = budgetData?.expenses.byType ?? deriveByType(expenseGroups);
 
   return (
-    <div style={{ padding: '1rem 0' }}>
+    <div className="py-4">
       {/* Page header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '1.25rem',
-        flexWrap: 'wrap',
-        gap: '0.75rem',
-      }}>
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         {/* Month navigation */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="flex items-center gap-2">
           <button
             onClick={goToPrev}
             aria-label="Previous month"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 32, height: 32,
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--color-surface)',
-              color: 'var(--color-text-secondary)',
-              cursor: 'pointer',
-            }}
+            className="flex items-center justify-center w-8 h-8 border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] cursor-pointer"
           >
             <ChevronLeft size={16} />
           </button>
 
-          <span style={{
-            fontSize: '1rem',
-            fontWeight: 600,
-            color: 'var(--color-text)',
-            minWidth: '10rem',
-            textAlign: 'center',
-          }}>
+          <span className="text-base font-semibold text-[var(--color-text)] min-w-40 text-center">
             {MONTH_NAMES[month - 1]} {year}
           </span>
 
           <button
             onClick={goToNext}
             aria-label="Next month"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 32, height: 32,
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--color-surface)',
-              color: 'var(--color-text-secondary)',
-              cursor: 'pointer',
-            }}
+            className="flex items-center justify-center w-8 h-8 border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] cursor-pointer"
           >
             <ChevronRight size={16} />
           </button>
@@ -1384,16 +1170,7 @@ export default function BudgetPage() {
           {!isCurrentMonth && (
             <button
               onClick={goToToday}
-              style={{
-                padding: '0.25rem 0.75rem',
-                fontSize: '0.8125rem',
-                fontWeight: 500,
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--color-surface)',
-                color: 'var(--color-text-secondary)',
-                cursor: 'pointer',
-              }}
+              className="px-3 py-1 text-[0.8125rem] font-medium border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] cursor-pointer"
             >
               Today
             </button>
@@ -1401,28 +1178,18 @@ export default function BudgetPage() {
         </div>
 
         {/* Right side: period tabs + settings */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div className="flex items-center gap-3">
           {/* Period tabs */}
-          <div style={{
-            display: 'flex',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            overflow: 'hidden',
-          }}>
+          <div className="flex border border-[var(--color-border)] rounded-[var(--radius-md)] overflow-hidden">
             {PERIOD_TABS.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setPeriodTab(tab)}
+                className="px-3 py-1 text-[0.8125rem] font-medium border-none cursor-pointer transition-[background,color] duration-150"
                 style={{
-                  padding: '0.25rem 0.75rem',
-                  fontSize: '0.8125rem',
-                  fontWeight: 500,
-                  border: 'none',
                   borderRight: tab !== 'Decade' ? '1px solid var(--color-border)' : 'none',
-                  cursor: 'pointer',
                   backgroundColor: periodTab === tab ? 'var(--color-accent)' : 'var(--color-surface)',
                   color: periodTab === tab ? '#fff' : 'var(--color-text-secondary)',
-                  transition: 'background 0.15s, color 0.15s',
                 }}
               >
                 {tab}
@@ -1433,15 +1200,7 @@ export default function BudgetPage() {
           {/* Settings icon */}
           <button
             aria-label="Budget settings"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 32, height: 32,
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--color-surface)',
-              color: 'var(--color-text-secondary)',
-              cursor: 'pointer',
-            }}
+            className="flex items-center justify-center w-8 h-8 border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] cursor-pointer"
           >
             <Settings size={16} />
           </button>
@@ -1468,11 +1227,11 @@ export default function BudgetPage() {
         {/* Left column — Budget table */}
         <Card padding="lg">
           {budgetLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="flex flex-col gap-4">
               {[1, 2, 3].map((i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div key={i} className="flex flex-col gap-2">
                   <Skeleton height={16} width="30%" />
-                  <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
+                  <div className="h-px bg-[var(--color-border)]" />
                   {[1, 2, 3].map((j) => (
                     <Skeleton key={j} height={44} width="100%" />
                   ))}
@@ -1480,7 +1239,7 @@ export default function BudgetPage() {
               ))}
             </div>
           ) : !budgetData ? (
-            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', padding: '1rem 0' }}>
+            <div className="text-[var(--color-text-muted)] text-sm py-4">
               No budget data for this period.
             </div>
           ) : (
@@ -1496,16 +1255,11 @@ export default function BudgetPage() {
               )}
 
               {/* Expense view tabs */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-[0.8125rem] text-[var(--color-text-secondary)] font-medium">
                   Expenses:
                 </span>
-                <div style={{
-                  display: 'flex',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)',
-                  overflow: 'hidden',
-                }}>
+                <div className="flex border border-[var(--color-border)] rounded-[var(--radius-md)] overflow-hidden">
                   {([
                     { value: 'byType' as ExpenseViewTab, label: 'By Type' },
                     { value: 'byGroup' as ExpenseViewTab, label: 'By Group' },
@@ -1513,16 +1267,11 @@ export default function BudgetPage() {
                     <button
                       key={t.value}
                       onClick={() => setExpenseViewTab(t.value)}
+                      className="text-[0.8125rem] font-medium border-none cursor-pointer transition-[background,color] duration-150 px-2.5 py-px"
                       style={{
-                        padding: '0.1875rem 0.625rem',
-                        fontSize: '0.8125rem',
-                        fontWeight: 500,
-                        border: 'none',
                         borderRight: t.value === 'byType' ? '1px solid var(--color-border)' : 'none',
-                        cursor: 'pointer',
                         backgroundColor: expenseViewTab === t.value ? 'var(--color-accent)' : 'var(--color-surface)',
                         color: expenseViewTab === t.value ? '#fff' : 'var(--color-text-secondary)',
-                        transition: 'background 0.15s, color 0.15s',
                       }}
                     >
                       {t.label}
@@ -1561,7 +1310,7 @@ export default function BudgetPage() {
                 </>
               ) : (
                 expenseGroups.length === 0 ? (
-                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+                  <div className="p-8 text-center text-[var(--color-text-muted)] text-sm">
                     No expense categories set up yet. Use &quot;+ Add category&quot; to get started.
                   </div>
                 ) : (
@@ -1578,7 +1327,7 @@ export default function BudgetPage() {
               )}
 
               {!incomeGroup && expenseGroups.length === 0 && (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+                <div className="p-8 text-center text-[var(--color-text-muted)] text-sm">
                   No budget categories set up yet. Use &quot;+ Add category&quot; to get started.
                 </div>
               )}
@@ -1587,7 +1336,7 @@ export default function BudgetPage() {
         </Card>
 
         {/* Right column — Summary panel + AI Coach */}
-        <div style={{ position: 'sticky', top: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="sticky top-4 flex flex-col gap-4">
           <SummaryPanel data={budgetData} />
           <BudgetCoach month={`${year}-${String(month).padStart(2, '0')}`} />
         </div>

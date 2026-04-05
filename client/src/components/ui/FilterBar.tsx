@@ -85,7 +85,7 @@ export function FilterBar({
                     }
                   }}
                   role="option"
-                  aria-selected={false}
+                  aria-selected={activeOptionId === opt.id}
                 >
                   <span>{opt.label}</span>
                   {opt.options && (

@@ -270,8 +270,9 @@ function NetWorthWidget({
       ) : chartError || !chartData ? (
         <WidgetError />
       ) : (
-        <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={filtered} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+        <div role="img" aria-label="Net worth over time chart">
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={filtered} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#E5622A" stopOpacity={0.2} />
@@ -293,7 +294,8 @@ function NetWorthWidget({
             />
             <Area type="monotone" dataKey="value" stroke="#E5622A" strokeWidth={2} fill="url(#nwGrad)" dot={false} />
           </AreaChart>
-        </ResponsiveContainer>
+          </ResponsiveContainer>
+        </div>
       )}
     </Card>
   );
@@ -450,8 +452,9 @@ function SpendingWidget({ data, isLoading, isError }: { data?: SpendingChart; is
       ) : isError || !data ? (
         <WidgetError />
       ) : (
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={data.data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+        <div role="img" aria-label="Spending comparison chart: this month vs last month">
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={data.data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
             <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
             <YAxis hide />
@@ -471,7 +474,8 @@ function SpendingWidget({ data, isLoading, isError }: { data?: SpendingChart; is
             <Line type="monotone" dataKey="thisMonth" stroke="#E5622A" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="lastMonth" stroke="#adb5bd" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
           </LineChart>
-        </ResponsiveContainer>
+          </ResponsiveContainer>
+        </div>
       )}
     </Card>
   );

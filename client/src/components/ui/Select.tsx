@@ -18,6 +18,7 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, hint, options, placeholder, className = '', id, ...props }, ref) => {
     const selectId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
+    const hintId = selectId ? `${selectId}-hint` : undefined;
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
@@ -30,6 +31,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             ref={ref}
             id={selectId}
             className={`w-full appearance-none rounded-[var(--radius-md)] border px-3 py-2 pr-9 text-sm bg-[var(--color-surface)] text-[var(--color-text)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent cursor-pointer ${error ? 'border-[var(--color-danger)]' : 'border-[var(--color-border)]'} ${className}`}
+            aria-describedby={hintId && (error || hint) ? hintId : undefined}
             {...props}
           >
             {placeholder && (
@@ -47,8 +49,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             <ChevronDown size={14} />
           </span>
         </div>
-        {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
-        {hint && !error && <p className="text-xs text-[var(--color-text-muted)]">{hint}</p>}
+        {error && <p id={hintId} className="text-xs text-[var(--color-danger)]">{error}</p>}
+        {hint && !error && <p id={hintId} className="text-xs text-[var(--color-text-muted)]">{hint}</p>}
       </div>
     );
   }

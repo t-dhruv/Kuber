@@ -551,7 +551,7 @@ function AiAnalysisPanel({ onDismiss }: { onDismiss: () => void }) {
     : null;
 
   return (
-    <Card className="p-5" style={{ background: 'var(--color-surface-hover)' }}>
+    <Card className="p-5 bg-[var(--color-surface-hover)]">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -825,7 +825,7 @@ export default function WealthPage() {
   const handleNext = () => setMonth((m) => addMonths(m, 1));
 
   return (
-    <div style={{ padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div className="py-4 flex flex-col gap-6">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">

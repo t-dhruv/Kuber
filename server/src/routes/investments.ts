@@ -576,6 +576,7 @@ router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
       costBasis: number;
       date?: string;
       assetClass?: string;
+      batchId?: string;
     }>;
 
     if (!Array.isArray(rows) || rows.length === 0) {
@@ -603,6 +604,8 @@ router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
       const costBasis = Number(row.costBasis);
       if (!symbol || isNaN(shares) || shares <= 0 || isNaN(costBasis) || costBasis < 0) continue;
 
+      const lotNote = row.batchId ? `[batch:${row.batchId}]` : undefined;
+
       const existing = await prisma.investmentHolding.findFirst({
         where: { accountId: row.accountId, symbol },
       });
@@ -620,6 +623,7 @@ router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
             shares,
             pricePerShare: costBasis,
             date: row.date ? new Date(row.date) : new Date(),
+            note: lotNote,
             status: 'confirmed',
           },
         });
@@ -642,6 +646,7 @@ router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
             shares,
             pricePerShare: costBasis,
             date: row.date ? new Date(row.date) : new Date(),
+            note: lotNote,
             status: 'confirmed',
           },
         });

@@ -352,6 +352,31 @@ router.post('/:id/close', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// DELETE /api/v1/accounts/:id
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+
+    const existing = await prisma.account.findUnique({ where: { id } });
+    if (!existing || existing.householdId !== householdId) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    // Soft-delete all transactions belonging to this account, then delete the account
+    await prisma.transaction.updateMany({
+      where: { accountId: id, householdId },
+      data: { isHidden: true },
+    });
+    await prisma.account.delete({ where: { id } });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[accounts/DELETE /:id]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/v1/accounts/:id/transactions
 router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
   try {

@@ -37,19 +37,8 @@ function CopyButton({ value, size = 14 }: { value: string; size?: number }) {
     <button
       onClick={handleCopy}
       title="Copy to clipboard"
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.25rem',
-        padding: '0.25rem 0.5rem',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-sm)',
-        backgroundColor: 'var(--color-surface)',
-        cursor: 'pointer',
-        fontSize: '0.75rem',
-        color: copied ? 'var(--color-success)' : 'var(--color-text-secondary)',
-        flexShrink: 0,
-      }}
+      className="inline-flex items-center gap-1 px-2 py-1 border border-[var(--color-border)] rounded-[var(--radius-sm)] bg-[var(--color-surface)] cursor-pointer text-xs shrink-0"
+      style={{ color: copied ? 'var(--color-success)' : 'var(--color-text-secondary)' }}
     >
       {copied ? <Check size={size} /> : <Copy size={size} />}
       {copied ? 'Copied' : 'Copy'}
@@ -101,61 +90,53 @@ function ApiTokensSection() {
   }
 
   return (
-    <Card style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-        <Key size={16} style={{ color: 'var(--color-accent)' }} />
-        <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)' }}>
+    <Card className="p-5 mb-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Key size={16} className="text-[var(--color-accent)]" />
+        <h3 className="m-0 text-[0.9375rem] font-semibold text-[var(--color-text)]">
           API Tokens
         </h3>
       </div>
-      <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+      <p className="text-[0.8125rem] text-[var(--color-text-secondary)] mb-4">
         Create long-lived API tokens for n8n and other automation tools.
       </p>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+      <div className="flex gap-2 mb-5">
         <Input
           value={tokenName}
           onChange={(e) => setTokenName(e.target.value)}
           placeholder="Token name (e.g. n8n-automation)"
           onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-          style={{ flex: 1 }}
+          className="flex-1"
         />
         <Button
           onClick={handleCreate}
           disabled={!tokenName.trim() || createMutation.isPending}
           size="sm"
         >
-          <Plus size={14} style={{ marginRight: '0.25rem' }} />
+          <Plus size={14} className="mr-1" />
           Create Token
         </Button>
       </div>
 
       {isLoading ? (
-        <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>Loading...</div>
+        <div className="text-[0.8125rem] text-[var(--color-text-muted)]">Loading...</div>
       ) : tokens.length === 0 ? (
-        <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', padding: '0.75rem 0' }}>
+        <div className="text-[0.8125rem] text-[var(--color-text-muted)] py-3">
           No tokens yet.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className="flex flex-col gap-2">
           {tokens.map((token) => (
             <div
               key={token.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.625rem 0.75rem',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border)',
-                backgroundColor: 'var(--color-surface)',
-              }}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]"
             >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-[var(--color-text)]">
                   {token.name}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.125rem' }}>
+                <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
                   Created {formatDate(token.createdAt)}
                   {' · '}Last used {formatDate(token.lastUsedAt)}
                   {token.expiresAt && ` · Expires ${formatDate(token.expiresAt)}`}
@@ -165,16 +146,7 @@ function ApiTokensSection() {
                 onClick={() => revokeMutation.mutate(token.id)}
                 disabled={revokeMutation.isPending}
                 title="Revoke token"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '0.25rem',
-                  border: 'none',
-                  background: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--color-danger)',
-                  borderRadius: 'var(--radius-sm)',
-                }}
+                className="flex items-center p-1 border-none bg-transparent cursor-pointer text-[var(--color-danger)] rounded-[var(--radius-sm)]"
               >
                 <Trash2 size={15} />
               </button>
@@ -190,26 +162,12 @@ function ApiTokensSection() {
           onClose={() => { setShowModal(false); setNewToken(null); }}
           title="Token Created — Save It Now"
         >
-          <div style={{ padding: '1rem 0' }}>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+          <div className="py-4">
+            <p className="text-sm text-[var(--color-text-secondary)] mb-4">
               This is the only time this token will be shown. Copy it now and store it securely.
             </p>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.75rem',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                fontFamily: 'monospace',
-                fontSize: '0.8125rem',
-                wordBreak: 'break-all',
-                color: 'var(--color-text)',
-              }}
-            >
-              <span style={{ flex: 1 }}>{newToken.token}</span>
+            <div className="flex items-center gap-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] font-mono text-[0.8125rem] break-all text-[var(--color-text)]">
+              <span className="flex-1">{newToken.token}</span>
               <CopyButton value={newToken.token} size={16} />
             </div>
           </div>
@@ -226,39 +184,28 @@ function ApiTokensSection() {
 
 function N8nConnectionSection() {
   return (
-    <Card style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-        <Zap size={16} style={{ color: 'var(--color-accent)' }} />
-        <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)' }}>
+    <Card className="p-5 mb-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Zap size={16} className="text-[var(--color-accent)]" />
+        <h3 className="m-0 text-[0.9375rem] font-semibold text-[var(--color-text)]">
           n8n Automation
         </h3>
       </div>
-      <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+      <p className="text-[0.8125rem] text-[var(--color-text-secondary)] mb-4">
         n8n is the workflow automation engine that powers market news syncing, price updates, and CSV imports.
         Start it with the automation profile.
       </p>
-      <div
-        style={{
-          padding: '0.75rem',
-          borderRadius: 'var(--radius-md)',
-          backgroundColor: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          fontSize: '0.8125rem',
-          fontFamily: 'monospace',
-          marginBottom: '1rem',
-          color: 'var(--color-text-secondary)',
-        }}
-      >
+      <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[0.8125rem] font-mono mb-4 text-[var(--color-text-secondary)]">
         docker compose --profile automation up -d
       </div>
       <a
         href="http://localhost:5678"
         target="_blank"
         rel="noopener noreferrer"
-        style={{ textDecoration: 'none' }}
+        className="no-underline"
       >
         <Button variant="outline" size="sm">
-          <ExternalLink size={14} style={{ marginRight: '0.375rem' }} />
+          <ExternalLink size={14} className="mr-1.5" />
           Open n8n
         </Button>
       </a>
@@ -277,35 +224,27 @@ function WebhookUrlsSection() {
   ];
 
   return (
-    <Card style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-        <Globe size={16} style={{ color: 'var(--color-accent)' }} />
-        <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)' }}>
+    <Card className="p-5 mb-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Globe size={16} className="text-[var(--color-accent)]" />
+        <h3 className="m-0 text-[0.9375rem] font-semibold text-[var(--color-text)]">
           Webhook URLs
         </h3>
       </div>
-      <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+      <p className="text-[0.8125rem] text-[var(--color-text-secondary)] mb-4">
         Use these URLs in your n8n workflows. All endpoints require a Bearer API token.
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      <div className="flex flex-col gap-2">
         {endpoints.map(({ label, url }) => (
           <div
             key={url}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              padding: '0.625rem 0.75rem',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-border)',
-              backgroundColor: 'var(--color-surface)',
-            }}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]"
           >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '0.125rem' }}>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-semibold text-[var(--color-text-muted)] mb-0.5">
                 {label}
               </div>
-              <div style={{ fontSize: '0.8125rem', fontFamily: 'monospace', color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div className="text-[0.8125rem] font-mono text-[var(--color-text)] overflow-hidden text-ellipsis whitespace-nowrap">
                 {url}
               </div>
             </div>
@@ -340,25 +279,25 @@ function WatchTickersSection() {
   });
 
   return (
-    <Card style={{ padding: '1.25rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-        <Zap size={16} style={{ color: 'var(--color-accent)' }} />
-        <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)' }}>
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Zap size={16} className="text-[var(--color-accent)]" />
+        <h3 className="m-0 text-[0.9375rem] font-semibold text-[var(--color-text)]">
           Watch Tickers
         </h3>
       </div>
-      <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+      <p className="text-[0.8125rem] text-[var(--color-text-secondary)] mb-4">
         Comma-separated list of ticker symbols for market news filtering and price updates (e.g. AAPL, TSLA, VFV.TO).
       </p>
       {isLoading ? (
-        <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>Loading...</div>
+        <div className="text-[0.8125rem] text-[var(--color-text-muted)]">Loading...</div>
       ) : (
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="flex gap-2">
           <Input
             value={tickers}
             onChange={(e) => setTickers(e.target.value)}
             placeholder="AAPL, TSLA, MSFT, VFV.TO"
-            style={{ flex: 1 }}
+            className="flex-1"
           />
           <Button
             onClick={() => saveMutation.mutate(tickers)}
@@ -378,11 +317,11 @@ function WatchTickersSection() {
 export function AutomationSection() {
   return (
     <div>
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-[var(--color-text)] m-0">
           Automation
         </h2>
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginTop: '0.25rem' }}>
+        <p className="text-sm text-[var(--color-text-secondary)] mt-1">
           Connect n8n workflows to automate market news, price updates, and statement imports.
         </p>
       </div>

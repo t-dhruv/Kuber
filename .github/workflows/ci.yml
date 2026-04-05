@@ -14,8 +14,8 @@ env:
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/kuber
 
 jobs:
-  lint-build:
-    name: Lint & Build
+  lint-typecheck-test:
+    name: Lint, Typecheck & Unit Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -34,21 +34,52 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Build (TypeScript + Vite)
-        run: npm run build
+      - name: Typecheck (server)
+        run: npx tsc --noEmit
+        working-directory: server
 
-      # E2E tests (Playwright) require a running PostgreSQL database and seeded
-      # data. They are intentionally skipped in CI until a self-hosted runner or
-      # a service container is configured.
-      #
-      # To enable, add a postgres service container and run:
-      #   - run: npm run test:e2e
-      #
+      - name: Typecheck (client)
+        run: npx tsc --noEmit
+        working-directory: client
+
+      - name: Unit tests (server)
+        run: npm run test
+        working-directory: server
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://kuber:kuber_test@localhost:5432/kuber_test
+          JWT_SECRET: test_jwt_secret_at_least_64_characters_long_for_ci_pipeline_run
+          JWT_REFRESH_SECRET: test_refresh_secret_at_least_64_characters_long_for_ci_pipeline
+
+      # E2E tests require a running PostgreSQL + seeded data.
+      # Skipped here — run locally with `npm run test:e2e` or add a service container.
       # See: https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers
+
+  build:
+    name: Build (TypeScript + Vite)
+    runs-on: ubuntu-latest
+    needs: lint-typecheck-test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npm run build
 
   docker-preview:
     name: Build & Push Pre-release Image
     runs-on: ubuntu-latest
+    needs: build
     # Only push Docker images on direct branch pushes, not on PRs
     # (PRs from forks don't have write access to GHCR)
     if: github.event_name == 'push'
@@ -85,7 +116,7 @@ jobs:
       - name: Build and push server image (pre-release)
         uses: docker/build-push-action@v5
         with:
-          context: ./server
+          context: .
           file: ./server/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.SERVER_TAGS }}
@@ -95,7 +126,7 @@ jobs:
       - name: Build and push client image (pre-release)
         uses: docker/build-push-action@v5
         with:
-          context: ./client
+          context: .
           file: ./client/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.CLIENT_TAGS }}
@@ -104,7 +135,7 @@ jobs:
 
       - name: Summary
         run: |
-          echo "### Pre-release images published 🐳" >> $GITHUB_STEP_SUMMARY
+          echo "### Pre-release images published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** \`${{ steps.meta.outputs.BRANCH }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**SHA:** \`${{ steps.meta.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY

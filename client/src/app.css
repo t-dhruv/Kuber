@@ -17,7 +17,7 @@
   /* Text */
   --color-text: #212529;
   --color-text-secondary: #6c757d;
-  --color-text-muted: #adb5bd;
+  --color-text-muted: #868e96;
   --color-text-inverse: #ffffff;
 
   /* Semantic */
@@ -87,6 +87,12 @@ body {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 3px; }
+
+/* Keyboard focus indicator */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 
 /* Skeleton animation */
 @keyframes skeleton-pulse {
