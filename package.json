@@ -20,7 +20,13 @@
     "db:studio": "turbo run db:studio --filter=server"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.58.2",
-    "turbo": "^2.0.0"
+    "eslint": "^10.2.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "turbo": "^2.0.0",
+    "typescript-eslint": "^8.58.0"
   }
 }
