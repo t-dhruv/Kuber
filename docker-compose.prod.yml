@@ -129,7 +129,7 @@ services:
       NGINXEOF
       nginx -g 'daemon off;'"
     ports:
-      - "9001:80"
+      - "80:80"
       - "443:443"
     depends_on:
       server:
