@@ -84,7 +84,8 @@ jobs:
     needs: build
     # Only push Docker images on direct branch pushes, not on PRs
     # (PRs from forks don't have write access to GHCR)
-    if: github.event_name == 'push'
+    # Skip for Dependabot — it only bumps deps, no image needed
+    if: github.event_name == 'push' && github.actor != 'dependabot[bot]'
     permissions:
       contents: read
       packages: write
