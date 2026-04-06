@@ -10,7 +10,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/kuber
 
 jobs:
   # ── Quality gate — must pass before any image is built or published ──────────
@@ -77,22 +76,37 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Compute image tags
-        id: meta
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/}"
-            # e.g. v1.2.3 → also tag as latest
-            echo "SERVER_TAGS=${{ env.IMAGE_PREFIX }}-server:${VERSION},${{ env.IMAGE_PREFIX }}-server:latest" >> $GITHUB_OUTPUT
-            echo "CLIENT_TAGS=${{ env.IMAGE_PREFIX }}-client:${VERSION},${{ env.IMAGE_PREFIX }}-client:latest" >> $GITHUB_OUTPUT
-            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-          else
-            # master branch push → tag as edge (rolling stable)
-            SHORT_SHA="${GITHUB_SHA::8}"
-            echo "SERVER_TAGS=${{ env.IMAGE_PREFIX }}-server:edge,${{ env.IMAGE_PREFIX }}-server:master-${SHORT_SHA}" >> $GITHUB_OUTPUT
-            echo "CLIENT_TAGS=${{ env.IMAGE_PREFIX }}-client:edge,${{ env.IMAGE_PREFIX }}-client:master-${SHORT_SHA}" >> $GITHUB_OUTPUT
-            echo "VERSION=edge" >> $GITHUB_OUTPUT
-          fi
+      # On version tag v1.2.3  →  1.2.3, 1.2, 1, latest
+      # On master branch push  →  edge, sha-<sha8>
+      - name: Docker metadata — server
+        id: meta-server
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kuber-server
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=edge,branch=master
+            type=edge,branch=main
+            type=sha,format=short
+          flavor: |
+            latest=auto
+
+      - name: Docker metadata — client
+        id: meta-client
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kuber-client
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=edge,branch=master
+            type=edge,branch=main
+            type=sha,format=short
+          flavor: |
+            latest=auto
 
       - name: Build and push server image
         uses: docker/build-push-action@v5
@@ -100,7 +114,8 @@ jobs:
           context: .
           file: ./server/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.SERVER_TAGS }}
+          tags: ${{ steps.meta-server.outputs.tags }}
+          labels: ${{ steps.meta-server.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -110,9 +125,23 @@ jobs:
           context: .
           file: ./client/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.CLIENT_TAGS }}
+          tags: ${{ steps.meta-client.outputs.tags }}
+          labels: ${{ steps.meta-client.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### Images published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Server tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta-server.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "**Client tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta-client.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
   # ── Create GitHub Release (version tags only) ─────────────────────────────────
   create-release:

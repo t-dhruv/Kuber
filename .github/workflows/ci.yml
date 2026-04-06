@@ -11,7 +11,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/kuber
 
 jobs:
   lint-typecheck-test:
@@ -104,17 +103,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Compute pre-release tags
-        id: meta
-        run: |
-          # Sanitize branch name for use as a Docker tag (/ → -, remove disallowed chars)
-          BRANCH="${GITHUB_REF#refs/heads/}"
-          SAFE_BRANCH=$(echo "$BRANCH" | sed 's|/|-|g' | tr -dc '[:alnum:]-_.')
-          SHORT_SHA="${GITHUB_SHA::8}"
-          echo "SERVER_TAGS=${{ env.IMAGE_PREFIX }}-server:pr-${SAFE_BRANCH},${{ env.IMAGE_PREFIX }}-server:pr-${SAFE_BRANCH}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          echo "CLIENT_TAGS=${{ env.IMAGE_PREFIX }}-client:pr-${SAFE_BRANCH},${{ env.IMAGE_PREFIX }}-client:pr-${SAFE_BRANCH}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          echo "BRANCH=${SAFE_BRANCH}" >> $GITHUB_OUTPUT
-          echo "SHORT_SHA=${SHORT_SHA}" >> $GITHUB_OUTPUT
+      # Produces tags:
+      #   ghcr.io/<owner>/kuber-server:branch-<safe-name>
+      #   ghcr.io/<owner>/kuber-server:branch-<safe-name>-<sha8>
+      - name: Docker metadata — server
+        id: meta-server
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kuber-server
+          tags: |
+            type=ref,event=branch,prefix=branch-
+            type=sha,format=short,prefix=branch-{{branch}}-
+          flavor: |
+            latest=false
+
+      - name: Docker metadata — client
+        id: meta-client
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kuber-client
+          tags: |
+            type=ref,event=branch,prefix=branch-
+            type=sha,format=short,prefix=branch-{{branch}}-
+          flavor: |
+            latest=false
 
       - name: Build and push server image (pre-release)
         uses: docker/build-push-action@v5
@@ -122,7 +134,8 @@ jobs:
           context: .
           file: ./server/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.SERVER_TAGS }}
+          tags: ${{ steps.meta-server.outputs.tags }}
+          labels: ${{ steps.meta-server.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -132,7 +145,8 @@ jobs:
           context: .
           file: ./client/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.CLIENT_TAGS }}
+          tags: ${{ steps.meta-client.outputs.tags }}
+          labels: ${{ steps.meta-client.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -140,8 +154,11 @@ jobs:
         run: |
           echo "### Pre-release images published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** \`${{ steps.meta.outputs.BRANCH }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**SHA:** \`${{ steps.meta.outputs.SHORT_SHA }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Server:** \`ghcr.io/${{ github.repository_owner }}/kuber-server:pr-${{ steps.meta.outputs.BRANCH }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Client:** \`ghcr.io/${{ github.repository_owner }}/kuber-client:pr-${{ steps.meta.outputs.BRANCH }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Server tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta-server.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "**Client tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta-client.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
