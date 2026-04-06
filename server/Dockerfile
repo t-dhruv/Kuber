@@ -2,6 +2,9 @@
 # ---- Builder stage ----
 FROM node:25-alpine AS builder
 
+# Prisma requires OpenSSL for schema engine
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copy root workspace manifest + shared package
@@ -28,6 +31,9 @@ RUN npm run build
 
 # ---- Runner stage ----
 FROM node:25-alpine AS runner
+
+# Prisma query engine requires OpenSSL on Alpine
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
