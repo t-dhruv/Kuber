@@ -3,29 +3,29 @@
 #      podman build --target client-runner .
 
 # ─── Shared base ──────────────────────────────────────────────────────────────
-FROM node:20-alpine AS base
+FROM node:25-alpine AS base
 WORKDIR /app
-COPY package.json ./
+COPY package.json package-lock.json ./
 COPY shared ./shared
 
 # ─── Server: install + build ──────────────────────────────────────────────────
 FROM base AS server-builder
 RUN apk add --no-cache openssl
 COPY server/package.json ./server/
-RUN npm install --workspace=server
+RUN npm ci --workspace=server
 COPY server/prisma ./server/prisma
 COPY server/src ./server/src
 COPY server/tsconfig.json ./server/
 WORKDIR /app/server
 RUN npx prisma generate && npm run build
 
-FROM node:20-alpine AS server-runner
+FROM node:25-alpine AS server-runner
 RUN apk add --no-cache openssl
 WORKDIR /app
-COPY package.json ./
+COPY package.json package-lock.json ./
 COPY shared ./shared
 COPY server/package.json ./server/
-RUN npm install --workspace=server --omit=dev
+RUN npm ci --workspace=server --omit=dev
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/prisma ./server/prisma
 # Prisma client is hoisted to root node_modules by npm workspaces
@@ -33,12 +33,12 @@ COPY --from=server-builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=server-builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 WORKDIR /app/server
 EXPOSE 9002
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
 
 # ─── Client: install + build ──────────────────────────────────────────────────
 FROM base AS client-builder
 COPY client/package.json ./client/
-RUN npm install --workspace=client
+RUN npm ci --workspace=client
 COPY client/index.html ./client/
 COPY client/vite.config.ts ./client/
 COPY client/tsconfig.json ./client/
