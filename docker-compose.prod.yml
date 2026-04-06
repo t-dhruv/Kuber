@@ -1,5 +1,15 @@
 version: '3.8'
 
+# Production compose — pulls pre-built images from GitHub Container Registry.
+# Set IMAGE_TAG to pin a specific version (e.g. v1.2.3) or leave unset to use "latest".
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Pin a version:
+#   IMAGE_TAG=v1.2.3 docker compose -f docker-compose.prod.yml up -d
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,7 +20,6 @@ services:
       POSTGRES_DB: kuber_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # No exposed port — internal network only
     networks:
       - kuber_network
     healthcheck:
@@ -20,9 +29,7 @@ services:
       retries: 5
 
   server:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
+    image: ghcr.io/t-dhruv/kuber-server:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -33,7 +40,6 @@ services:
         condition: service_healthy
     networks:
       - kuber_network
-    # No port exposed externally — nginx proxies to this service
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:9002/health || exit 1"]
       interval: 15s
@@ -42,13 +48,10 @@ services:
       start_period: 30s
 
   client:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
+    image: ghcr.io/t-dhruv/kuber-client:${IMAGE_TAG:-latest}
     restart: unless-stopped
     networks:
       - kuber_network
-    # No port exposed externally — nginx proxies to this service
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
       interval: 15s
