@@ -62,7 +62,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.CLIENT_URL) {
 }
 
 const app = express();
-const PORT = process.env.PORT ?? 4000;
+const PORT = process.env.PORT ?? 9002;
 
 const clientUrl = process.env.CLIENT_URL ?? 'http://localhost:3000';
 
