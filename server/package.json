@@ -37,6 +37,7 @@
     "resend": "^6.9.4",
     "imap-simple": "^5.1.0",
     "mailparser": "^3.6.0",
+    "prisma": "^5.16.0",
     "yahoo-finance2": "^3.13.2",
     "zod": "^3.23.8"
   },
@@ -58,7 +59,6 @@
     "@types/mailparser": "^3.4.0",
     "@types/qrcode": "^1.5.6",
     "@vitest/coverage-v8": "^1.6.1",
-    "prisma": "^5.16.0",
     "tsx": "^4.16.0",
     "typescript": "^5.5.3",
     "vitest": "^1.6.1"
