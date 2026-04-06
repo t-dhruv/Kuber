@@ -1,0 +1,64 @@
+version: 2
+
+updates:
+  # npm — root workspace (covers all packages)
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: UTC
+    open-pull-requests-limit: 10
+    groups:
+      # Batch all non-breaking minor/patch updates into one PR
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Major version bumps need manual review
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    labels:
+      - dependencies
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: UTC
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns:
+          - '*'
+    labels:
+      - dependencies
+      - github-actions
+
+  # Docker base images
+  - package-ecosystem: docker
+    directory: /server
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: UTC
+    labels:
+      - dependencies
+      - docker
+
+  - package-ecosystem: docker
+    directory: /client
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: UTC
+    labels:
+      - dependencies
+      - docker
