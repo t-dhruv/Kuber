@@ -15,7 +15,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.80.0",
+    "@anthropic-ai/sdk": "^0.81.0",
     "@google/generative-ai": "^0.24.1",
     "@kuber/shared": "*",
     "@prisma/client": "^5.16.0",
