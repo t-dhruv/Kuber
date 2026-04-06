@@ -739,13 +739,14 @@ function CashFlowTab({
             {/* Bar chart view */}
             {cfChartView === "bar" && (
               chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <ComposedChart
-                    data={chartData}
-                    margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
-                    barCategoryGap="20%"
-                    barGap={4}
-                  >
+                <div role="img" aria-label="Cash flow overview chart">
+                  <ResponsiveContainer width="100%" height={260}>
+                    <ComposedChart
+                      data={chartData}
+                      margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
+                      barCategoryGap="20%"
+                      barGap={4}
+                    >
                     <CartesianGrid
                       strokeDasharray="3 3"
                       stroke="var(--color-border)"
@@ -810,7 +811,8 @@ function CashFlowTab({
                       dot={{ r: 3, fill: "#1971c2", strokeWidth: 0 }}
                     />
                   </ComposedChart>
-                </ResponsiveContainer>
+                  </ResponsiveContainer>
+                </div>
               ) : (
                 <div
                   style={{
@@ -1502,7 +1504,7 @@ function ChartView({
     const innerRadius = type === "donut" ? 80 : 0;
 
     return (
-      <div style={{ position: "relative" }}>
+      <div role="img" aria-label="Spending breakdown chart" style={{ position: "relative" }}>
         <ResponsiveContainer width="100%" height={240}>
           <PieChart>
             <Pie
@@ -1566,11 +1568,12 @@ function ChartView({
 
   if (type === "bar") {
     return (
-      <ResponsiveContainer width="100%" height={240}>
-        <ComposedChart
-          data={data}
-          layout="vertical"
-          margin={{ top: 0, right: 8, bottom: 0, left: 8 }}
+      <div role="img" aria-label="Spending breakdown chart">
+        <ResponsiveContainer width="100%" height={240}>
+          <ComposedChart
+            data={data}
+            layout="vertical"
+            margin={{ top: 0, right: 8, bottom: 0, left: 8 }}
         >
           <CartesianGrid
             strokeDasharray="3 3"
@@ -1612,13 +1615,15 @@ function ChartView({
             ))}
           </Bar>
         </ComposedChart>
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      </div>
     );
   }
 
   // Line chart
   return (
-    <ResponsiveContainer width="100%" height={240}>
+    <div role="img" aria-label="Spending breakdown chart">
+      <ResponsiveContainer width="100%" height={240}>
       <ComposedChart
         data={data}
         margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
@@ -1659,7 +1664,8 @@ function ChartView({
           animationDuration={600}
         />
       </ComposedChart>
-    </ResponsiveContainer>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -1752,8 +1758,9 @@ function CompareView({
           ))}
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={280}>
-        <ComposedChart data={top10} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 8 }}>
+      <div role="img" aria-label="Spending comparison chart">
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={top10} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
           <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
           <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} width={90} />
@@ -1761,7 +1768,8 @@ function CompareView({
           <Bar dataKey="current" name="current" fill="#1971c2" radius={[0, 3, 3, 0]} maxBarSize={14} opacity={0.9} />
           <Bar dataKey="prior" name="prior" fill="var(--color-border)" radius={[0, 3, 3, 0]} maxBarSize={14} opacity={0.7} />
         </ComposedChart>
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
         {top10.map((item) => (
           <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8125rem' }}>
@@ -1831,10 +1839,11 @@ function MonthlyView({ data, isLoading, grouping }: { data: MonthlyReport | unde
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.25rem' }}>
         {top8.map((s, i) => <LegendDot key={s.id} color={CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length]} label={s.name} />)}
       </div>
-      <ResponsiveContainer width="100%" height={240}>
-        <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} />
+      <div role="img" aria-label="Monthly spending breakdown chart">
+        <ResponsiveContainer width="100%" height={240}>
+          <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} />
           <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} width={42} />
           <Tooltip
             contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem' }}
@@ -1844,7 +1853,8 @@ function MonthlyView({ data, isLoading, grouping }: { data: MonthlyReport | unde
             <Bar key={s.id} dataKey={s.id} stackId="stack" fill={CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length]} maxBarSize={32} radius={i === top8.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
           ))}
         </ComposedChart>
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

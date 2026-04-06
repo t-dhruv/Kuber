@@ -1,21 +1,29 @@
+# Build context: monorepo root
 # ---- Builder stage ----
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files for dependency install
+# Copy root workspace manifest + shared package
 COPY package.json package-lock.json ./
+COPY shared ./shared
 
-# Install all dependencies (including devDeps for build)
-RUN npm ci
+# Copy server package manifest
+COPY server/package.json ./server/
 
-# Copy source files
-COPY prisma ./prisma
-COPY src ./src
-COPY tsconfig.json ./
+# Install all workspace dependencies (hoisted to /app/node_modules)
+RUN npm ci --workspace=server
 
-# Generate Prisma client and compile TypeScript
+# Copy server source
+COPY server/prisma ./server/prisma
+COPY server/src ./server/src
+COPY server/tsconfig.json ./server/
+
+# Generate Prisma client (output: /app/node_modules/.prisma/client)
+WORKDIR /app/server
 RUN npx prisma generate
+
+# Compile TypeScript
 RUN npm run build
 
 # ---- Runner stage ----
@@ -23,23 +31,21 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Copy package files
 COPY package.json package-lock.json ./
+COPY shared ./shared
+COPY server/package.json ./server/
 
-# Install production dependencies only
-RUN npm ci --omit=dev
+# Install production deps only (prisma CLI included — needed for migrate deploy)
+RUN npm ci --workspace=server --omit=dev
 
-# Copy compiled output from builder
-COPY --from=builder /app/dist ./dist
+# Copy compiled output and schema
+COPY --from=builder /app/server/dist ./server/dist
+COPY --from=builder /app/server/prisma ./server/prisma
 
-# Copy Prisma schema and migrations (needed at runtime for migrate deploy)
-COPY --from=builder /app/prisma ./prisma
+# Copy generated Prisma client from builder (hoisted location)
+COPY --from=builder /app/node_modules/.prisma /app/node_modules/.prisma
 
-# Copy generated Prisma client from builder node_modules
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
+WORKDIR /app/server
+EXPOSE 9002
 
-EXPOSE 4000
-
-# Run migrations then start the server
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

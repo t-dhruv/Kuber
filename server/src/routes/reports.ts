@@ -422,7 +422,7 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
       let id: string;
       let name: string;
       let icon: string | null = null;
-      let color: string | null = null;
+      const color: string | null = null;
 
       if (groupBy === 'category') {
         id = t.categoryId ?? '__uncategorized__';
@@ -568,11 +568,10 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
     const groupMap = new Map<string, { id: string; name: string; icon: string | null; color: string | null; amount: number; count: number }>();
 
     for (const t of transactions) {
-      let key: string;
       let id: string;
       let name: string;
       let icon: string | null = null;
-      let color: string | null = null;
+      const color: string | null = null;
 
       if (groupBy === 'category') {
         id = t.categoryId ?? '__uncategorized__';
@@ -610,7 +609,7 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
         continue;
       }
 
-      key = id;
+      const key = id;
       const existing = groupMap.get(key);
       if (existing) {
         existing.amount += t.amount;
@@ -1102,11 +1101,13 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
     // Build budget map: categoryId -> budgeted amount
     const budgetMap = new Map<string, { name: string; emoji: string | null; budgeted: number }>();
     for (const b of budgets) {
-      budgetMap.set(b.categoryId, {
-        name: b.category.name,
-        emoji: b.category.emoji ?? null,
-        budgeted: b.amount,
-      });
+      if (b.categoryId) {
+        budgetMap.set(b.categoryId, {
+          name: b.category?.name ?? 'Uncategorized',
+          emoji: b.category?.emoji ?? null,
+          budgeted: b.amount,
+        });
+      }
     }
 
     // Merge: all budgeted categories + categories with spending but no budget

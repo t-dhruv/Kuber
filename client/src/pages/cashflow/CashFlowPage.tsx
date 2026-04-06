@@ -270,8 +270,9 @@ function YearOverviewChart({
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={220}>
-        <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
+      <div role="img" aria-label="Cash flow year overview chart">
+        <ResponsiveContainer width="100%" height={220}>
+          <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
           onClick={(e) => {
             if (e?.activePayload?.[0]) {
               const point = e.activePayload[0].payload as ChartPoint;
@@ -332,7 +333,8 @@ function YearOverviewChart({
             dot={false}
           />
         </ComposedChart>
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      </div>
     </Card>
   );
 }
@@ -553,7 +555,7 @@ function SankeyChart({ data, year, month }: { data?: MonthData; year: number; mo
       <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem', textAlign: 'center' }}>
         Click a category node to view transactions
       </p>
-      <div style={{ height: 320 }}>
+      <div style={{ height: 320 }} role="img" aria-label="Cash flow Sankey diagram">
         <ResponsiveContainer width="100%" height="100%">
           <Sankey
             data={{ nodes, links }}

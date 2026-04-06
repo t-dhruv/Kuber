@@ -60,7 +60,7 @@ export default function ImportHistory() {
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-[color:var(--text-secondary)]">
+      <div className="flex flex-col items-center justify-center py-20 text-[color:var(--color-text-secondary)]">
         <FileText size={48} className="mb-3 opacity-40" />
         <p className="font-medium">No imports yet</p>
         <p className="text-sm mt-1">Upload a CSV or PDF statement to get started.</p>
@@ -70,16 +70,16 @@ export default function ImportHistory() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-[color:var(--border)] overflow-hidden">
+      <div className="rounded-xl border border-[color:var(--color-border)] overflow-hidden">
         {items.map((item) => (
           <div
             key={item.id}
-            className="flex items-center gap-4 px-4 py-3 border-b last:border-0 border-[color:var(--border)] hover:bg-[color:var(--surface-hover)]"
+            className="flex items-center gap-4 px-4 py-3 border-b last:border-0 border-[color:var(--color-border)] hover:bg-[color:var(--color-surface-hover)]"
           >
             <StatusIcon status={item.status} />
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm truncate">{item.filename}</p>
-              <p className="text-xs text-[color:var(--text-secondary)]">
+              <p className="text-xs text-[color:var(--color-text-secondary)]">
                 {item.bankSource ? (BANK_NAMES[item.bankSource] ?? item.bankSource) : 'Unknown bank'} ·{' '}
                 {new Date(item.createdAt).toLocaleDateString(undefined, {
                   year: 'numeric', month: 'short', day: 'numeric',
@@ -92,7 +92,7 @@ export default function ImportHistory() {
                 {item.rowsImported} imported
               </p>
               {item.rowsDuplicate > 0 && (
-                <p className="text-xs text-[color:var(--text-secondary)]">{item.rowsDuplicate} duplicates skipped</p>
+                <p className="text-xs text-[color:var(--color-text-secondary)]">{item.rowsDuplicate} duplicates skipped</p>
               )}
               {item.rowsSkipped > 0 && (
                 <p className="text-xs text-red-500">{item.rowsSkipped} errors</p>
@@ -106,17 +106,17 @@ export default function ImportHistory() {
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
           <button
-            className="px-3 py-1 text-sm rounded border border-[color:var(--border)] disabled:opacity-40"
+            className="px-3 py-1 text-sm rounded border border-[color:var(--color-border)] disabled:opacity-40"
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
           >
             Previous
           </button>
-          <span className="text-sm text-[color:var(--text-secondary)]">
+          <span className="text-sm text-[color:var(--color-text-secondary)]">
             Page {page} of {totalPages}
           </span>
           <button
-            className="px-3 py-1 text-sm rounded border border-[color:var(--border)] disabled:opacity-40"
+            className="px-3 py-1 text-sm rounded border border-[color:var(--color-border)] disabled:opacity-40"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
           >

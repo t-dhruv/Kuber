@@ -39,6 +39,9 @@ export function SankeyNode({
   const labelX = labelSide === 'left' ? x - 8 : x + width + 8
   const anchor = labelSide === 'left' ? 'end' : 'start'
 
+  // Only render both label + amount if the node is tall enough; for tiny nodes show just the label
+  const showAmount = safeHeight >= 22
+
   return (
     <g onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} style={{ cursor: 'default' }}>
       <rect
@@ -53,7 +56,7 @@ export function SankeyNode({
       />
       <text
         x={labelX}
-        y={midY - 7}
+        y={showAmount ? midY - 7 : midY}
         textAnchor={anchor}
         dominantBaseline="middle"
         style={{
@@ -66,21 +69,23 @@ export function SankeyNode({
       >
         {label}
       </text>
-      <text
-        x={labelX}
-        y={midY + 7}
-        textAnchor={anchor}
-        dominantBaseline="middle"
-        style={{
-          fontSize: '0.625rem',
-          fill: color,
-          fontFamily: 'inherit',
-          fontWeight: 500,
-          pointerEvents: 'none',
-        }}
-      >
-        {fmtNodeCurrency(amount)}
-      </text>
+      {showAmount && (
+        <text
+          x={labelX}
+          y={midY + 7}
+          textAnchor={anchor}
+          dominantBaseline="middle"
+          style={{
+            fontSize: '0.625rem',
+            fill: color,
+            fontFamily: 'inherit',
+            fontWeight: 500,
+            pointerEvents: 'none',
+          }}
+        >
+          {fmtNodeCurrency(amount)}
+        </text>
+      )}
     </g>
   )
 }

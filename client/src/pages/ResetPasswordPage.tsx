@@ -35,55 +35,31 @@ export default function ResetPasswordPage() {
   const errorMessage = validationError
     ?? (mutation.error ? (mutation.error as any)?.response?.data?.error ?? 'Something went wrong. Please try again.' : null);
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '0.625rem 0.875rem',
-    borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--color-border-strong)',
-    backgroundColor: 'var(--color-bg)',
-    color: 'var(--color-text)',
-    fontSize: '0.9375rem',
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
+  const inputClass = "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] text-[0.9375rem] outline-none box-border";
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'var(--color-bg)',
-      padding: '1rem',
-    }}>
-      <div style={{
-        width: '100%',
-        maxWidth: '400px',
-        backgroundColor: 'var(--color-surface)',
-        borderRadius: 'var(--radius-xl)',
-        boxShadow: 'var(--shadow-lg)',
-        padding: '2.5rem',
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--color-accent)', margin: 0, letterSpacing: '-0.02em' }}>
+    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] p-4">
+      <div className="w-full max-w-[400px] bg-[var(--color-surface)] rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] p-10">
+        <div className="text-center mb-8">
+          <h1 className="text-[2rem] font-extrabold text-[var(--color-accent)] m-0 tracking-[-0.02em]">
             Kuber
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', marginTop: '0.5rem', fontSize: '0.875rem' }}>
+          <p className="text-[var(--color-text-secondary)] mt-2 text-sm">
             Choose a new password
           </p>
         </div>
 
         {!token ? (
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ color: 'var(--color-danger)', marginBottom: '1rem' }}>Invalid reset link.</p>
-            <Link to="/forgot-password" style={{ color: 'var(--color-accent)', textDecoration: 'none', fontSize: '0.875rem', fontWeight: '500' }}>
+          <div className="text-center">
+            <p className="text-[var(--color-danger)] mb-4">Invalid reset link.</p>
+            <Link to="/forgot-password" className="text-[var(--color-accent)] no-underline text-sm font-medium">
               Request a new one
             </Link>
           </div>
         ) : (
           <form onSubmit={handleSubmit} noValidate>
-            <div style={{ marginBottom: '1rem' }}>
-              <label htmlFor="password" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: 'var(--color-text)', marginBottom: '0.375rem' }}>
+            <div className="mb-4">
+              <label htmlFor="password" className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
                 New Password
               </label>
               <input
@@ -94,12 +70,12 @@ export default function ResetPasswordPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Min. 8 characters"
-                style={inputStyle}
+                className={inputClass}
               />
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label htmlFor="confirmPassword" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', color: 'var(--color-text)', marginBottom: '0.375rem' }}>
+            <div className="mb-6">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
                 Confirm New Password
               </label>
               <input
@@ -110,19 +86,12 @@ export default function ResetPasswordPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
-                style={inputStyle}
+                className={inputClass}
               />
             </div>
 
             {errorMessage && (
-              <div style={{
-                padding: '0.75rem',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--color-danger-light)',
-                color: 'var(--color-danger)',
-                fontSize: '0.875rem',
-                marginBottom: '1rem',
-              }}>
+              <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-danger-light)] text-[var(--color-danger)] text-sm mb-4">
                 {errorMessage}
               </div>
             )}
@@ -130,19 +99,8 @@ export default function ResetPasswordPage() {
             <button
               type="submit"
               disabled={mutation.isPending}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--color-accent)',
-                color: '#fff',
-                fontWeight: '600',
-                fontSize: '0.9375rem',
-                border: 'none',
-                cursor: mutation.isPending ? 'not-allowed' : 'pointer',
-                opacity: mutation.isPending ? 0.7 : 1,
-                transition: 'opacity 0.15s',
-              }}
+              className="w-full py-3 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-white font-semibold text-[0.9375rem] border-none transition-opacity duration-150"
+              style={{ cursor: mutation.isPending ? 'not-allowed' : 'pointer', opacity: mutation.isPending ? 0.7 : 1 }}
             >
               {mutation.isPending ? 'Updating…' : 'Update password'}
             </button>

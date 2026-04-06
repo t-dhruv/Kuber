@@ -1,0 +1,113 @@
+{
+  "id": "youtube-finance-to-intel",
+  "name": "YouTube Finance → Kuber Intel Feed",
+  "active": false,
+  "version": 1,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "node-schedule",
+      "name": "Daily 7am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node-youtube-search",
+      "name": "YouTube Search Recent Videos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/youtube/v3/search?part=snippet&channelId={{ $env.YOUTUBE_CHANNEL_IDS }}&maxResults=5&order=date&type=video&key={{ $env.YOUTUBE_API_KEY }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-split-items",
+      "name": "Split Video Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "node-ai-summarize",
+      "name": "AI Summarize Video",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "parameters": {
+        "operation": "text",
+        "prompt": "=Summarize this YouTube finance video in 2-3 sentences and classify sentiment as bullish, bearish, or neutral.\n\nTitle: {{ $json.snippet?.title || 'Unknown' }}\nDescription: {{ ($json.snippet?.description || '').slice(0, 500) }}\nChannel: {{ $json.snippet?.channelTitle || '' }}\n\nRespond with JSON only: { \"title\": \"...\", \"summary\": \"...\", \"sentiment\": \"bullish|bearish|neutral\" }",
+        "options": {
+          "model": "gpt-3.5-turbo",
+          "maxTokens": 300
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credential-id",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "id": "node-post-intel",
+      "name": "POST to Kuber Intel Feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.KUBER_WEBHOOK_URL }}/api/v1/investment-intel/feed",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.KUBER_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ (() => { let parsed = {}; try { parsed = JSON.parse($json.message?.content || '{}'); } catch(e) {} const item = $('Split Video Items').item.json; return { source: 'youtube', title: parsed.title || item.snippet?.title || 'YouTube Finance', summary: parsed.summary || '', sentiment: parsed.sentiment || 'neutral', url: 'https://www.youtube.com/watch?v=' + (item.id?.videoId || '') }; })() }}"
+      }
+    }
+  ],
+  "connections": {
+    "Daily 7am": {
+      "main": [[{ "node": "YouTube Search Recent Videos", "type": "main", "index": 0 }]]
+    },
+    "YouTube Search Recent Videos": {
+      "main": [[{ "node": "Split Video Items", "type": "main", "index": 0 }]]
+    },
+    "Split Video Items": {
+      "main": [[{ "node": "AI Summarize Video", "type": "main", "index": 0 }]]
+    },
+    "AI Summarize Video": {
+      "main": [[{ "node": "POST to Kuber Intel Feed", "type": "main", "index": 0 }]]
+    }
+  }
+}

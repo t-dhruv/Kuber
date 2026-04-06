@@ -1,54 +1,43 @@
 import { Router, Response } from 'express';
-import { prisma } from '../lib/prisma';
-import { AuthRequest } from '../middleware/auth';
+import { prisma } from '../lib/prisma.js';
+import { AuthRequest } from '../middleware/auth.js';
+import { runProactiveChecks } from '../lib/proactiveAi.js';
 
 const router = Router();
 
-// GET /api/v1/notifications
+// GET /api/v1/notifications — list unread + recent (last 30 days)
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.userId!;
-    const unreadOnly = req.query.unreadOnly === 'true';
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
-
-    const notifications = await prisma.notification.findMany({
+    const householdId = req.householdId;
+    if (!householdId) return res.status(401).json({ error: 'Unauthorized' });
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const items = await prisma.notification.findMany({
       where: {
-        userId,
-        ...(unreadOnly ? { isRead: false } : {}),
+        householdId,
+        createdAt: { gte: thirtyDaysAgo },
       },
       orderBy: { createdAt: 'desc' },
-      take: limit,
+      take: 50,
     });
-
-    const data = notifications.map(n => ({
-      id: n.id,
-      type: n.type,
-      title: n.title,
-      message: n.body,
-      isRead: n.isRead,
-      createdAt: n.createdAt.toISOString(),
-      actionUrl: (n.metadata as Record<string, unknown> | null)?.actionUrl as string | null ?? null,
-    }));
-
-    return res.json(data);
+    const unreadCount = items.filter((n) => !n.read).length;
+    return res.json({ items, unreadCount });
   } catch (err) {
-    console.error('[notifications/list]', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('[notifications GET]', err);
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return res.status(500).json({ error: 'Internal server error', detail: msg });
   }
 });
 
-// GET /api/v1/notifications/count
-router.get('/count', async (req: AuthRequest, res: Response) => {
+// PUT /api/v1/notifications/:id/read
+router.put('/:id/read', async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.userId!;
-
-    const unread = await prisma.notification.count({
-      where: { userId, isRead: false },
+    const n = await prisma.notification.findFirst({
+      where: { id: req.params.id, householdId: req.householdId! },
     });
-
-    return res.json({ unread });
+    if (!n) return res.status(404).json({ error: 'Not found' });
+    await prisma.notification.update({ where: { id: req.params.id }, data: { read: true } });
+    return res.json({ message: 'Marked as read' });
   } catch (err) {
-    console.error('[notifications/count]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -56,66 +45,36 @@ router.get('/count', async (req: AuthRequest, res: Response) => {
 // PUT /api/v1/notifications/read-all
 router.put('/read-all', async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.userId!;
-
-    const result = await prisma.notification.updateMany({
-      where: { userId, isRead: false },
-      data: { isRead: true },
+    await prisma.notification.updateMany({
+      where: { householdId: req.householdId!, read: false },
+      data: { read: true },
     });
-
-    return res.json({ updated: result.count });
+    return res.json({ message: 'All marked as read' });
   } catch (err) {
-    console.error('[notifications/read-all]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// PUT /api/v1/notifications/:id/read
-router.put('/:id/read', async (req: AuthRequest, res: Response) => {
+// DELETE /api/v1/notifications/clear — delete all read notifications
+router.delete('/clear', async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.userId!;
-    const { id } = req.params;
-
-    const notification = await prisma.notification.findUnique({
-      where: { id },
-      select: { userId: true },
+    const result = await prisma.notification.deleteMany({
+      where: { householdId: req.householdId!, read: true },
     });
-
-    if (!notification) return res.status(404).json({ error: 'Notification not found' });
-    if (notification.userId !== userId) return res.status(403).json({ error: 'Forbidden' });
-
-    await prisma.notification.update({
-      where: { id },
-      data: { isRead: true },
-    });
-
-    return res.json({ success: true });
+    return res.json({ deleted: result.count });
   } catch (err) {
-    console.error('[notifications/read]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// DELETE /api/v1/notifications/:id
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
+// POST /api/v1/notifications/run-checks — trigger proactive AI analysis on-demand
+router.post('/run-checks', async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.userId!;
-    const { id } = req.params;
-
-    const notification = await prisma.notification.findUnique({
-      where: { id },
-      select: { userId: true },
-    });
-
-    if (!notification) return res.status(404).json({ error: 'Notification not found' });
-    if (notification.userId !== userId) return res.status(403).json({ error: 'Forbidden' });
-
-    await prisma.notification.delete({ where: { id } });
-
-    return res.json({ success: true });
+    const count = await runProactiveChecks(prisma, req.householdId!);
+    return res.json({ created: count });
   } catch (err) {
-    console.error('[notifications/delete]', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('[notifications/run-checks]', err);
+    return res.status(500).json({ error: 'Analysis failed' });
   }
 });
 

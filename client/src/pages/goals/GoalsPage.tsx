@@ -145,25 +145,16 @@ function GoalOverflowMenu({
   }, [open]);
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        style={{
-          background: 'rgba(0,0,0,0.35)', border: 'none', cursor: 'pointer',
-          padding: '0.25rem 0.375rem', borderRadius: 'var(--radius-sm)',
-          color: '#fff', display: 'flex', alignItems: 'center',
-        }}
+        className="flex items-center bg-black/35 border-none cursor-pointer py-1 px-1.5 rounded-[var(--radius-sm)] text-white"
         aria-label="Goal options"
       >
         <MoreHorizontal size={14} />
       </button>
       {open && (
-        <div style={{
-          position: 'absolute', right: 0, top: '100%', marginTop: '0.25rem',
-          backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)',
-          minWidth: 120, zIndex: 50,
-        }}>
+        <div className="absolute right-0 top-full mt-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-[var(--shadow-md)] min-w-[120px] z-50">
           {[
             { label: 'Edit', icon: <Pencil size={13} />, action: onEdit, danger: false },
             { label: 'Delete', icon: <Trash2 size={13} />, action: onDelete, danger: true },
@@ -171,15 +162,7 @@ function GoalOverflowMenu({
             <button
               key={item.label}
               onClick={() => { item.action(); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                width: '100%', padding: '0.5rem 0.75rem', background: 'none', border: 'none',
-                cursor: 'pointer', fontSize: '0.8125rem',
-                color: item.danger ? 'var(--color-danger)' : 'var(--color-text)',
-                textAlign: 'left',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              className={`flex items-center gap-2 w-full px-3 py-2 bg-transparent border-none cursor-pointer text-[0.8125rem] text-left hover:bg-[var(--color-surface-hover)] ${item.danger ? 'text-[var(--color-danger)]' : 'text-[var(--color-text)]'}`}
             >
               {item.icon}
               {item.label}
@@ -210,71 +193,55 @@ function GoalCard({
   const typeInfo = GOAL_TYPES.find((t) => t.value === goal.type) ?? GOAL_TYPES[6];
 
   return (
-    <div style={{
-      backgroundColor: 'var(--color-surface)',
-      borderRadius: 'var(--radius-xl)',
-      border: '1px solid var(--color-border)',
-      boxShadow: 'var(--shadow-sm)',
-      overflow: 'hidden',
-    }}>
+    <div className="bg-[var(--color-surface)] rounded-[var(--radius-xl)] border border-[var(--color-border)] shadow-[var(--shadow-sm)] overflow-hidden">
       {/* Card image / gradient header */}
-      <div style={{
-        height: 80,
-        background: goal.imageUrl ? `url(${goal.imageUrl}) center/cover` : gradient,
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'flex-end',
-        padding: '0.5rem',
-      }}>
+      <div
+        className="h-20 relative flex items-start justify-end p-2"
+        style={{ background: goal.imageUrl ? `url(${goal.imageUrl}) center/cover` : gradient }}
+      >
         <GoalOverflowMenu onEdit={onEdit} onDelete={onDelete} />
       </div>
 
       {/* Card body */}
-      <div style={{ padding: '1rem' }}>
+      <div className="p-4">
         {/* Name + status */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.75rem' }}>
+        <div className="flex items-start justify-between gap-2 mb-3">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-              <span style={{ fontSize: '1rem' }}>{typeInfo.emoji}</span>
-              <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)' }}>{goal.name}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base">{typeInfo.emoji}</span>
+              <span className="text-[0.9375rem] font-semibold text-[var(--color-text)]">{goal.name}</span>
             </div>
           </div>
-          <span style={{
-            flexShrink: 0,
-            fontSize: '0.6875rem', fontWeight: 600,
-            padding: '0.125rem 0.5rem', borderRadius: 'var(--radius-full)',
-            backgroundColor: statusStyle.bg, color: statusStyle.color,
-          }}>
+          <span
+            className="shrink-0 text-[0.6875rem] font-semibold py-0.5 px-2 rounded-[var(--radius-full)]"
+            style={{ backgroundColor: statusStyle.bg, color: statusStyle.color }}
+          >
             {statusStyle.label}
           </span>
         </div>
 
         {/* Progress bar */}
-        <div style={{ marginBottom: '0.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+        <div className="mb-2">
+          <div className="flex justify-between mb-1.5 text-xs text-[var(--color-text-secondary)]">
             <span>{Math.round(pct * 100)}%</span>
           </div>
-          <div style={{ height: 8, backgroundColor: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%',
-              width: `${pct * 100}%`,
-              backgroundColor: 'var(--color-accent)',
-              borderRadius: 'var(--radius-full)',
-              transition: 'width 0.4s ease',
-            }} />
+          <div className="h-2 bg-[var(--color-border)] rounded-[var(--radius-full)] overflow-hidden">
+            <div
+              className="h-full bg-[var(--color-accent)] rounded-[var(--radius-full)] transition-[width] duration-[400ms] ease-in-out"
+              style={{ width: `${pct * 100}%` }}
+            />
           </div>
         </div>
 
         {/* Amounts */}
-        <div style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
-          <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{fmtCurrency(goal.currentAmount)}</span>
+        <div className="text-sm text-[var(--color-text-secondary)] mb-1.5">
+          <span className="font-semibold text-[var(--color-text)]">{fmtCurrency(goal.currentAmount)}</span>
           {' / '}
           {fmtCurrency(goal.targetAmount)}
         </div>
 
         {/* Target date + monthly */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem', marginBottom: '0.875rem', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+        <div className="flex flex-col gap-0.5 mb-3.5 text-xs text-[var(--color-text-muted)]">
           {goal.targetDate && (
             <span>Target: {fmtDate(goal.targetDate)}</span>
           )}
@@ -284,9 +251,9 @@ function GoalCard({
         </div>
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="flex gap-2">
           {goal.status !== 'completed' && (
-            <Button size="sm" variant="outline" icon={<Plus size={12} />} onClick={onContribute} style={{ flex: 1 }}>
+            <Button size="sm" variant="outline" icon={<Plus size={12} />} onClick={onContribute} className="flex-1">
               Add funds
             </Button>
           )}
@@ -314,93 +281,71 @@ function DebtGoalCard({
   const statusStyle = goalStatusStyle(goal.status);
 
   return (
-    <div style={{
-      backgroundColor: 'var(--color-surface)',
-      borderRadius: 'var(--radius-xl)',
-      border: '1px solid var(--color-border)',
-      boxShadow: 'var(--shadow-sm)',
-      overflow: 'hidden',
-    }}>
+    <div className="bg-[var(--color-surface)] rounded-[var(--radius-xl)] border border-[var(--color-border)] shadow-[var(--shadow-sm)] overflow-hidden">
       {/* Gradient header */}
-      <div style={{
-        height: 80,
-        background: GOAL_GRADIENTS.debt,
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0.5rem 0.75rem',
-      }}>
-        <span style={{ fontSize: '1.75rem' }}>💳</span>
+      <div
+        className="h-20 flex items-center justify-between px-3 py-2"
+        style={{ background: GOAL_GRADIENTS.debt }}
+      >
+        <span className="text-[1.75rem]">💳</span>
         <GoalOverflowMenu onEdit={onEdit} onDelete={onDelete} />
       </div>
 
       {/* Card body */}
-      <div style={{ padding: '1rem' }}>
+      <div className="p-4">
         {/* Name + status */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.75rem' }}>
-          <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)' }}>{goal.name}</span>
-          <span style={{
-            flexShrink: 0,
-            fontSize: '0.6875rem', fontWeight: 600,
-            padding: '0.125rem 0.5rem', borderRadius: 'var(--radius-full)',
-            backgroundColor: statusStyle.bg, color: statusStyle.color,
-          }}>
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <span className="text-[0.9375rem] font-semibold text-[var(--color-text)]">{goal.name}</span>
+          <span
+            className="shrink-0 text-[0.6875rem] font-semibold py-0.5 px-2 rounded-[var(--radius-full)]"
+            style={{ backgroundColor: statusStyle.bg, color: statusStyle.color }}
+          >
             {statusStyle.label}
           </span>
         </div>
 
         {/* Debt amounts row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginBottom: '0.125rem' }}>Original</div>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>{fmtCurrency(goal.targetAmount)}</div>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="text-center">
+            <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-0.5">Original</div>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-text)]">{fmtCurrency(goal.targetAmount)}</div>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginBottom: '0.125rem' }}>Paid Off</div>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-success)' }}>{fmtCurrency(goal.currentAmount)}</div>
+          <div className="text-center">
+            <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-0.5">Paid Off</div>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-success)]">{fmtCurrency(goal.currentAmount)}</div>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginBottom: '0.125rem' }}>Remaining</div>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-danger)' }}>{fmtCurrency(remaining)}</div>
+          <div className="text-center">
+            <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-0.5">Remaining</div>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-danger)]">{fmtCurrency(remaining)}</div>
           </div>
         </div>
 
         {/* Progress bar */}
-        <div style={{ marginBottom: '0.625rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+        <div className="mb-2.5">
+          <div className="flex justify-between mb-1 text-xs text-[var(--color-text-secondary)]">
             <span>{Math.round(pct * 100)}% paid off</span>
           </div>
-          <div style={{ height: 8, backgroundColor: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%',
-              width: `${pct * 100}%`,
-              background: 'linear-gradient(90deg, #c92a2a, #e67700)',
-              borderRadius: 'var(--radius-full)',
-              transition: 'width 0.4s ease',
-            }} />
+          <div className="h-2 bg-[var(--color-border)] rounded-[var(--radius-full)] overflow-hidden">
+            <div
+              className="h-full rounded-[var(--radius-full)] transition-[width] duration-[400ms] ease-in-out"
+              style={{ width: `${pct * 100}%`, background: 'linear-gradient(90deg, #c92a2a, #e67700)' }}
+            />
           </div>
         </div>
 
         {/* Linked account */}
         {goal.linkedAccount && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '0.375rem',
-            fontSize: '0.75rem', color: 'var(--color-text-secondary)',
-            backgroundColor: 'var(--color-surface-hover)',
-            borderRadius: 'var(--radius-sm)', padding: '0.25rem 0.5rem',
-            marginBottom: '0.625rem',
-          }}>
+          <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] bg-[var(--color-surface-hover)] rounded-[var(--radius-sm)] px-2 py-1 mb-2.5">
             <CreditCard size={11} />
             <span>{goal.linkedAccount.name}</span>
-            <span style={{ marginLeft: 'auto', color: 'var(--color-danger)', fontWeight: 500 }}>
+            <span className="ml-auto text-[var(--color-danger)] font-medium">
               {fmtCurrency(goal.linkedAccount.balance)}
             </span>
           </div>
         )}
 
         {/* Meta */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem', marginBottom: '0.875rem', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+        <div className="flex flex-col gap-0.5 mb-3.5 text-xs text-[var(--color-text-muted)]">
           {goal.targetDate && <span>Target payoff: {fmtDate(goal.targetDate)}</span>}
           {goal.monthlyContribution != null && goal.monthlyContribution > 0 && (
             <span>Monthly payment: {fmtCurrency(goal.monthlyContribution)}/mo</span>
@@ -409,7 +354,7 @@ function DebtGoalCard({
 
         {/* Actions */}
         {goal.status !== 'completed' && (
-          <Button size="sm" variant="outline" icon={<CreditCard size={12} />} onClick={onPayment} style={{ width: '100%' }}>
+          <Button size="sm" variant="outline" icon={<CreditCard size={12} />} onClick={onPayment} className="w-full">
             Make Payment
           </Button>
         )}
@@ -435,13 +380,7 @@ function PayDownSummary({ goals }: { goals: Goal[] }) {
   }
 
   return (
-    <div style={{
-      display: 'flex', gap: '0', marginBottom: '1.25rem',
-      backgroundColor: 'var(--color-surface)',
-      border: '1px solid var(--color-border)',
-      borderRadius: 'var(--radius-lg)',
-      overflow: 'hidden',
-    }}>
+    <div className="flex mb-5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)] overflow-hidden">
       {[
         { label: 'Total Debt', value: fmtCurrency(totalDebt), color: 'var(--color-danger)' },
         { label: 'Monthly Payments', value: totalMonthly > 0 ? `${fmtCurrency(totalMonthly)}/mo` : '—', color: 'var(--color-text)' },
@@ -449,15 +388,12 @@ function PayDownSummary({ goals }: { goals: Goal[] }) {
       ].map((item, i) => (
         <div
           key={item.label}
-          style={{
-            flex: 1, padding: '0.875rem 1rem', textAlign: 'center',
-            borderLeft: i > 0 ? '1px solid var(--color-border)' : 'none',
-          }}
+          className={`flex-1 px-4 py-3.5 text-center${i > 0 ? ' border-l border-[var(--color-border)]' : ''}`}
         >
-          <div style={{ fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-1 font-medium uppercase tracking-[0.05em]">
             {item.label}
           </div>
-          <div style={{ fontSize: '1rem', fontWeight: 700, color: item.color }}>
+          <div className="text-base font-bold" style={{ color: item.color }}>
             {item.value}
           </div>
         </div>
@@ -470,18 +406,18 @@ function PayDownSummary({ goals }: { goals: Goal[] }) {
 
 function GoalsEmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 1rem', textAlign: 'center' }}>
-      <svg width="96" height="96" viewBox="0 0 96 96" fill="none" style={{ marginBottom: '1.5rem' }}>
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <svg width="96" height="96" viewBox="0 0 96 96" fill="none" className="mb-6">
         <circle cx="48" cy="48" r="44" fill="var(--color-accent-light)" />
         <circle cx="48" cy="48" r="28" fill="none" stroke="var(--color-accent)" strokeWidth="3" strokeDasharray="6 4" />
         <circle cx="48" cy="48" r="16" fill="var(--color-accent)" opacity="0.2" />
         <circle cx="48" cy="48" r="8" fill="var(--color-accent)" />
         <path d="M48 8 L52 16 L60 16 L54 22 L56 30 L48 26 L40 30 L42 22 L36 16 L44 16 Z" fill="var(--color-accent)" opacity="0.6" />
       </svg>
-      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+      <h2 className="text-xl font-bold text-[var(--color-text)] mb-2">
         Plan for your future
       </h2>
-      <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', maxWidth: 320, marginBottom: '1.5rem' }}>
+      <p className="text-sm text-[var(--color-text-secondary)] max-w-[320px] mb-6">
         Set financial goals and track your progress toward what matters most.
       </p>
       <Button icon={<Plus size={14} />} onClick={onAdd}>
@@ -493,19 +429,17 @@ function GoalsEmptyState({ onAdd }: { onAdd: () => void }) {
 
 function DebtEmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 1rem', textAlign: 'center' }}>
-      <div style={{
-        width: 72, height: 72, borderRadius: 'var(--radius-full)',
-        background: GOAL_GRADIENTS.debt,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '2rem', marginBottom: '1.25rem',
-      }}>
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <div
+        className="w-[72px] h-[72px] rounded-[var(--radius-full)] flex items-center justify-center text-[2rem] mb-5"
+        style={{ background: GOAL_GRADIENTS.debt }}
+      >
         💳
       </div>
-      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+      <h2 className="text-xl font-bold text-[var(--color-text)] mb-2">
         No debt goals yet
       </h2>
-      <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', maxWidth: 340, marginBottom: '1.5rem' }}>
+      <p className="text-sm text-[var(--color-text-secondary)] max-w-[340px] mb-6">
         Link a loan or credit card and track your payoff journey.
       </p>
       <Button icon={<Plus size={14} />} onClick={onAdd}>
@@ -597,28 +531,27 @@ function AddGoalModal({
       <form onSubmit={handleSubmit}>
         {/* Goal type selector */}
         {!editing && (
-          <div style={{ marginBottom: '1.25rem' }}>
-            <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.625rem' }}>
+          <div className="mb-5">
+            <p className="text-sm font-medium text-[var(--color-text)] mb-2.5">
               Goal type
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+            <div className="grid grid-cols-4 gap-2">
               {GOAL_TYPES.map((gt) => (
                 <button
                   key={gt.value}
                   type="button"
                   onClick={() => set('type', gt.value)}
+                  className="flex flex-col items-center py-2.5 px-1.5 rounded-[var(--radius-md)] cursor-pointer gap-1 transition-all duration-150"
                   style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    padding: '0.625rem 0.375rem', borderRadius: 'var(--radius-md)',
-                    border: form.type === gt.value
-                      ? '2px solid var(--color-accent)'
-                      : '1px solid var(--color-border)',
+                    border: form.type === gt.value ? '2px solid var(--color-accent)' : '1px solid var(--color-border)',
                     backgroundColor: form.type === gt.value ? 'var(--color-accent-light)' : 'var(--color-surface)',
-                    cursor: 'pointer', gap: '0.25rem', transition: 'all 0.15s',
                   }}
                 >
-                  <span style={{ fontSize: '1.25rem' }}>{gt.emoji}</span>
-                  <span style={{ fontSize: '0.6875rem', fontWeight: 500, color: form.type === gt.value ? 'var(--color-accent)' : 'var(--color-text-secondary)', textAlign: 'center', lineHeight: 1.3 }}>
+                  <span className="text-xl">{gt.emoji}</span>
+                  <span
+                    className="text-[0.6875rem] font-medium text-center leading-[1.3]"
+                    style={{ color: form.type === gt.value ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
+                  >
                     {gt.label}
                   </span>
                 </button>
@@ -627,7 +560,7 @@ function AddGoalModal({
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="flex flex-col gap-4">
           <Input
             label="Goal name"
             placeholder="e.g. Emergency Fund, Bali Trip..."
@@ -635,7 +568,7 @@ function AddGoalModal({
             onChange={(e) => set('name', e.target.value)}
             required
           />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="grid grid-cols-2 gap-4">
             <Input
               label="Target amount"
               type="number"
@@ -653,7 +586,7 @@ function AddGoalModal({
               onChange={(e) => set('targetDate', e.target.value)}
             />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="grid grid-cols-2 gap-4">
             <Input
               label="Starting amount"
               type="number"
@@ -785,7 +718,7 @@ function AddDebtGoalModal({
       size="lg"
     >
       <form onSubmit={handleSubmit}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="flex flex-col gap-4">
           <Input
             label="Goal name"
             placeholder="e.g. Pay off Visa, Student Loan..."
@@ -794,7 +727,7 @@ function AddDebtGoalModal({
             required
           />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="grid grid-cols-2 gap-4">
             <Input
               label="Total debt amount"
               type="number"
@@ -817,8 +750,8 @@ function AddDebtGoalModal({
           </div>
 
           <div>
-            <label style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', display: 'block', marginBottom: '0.375rem' }}>
-              Link account <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}>(optional)</span>
+            <label className="text-sm font-medium text-[var(--color-text)] block mb-1.5">
+              Link account <span className="text-[var(--color-text-muted)] font-normal">(optional)</span>
             </label>
             {debtAccounts && debtAccounts.length > 0 ? (
               <Select
@@ -830,7 +763,7 @@ function AddDebtGoalModal({
                 ]}
               />
             ) : (
-              <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', padding: '0.5rem 0' }}>
+              <p className="text-[0.8125rem] text-[var(--color-text-muted)] py-2">
                 No credit card or loan accounts found. Add one in Accounts first.
               </p>
             )}
@@ -894,18 +827,20 @@ function ContributeModal({
   return (
     <Modal open={open} onClose={onClose} title={isDebt ? 'Make Payment' : 'Add Funds'} size="sm">
       {goal && (
-        <div style={{ marginBottom: '1rem' }}>
-          <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+        <div className="mb-4">
+          <p className="text-sm font-semibold text-[var(--color-text)] mb-2">
             {goal.name}
           </p>
-          <div style={{ height: 6, backgroundColor: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden', marginBottom: '0.375rem' }}>
-            <div style={{
-              height: '100%', width: `${pct * 100}%`,
-              background: isDebt ? 'linear-gradient(90deg, #c92a2a, #e67700)' : 'var(--color-accent)',
-              borderRadius: 'var(--radius-full)',
-            }} />
+          <div className="h-1.5 bg-[var(--color-border)] rounded-[var(--radius-full)] overflow-hidden mb-1.5">
+            <div
+              className="h-full rounded-[var(--radius-full)]"
+              style={{
+                width: `${pct * 100}%`,
+                background: isDebt ? 'linear-gradient(90deg, #c92a2a, #e67700)' : 'var(--color-accent)',
+              }}
+            />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+          <div className="flex justify-between text-xs text-[var(--color-text-secondary)]">
             {isDebt ? (
               <>
                 <span>{fmtCurrency(goal.currentAmount)} paid off</span>
@@ -966,7 +901,7 @@ function DeleteGoalModal({
 
   return (
     <Modal open={open} onClose={onClose} title="Delete Goal" size="sm">
-      <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+      <p className="text-sm text-[var(--color-text-secondary)]">
         Delete <strong>{goal?.name}</strong>? This cannot be undone.
       </p>
       <ModalFooter>
@@ -1000,11 +935,11 @@ function PayDownGoals({
 
   if (isLoading) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+      <div className="grid grid-cols-2 gap-4">
         {[1, 2].map((i) => (
           <Card key={i} padding="none">
             <Skeleton height={80} width="100%" style={{ borderRadius: '0' }} />
-            <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+            <div className="p-4 flex flex-col gap-2.5">
               <Skeleton height={16} width="60%" />
               <Skeleton height={8} width="100%" />
               <Skeleton height={13} width="80%" />
@@ -1019,7 +954,7 @@ function PayDownGoals({
   if (isError) {
     return (
       <Card padding="lg">
-        <p style={{ color: 'var(--color-danger)', fontSize: '0.875rem' }}>Failed to load debt goals.</p>
+        <p className="text-[var(--color-danger)] text-sm">Failed to load debt goals.</p>
       </Card>
     );
   }
@@ -1031,7 +966,7 @@ function PayDownGoals({
   return (
     <>
       <PayDownSummary goals={debtGoals} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+      <div className="grid grid-cols-2 gap-4">
         {debtGoals.map((goal) => (
           <DebtGoalCard
             key={goal.id}
@@ -1085,18 +1020,15 @@ export default function GoalsPage() {
   const saveUpGoals = goals?.filter((g) => g.type !== 'debt') ?? [];
 
   return (
-    <div style={{ padding: '1.5rem 0' }}>
+    <div className="py-6">
       {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, flex: '0 0 auto' }}>
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <h1 className="text-2xl font-bold text-[var(--color-text)] m-0 shrink-0">
           Goals
         </h1>
 
         {/* Sub-tabs */}
-        <div style={{
-          display: 'flex', background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)', overflow: 'hidden', flex: '0 0 auto',
-        }}>
+        <div className="flex bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] overflow-hidden shrink-0">
           {([
             { value: 'save_up', label: 'Save up' },
             { value: 'pay_down', label: 'Pay down' },
@@ -1104,12 +1036,10 @@ export default function GoalsPage() {
             <button
               key={tab.value}
               onClick={() => setSubTab(tab.value)}
+              className="py-1.5 px-3.5 border-none cursor-pointer text-[0.8125rem] font-medium transition-[background] duration-150"
               style={{
-                padding: '0.375rem 0.875rem', border: 'none', cursor: 'pointer',
-                fontSize: '0.8125rem', fontWeight: 500,
                 backgroundColor: subTab === tab.value ? 'var(--color-accent)' : 'transparent',
                 color: subTab === tab.value ? '#fff' : 'var(--color-text-secondary)',
-                transition: 'background 0.15s',
               }}
             >
               {tab.label}
@@ -1117,7 +1047,7 @@ export default function GoalsPage() {
           ))}
         </div>
 
-        <div style={{ flex: 1 }} />
+        <div className="flex-1" />
 
         <Button variant="ghost" size="sm" icon={<MessageSquare size={14} />}>
           Share feedback
@@ -1142,11 +1072,11 @@ export default function GoalsPage() {
           onPayment={setContributeTarget}
         />
       ) : isLoading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+        <div className="grid grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i} padding="none">
               <Skeleton height={80} width="100%" style={{ borderRadius: '0' }} />
-              <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              <div className="p-4 flex flex-col gap-2.5">
                 <Skeleton height={16} width="60%" />
                 <Skeleton height={8} width="100%" />
                 <Skeleton height={13} width="80%" />
@@ -1158,12 +1088,12 @@ export default function GoalsPage() {
         </div>
       ) : isError ? (
         <Card padding="lg">
-          <p style={{ color: 'var(--color-danger)', fontSize: '0.875rem' }}>Failed to load goals.</p>
+          <p className="text-[var(--color-danger)] text-sm">Failed to load goals.</p>
         </Card>
       ) : !saveUpGoals.length ? (
         <GoalsEmptyState onAdd={openAdd} />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
+        <div className="grid grid-cols-2 gap-4">
           {saveUpGoals.map((goal) => (
             <GoalCard
               key={goal.id}

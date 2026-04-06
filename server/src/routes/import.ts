@@ -10,6 +10,7 @@
 
 import { Router } from 'express';
 import multer from 'multer';
+import { createCheckpoint } from '../lib/checkpoint.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.js';
@@ -25,12 +26,15 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok =
-      file.mimetype === 'text/csv' ||
-      file.mimetype === 'application/pdf' ||
-      file.originalname.endsWith('.csv') ||
-      file.originalname.endsWith('.pdf');
-    ok ? cb(null, true) : cb(new Error('Only CSV and PDF files are accepted'));
+    // Check by extension only — browsers/OS send inconsistent MIME types for CSV
+    // (e.g. application/vnd.ms-excel, application/csv, text/plain are all valid CSV)
+    const ext = file.originalname.split('.').pop()?.toLowerCase();
+    const validExt = ext === 'csv' || ext === 'pdf';
+    if (validExt) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV and PDF files are accepted'));
+    }
   },
 });
 
@@ -83,13 +87,16 @@ interface ParsedRow {
   isDuplicate: boolean;
   status: 'new' | 'duplicate' | 'invalid';
   error?: string;
+  investmentType?: InvestmentRowType;
+  ticker?: string | null;
 }
 
 async function parseUploadedFile(
   buffer: Buffer,
   filename: string,
   accountId: string,
-  householdId: string
+  householdId: string,
+  accountType?: string
 ): Promise<{ rows: ParsedRow[]; bankSource: string; confidence: number; totalRows: number }> {
   const isPdf = filename.toLowerCase().endsWith('.pdf');
 
@@ -164,7 +171,7 @@ async function parseUploadedFile(
         error: `Cannot parse date: ${row.date}`,
       };
     }
-    return {
+    const base: ParsedRow = {
       date: parsedDate,
       description: row.description,
       amount: row.amount,
@@ -173,9 +180,35 @@ async function parseUploadedFile(
       isDuplicate: row.isDuplicate,
       status: row.isDuplicate ? ('duplicate' as const) : ('new' as const),
     };
+    if (accountType === 'investment') {
+      base.investmentType = detectInvestmentType(row.description, row.amount);
+      base.ticker = extractTicker(row.description);
+    }
+    return base;
   });
 
   return { rows: finalRows, bankSource, confidence, totalRows };
+}
+
+// ---------------------------------------------------------------------------
+// Investment row type detection
+// ---------------------------------------------------------------------------
+type InvestmentRowType = 'buy' | 'sell' | 'dividend' | 'transfer' | 'fee' | 'other';
+
+function detectInvestmentType(description: string, amount: number): InvestmentRowType {
+  const d = description.toLowerCase();
+  if (/\bbuy\b|purchase|bought/.test(d) || (amount < 0 && /shares?|units?/.test(d))) return 'buy';
+  if (/\bsell\b|sold|proceeds/.test(d) || (amount > 0 && /shares?|units?/.test(d))) return 'sell';
+  if (/dividend|dist(ribution)?|reinvest/.test(d)) return 'dividend';
+  if (/transfer|deposit|withdrawal/.test(d)) return 'transfer';
+  if (/fee|commission|expense|mgmt/.test(d)) return 'fee';
+  return 'other';
+}
+
+// Simple ticker extraction from description (e.g. "BUY 10 VFV.TO @ $120.00" → "VFV.TO")
+function extractTicker(description: string): string | null {
+  const match = description.match(/\b([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\b/);
+  return match?.[1] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +232,8 @@ router.post('/parse', upload.single('file'), async (req: AuthRequest, res) => {
       req.file.buffer,
       req.file.originalname,
       accountId,
-      req.householdId!
+      req.householdId!,
+      account.type
     );
 
     const newCount = rows.filter((r) => r.status === 'new').length;
@@ -217,7 +251,12 @@ router.post('/parse', upload.single('file'), async (req: AuthRequest, res) => {
     });
   } catch (err) {
     console.error('Import parse error:', err);
-    return res.status(500).json({ error: err instanceof Error ? err.message : 'Parse failed' });
+    const msg = err instanceof Error ? err.message : 'Parse failed';
+    // Pass through user-facing messages; suppress internal details like file paths or stack traces
+    const safeMsg = /^(PDF|Only|Cannot parse|Failed to|No rows|Unsupported)/i.test(msg)
+      ? msg
+      : 'Failed to parse file. Check the format and try again.';
+    return res.status(422).json({ error: safeMsg });
   }
 });
 
@@ -232,13 +271,18 @@ const ConfirmRowSchema = z.object({
   hash: z.string(),
   categoryId: z.string().optional(),
   notes: z.string().optional(),
+  investmentType: z.enum(['buy', 'sell', 'dividend', 'transfer', 'fee', 'other']).optional(),
+  ticker: z.string().nullable().optional(),
+  shares: z.number().optional(),
+  pricePerShare: z.number().optional(),
 });
 
 const ConfirmSchema = z.object({
   accountId: z.string(),
-  rows: z.array(ConfirmRowSchema),
-  filename: z.string().optional(),
-  bankSource: z.string().optional(),
+  rows: z.array(ConfirmRowSchema).max(5000, 'Cannot import more than 5000 rows at once'),
+  filename: z.string().max(255).optional(),
+  bankSource: z.string().max(50).optional(),
+  batchId: z.string().max(64).optional(),
 });
 
 router.post('/confirm', async (req: AuthRequest, res) => {
@@ -246,23 +290,32 @@ router.post('/confirm', async (req: AuthRequest, res) => {
     const body = ConfirmSchema.safeParse(req.body);
     if (!body.success) return res.status(400).json({ error: body.error.flatten() });
 
-    const { accountId, rows, filename, bankSource } = body.data;
+    const { accountId, rows, filename, bankSource, batchId } = body.data;
 
     const account = await prisma.account.findFirst({
       where: { id: accountId, householdId: req.householdId! },
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
-    // Pre-load categories for case-insensitive matching
+    // Pre-load categories for matching
     const categories = await prisma.category.findMany({
       where: { householdId: req.householdId! },
       select: { id: true, name: true },
     });
     const categoryMap = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
 
+    // Pre-load existing merchants to avoid N+1 inside transaction
+    const existingMerchants = await prisma.merchant.findMany({
+      where: { householdId: req.householdId! },
+      select: { id: true, name: true },
+    });
+    const merchantCache = new Map(existingMerchants.map((m) => [m.name.toLowerCase(), m.id]));
+
     let imported = 0;
     let skipped = 0;
     const errors: Array<{ index: number; error: string }> = [];
+
+    const isInvestmentAccount = account.type === 'investment';
 
     await prisma.$transaction(async (tx) => {
       for (let i = 0; i < rows.length; i++) {
@@ -275,30 +328,83 @@ router.post('/confirm', async (req: AuthRequest, res) => {
             continue;
           }
 
+          if (isInvestmentAccount && (row.investmentType === 'buy' || row.investmentType === 'sell')) {
+            // ── Investment buy/sell: upsert holding + create lot ──────────────
+            const ticker = row.ticker ?? extractTicker(row.description) ?? 'UNKNOWN';
+            const isBuy = row.investmentType === 'buy';
+            const shareDelta = row.shares ?? 1; // fallback: 1 share if not specified
+            const price = row.pricePerShare ?? Math.abs(row.amount) / shareDelta;
+
+            let holding = await tx.investmentHolding.findFirst({
+              where: { accountId, symbol: ticker },
+            });
+
+            if (!holding) {
+              holding = await tx.investmentHolding.create({
+                data: {
+                  accountId,
+                  symbol: ticker,
+                  name: ticker,
+                  shares: 0,
+                  costBasis: 0,
+                  currentPrice: price,
+                },
+              });
+            }
+
+            const newShares = isBuy ? holding.shares + shareDelta : holding.shares - shareDelta;
+            const newCostBasis = isBuy
+              ? holding.costBasis + shareDelta * price
+              : holding.costBasis - (holding.shares > 0 ? (shareDelta / holding.shares) * holding.costBasis : 0);
+
+            await tx.investmentHolding.update({
+              where: { id: holding.id },
+              data: {
+                shares: Math.max(0, newShares),
+                costBasis: Math.max(0, newCostBasis),
+                currentPrice: price,
+              },
+            });
+
+            await tx.holdingLot.create({
+              data: {
+                holdingId: holding.id,
+                date: txDate,
+                shares: isBuy ? shareDelta : -shareDelta,
+                pricePerShare: price,
+                note: [row.description, batchId ? `[batch:${batchId}]` : null].filter(Boolean).join(' '),
+                status: 'confirmed',
+              },
+            });
+          }
+
+          // Always create a transaction record (for cash flow tracking regardless of type)
           // Resolve category
           let resolvedCategoryId = row.categoryId ?? null;
           if (!resolvedCategoryId) {
-            // Try to match by description keyword in category names
             const descLower = row.description.toLowerCase();
             for (const [name, id] of categoryMap) {
-              if (descLower.includes(name) || name.includes(descLower.split(' ')[0])) {
+              if (descLower.includes(name)) {
                 resolvedCategoryId = id;
                 break;
               }
             }
           }
 
-          // Find or create merchant
+          // Resolve merchant from pre-loaded cache — create only if genuinely new
           const merchantName = row.description.split(/[#\d]/)[0].trim();
-          let merchant = await tx.merchant.findFirst({
-            where: { householdId: req.householdId!, name: { equals: merchantName, mode: 'insensitive' } },
-          });
-          if (!merchant && merchantName.length > 1) {
-            merchant = await tx.merchant.create({
+          const merchantKey = merchantName.toLowerCase();
+          let merchantId: string | null = merchantCache.get(merchantKey) ?? null;
+          if (!merchantId && merchantName.length > 2) {
+            const created = await tx.merchant.create({
               data: { householdId: req.householdId!, name: merchantName, displayName: merchantName },
             });
+            merchantId = created.id;
+            merchantCache.set(merchantKey, merchantId);
           }
 
+          const batchNote = batchId ? `[batch:${batchId}]` : null;
+          const notes = [row.notes, batchNote].filter(Boolean).join(' ') || null;
           await tx.transaction.create({
             data: {
               householdId: req.householdId!,
@@ -308,8 +414,8 @@ router.post('/confirm', async (req: AuthRequest, res) => {
               originalDescription: row.description,
               amount: row.amount,
               categoryId: resolvedCategoryId,
-              merchantId: merchant?.id ?? null,
-              notes: row.notes ?? null,
+              merchantId,
+              notes,
               needsReview: !resolvedCategoryId,
             },
           });
@@ -320,6 +426,23 @@ router.post('/confirm', async (req: AuthRequest, res) => {
         }
       }
     });
+
+    // Create rollback checkpoint
+    if (imported > 0) {
+      // We need the IDs of newly created transactions — re-query by hash match or by createdAt
+      // Simplest: query transactions created in the last few seconds for this account
+      const recentIds = await prisma.transaction.findMany({
+        where: { accountId, householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
+        select: { id: true },
+      });
+      await createCheckpoint(
+        prisma,
+        req.householdId!,
+        'bulk-import',
+        `Imported ${imported} rows from ${filename ?? 'unknown'}`,
+        recentIds.map((t) => t.id)
+      );
+    }
 
     // Record import history
     await prisma.importHistory.create({
@@ -381,8 +504,8 @@ const WebhookRowSchema = z.object({
 
 const WebhookSchema = z.object({
   accountId: z.string(),
-  source: z.string().optional(),
-  transactions: z.array(WebhookRowSchema),
+  source: z.string().max(50).optional(),
+  transactions: z.array(WebhookRowSchema).max(5000, 'Cannot import more than 5000 rows at once'),
 });
 
 router.post('/webhook', async (req: AuthRequest, res) => {
@@ -408,30 +531,35 @@ router.post('/webhook', async (req: AuthRequest, res) => {
       )
     );
 
-    let imported = 0;
+    // Filter out duplicates and invalid dates up-front
+    const toCreate: Array<{
+      householdId: string; accountId: string; date: Date;
+      description: string; originalDescription: string; amount: number; needsReview: boolean;
+    }> = [];
     let skipped = 0;
 
     for (const txn of transactions) {
       const hash = computeDedupHash(txn.date, txn.description, txn.amount);
       if (existingHashes.has(hash)) { skipped++; continue; }
-
       const txDate = new Date(txn.date);
       if (isNaN(txDate.getTime())) { skipped++; continue; }
-
-      await prisma.transaction.create({
-        data: {
-          householdId: req.householdId!,
-          accountId,
-          date: txDate,
-          description: txn.description,
-          originalDescription: txn.description,
-          amount: txn.amount,
-          needsReview: true,
-        },
+      existingHashes.add(hash); // prevent within-batch duplicates
+      toCreate.push({
+        householdId: req.householdId!,
+        accountId,
+        date: txDate,
+        description: txn.description,
+        originalDescription: txn.description,
+        amount: txn.amount,
+        needsReview: true,
       });
-      existingHashes.add(hash);
-      imported++;
     }
+
+    // Bulk insert — single DB roundtrip
+    if (toCreate.length > 0) {
+      await prisma.transaction.createMany({ data: toCreate });
+    }
+    const imported = toCreate.length;
 
     await prisma.importHistory.create({
       data: {

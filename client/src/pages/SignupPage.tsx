@@ -31,93 +31,55 @@ export default function SignupPage() {
   const errorMessage = validationError
     ?? (signup.error ? (signup.error as any)?.response?.data?.error ?? 'Sign up failed. Please try again.' : null);
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '0.625rem 0.875rem',
-    borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--color-border-strong)',
-    backgroundColor: 'var(--color-bg)',
-    color: 'var(--color-text)',
-    fontSize: '0.9375rem',
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: '0.875rem',
-    fontWeight: '500',
-    color: 'var(--color-text)',
-    marginBottom: '0.375rem',
-  };
+  const inputClass = "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] text-[0.9375rem] outline-none box-border";
+  const labelClass = "block text-sm font-medium text-[var(--color-text)] mb-1.5";
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'var(--color-bg)',
-      padding: '1rem',
-    }}>
-      <div style={{
-        width: '100%',
-        maxWidth: '440px',
-        backgroundColor: 'var(--color-surface)',
-        borderRadius: 'var(--radius-xl)',
-        boxShadow: 'var(--shadow-lg)',
-        padding: '2.5rem',
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--color-accent)', margin: 0, letterSpacing: '-0.02em' }}>
+    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] p-4">
+      <div className="w-full max-w-[440px] bg-[var(--color-surface)] rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] p-10">
+        <div className="text-center mb-8">
+          <h1 className="text-[2rem] font-extrabold text-[var(--color-accent)] m-0 tracking-[-0.02em]">
             Kuber
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', marginTop: '0.5rem', fontSize: '0.875rem' }}>
+          <p className="text-[var(--color-text-secondary)] mt-2 text-sm">
             Create your account
           </p>
         </div>
 
         <form onSubmit={handleSubmit} noValidate>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+          <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label htmlFor="firstName" style={labelStyle}>First Name</label>
-              <input id="firstName" type="text" autoComplete="given-name" required value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Jane" style={inputStyle} />
+              <label htmlFor="firstName" className={labelClass}>First Name</label>
+              <input id="firstName" type="text" autoComplete="given-name" required value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Jane" className={inputClass} />
             </div>
             <div>
-              <label htmlFor="lastName" style={labelStyle}>Last Name</label>
-              <input id="lastName" type="text" autoComplete="family-name" required value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Smith" style={inputStyle} />
+              <label htmlFor="lastName" className={labelClass}>Last Name</label>
+              <input id="lastName" type="text" autoComplete="family-name" required value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Smith" className={inputClass} />
             </div>
           </div>
 
-          <div style={{ marginBottom: '1rem' }}>
-            <label htmlFor="email" style={labelStyle}>Email</label>
-            <input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" style={inputStyle} />
+          <div className="mb-4">
+            <label htmlFor="email" className={labelClass}>Email</label>
+            <input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className={inputClass} />
           </div>
 
-          <div style={{ marginBottom: '1rem' }}>
-            <label htmlFor="password" style={labelStyle}>Password</label>
-            <input id="password" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" style={inputStyle} />
+          <div className="mb-4">
+            <label htmlFor="password" className={labelClass}>Password</label>
+            <input id="password" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" className={inputClass} />
           </div>
 
-          <div style={{ marginBottom: '1rem' }}>
-            <label htmlFor="confirmPassword" style={labelStyle}>Confirm Password</label>
-            <input id="confirmPassword" type="password" autoComplete="new-password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••" style={inputStyle} />
+          <div className="mb-4">
+            <label htmlFor="confirmPassword" className={labelClass}>Confirm Password</label>
+            <input id="confirmPassword" type="password" autoComplete="new-password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••" className={inputClass} />
           </div>
 
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label htmlFor="householdName" style={labelStyle}>What should we call your household?</label>
-            <input id="householdName" type="text" required value={householdName} onChange={(e) => setHouseholdName(e.target.value)} placeholder="The Smith Family" style={inputStyle} />
+          <div className="mb-6">
+            <label htmlFor="householdName" className={labelClass}>What should we call your household?</label>
+            <input id="householdName" type="text" required value={householdName} onChange={(e) => setHouseholdName(e.target.value)} placeholder="The Smith Family" className={inputClass} />
           </div>
 
           {errorMessage && (
-            <div style={{
-              padding: '0.75rem',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--color-danger-light)',
-              color: 'var(--color-danger)',
-              fontSize: '0.875rem',
-              marginBottom: '1rem',
-            }}>
+            <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-danger-light)] text-[var(--color-danger)] text-sm mb-4">
               {errorMessage}
             </div>
           )}
@@ -125,27 +87,16 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={signup.isPending}
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--color-accent)',
-              color: '#fff',
-              fontWeight: '600',
-              fontSize: '0.9375rem',
-              border: 'none',
-              cursor: signup.isPending ? 'not-allowed' : 'pointer',
-              opacity: signup.isPending ? 0.7 : 1,
-              transition: 'opacity 0.15s',
-            }}
+            className="w-full py-3 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-white font-semibold text-[0.9375rem] border-none transition-opacity duration-150"
+            style={{ cursor: signup.isPending ? 'not-allowed' : 'pointer', opacity: signup.isPending ? 0.7 : 1 }}
           >
             {signup.isPending ? 'Creating account…' : 'Create account'}
           </button>
         </form>
 
-        <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+        <p className="text-center mt-6 text-sm text-[var(--color-text-secondary)]">
           Already have an account?{' '}
-          <Link to="/login" style={{ color: 'var(--color-accent)', textDecoration: 'none', fontWeight: '500' }}>
+          <Link to="/login" className="text-[var(--color-accent)] no-underline font-medium">
             Sign in
           </Link>
         </p>

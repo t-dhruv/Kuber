@@ -68,35 +68,13 @@ function SummaryCard({
   color?: string;
 }) {
   return (
-    <div
-      style={{
-        flex: "1 1 150px",
-        padding: "0.875rem 1rem",
-        borderRadius: "var(--radius-lg)",
-        border: "1px solid var(--color-border)",
-        backgroundColor: "var(--color-surface)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.25rem",
-      }}
-    >
-      <span
-        style={{
-          fontSize: "0.75rem",
-          color: "var(--color-text-secondary)",
-          fontWeight: 500,
-          textTransform: "uppercase",
-          letterSpacing: "0.04em",
-        }}
-      >
+    <div className="flex-[1_1_150px] px-4 py-3.5 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] flex flex-col gap-1">
+      <span className="text-xs text-[var(--color-text-secondary)] font-medium uppercase tracking-[0.04em]">
         {label}
       </span>
       <span
-        style={{
-          fontSize: "1.125rem",
-          fontWeight: 700,
-          color: color ?? "var(--color-text)",
-        }}
+        className="text-lg font-bold"
+        style={{ color: color ?? "var(--color-text)" }}
       >
         {value}
       </span>
@@ -124,17 +102,8 @@ function ForecastTooltip({
     day: "numeric",
   });
   return (
-    <div
-      style={{
-        backgroundColor: "var(--color-surface)",
-        border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-md)",
-        padding: "0.625rem 0.875rem",
-        fontSize: "0.8125rem",
-        boxShadow: "var(--shadow-md)",
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: "0.25rem", color: "var(--color-text)" }}>
+    <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] px-3.5 py-2.5 text-[0.8125rem] shadow-[var(--shadow-md)]">
+      <div className="font-semibold mb-1 text-[var(--color-text)]">
         {dateLabel}
       </div>
       <div style={{ color: projected >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
@@ -165,32 +134,22 @@ export function CashFlowForecast() {
   const endBalance = data?.summary.projectedEndBalance ?? 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+    <div className="flex flex-col gap-4">
       {/* Days selector */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <span
-          style={{
-            fontSize: "0.8125rem",
-            fontWeight: 500,
-            color: "var(--color-text-secondary)",
-          }}
-        >
+      <div className="flex items-center gap-2">
+        <span className="text-[0.8125rem] font-medium text-[var(--color-text-secondary)]">
           Forecast window:
         </span>
         {([30, 60, 90] as const).map((d) => (
           <button
             key={d}
             onClick={() => setDays(d)}
+            className="px-3 py-1 rounded-[var(--radius-md)] text-[0.8125rem] cursor-pointer transition-all duration-150"
             style={{
-              padding: "0.25rem 0.75rem",
-              borderRadius: "var(--radius-md)",
-              fontSize: "0.8125rem",
               fontWeight: days === d ? 600 : 400,
               border: days === d ? "1px solid var(--color-accent)" : "1px solid var(--color-border)",
               backgroundColor: days === d ? "var(--color-accent-light)" : "var(--color-surface)",
               color: days === d ? "var(--color-accent)" : "var(--color-text-secondary)",
-              cursor: "pointer",
-              transition: "all 0.15s",
             }}
           >
             {d}d
@@ -200,15 +159,15 @@ export function CashFlowForecast() {
 
       {/* Summary cards */}
       {isLoading ? (
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div className="flex gap-3 flex-wrap">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} style={{ flex: "1 1 150px" }}>
+            <div key={i} className="flex-[1_1_150px]">
               <Skeleton height={72} />
             </div>
           ))}
         </div>
       ) : (
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div className="flex gap-3 flex-wrap">
           <SummaryCard
             label="Current Balance"
             value={fmtCurrency(data?.currentBalance ?? 0)}
@@ -242,19 +201,14 @@ export function CashFlowForecast() {
 
       {/* Chart */}
       <Card>
-        <div style={{ padding: "1rem 1.25rem 0.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontWeight: 600, fontSize: "0.9375rem", color: "var(--color-text)" }}>
+        <div className="px-5 pt-4 pb-2">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-[0.9375rem] text-[var(--color-text)]">
               Projected Balance
             </span>
             {data?.summary.knownRecurringTotal !== undefined &&
               data.summary.knownRecurringTotal !== 0 && (
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--color-text-secondary)",
-                  }}
-                >
+                <span className="text-xs text-[var(--color-text-secondary)]">
                   Includes {fmtCurrency(Math.abs(data.summary.knownRecurringTotal))} known recurring
                   {data.summary.knownRecurringTotal < 0 ? " expenses" : " income"}
                 </span>
@@ -263,26 +217,19 @@ export function CashFlowForecast() {
         </div>
 
         {isLoading && (
-          <div style={{ padding: "1rem 1.25rem" }}>
+          <div className="px-5 py-4">
             <Skeleton height={280} />
           </div>
         )}
 
         {isError && (
-          <div
-            style={{
-              padding: "2rem",
-              textAlign: "center",
-              color: "var(--color-text-secondary)",
-              fontSize: "0.875rem",
-            }}
-          >
+          <div className="p-8 text-center text-[var(--color-text-secondary)] text-sm">
             Failed to load forecast data.
           </div>
         )}
 
         {!isLoading && !isError && data && (
-          <div style={{ padding: "0.5rem 0 1rem" }}>
+          <div className="py-2 pb-4">
             <ResponsiveContainer width="100%" height={300}>
               <ComposedChart
                 data={data.projections}
@@ -343,13 +290,7 @@ export function CashFlowForecast() {
       </Card>
 
       {/* Disclaimer */}
-      <p
-        style={{
-          fontSize: "0.75rem",
-          color: "var(--color-text-secondary)",
-          margin: 0,
-        }}
-      >
+      <p className="text-xs text-[var(--color-text-secondary)] m-0">
         Projections are estimates based on your last 90 days of transaction history plus known
         recurring items. Actual results may vary.
       </p>

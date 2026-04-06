@@ -169,6 +169,60 @@ export const BANK_FORMATS: BankFormat[] = [
     amountStrategy: 'single',
     debitSign: 'positive', // Amex: positive = charge (debit), negative = credit/refund
   },
+  // ── Investment Brokerages ──────────────────────────────────────────────────
+  {
+    id: 'questrade-ca',
+    name: 'Questrade',
+    country: 'CA',
+    mapping: {
+      date: ['transaction date', 'settlement date'],
+      description: ['description', 'symbol', 'activity type'],
+      amount: ['net amount', 'amount'],
+      reference: ['transaction id'],
+    },
+    amountStrategy: 'single',
+    debitSign: 'negative',
+  },
+  {
+    id: 'wealthsimple-ca',
+    name: 'Wealthsimple',
+    country: 'CA',
+    mapping: {
+      date: ['date'],
+      description: ['activity', 'description', 'symbol'],
+      amount: ['amount', 'net amount'],
+      reference: ['id'],
+    },
+    amountStrategy: 'single',
+    debitSign: 'negative',
+  },
+  {
+    id: 'ibkr',
+    name: 'Interactive Brokers',
+    country: 'INTL',
+    mapping: {
+      date: ['date/time', 'settle date/time', 'date'],
+      description: ['symbol', 'description'],
+      amount: ['proceeds', 'amount', 'realized p/l'],
+      reference: ['trade id', 'order id'],
+    },
+    amountStrategy: 'single',
+    debitSign: 'negative',
+  },
+  {
+    id: 'td-direct-ca',
+    name: 'TD Direct Investing',
+    country: 'CA',
+    mapping: {
+      date: ['settlement date', 'transaction date'],
+      description: ['description', 'symbol'],
+      debit: ['debit'],
+      credit: ['credit'],
+    },
+    amountStrategy: 'debit-credit',
+    debitSign: 'positive',
+  },
+
   // ── Generic fallback ─────────────────────────────────────────────────────────
   {
     id: 'generic',
@@ -207,21 +261,43 @@ function scoreFormat(format: BankFormat, headers: string[]): number {
  * Detect the best matching bank format for the given CSV headers.
  * Returns the format and confidence score, or 'generic' as fallback.
  */
+/**
+ * Check that a format's required fields (date, description, and at least one amount field)
+ * are all present in the CSV headers. Prevents high-scoring false matches like detecting
+ * a generic "Date,Description,Amount" CSV as Amex just because it shares 3 column names.
+ */
+function hasAllRequiredFields(format: BankFormat, lowerHeaders: string[]): boolean {
+  const matches = (patterns: string[]) =>
+    patterns.some((p) => lowerHeaders.some((h) => h.includes(p) || p.includes(h)));
+
+  const hasDate = matches(format.mapping.date);
+  const hasDesc = matches(format.mapping.description);
+  const hasAmount =
+    format.amountStrategy === 'single'
+      ? matches(format.mapping.amount ?? [])
+      : matches(format.mapping.debit ?? []) || matches(format.mapping.credit ?? []);
+
+  return hasDate && hasDesc && hasAmount;
+}
+
 export function detectBankFormat(headers: string[]): { format: BankFormat; confidence: number } {
+  const lowerHeaders = headers.map((h) => h.toLowerCase().trim());
   let best: BankFormat = BANK_FORMATS.find((f) => f.id === 'generic')!;
   let bestScore = 0;
 
   for (const format of BANK_FORMATS) {
     if (format.id === 'generic') continue;
+    // A format must cover all required fields AND score above a minimum threshold
+    if (!hasAllRequiredFields(format, lowerHeaders)) continue;
     const score = scoreFormat(format, headers);
-    if (score > bestScore) {
+    // Use a higher threshold (0.6) so ambiguous CSVs fall back to generic
+    if (score > bestScore && score >= 0.6) {
       bestScore = score;
       best = format;
     }
   }
 
-  // Fall back to generic if no confident match
-  if (bestScore < 0.3) {
+  if (bestScore < 0.6) {
     return { format: BANK_FORMATS.find((f) => f.id === 'generic')!, confidence: bestScore };
   }
 

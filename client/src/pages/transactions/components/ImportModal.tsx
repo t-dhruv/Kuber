@@ -14,26 +14,15 @@ const NativeSelect = ({
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   children: React.ReactNode;
 }) => (
-  <div style={{ position: 'relative' }}>
+  <div className="relative">
     <select
       value={value}
       onChange={onChange}
-      style={{
-        width: '100%',
-        appearance: 'none',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--color-border)',
-        padding: '0.5rem 2rem 0.5rem 0.75rem',
-        fontSize: '0.875rem',
-        backgroundColor: 'var(--color-surface)',
-        color: 'var(--color-text)',
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-      }}
+      className="w-full appearance-none rounded-[var(--radius-md)] border border-[var(--color-border)] py-2 pl-3 pr-8 text-sm bg-[var(--color-surface)] text-[var(--color-text)] cursor-pointer font-[inherit]"
     >
       {children}
     </select>
-    <span style={{ position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--color-text-muted)' }}>
+    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--color-text-muted)]">
       ▾
     </span>
   </div>
@@ -167,7 +156,7 @@ function Step1Upload({
   const canProceed = !!file && !!accountId;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div className="flex flex-col gap-4">
       {/* Drop zone */}
       <div
         onClick={() => inputRef.current?.click()}
@@ -176,35 +165,31 @@ function Step1Upload({
         onDrop={onDrop}
         style={{
           border: `2px dashed ${dragging ? 'var(--color-accent)' : 'var(--color-border)'}`,
-          borderRadius: 'var(--radius-lg)',
-          padding: '2rem',
-          textAlign: 'center',
-          cursor: 'pointer',
           backgroundColor: dragging ? 'var(--color-accent-light)' : 'var(--color-bg)',
-          transition: 'all 0.15s',
         }}
+        className="rounded-[var(--radius-lg)] p-8 text-center cursor-pointer transition-all duration-[150ms]"
       >
         <input
           ref={inputRef}
           type="file"
           accept=".csv,text/csv"
-          style={{ display: 'none' }}
+          className="hidden"
           onChange={onInputChange}
         />
         {file ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-            <FileText size={28} style={{ color: 'var(--color-accent)' }} />
-            <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{file.name}</span>
-            <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+          <div className="flex flex-col items-center gap-2">
+            <FileText size={28} className="text-[var(--color-accent)]" />
+            <span className="font-semibold text-[var(--color-text)]">{file.name}</span>
+            <span className="text-[0.8125rem] text-[var(--color-text-muted)]">
               ~{rowEstimate} data rows detected
             </span>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-            <Upload size={28} style={{ color: 'var(--color-text-muted)' }} />
-            <span style={{ fontWeight: 500, color: 'var(--color-text)' }}>Drag & drop a CSV file</span>
-            <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
-              or <span style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>browse</span>
+          <div className="flex flex-col items-center gap-2">
+            <Upload size={28} className="text-[var(--color-text-muted)]" />
+            <span className="font-medium text-[var(--color-text)]">Drag & drop a CSV file</span>
+            <span className="text-[0.8125rem] text-[var(--color-text-muted)]">
+              or <span className="text-[var(--color-accent)] underline">browse</span>
             </span>
           </div>
         )}
@@ -212,8 +197,8 @@ function Step1Upload({
 
       {/* Account selector */}
       <div>
-        <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.375rem' }}>
-          Import into account <span style={{ color: 'var(--color-error)' }}>*</span>
+        <label className="block text-[0.8125rem] font-medium text-[var(--color-text)] mb-1.5">
+          Import into account <span className="text-[var(--color-error)]">*</span>
         </label>
         <NativeSelect
           value={accountId}
@@ -228,7 +213,7 @@ function Step1Upload({
 
       {/* Date format */}
       <div>
-        <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.375rem' }}>
+        <label className="block text-[0.8125rem] font-medium text-[var(--color-text)] mb-1.5">
           Date format in CSV
         </label>
         <NativeSelect value={dateFormat} onChange={(e) => onDateFormat(e.target.value)}>
@@ -284,12 +269,12 @@ function Step2Map({ headers, csvText, mapping, onMapping, onBack, onNext }: Step
   const requiredMapped = mapping.date && mapping.description && mapping.amount;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3">
         {REQUIRED_FIELDS.map(({ key, label }) => (
           <div key={key}>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
-              {label} <span style={{ color: 'var(--color-error)' }}>*</span>
+            <label className="block text-[0.8125rem] font-medium text-[var(--color-text)] mb-1">
+              {label} <span className="text-[var(--color-error)]">*</span>
             </label>
             <NativeSelect
               value={mapping[key] ?? SKIP}
@@ -302,7 +287,7 @@ function Step2Map({ headers, csvText, mapping, onMapping, onBack, onNext }: Step
         ))}
         {OPTIONAL_FIELDS.map(({ key, label }) => (
           <div key={key}>
-            <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
+            <label className="block text-[0.8125rem] font-medium text-[var(--color-text-muted)] mb-1">
               {label}
             </label>
             <NativeSelect
@@ -318,15 +303,15 @@ function Step2Map({ headers, csvText, mapping, onMapping, onBack, onNext }: Step
       {/* Preview table */}
       {previewDataRows.length > 0 && (
         <div>
-          <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+          <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-[0.05em] mb-2">
             Preview (first 3 rows)
           </p>
-          <div style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+          <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)]">
+            <table className="w-full border-collapse text-[0.8125rem]">
               <thead>
-                <tr style={{ backgroundColor: 'var(--color-bg)' }}>
+                <tr className="bg-[var(--color-bg)]">
                   {['Date', 'Description', 'Amount', 'Category', 'Notes'].map(h => (
-                    <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                    <th key={h} className="px-3 py-[0.4rem] text-left font-semibold text-[var(--color-text-muted)] border-b border-[var(--color-border)] whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -335,11 +320,11 @@ function Step2Map({ headers, csvText, mapping, onMapping, onBack, onNext }: Step
               <tbody>
                 {previewDataRows.map((row, i) => (
                   <tr key={i} style={{ borderBottom: i < previewDataRows.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
-                    <td style={{ padding: '0.4rem 0.75rem', color: 'var(--color-text)' }}>{getCell(row, mapping.date)}</td>
-                    <td style={{ padding: '0.4rem 0.75rem', color: 'var(--color-text)' }}>{getCell(row, mapping.description)}</td>
-                    <td style={{ padding: '0.4rem 0.75rem', color: 'var(--color-text)' }}>{getCell(row, mapping.amount)}</td>
-                    <td style={{ padding: '0.4rem 0.75rem', color: 'var(--color-text-muted)' }}>{getCell(row, mapping.category ?? SKIP)}</td>
-                    <td style={{ padding: '0.4rem 0.75rem', color: 'var(--color-text-muted)' }}>{getCell(row, mapping.notes ?? SKIP)}</td>
+                    <td className="px-3 py-[0.4rem] text-[var(--color-text)]">{getCell(row, mapping.date)}</td>
+                    <td className="px-3 py-[0.4rem] text-[var(--color-text)]">{getCell(row, mapping.description)}</td>
+                    <td className="px-3 py-[0.4rem] text-[var(--color-text)]">{getCell(row, mapping.amount)}</td>
+                    <td className="px-3 py-[0.4rem] text-[var(--color-text-muted)]">{getCell(row, mapping.category ?? SKIP)}</td>
+                    <td className="px-3 py-[0.4rem] text-[var(--color-text-muted)]">{getCell(row, mapping.notes ?? SKIP)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -413,40 +398,40 @@ function Step3Preview({ file, accountId, dateFormat, mapping, onBack, onDone }: 
   const hasErrors = (preview?.errors.length ?? 0) > 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div className="flex flex-col gap-4">
       {previewQuery.isLoading && (
-        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+        <div className="p-8 text-center text-[var(--color-text-muted)]">
           Parsing CSV...
         </div>
       )}
 
       {previewQuery.isError && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-error-light, #fef2f2)', color: 'var(--color-error, #dc2626)' }}>
+        <div className="flex items-center gap-2 p-3 rounded-[var(--radius-md)] bg-[var(--color-error-light,#fef2f2)] text-[var(--color-error,#dc2626)]">
           <AlertTriangle size={16} />
-          <span style={{ fontSize: '0.875rem' }}>{(previewQuery.error as any)?.response?.data?.error ?? 'Failed to parse CSV'}</span>
+          <span className="text-sm">{(previewQuery.error as any)?.response?.data?.error ?? 'Failed to parse CSV'}</span>
         </div>
       )}
 
       {preview && (
         <>
           {/* Summary badge */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-accent-light)', border: '1px solid var(--color-accent)' }}>
-            <CheckCircle2 size={16} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-            <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 500 }}>
+          <div className="flex items-center gap-2 px-4 py-3 rounded-[var(--radius-md)] bg-[var(--color-accent-light)] border border-[var(--color-accent)]">
+            <CheckCircle2 size={16} className="text-[var(--color-accent)] shrink-0" />
+            <span className="text-sm text-[var(--color-text)] font-medium">
               {totalRows} rows found — up to {totalRows - (preview.errors.length)} will be imported
             </span>
           </div>
 
           {/* Errors warning */}
           {hasErrors && (
-            <div style={{ padding: '0.75rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-warning-light, #fffbeb)', border: '1px solid var(--color-warning, #f59e0b)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.375rem' }}>
-                <AlertTriangle size={14} style={{ color: 'var(--color-warning, #f59e0b)', flexShrink: 0 }} />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
+            <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-warning-light,#fffbeb)] border border-[var(--color-warning,#f59e0b)]">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <AlertTriangle size={14} className="text-[var(--color-warning,#f59e0b)] shrink-0" />
+                <span className="text-[0.8125rem] font-semibold text-[var(--color-text)]">
                   {preview.errors.length} row{preview.errors.length !== 1 ? 's' : ''} will be skipped
                 </span>
               </div>
-              <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+              <ul className="m-0 pl-5 text-[0.8125rem] text-[var(--color-text-muted)]">
                 {preview.errors.slice(0, 5).map(e => (
                   <li key={e.row}>Row {e.row}: {e.message}</li>
                 ))}
@@ -458,15 +443,15 @@ function Step3Preview({ file, accountId, dateFormat, mapping, onBack, onDone }: 
           {/* Preview table (up to 10 rows) */}
           {preview.preview.length > 0 && (
             <div>
-              <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+              <p className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-[0.05em] mb-2">
                 First {preview.preview.length} rows
               </p>
-              <div style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+              <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)]">
+                <table className="w-full border-collapse text-[0.8125rem]">
                   <thead>
-                    <tr style={{ backgroundColor: 'var(--color-bg)' }}>
+                    <tr className="bg-[var(--color-bg)]">
                       {['Date', 'Description', 'Amount', 'Category'].map(h => (
-                        <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: 'left', fontWeight: 600, color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+                        <th key={h} className="px-3 py-[0.4rem] text-left font-semibold text-[var(--color-text-muted)] border-b border-[var(--color-border)] whitespace-nowrap">
                           {h}
                         </th>
                       ))}
@@ -475,19 +460,19 @@ function Step3Preview({ file, accountId, dateFormat, mapping, onBack, onDone }: 
                   <tbody>
                     {preview.preview.map((row, i) => (
                       <tr key={i} style={{ borderBottom: i < preview.preview.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
-                        <td style={{ padding: '0.4rem 0.75rem', color: 'var(--color-text)', whiteSpace: 'nowrap' }}>{row.date}</td>
-                        <td style={{ padding: '0.4rem 0.75rem', color: 'var(--color-text)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.description}</td>
-                        <td style={{ padding: '0.4rem 0.75rem', color: row.amount < 0 ? 'var(--color-error, #dc2626)' : 'var(--color-success, #16a34a)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        <td className="px-3 py-[0.4rem] text-[var(--color-text)] whitespace-nowrap">{row.date}</td>
+                        <td className="px-3 py-[0.4rem] text-[var(--color-text)] max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap">{row.description}</td>
+                        <td className="px-3 py-[0.4rem] whitespace-nowrap [font-variant-numeric:tabular-nums]" style={{ color: row.amount < 0 ? 'var(--color-error,#dc2626)' : 'var(--color-success,#16a34a)' }}>
                           {fmtCurrency(row.amount)}
                         </td>
-                        <td style={{ padding: '0.4rem 0.75rem', color: 'var(--color-text-muted)' }}>{row.category ?? '—'}</td>
+                        <td className="px-3 py-[0.4rem] text-[var(--color-text-muted)]">{row.category ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               {totalRows > 5 && (
-                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1.5">
                   Showing first 5 of {totalRows} rows
                 </p>
               )}

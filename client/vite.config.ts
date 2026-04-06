@@ -6,7 +6,21 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': '/src' } },
   server: {
-    port: 3000,
-    proxy: { '/api': { target: 'http://localhost:4000', changeOrigin: true } }
+    port: 9001,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:9002',
+        changeOrigin: true,
+        // Required for SSE streaming — prevents Vite's proxy from buffering the response
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            // Pass through SSE responses without buffering
+            if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+              proxyRes.headers['cache-control'] = 'no-cache';
+            }
+          });
+        },
+      },
+    }
   }
 });

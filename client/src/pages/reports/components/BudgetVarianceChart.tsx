@@ -220,8 +220,9 @@ export function BudgetVarianceChart({ from, to }: Props) {
 
       {/* Bar chart */}
       <Card padding="lg">
-        <ResponsiveContainer width="100%" height={320}>
-          <BarChart
+        <div role="img" aria-label="Budget variance chart">
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart
             data={chartData}
             margin={{ top: 4, right: 8, left: 8, bottom: 40 }}
             barCategoryGap="30%"
@@ -257,7 +258,8 @@ export function BudgetVarianceChart({ from, to }: Props) {
               ))}
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
+          </ResponsiveContainer>
+        </div>
       </Card>
 
       {/* Table breakdown */}

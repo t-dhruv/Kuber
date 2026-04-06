@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { getQuotes, getQuote, getLiveBenchmarks, BenchmarkPeriod } from '../lib/priceCache';
@@ -117,6 +118,7 @@ type RawHolding = {
   shares: number;
   costBasis: number;
   currentPrice: number;
+  updatedAt: Date;
   account: { name: string };
   lots: Array<{
     id: string;
@@ -157,6 +159,7 @@ function buildHolding(
     dayChange: Math.round(dayChange * h.shares * 100) / 100,
     dayChangePercent,
     priceSource: 'live',
+    priceUpdatedAt: new Date().toISOString(),
     lots: h.lots.map((l) => ({
       id: l.id,
       date: l.date.toISOString(),
@@ -191,6 +194,7 @@ function buildHoldingFallback(h: RawHolding, avgCostBasis: number) {
     dayChange: 0,
     dayChangePercent: 0,
     priceSource: 'cached',
+    priceUpdatedAt: h.updatedAt.toISOString(),
     lots: h.lots.map((l) => ({
       id: l.id,
       date: l.date.toISOString(),
@@ -560,6 +564,103 @@ router.put('/holdings/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /api/v1/investments/holdings/import — bulk import holdings from CSV rows
+router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const rows = req.body as Array<{
+      accountId: string;
+      symbol: string;
+      name?: string;
+      shares: number;
+      costBasis: number;
+      date?: string;
+      assetClass?: string;
+      batchId?: string;
+    }>;
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'Provide an array of holdings' });
+    }
+
+    // Validate all accountIds belong to this household
+    const accountIds = [...new Set(rows.map((r) => r.accountId))];
+    const accounts = await prisma.account.findMany({
+      where: { id: { in: accountIds }, householdId },
+      select: { id: true },
+    });
+    const validIds = new Set(accounts.map((a) => a.id));
+    const invalid = accountIds.filter((id) => !validIds.has(id));
+    if (invalid.length > 0) {
+      return res.status(400).json({ error: `Unknown accountId(s): ${invalid.join(', ')}` });
+    }
+
+    let created = 0;
+    let updated = 0;
+
+    for (const row of rows) {
+      const symbol = row.symbol.toUpperCase().trim();
+      const shares = Number(row.shares);
+      const costBasis = Number(row.costBasis);
+      if (!symbol || isNaN(shares) || shares <= 0 || isNaN(costBasis) || costBasis < 0) continue;
+
+      const lotNote = row.batchId ? `[batch:${row.batchId}]` : undefined;
+
+      const existing = await prisma.investmentHolding.findFirst({
+        where: { accountId: row.accountId, symbol },
+      });
+
+      if (existing) {
+        const newShares = existing.shares + shares;
+        const newCost = (existing.costBasis * existing.shares + costBasis * shares) / newShares;
+        await prisma.investmentHolding.update({
+          where: { id: existing.id },
+          data: { shares: newShares, costBasis: newCost },
+        });
+        await prisma.holdingLot.create({
+          data: {
+            holdingId: existing.id,
+            shares,
+            pricePerShare: costBasis,
+            date: row.date ? new Date(row.date) : new Date(),
+            note: lotNote,
+            status: 'confirmed',
+          },
+        });
+        updated++;
+      } else {
+        const holding = await prisma.investmentHolding.create({
+          data: {
+            accountId: row.accountId,
+            symbol,
+            name: row.name?.trim() || symbol,
+            shares,
+            costBasis,
+            currentPrice: costBasis,
+            assetClass: row.assetClass ?? 'us_stock',
+          },
+        });
+        await prisma.holdingLot.create({
+          data: {
+            holdingId: holding.id,
+            shares,
+            pricePerShare: costBasis,
+            date: row.date ? new Date(row.date) : new Date(),
+            note: lotNote,
+            status: 'confirmed',
+          },
+        });
+        created++;
+      }
+    }
+
+    return res.json({ created, updated, total: created + updated });
+  } catch (err) {
+    console.error('[investments/holdings/import POST]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // DELETE /api/v1/investments/holdings/:id
 router.delete('/holdings/:id', async (req: AuthRequest, res: Response) => {
   try {
@@ -876,6 +977,28 @@ router.post('/lots/:id/skip', async (req: AuthRequest, res: Response) => {
     console.error('[investments/lots/:id/skip]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// ── PATCH /holdings/prices — bulk price update from n8n ──────────────────────
+const priceUpdateSchema = z.array(z.object({
+  symbol: z.string().min(1).max(20),
+  price: z.number().positive(),
+  currency: z.string().length(3).optional(),
+}));
+
+router.patch('/holdings/prices', async (req: AuthRequest, res: Response) => {
+  const parse = priceUpdateSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: parse.error.issues[0]?.message });
+  const householdId = req.householdId!;
+  let updated = 0;
+  for (const { symbol, price } of parse.data) {
+    const result = await prisma.investmentHolding.updateMany({
+      where: { symbol: { equals: symbol, mode: 'insensitive' }, account: { householdId } },
+      data: { currentPrice: price, updatedAt: new Date() },
+    });
+    updated += result.count;
+  }
+  return res.json({ updated });
 });
 
 export default router;

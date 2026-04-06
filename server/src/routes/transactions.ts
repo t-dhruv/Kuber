@@ -900,6 +900,18 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // If merchantName is provided, update description and sync the linked merchant's displayName
+    if (req.body.merchantName !== undefined) {
+      const newName = String(req.body.merchantName).trim();
+      data.description = newName;
+      if (existing.merchantId) {
+        await prisma.merchant.update({
+          where: { id: existing.merchantId },
+          data: { displayName: newName, name: newName },
+        });
+      }
+    }
+
     // If changing accountId, verify it belongs to the household
     if (data.accountId) {
       const account = await prisma.account.findFirst({ where: { id: data.accountId, householdId } });

@@ -59,7 +59,7 @@ export class AnthropicProvider implements AiProviderClient {
         ? [{ type: 'text' as const, text: opts.systemPrompt, cache_control: { type: 'ephemeral' as const } }]
         : undefined,
       messages,
-    });
+    }, { signal: opts.signal });
 
     for await (const event of stream) {
       if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {

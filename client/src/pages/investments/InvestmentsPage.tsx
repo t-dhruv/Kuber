@@ -4,7 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
-import { Plus, ChevronRight, ChevronDown, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, ChevronRight, ChevronDown, Trash2, RefreshCw, Newspaper, Loader2, Upload } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Card, Skeleton, Button, Modal, ModalFooter, Input, Select, notify,
@@ -22,6 +22,16 @@ const fmtDate = (d: string) =>
 
 const fmtDateFull = (d: string) =>
   new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+const formatPriceAge = (iso: string) => {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,6 +60,7 @@ interface Holding {
   dayChange: number;
   dayChangePercent: number;
   priceSource: 'live' | 'cached';
+  priceUpdatedAt?: string;
   lots: HoldingLot[];
 }
 
@@ -340,8 +351,9 @@ function PerformanceChart({ data, isLoading }: { data?: HistoryPoint[]; isLoadin
         <Skeleton height={220} width="100%" />
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={data ?? []} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <div role="img" aria-label="Portfolio performance chart">
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={data ?? []} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
               <XAxis
                 dataKey="date"
@@ -376,7 +388,8 @@ function PerformanceChart({ data, isLoading }: { data?: HistoryPoint[]; isLoadin
                 activeDot={{ r: 4 }}
               />
             </LineChart>
-          </ResponsiveContainer>
+            </ResponsiveContainer>
+          </div>
           <div style={{
             textAlign: 'center',
             marginTop: '0.375rem',
@@ -552,6 +565,68 @@ function PendingLotsCard({ lots }: { lots: PendingLot[] }) {
 
 // ─── Expanded Holding Row ─────────────────────────────────────────────────────
 
+// ─── Holding News Panel ───────────────────────────────────────────────────────
+
+interface NewsItem {
+  title: string;
+  link: string;
+  pubDate: string;
+  description: string;
+}
+
+function HoldingNewsPanel({ ticker }: { ticker: string }) {
+  const { data, isLoading, isError } = useQuery<{ ticker: string; items: NewsItem[] }>({
+    queryKey: ['holding-news', ticker],
+    queryFn: () => api.get(`/investment-intel/news?ticker=${encodeURIComponent(ticker)}`).then((r) => r.data),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.5rem 0', fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+        <Loader2 size={13} className="animate-spin" />
+        Loading news for {ticker}…
+      </div>
+    );
+  }
+
+  if (isError) {
+    return <p style={{ fontSize: '0.8125rem', color: 'var(--color-danger, #ef4444)', margin: '0.375rem 0' }}>Could not load news.</p>;
+  }
+
+  const items = data?.items?.slice(0, 5) ?? [];
+
+  if (!items.length) {
+    return <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', margin: '0.375rem 0' }}>No news found for {ticker}.</p>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
+      {items.map((item, i) => (
+        <div key={i} style={{ padding: '0.375rem 0', borderBottom: i < items.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
+          <a
+            href={item.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-accent)', textDecoration: 'none', lineHeight: 1.4 }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none'; }}
+          >
+            {item.title}
+          </a>
+          {item.pubDate && (
+            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0.125rem 0 0' }}>
+              {new Date(item.pubDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Expanded Holding ─────────────────────────────────────────────────────────
+
 function ExpandedHolding({
   holding,
   onAddLot,
@@ -561,7 +636,19 @@ function ExpandedHolding({
   onAddLot: () => void;
   onSetRecurring: () => void;
 }) {
+  const [showNews, setShowNews] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const queryClient = useQueryClient();
+
+  const deleteHoldingMutation = useMutation({
+    mutationFn: () => api.delete(`/investments/holdings/${holding.id}`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
+      queryClient.invalidateQueries({ queryKey: ['investments-allocation'] });
+      notify.success(`${holding.ticker} removed`);
+    },
+    onError: () => notify.error('Failed to remove holding'),
+  });
 
   const deleteLotMutation = useMutation({
     mutationFn: (lotId: string) =>
@@ -685,6 +772,42 @@ function ExpandedHolding({
         <Button size="sm" variant="secondary" icon={<RefreshCw size={13} />} onClick={onSetRecurring}>
           Set Recurring
         </Button>
+        <Button
+          size="sm"
+          variant={showNews ? 'primary' : 'secondary'}
+          icon={<Newspaper size={13} />}
+          onClick={() => setShowNews((v) => !v)}
+        >
+          {showNews ? 'Hide News' : 'Latest News'}
+        </Button>
+        <div style={{ flex: 1 }} />
+        {!confirmDelete ? (
+          <Button
+            size="sm"
+            variant="danger"
+            icon={<Trash2 size={13} />}
+            onClick={() => setConfirmDelete(true)}
+          >
+            Remove Holding
+          </Button>
+        ) : (
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+              Delete all lots for {holding.ticker}?
+            </span>
+            <Button
+              size="sm"
+              variant="danger"
+              loading={deleteHoldingMutation.isPending}
+              onClick={() => deleteHoldingMutation.mutate()}
+            >
+              Confirm
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Recurring schedules */}
@@ -766,13 +889,30 @@ function ExpandedHolding({
           ))}
         </div>
       )}
+
+      {/* Latest News panel */}
+      {showNews && (
+        <div style={{ marginTop: '0.75rem' }}>
+          <div style={{
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+            marginBottom: '0.5rem',
+          }}>
+            Latest News — {holding.ticker}
+          </div>
+          <HoldingNewsPanel ticker={holding.ticker} />
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Holdings Table ───────────────────────────────────────────────────────────
 
-const TABLE_HEADERS = ['', 'Security', 'Ticker', 'Shares', 'Avg Cost', 'Price', 'Value', 'Day Change', 'Total Return'];
+const TABLE_HEADERS = ['', 'Security', 'Ticker', 'Shares', 'Avg Cost', 'Current Price', 'Value', 'Day Change', 'Total Return'];
 
 function HoldingsTable({
   data,
@@ -873,8 +1013,16 @@ function HoldingsTable({
                       <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
                         {fmtCurrency(h.avgCostBasis)}
                       </td>
-                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
-                        {fmtCurrency(h.currentPrice)}
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                            {fmtCurrency(h.currentPrice)}
+                          </span>
+                          <span style={{ fontSize: '0.6875rem', color: h.priceSource === 'live' ? 'var(--color-success)' : 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                            {h.priceSource === 'live' ? '● live' : '● cached'}
+                            {h.priceUpdatedAt ? ` · ${formatPriceAge(h.priceUpdatedAt)}` : ''}
+                          </span>
+                        </div>
                       </td>
                       <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
                         {fmtCurrency(h.currentValue)}
@@ -957,8 +1105,9 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
     <Card padding="lg">
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flexShrink: 0 }}>
-          <ResponsiveContainer width={260} height={260}>
-            <PieChart>
+          <div role="img" aria-label="Portfolio allocation pie chart">
+            <ResponsiveContainer width={260} height={260}>
+              <PieChart>
               <Pie
                 data={segments}
                 dataKey="value"
@@ -975,7 +1124,8 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
                 ))}
               </Pie>
             </PieChart>
-          </ResponsiveContainer>
+            </ResponsiveContainer>
+          </div>
           <div style={{
             position: 'absolute',
             top: '50%',
@@ -1567,6 +1717,158 @@ function RecurringModal({
   );
 }
 
+// ─── Bulk Import Modal ────────────────────────────────────────────────────────
+
+function BulkImportModal({
+  open,
+  onClose,
+  accounts,
+}: {
+  open: boolean;
+  onClose: () => void;
+  accounts: InvestmentAccount[];
+}) {
+  const queryClient = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [accountId, setAccountId] = useState('');
+  const [rows, setRows] = useState<Array<{ symbol: string; name: string; shares: string; costBasis: string; date: string }>>([]);
+  const [parseError, setParseError] = useState('');
+
+  function parseCSV(text: string) {
+    setParseError('');
+    const lines = text.trim().split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) { setParseError('CSV must have a header row and at least one data row'); return; }
+    const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/[^a-z]/g, ''));
+    const idxSymbol = headers.findIndex((h) => h === 'symbol' || h === 'ticker');
+    const idxShares = headers.findIndex((h) => h.includes('share') || h === 'qty' || h === 'quantity');
+    const idxCost = headers.findIndex((h) => h.includes('cost') || h.includes('price') || h.includes('avg'));
+    const idxName = headers.findIndex((h) => h === 'name' || h === 'security');
+    const idxDate = headers.findIndex((h) => h === 'date' || h.includes('purchas'));
+    if (idxSymbol === -1 || idxShares === -1 || idxCost === -1) {
+      setParseError('Required columns: symbol (or ticker), shares (or qty), costBasis (or avgPrice)');
+      return;
+    }
+    const parsed = lines.slice(1).map((line) => {
+      const cols = line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
+      return {
+        symbol: cols[idxSymbol] ?? '',
+        name: idxName >= 0 ? (cols[idxName] ?? '') : '',
+        shares: cols[idxShares] ?? '',
+        costBasis: cols[idxCost] ?? '',
+        date: idxDate >= 0 ? (cols[idxDate] ?? '') : '',
+      };
+    }).filter((r) => r.symbol);
+    setRows(parsed);
+  }
+
+  const importMutation = useMutation({
+    mutationFn: () => {
+      const payload = rows.map((r) => ({
+        accountId,
+        symbol: r.symbol,
+        name: r.name || r.symbol,
+        shares: parseFloat(r.shares),
+        costBasis: parseFloat(r.costBasis),
+        date: r.date || undefined,
+      }));
+      return api.post('/investments/holdings/import', payload).then((r) => r.data);
+    },
+    onSuccess: (data: { created: number; updated: number }) => {
+      notify.success(`Imported ${data.created} new, updated ${data.updated} existing holdings`);
+      queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
+      queryClient.invalidateQueries({ queryKey: ['investments-allocation'] });
+      onClose();
+    },
+    onError: () => notify.error('Import failed'),
+  });
+
+  if (!open) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} title="Import Holdings from CSV" size="lg">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', padding: '0.75rem', background: 'var(--color-surface-hover)', borderRadius: 6 }}>
+          CSV must have columns: <strong>symbol</strong> (or ticker), <strong>shares</strong> (or qty), <strong>costBasis</strong> (or avgPrice).
+          Optional: name, date.
+        </div>
+
+        <div>
+          <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>Account</label>
+          <select
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', fontSize: '0.875rem' }}
+          >
+            <option value="">Select account…</option>
+            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>CSV File</label>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = (ev) => parseCSV(ev.target?.result as string);
+              reader.readAsText(file);
+            }}
+          />
+          <Button variant="secondary" icon={<Upload size={14} />} onClick={() => fileRef.current?.click()}>
+            Choose CSV file
+          </Button>
+          {parseError && <p style={{ color: 'var(--color-danger)', fontSize: '0.8125rem', marginTop: 4 }}>{parseError}</p>}
+        </div>
+
+        {rows.length > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: 6 }}>{rows.length} row{rows.length !== 1 ? 's' : ''} parsed</p>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  {['Symbol', 'Name', 'Shares', 'Cost Basis', 'Date'].map((h) => (
+                    <th key={h} style={{ textAlign: 'left', padding: '0.25rem 0.5rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.slice(0, 10).map((r, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td style={{ padding: '0.25rem 0.5rem', fontWeight: 600 }}>{r.symbol}</td>
+                    <td style={{ padding: '0.25rem 0.5rem', color: 'var(--color-text-secondary)' }}>{r.name || '—'}</td>
+                    <td style={{ padding: '0.25rem 0.5rem' }}>{r.shares}</td>
+                    <td style={{ padding: '0.25rem 0.5rem' }}>{r.costBasis}</td>
+                    <td style={{ padding: '0.25rem 0.5rem', color: 'var(--color-text-secondary)' }}>{r.date || '—'}</td>
+                  </tr>
+                ))}
+                {rows.length > 10 && (
+                  <tr><td colSpan={5} style={{ padding: '0.25rem 0.5rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>…and {rows.length - 10} more</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={() => importMutation.mutate()}
+            loading={importMutation.isPending}
+            disabled={!accountId || rows.length === 0}
+          >
+            Import {rows.length > 0 ? `${rows.length} Holdings` : ''}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InvestmentsPage() {
@@ -1574,6 +1876,7 @@ export default function InvestmentsPage() {
   const [period, setPeriod] = useState<Period>('1Y');
   const [accountId, setAccountId] = useState<string | undefined>();
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: holdingsData, isLoading: holdingsLoading } = useQuery<HoldingsData>({
     queryKey: ['investments-holdings', accountId],
@@ -1653,6 +1956,14 @@ export default function InvestmentsPage() {
 
         <Button
           size="sm"
+          variant="secondary"
+          icon={<Upload size={14} />}
+          onClick={() => setImportOpen(true)}
+        >
+          Import CSV
+        </Button>
+        <Button
+          size="sm"
           icon={<Plus size={14} />}
           onClick={() => setAddOpen(true)}
         >
@@ -1693,6 +2004,13 @@ export default function InvestmentsPage() {
       <AddHoldingModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
+        accounts={accounts}
+      />
+
+      {/* Bulk Import Modal */}
+      <BulkImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
         accounts={accounts}
       />
     </div>

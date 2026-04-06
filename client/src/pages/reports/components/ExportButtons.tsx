@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, FileText, FileSpreadsheet } from 'lucide-react';
+import { FileText, FileSpreadsheet } from 'lucide-react';
 
 interface ExportButtonsProps {
   type: 'spending' | 'cashflow' | 'tax';
@@ -55,26 +55,13 @@ export function ExportButtons({ type, from, to, year }: ExportButtonsProps) {
     }
   }
 
-  const btnBase: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.375rem',
-    padding: '0.375rem 0.75rem',
-    fontSize: '0.8125rem',
-    fontWeight: 500,
-    borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--color-border)',
-    background: 'var(--color-surface)',
-    color: 'var(--color-text-secondary)',
-    cursor: 'pointer',
-    transition: 'all 0.15s',
-    whiteSpace: 'nowrap' as const,
-  };
+  const btnClass = "inline-flex items-center gap-1.5 px-3 py-1.5 text-[0.8125rem] font-medium rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] cursor-pointer transition-all duration-150 whitespace-nowrap";
 
   return (
-    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+    <div className="flex gap-2 items-center">
       <button
-        style={{ ...btnBase, opacity: pdfLoading ? 0.6 : 1 }}
+        className={btnClass}
+        style={{ opacity: pdfLoading ? 0.6 : 1 }}
         onClick={() => handleDownload('pdf', setPdfLoading)}
         disabled={pdfLoading}
         title="Export as PDF"
@@ -83,7 +70,8 @@ export function ExportButtons({ type, from, to, year }: ExportButtonsProps) {
         {pdfLoading ? 'Exporting…' : 'PDF'}
       </button>
       <button
-        style={{ ...btnBase, opacity: excelLoading ? 0.6 : 1 }}
+        className={btnClass}
+        style={{ opacity: excelLoading ? 0.6 : 1 }}
         onClick={() => handleDownload('excel', setExcelLoading)}
         disabled={excelLoading}
         title="Export as Excel"

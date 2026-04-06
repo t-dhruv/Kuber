@@ -6,10 +6,28 @@
  */
 
 import { useState, useRef, useCallback } from 'react';
-import { Upload, FileText, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, FileText, AlertCircle, Loader2, Download } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui';
 import type { ParseResult } from '../ImportPage';
+
+const SAMPLE_CSV = `Date,Description,Amount,Reference
+2024-03-01,Grocery Store,-52.40,TXN001
+2024-03-02,Salary Deposit,3500.00,TXN002
+2024-03-03,Netflix Subscription,-15.99,TXN003
+2024-03-05,Electric Bill,-120.00,TXN004
+2024-03-07,Coffee Shop,-4.75,TXN005
+`;
+
+function downloadSample() {
+  const blob = new Blob([SAMPLE_CSV], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'kuber-sample-transactions.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 interface Account {
   id: string;
@@ -89,7 +107,7 @@ export default function DropZone({ accounts, onParsed }: Props) {
         className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
           isDragging
             ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/5'
-            : 'border-[color:var(--border)] hover:border-[color:var(--color-primary)]/50'
+            : 'border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]/50'
         }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -107,11 +125,11 @@ export default function DropZone({ accounts, onParsed }: Props) {
           <div className="flex flex-col items-center gap-2">
             <FileText size={40} className="text-[color:var(--color-primary)]" />
             <p className="font-medium">{file.name}</p>
-            <p className="text-sm text-[color:var(--text-secondary)]">
+            <p className="text-sm text-[color:var(--color-text-secondary)]">
               {(file.size / 1024).toFixed(1)} KB
             </p>
             <button
-              className="text-xs text-[color:var(--text-secondary)] underline mt-1"
+              className="text-xs text-[color:var(--color-text-secondary)] underline mt-1"
               onClick={(e) => { e.stopPropagation(); setFile(null); }}
             >
               Change file
@@ -119,14 +137,14 @@ export default function DropZone({ accounts, onParsed }: Props) {
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">
-            <Upload size={40} className="text-[color:var(--text-secondary)]" />
+            <Upload size={40} className="text-[color:var(--color-text-secondary)]" />
             <div>
               <p className="font-medium">Drop your bank statement here</p>
-              <p className="text-sm text-[color:var(--text-secondary)] mt-1">
+              <p className="text-sm text-[color:var(--color-text-secondary)] mt-1">
                 CSV or PDF · Max 20 MB · TD, RBC, CIBC, BMO, Scotiabank, Chase, BofA and more
               </p>
             </div>
-            <p className="text-xs text-[color:var(--text-secondary)]">or click to browse</p>
+            <p className="text-xs text-[color:var(--color-text-secondary)]">or click to browse</p>
           </div>
         )}
       </div>
@@ -137,7 +155,7 @@ export default function DropZone({ accounts, onParsed }: Props) {
         <select
           value={accountId}
           onChange={(e) => setAccountId(e.target.value)}
-          className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary)]/40"
+          className="w-full rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary)]/40"
         >
           <option value="">Select account…</option>
           {accounts.map((a) => (
@@ -157,9 +175,19 @@ export default function DropZone({ accounts, onParsed }: Props) {
       )}
 
       {/* Tips */}
-      <div className="bg-[color:var(--surface-hover)] rounded-lg p-4 text-sm space-y-1">
-        <p className="font-medium">Tips</p>
-        <ul className="text-[color:var(--text-secondary)] space-y-0.5 list-disc list-inside">
+      <div className="bg-[color:var(--color-surface-hover)] rounded-lg p-4 text-sm space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="font-medium">Tips</p>
+          <button
+            type="button"
+            onClick={downloadSample}
+            className="flex items-center gap-1 text-xs text-[color:var(--color-primary)] hover:underline"
+          >
+            <Download size={12} />
+            Download sample CSV
+          </button>
+        </div>
+        <ul className="text-[color:var(--color-text-secondary)] space-y-0.5 list-disc list-inside">
           <li>Download CSV export from your bank's online portal</li>
           <li>Kuber auto-detects TD, RBC, CIBC, BMO, Scotiabank, Chase, BofA, Wells Fargo, Capital One & Amex</li>
           <li>Duplicate transactions are flagged automatically — you choose what to import</li>

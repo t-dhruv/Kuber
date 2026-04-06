@@ -3,15 +3,17 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Plus, ChevronRight, RotateCcw, X, Check,
-  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors,
+  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card,
+  Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card, notify, ConfirmDialog,
 } from '@/components/ui';
 import { ImportModal } from './components/ImportModal';
 import { SplitTransactionModal } from './components/SplitTransactionModal';
 import { DuplicateReviewModal } from './components/DuplicateReviewModal';
+import { ReceiptOcrModal } from './components/ReceiptOcrModal';
+import { AiSetupNudge } from '@/components/ui/AiSetupNudge';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,7 +129,7 @@ function CategoryPicker({
 
   return (
     <div>
-      <div style={{ marginBottom: '0.5rem' }}>
+      <div className="mb-2">
         <Input
           placeholder="Search categories..."
           value={search}
@@ -135,22 +137,19 @@ function CategoryPicker({
           leftIcon={<Search size={14} />}
         />
       </div>
-      <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <div className="flex flex-col gap-3 overflow-y-auto max-h-[220px]">
         {groups.map((group) => (
           <div key={group}>
-            <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 0.25rem', marginBottom: '0.25rem' }}>
+            <div className="text-[0.6875rem] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.06em] px-1 mb-1">
               {group}
             </div>
             {filtered.filter((c) => (c.groupName ?? 'Other') === group).map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => onSelect(cat.id)}
+                className="flex items-center gap-2 w-full px-2 py-1.5 rounded-[var(--radius-sm)] border-none cursor-pointer text-left"
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '0.5rem',
-                  width: '100%', padding: '0.375rem 0.5rem',
-                  borderRadius: 'var(--radius-sm)', border: 'none',
                   backgroundColor: selectedId === cat.id ? 'var(--color-accent-light)' : 'transparent',
-                  cursor: 'pointer', textAlign: 'left',
                 }}
                 onMouseEnter={(e) => {
                   if (selectedId !== cat.id) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)';
@@ -159,24 +158,19 @@ function CategoryPicker({
                   if (selectedId !== cat.id) e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
-                <span style={{
-                  width: 24, height: 24, borderRadius: 'var(--radius-full)',
-                  backgroundColor: 'var(--color-accent)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.75rem', flexShrink: 0,
-                }}>
+                <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0">
                   {cat.emoji ?? cat.name[0]}
                 </span>
-                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: selectedId === cat.id ? 600 : 400 }}>
+                <span className={`text-sm text-[var(--color-text)] ${selectedId === cat.id ? 'font-semibold' : 'font-normal'}`}>
                   {cat.name}
                 </span>
-                {selectedId === cat.id && <Check size={14} style={{ marginLeft: 'auto', color: 'var(--color-accent)' }} />}
+                {selectedId === cat.id && <Check size={14} className="ml-auto text-[var(--color-accent)]" />}
               </button>
             ))}
           </div>
         ))}
         {filtered.length === 0 && (
-          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+          <div className="p-4 text-center text-[var(--color-text-muted)] text-sm">
             No categories found
           </div>
         )}
@@ -213,7 +207,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
     mutationFn: async () => {
       // 1. Save core fields
       await api.put(`/transactions/${transaction!.id}`, {
-        description: form.merchantName,
+        merchantName: form.merchantName,
         date: form.date,
         amount: form.amount,
         categoryId: form.categoryId,
@@ -256,7 +250,10 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       onSaved();
     },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to save transaction'),
   });
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/transactions/${transaction!.id}`),
@@ -264,6 +261,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       onClose();
     },
+    onError: () => notify.error('Failed to delete transaction'),
   });
 
   const selectedCategory = categories.find((c) => c.id === form.categoryId);
@@ -287,41 +285,29 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
       {/* Backdrop */}
       {open && (
         <div
-          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.2)', zIndex: 40 }}
+          className="fixed inset-0 bg-black/20 z-40"
           onClick={onClose}
         />
       )}
 
       {/* Drawer */}
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 380, zIndex: 50,
-        backgroundColor: 'var(--color-surface)',
-        borderLeft: '1px solid var(--color-border)',
-        boxShadow: 'var(--shadow-lg)',
-        transform: open ? 'translateX(0)' : 'translateX(100%)',
-        transition: 'transform 0.25s ease',
-        display: 'flex', flexDirection: 'column',
-        overflowY: 'auto',
-      }}>
+      <div
+        className="fixed top-0 right-0 bottom-0 w-[380px] z-50 bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[var(--shadow-lg)] flex flex-col overflow-y-auto transition-transform duration-[250ms] ease-[ease]"
+        style={{ transform: open ? 'translateX(0)' : 'translateX(100%)' }}
+      >
         {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '1rem 1.25rem',
-          borderBottom: '1px solid var(--color-border)',
-          flexShrink: 0,
-        }}>
-          <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)] shrink-0">
+          <h2 className="text-base font-semibold text-[var(--color-text)] m-0">
             Transaction Details
           </h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>
+          <button onClick={onClose} aria-label="Close" className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1">
             <X size={18} />
           </button>
         </div>
 
         {/* Body */}
         {transaction && (
-          <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
+          <div className="p-5 flex flex-col gap-4 flex-1">
             {/* Merchant */}
             <Input
               label="Merchant"
@@ -348,39 +334,31 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
 
             {/* Category */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.375rem' }}>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
                 Category
               </label>
               <button
                 onClick={() => setShowCategoryPicker((v) => !v)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '0.5rem',
-                  width: '100%', padding: '0.5rem 0.75rem',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border)',
-                  backgroundColor: 'var(--color-surface)',
-                  cursor: 'pointer', textAlign: 'left',
-                }}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] cursor-pointer text-left"
               >
                 {selectedCategory ? (
                   <>
-                    <span style={{
-                      width: 22, height: 22, borderRadius: 'var(--radius-full)',
-                      backgroundColor: 'var(--color-accent)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '0.6875rem', flexShrink: 0,
-                    }}>
+                    <span className="w-[22px] h-[22px] rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-[0.6875rem] shrink-0">
                       {selectedCategory.emoji ?? selectedCategory.name[0]}
                     </span>
-                    <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', flex: 1 }}>{selectedCategory.name}</span>
+                    <span className="text-sm text-[var(--color-text)] flex-1">{selectedCategory.name}</span>
                   </>
                 ) : (
-                  <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', flex: 1 }}>Select category...</span>
+                  <span className="text-sm text-[var(--color-text-muted)] flex-1">Select category...</span>
                 )}
-                <ChevronRightIcon size={14} style={{ color: 'var(--color-text-muted)', transform: showCategoryPicker ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+                <ChevronRightIcon
+                  size={14}
+                  className="text-[var(--color-text-muted)] transition-transform duration-[150ms]"
+                  style={{ transform: showCategoryPicker ? 'rotate(90deg)' : 'none' }}
+                />
               </button>
               {showCategoryPicker && (
-                <div style={{ marginTop: '0.5rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '0.5rem' }}>
+                <div className="mt-2 border border-[var(--color-border)] rounded-[var(--radius-md)] p-2">
                   <CategoryPicker
                     categories={categories}
                     selectedId={form.categoryId ?? ''}
@@ -392,97 +370,75 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
 
             {/* Account (read-only) */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.375rem' }}>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
                 Account
               </label>
-              <div style={{
-                padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg)',
-                fontSize: '0.875rem', color: 'var(--color-text-secondary)',
-              }}>
+              <div className="px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm text-[var(--color-text-secondary)]">
                 {transaction.accountName}{transaction.accountLastFour ? ` ••${transaction.accountLastFour}` : ''}
               </div>
             </div>
 
             {/* Notes */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.375rem' }}>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
                 Notes
               </label>
               <textarea
                 value={form.notes ?? ''}
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                 rows={3}
-                style={{
-                  width: '100%', padding: '0.5rem 0.75rem',
-                  borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)',
-                  backgroundColor: 'var(--color-surface)', color: 'var(--color-text)',
-                  fontSize: '0.875rem', resize: 'vertical', fontFamily: 'inherit',
-                  boxSizing: 'border-box',
-                }}
+                className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-sm resize-y font-[inherit] box-border"
                 placeholder="Add a note..."
               />
             </div>
 
             {/* Tags */}
             <div>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.375rem' }}>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
                 Tags
               </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: '0.5rem' }}>
+              <div className="flex flex-wrap gap-1.5 mb-2">
                 {(form.tags ?? []).map((tag) => (
-                  <span key={tag.id} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
-                    padding: '0.125rem 0.5rem 0.125rem 0.625rem',
-                    borderRadius: 'var(--radius-full)',
-                    backgroundColor: 'var(--color-accent-light)',
-                    color: 'var(--color-accent)',
-                    fontSize: '0.75rem', fontWeight: 500,
-                  }}>
+                  <span key={tag.id} className="inline-flex items-center gap-1 py-0.5 pr-2 pl-2.5 rounded-[var(--radius-full)] bg-[var(--color-accent-light)] text-[var(--color-accent)] text-xs font-medium">
                     {tag.name}
-                    <button onClick={() => removeTag(tag.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', display: 'flex', alignItems: 'center' }}>
+                    <button onClick={() => removeTag(tag.id)} aria-label={`Remove tag ${tag.name}`} className="bg-transparent border-none cursor-pointer p-0 text-[inherit] flex items-center">
                       <X size={11} />
                     </button>
                   </span>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div className="flex gap-2">
                 <input
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput); } }}
                   placeholder="Add tag..."
-                  style={{
-                    flex: 1, padding: '0.375rem 0.625rem',
-                    borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-surface)', color: 'var(--color-text)',
-                    fontSize: '0.8125rem', fontFamily: 'inherit',
-                  }}
+                  className="flex-1 px-2.5 py-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
                 />
                 <Button variant="secondary" size="sm" onClick={() => addTag(tagInput)}>Add</Button>
               </div>
             </div>
 
             {/* Toggles */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>Needs Review</span>
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--color-text)]">Needs Review</span>
                 <Toggle
                   id="txn-needs-review"
                   checked={form.needsReview ?? false}
                   onChange={(e) => setForm((f) => ({ ...f, needsReview: e.target.checked }))}
                 />
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>Is Recurring</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--color-text)]">Is Recurring</span>
                 <Toggle
                   id="txn-is-recurring"
                   checked={form.isRecurring ?? false}
                   onChange={(e) => setForm((f) => ({ ...f, isRecurring: e.target.checked }))}
                 />
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>Hide from reports</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--color-text)]">Hide from reports</span>
                 <Toggle
                   id="txn-is-hidden"
                   checked={form.isHidden ?? false}
@@ -495,29 +451,35 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
 
         {/* Footer */}
         {transaction && (
-          <div style={{
-            padding: '1rem 1.25rem',
-            borderTop: '1px solid var(--color-border)',
-            display: 'flex', gap: '0.5rem', flexShrink: 0,
-          }}>
+          <div className="px-5 py-4 border-t border-[var(--color-border)] flex gap-2 shrink-0">
             <Button
               variant="primary"
               loading={saveMutation.isPending}
               onClick={() => saveMutation.mutate()}
-              style={{ flex: 1 }}
+              className="flex-1"
             >
               Save
             </Button>
             <Button
               variant="danger"
               loading={deleteMutation.isPending}
-              onClick={() => deleteMutation.mutate()}
+              onClick={() => setConfirmDelete(true)}
             >
               Delete
             </Button>
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        title="Delete Transaction"
+        message={<>Delete <strong>{transaction?.merchantName}</strong>? This cannot be undone.</>}
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+      />
     </>
   );
 }
@@ -552,6 +514,7 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
       onClose();
       setForm({ date: fmtInputDate(new Date().toISOString()), description: '', amount: '', accountId: '', categoryId: '', notes: '' });
     },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to add transaction'),
   });
 
   const accountOptions = accounts.map((a) => ({
@@ -566,22 +529,27 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
 
   return (
     <Modal open={open} onClose={onClose} title="Add Transaction" size="md">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-3">
           <Input
             label="Date"
             type="date"
             value={form.date}
             onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
           />
-          <Input
-            label="Amount"
-            type="number"
-            step="0.01"
-            placeholder="-45.00"
-            value={form.amount}
-            onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-          />
+          <div>
+            <Input
+              label="Amount"
+              type="number"
+              step="0.01"
+              placeholder="-45.00"
+              value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+            />
+            <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
+              Negative = expense, positive = income
+            </p>
+          </div>
         </div>
         <Input
           label="Merchant / Description"
@@ -604,7 +572,7 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
           onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
         />
         <div>
-          <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.375rem' }}>
+          <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
             Notes
           </label>
           <textarea
@@ -612,13 +580,7 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
             rows={2}
             placeholder="Optional notes..."
-            style={{
-              width: '100%', padding: '0.5rem 0.75rem',
-              borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)',
-              backgroundColor: 'var(--color-surface)', color: 'var(--color-text)',
-              fontSize: '0.875rem', resize: 'vertical', fontFamily: 'inherit',
-              boxSizing: 'border-box',
-            }}
+            className="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-sm resize-y font-[inherit] box-border"
           />
         </div>
       </div>
@@ -720,74 +682,46 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
     <>
       {open && (
         <div
-          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.15)', zIndex: 30 }}
+          className="fixed inset-0 bg-black/[0.15] z-30"
           onClick={onClose}
         />
       )}
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 320, zIndex: 35,
-        backgroundColor: 'var(--color-surface)',
-        borderLeft: '1px solid var(--color-border)',
-        boxShadow: 'var(--shadow-lg)',
-        transform: open ? 'translateX(0)' : 'translateX(100%)',
-        transition: 'transform 0.25s ease',
-        display: 'flex', flexDirection: 'column',
-        overflowY: 'auto',
-      }}>
+      <div
+        className="fixed top-0 right-0 bottom-0 w-[320px] z-[35] bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[var(--shadow-lg)] flex flex-col overflow-y-auto transition-transform duration-[250ms] ease-[ease]"
+        style={{ transform: open ? 'translateX(0)' : 'translateX(100%)' }}
+      >
         {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '1rem 1.25rem',
-          borderBottom: '1px solid var(--color-border)',
-          flexShrink: 0,
-        }}>
-          <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>Filters</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4 }}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)] shrink-0">
+          <h2 className="text-base font-semibold text-[var(--color-text)] m-0">Filters</h2>
+          <button onClick={onClose} aria-label="Close filters" className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1">
             <X size={18} />
           </button>
         </div>
 
         {/* Filter sections */}
-        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', flex: 1 }}>
+        <div className="p-5 flex flex-col gap-6 flex-1">
           {/* Date Range */}
           <div>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em] mb-2">
               Date Range
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>From</label>
+                <label className="block text-xs text-[var(--color-text-muted)] mb-1">From</label>
                 <input
                   type="date"
                   value={localFrom}
                   onChange={(e) => setLocalFrom(e.target.value)}
-                  style={{
-                    width: '100%', padding: '0.4rem 0.5rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    fontSize: '0.8125rem', fontFamily: 'inherit',
-                    boxSizing: 'border-box',
-                  }}
+                  className="w-full px-2 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit] box-border"
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>To</label>
+                <label className="block text-xs text-[var(--color-text-muted)] mb-1">To</label>
                 <input
                   type="date"
                   value={localTo}
                   onChange={(e) => setLocalTo(e.target.value)}
-                  style={{
-                    width: '100%', padding: '0.4rem 0.5rem',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    fontSize: '0.8125rem', fontFamily: 'inherit',
-                    boxSizing: 'border-box',
-                  }}
+                  className="w-full px-2 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit] box-border"
                 />
               </div>
             </div>
@@ -795,18 +729,18 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
 
           {/* Account */}
           <div>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em] mb-2">
               Account
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                <input type="radio" checked={localAccountId === ''} onChange={() => setLocalAccountId('')} style={{ accentColor: 'var(--color-accent)' }} />
-                <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>All accounts</span>
+            <div className="flex flex-col gap-1.5">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" checked={localAccountId === ''} onChange={() => setLocalAccountId('')} className="accent-[var(--color-accent)]" />
+                <span className="text-sm text-[var(--color-text)]">All accounts</span>
               </label>
               {accounts.map((acc) => (
-                <label key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                  <input type="radio" checked={localAccountId === acc.id} onChange={() => setLocalAccountId(acc.id)} style={{ accentColor: 'var(--color-accent)' }} />
-                  <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+                <label key={acc.id} className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" checked={localAccountId === acc.id} onChange={() => setLocalAccountId(acc.id)} className="accent-[var(--color-accent)]" />
+                  <span className="text-sm text-[var(--color-text)]">
                     {acc.name}{acc.lastFour ? ` ••${acc.lastFour}` : ''}
                   </span>
                 </label>
@@ -816,20 +750,20 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
 
           {/* Categories */}
           <div>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em] mb-2">
               Categories
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', maxHeight: 200, overflowY: 'auto' }}>
+            <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
               {categories.map((cat) => (
-                <label key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={localCategoryIds.includes(cat.id)}
                     onChange={() => toggleCategory(cat.id)}
-                    style={{ accentColor: 'var(--color-accent)' }}
+                    className="accent-[var(--color-accent)]"
                   />
-                  <span style={{ fontSize: '0.75rem' }}>{cat.emoji ?? ''}</span>
-                  <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{cat.name}</span>
+                  <span className="text-xs">{cat.emoji ?? ''}</span>
+                  <span className="text-sm text-[var(--color-text)]">{cat.name}</span>
                 </label>
               ))}
             </div>
@@ -837,10 +771,10 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
 
           {/* Amount range */}
           <div>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em] mb-2">
               Amount Range
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            <div className="grid grid-cols-2 gap-2">
               <Input
                 placeholder="Min"
                 type="number"
@@ -858,25 +792,18 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
 
           {/* Type filter pills */}
           <div>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em] mb-2">
               Type
             </div>
-            <div style={{ display: 'flex', gap: '0.375rem' }}>
+            <div className="flex gap-1.5">
               {(['all', 'income', 'expense'] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setLocalType(t)}
+                  className="flex-1 py-1.5 rounded-[var(--radius-full)] border border-[var(--color-border)] cursor-pointer text-[0.8125rem] font-medium transition-[background-color,color] duration-[150ms]"
                   style={{
-                    flex: 1,
-                    padding: '0.375rem 0',
-                    borderRadius: 'var(--radius-full)',
-                    border: '1px solid var(--color-border)',
-                    cursor: 'pointer',
-                    fontSize: '0.8125rem',
-                    fontWeight: 500,
                     backgroundColor: localType === t ? 'var(--color-accent)' : 'var(--color-surface)',
                     color: localType === t ? '#fff' : 'var(--color-text-secondary)',
-                    transition: 'background-color 0.15s, color 0.15s',
                   }}
                 >
                   {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -887,18 +814,18 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
 
           {/* Toggles */}
           <div>
-            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.625rem' }}>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em] mb-2.5">
               Other
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="flex flex-col gap-3">
               {[
                 { label: 'Needs Review only', value: localNeedsReview, onChange: setLocalNeedsReview },
                 { label: 'Recurring only', value: localRecurring, onChange: setLocalRecurring },
                 { label: 'Show Hidden', value: localHidden, onChange: setLocalHidden },
                 { label: 'Include Pending', value: localPending, onChange: setLocalPending },
               ].map(({ label, value, onChange }) => (
-                <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>{label}</span>
+                <div key={label} className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--color-text)]">{label}</span>
                   <Toggle checked={value} onChange={(e) => onChange(e.target.checked)} />
                 </div>
               ))}
@@ -907,13 +834,9 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
         </div>
 
         {/* Footer */}
-        <div style={{
-          padding: '1rem 1.25rem',
-          borderTop: '1px solid var(--color-border)',
-          display: 'flex', gap: '0.5rem', flexShrink: 0,
-        }}>
-          <Button variant="secondary" onClick={clearFilters} style={{ flex: 1 }}>Clear</Button>
-          <Button variant="primary" onClick={applyFilters} style={{ flex: 1 }}>Apply</Button>
+        <div className="px-5 py-4 border-t border-[var(--color-border)] flex gap-2 shrink-0">
+          <Button variant="secondary" onClick={clearFilters} className="flex-1">Clear</Button>
+          <Button variant="primary" onClick={applyFilters} className="flex-1">Apply</Button>
         </div>
       </div>
     </>
@@ -937,33 +860,20 @@ function BulkActionsBar({ count, categories, onRecategorize, onMarkReviewed, onH
   const pickerRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div style={{
-      position: 'sticky', top: 0, zIndex: 20,
-      backgroundColor: 'var(--color-accent)',
-      padding: '0.625rem 1rem',
-      display: 'flex', alignItems: 'center', gap: '0.5rem',
-      borderRadius: 'var(--radius-md)',
-      marginBottom: '0.5rem',
-      flexWrap: 'wrap',
-    }}>
-      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#fff', marginRight: 'auto' }}>
+    <div className="sticky top-0 z-20 bg-[var(--color-accent)] px-4 py-2.5 flex items-center gap-2 rounded-[var(--radius-md)] mb-2 flex-wrap">
+      <span className="text-sm font-semibold text-white mr-auto">
         {count} selected
       </span>
 
-      <div style={{ position: 'relative' }} ref={pickerRef}>
+      <div className="relative" ref={pickerRef}>
         <button
           onClick={() => setShowCategoryPicker((v) => !v)}
-          style={{ background: 'rgba(255,255,255,0.2)', border: 'none', cursor: 'pointer', color: '#fff', padding: '0.375rem 0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem', fontWeight: 500 }}
+          className="bg-white/20 border-none cursor-pointer text-white px-3 py-1.5 rounded-[var(--radius-sm)] text-[0.8125rem] font-medium"
         >
           Recategorize
         </button>
         {showCategoryPicker && (
-          <div style={{
-            position: 'absolute', top: '100%', left: 0, marginTop: '0.375rem',
-            width: 260, backgroundColor: 'var(--color-surface)',
-            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
-            boxShadow: 'var(--shadow-md)', padding: '0.5rem', zIndex: 10,
-          }}>
+          <div className="absolute top-full left-0 mt-1.5 w-[260px] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-[var(--shadow-md)] p-2 z-10">
             <CategoryPicker
               categories={categories}
               selectedId=""
@@ -981,13 +891,13 @@ function BulkActionsBar({ count, categories, onRecategorize, onMarkReviewed, onH
         <button
           key={label}
           onClick={action}
-          style={{ background: 'rgba(255,255,255,0.2)', border: 'none', cursor: 'pointer', color: '#fff', padding: '0.375rem 0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem', fontWeight: 500 }}
+          className="bg-white/20 border-none cursor-pointer text-white px-3 py-1.5 rounded-[var(--radius-sm)] text-[0.8125rem] font-medium"
         >
           {label}
         </button>
       ))}
 
-      <button onClick={onClear} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', padding: 4 }}>
+      <button onClick={onClear} aria-label="Clear filters" className="bg-transparent border-none cursor-pointer text-white/80 p-1">
         <X size={16} />
       </button>
     </div>
@@ -1024,36 +934,30 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
   }
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center',
-      height: 52, padding: '0 0.75rem',
-      gap: '0.75rem',
-      backgroundColor: selected ? 'var(--color-accent-light)' : 'transparent',
-      cursor: 'default',
-    }}
+    <div
+      className="flex items-center h-[52px] px-3 gap-3 cursor-default"
+      style={{ backgroundColor: selected ? 'var(--color-accent-light)' : 'transparent' }}
       onMouseEnter={(e) => { if (!selected) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'; }}
-      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.backgroundColor = selected ? 'var(--color-accent-light)' : 'transparent'; }}
     >
       {/* Checkbox */}
       <input
         type="checkbox"
         checked={selected}
         onChange={(e) => onSelect(txn.id, e.target.checked)}
-        style={{ accentColor: 'var(--color-accent)', flexShrink: 0, cursor: 'pointer' }}
+        className="accent-[var(--color-accent)] shrink-0 cursor-pointer"
       />
 
       {/* Category circle */}
-      <div style={{
-        width: 32, height: 32, borderRadius: 'var(--radius-full)', flexShrink: 0,
-        backgroundColor: txn.categoryColor ?? 'var(--color-accent)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#fff', fontSize: '0.75rem', fontWeight: 700,
-      }}>
+      <div
+        className="w-8 h-8 rounded-[var(--radius-full)] shrink-0 flex items-center justify-center text-white text-xs font-bold"
+        style={{ backgroundColor: txn.categoryColor ?? 'var(--color-accent)' }}
+      >
         {txn.categoryIcon ?? merchantInitial(txn.merchantName)}
       </div>
 
       {/* Merchant name */}
-      <div style={{ flex: '1 1 180px', minWidth: 0 }} onDoubleClick={startEdit}>
+      <div className="flex-[1_1_180px] min-w-0" onDoubleClick={startEdit}>
         {editing ? (
           <input
             ref={inputRef}
@@ -1061,65 +965,44 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitEdit}
             onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(false); }}
-            style={{
-              fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)',
-              border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-sm)',
-              padding: '0.125rem 0.375rem', background: 'var(--color-surface)',
-              fontFamily: 'inherit', width: '100%',
-            }}
+            className="text-sm font-medium text-[var(--color-text)] border border-[var(--color-accent)] rounded-[var(--radius-sm)] py-0.5 px-1.5 bg-[var(--color-surface)] font-[inherit] w-full"
           />
         ) : (
-          <div style={{
-            fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
+          <div className="text-sm font-medium text-[var(--color-text)] whitespace-nowrap overflow-hidden text-ellipsis">
             {txn.merchantName}
           </div>
         )}
       </div>
 
       {/* Category name — hidden on mobile */}
-      <div className="hidden sm:block" style={{ flex: '0 0 130px', fontSize: '0.8125rem', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <div className="hidden sm:block flex-[0_0_130px] text-[0.8125rem] text-[var(--color-text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis">
         {txn.categoryName}
       </div>
 
       {/* Account — hidden on mobile and tablet */}
-      <div className="hidden md:block" style={{ flex: '0 0 150px', fontSize: '0.8125rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <div className="hidden md:block flex-[0_0_150px] text-[0.8125rem] text-[var(--color-text-muted)] whitespace-nowrap overflow-hidden text-ellipsis">
         {txn.accountName}{txn.accountLastFour ? ` ••${txn.accountLastFour}` : ''}
       </div>
 
       {/* Badges — hidden on mobile */}
-      <div className="hidden sm:flex" style={{ gap: '0.25rem', flex: '0 0 auto' }}>
+      <div className="hidden sm:flex gap-1 flex-[0_0_auto]">
         {txn.isRecurring && (
-          <span title="Recurring" style={{ color: 'var(--color-info)', fontSize: '0.875rem' }}>
+          <span title="Recurring" className="text-[var(--color-info)] text-sm">
             <RotateCcw size={13} />
           </span>
         )}
         {txn.needsReview && (
-          <span style={{
-            fontSize: '0.6875rem', fontWeight: 600,
-            padding: '0.125rem 0.375rem', borderRadius: 'var(--radius-full)',
-            backgroundColor: 'var(--color-warning-light)', color: 'var(--color-warning)',
-          }}>
+          <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-warning-light)] text-[var(--color-warning)]">
             Review
           </span>
         )}
         {txn.isPending && (
-          <span style={{
-            fontSize: '0.6875rem', fontWeight: 600,
-            padding: '0.125rem 0.375rem', borderRadius: 'var(--radius-full)',
-            backgroundColor: 'var(--color-surface-hover)', color: 'var(--color-text-muted)',
-            border: '1px solid var(--color-border)',
-          }}>
+          <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]">
             Pending
           </span>
         )}
         {txn.isSplit && (
-          <span style={{
-            fontSize: '0.6875rem', fontWeight: 600,
-            padding: '0.125rem 0.375rem', borderRadius: 'var(--radius-full)',
-            backgroundColor: 'var(--color-accent-light)', color: 'var(--color-accent)',
-          }}>
+          <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-accent-light)] text-[var(--color-accent)]">
             Split
           </span>
         )}
@@ -1127,33 +1010,26 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
 
       {/* Split button — hidden on mobile */}
       <button
-        className="hidden sm:flex"
+        className="hidden sm:flex items-center gap-1 bg-transparent border-none cursor-pointer p-1 shrink-0"
         onClick={(e) => { e.stopPropagation(); onSplit(txn); }}
         title={txn.isSplit ? 'Edit split' : 'Split transaction'}
-        style={{
-          alignItems: 'center', gap: '0.25rem',
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: txn.isSplit ? 'var(--color-accent)' : 'var(--color-text-muted)',
-          padding: 4, flexShrink: 0,
-        }}
+        style={{ color: txn.isSplit ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
       >
         <Scissors size={14} />
       </button>
 
       {/* Amount */}
-      <div style={{
-        flex: '0 0 90px', textAlign: 'right',
-        fontSize: '0.875rem', fontWeight: 600,
-        fontVariantNumeric: 'tabular-nums',
-        color: txn.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)',
-      }}>
+      <div
+        className="flex-[0_0_90px] text-right text-sm font-semibold [font-variant-numeric:tabular-nums]"
+        style={{ color: txn.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}
+      >
         {txn.amount < 0 ? '-' : '+'}{fmtCurrency(txn.amount)}
       </div>
 
       {/* Arrow */}
       <button
         onClick={() => onOpen(txn)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 4, flexShrink: 0 }}
+        className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1 shrink-0"
       >
         <ChevronRight size={16} />
       </button>
@@ -1182,30 +1058,29 @@ function Pagination({ page, total, pageSize, onChange }: { page: number; total: 
   const end = Math.min(page * pageSize, total);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0', borderTop: '1px solid var(--color-border)' }}>
-      <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
+    <div className="flex items-center justify-between py-3 border-t border-[var(--color-border)]">
+      <span className="text-[0.8125rem] text-[var(--color-text-muted)]">
         Showing {start}–{end} of {total} transactions
       </span>
-      <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+      <div className="flex gap-1 items-center">
         <button
           onClick={() => onChange(page - 1)}
           disabled={page === 1}
-          style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '0.25rem 0.5rem', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1, color: 'var(--color-text-secondary)' }}
+          className="bg-transparent border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-[var(--color-text-secondary)]"
+          style={{ cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1 }}
         >
           <ChevronLeft size={14} />
         </button>
         {pages.map((p, i) => (
           p === '...' ? (
-            <span key={`ellipsis-${i}`} style={{ padding: '0 0.25rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>…</span>
+            <span key={`ellipsis-${i}`} className="px-1 text-[var(--color-text-muted)] text-sm">…</span>
           ) : (
             <button
               key={p}
               onClick={() => onChange(p as number)}
+              className="min-w-8 px-2 py-1 rounded-[var(--radius-sm)] text-[0.8125rem] cursor-pointer"
               style={{
-                minWidth: 32, padding: '0.25rem 0.5rem',
-                borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem',
                 border: p === page ? 'none' : '1px solid var(--color-border)',
-                cursor: 'pointer',
                 backgroundColor: p === page ? 'var(--color-accent)' : 'transparent',
                 color: p === page ? '#fff' : 'var(--color-text-secondary)',
                 fontWeight: p === page ? 600 : 400,
@@ -1218,7 +1093,8 @@ function Pagination({ page, total, pageSize, onChange }: { page: number; total: 
         <button
           onClick={() => onChange(page + 1)}
           disabled={page === totalPages}
-          style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '0.25rem 0.5rem', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1, color: 'var(--color-text-secondary)' }}
+          className="bg-transparent border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-[var(--color-text-secondary)]"
+          style={{ cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1 }}
         >
           <ChevronRightIcon size={14} />
         </button>
@@ -1238,6 +1114,8 @@ export default function TransactionsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [showAutoCatPanel, setShowAutoCatPanel] = useState(false);
   const [splitTxn, setSplitTxn] = useState<Transaction | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
 
@@ -1269,6 +1147,28 @@ export default function TransactionsPage() {
   });
 
   const duplicateCount = duplicatesData?.count ?? 0;
+
+  // ── Auto-categorize ──
+
+  const { data: autoCatStatus, refetch: refetchAutoCatStatus, isFetching: autoCatStatusFetching } = useQuery<{
+    configured: boolean;
+    notConfigured?: boolean;
+    uncategorizedCount: number;
+  }>({
+    queryKey: ['auto-categorize-status'],
+    queryFn: () => api.get('/auto-categorize/status').then((r) => r.data),
+    enabled: false,
+  });
+
+  const autoCatMutation = useMutation({
+    mutationFn: () => api.post('/auto-categorize/batch').then((r) => r.data as { updated: number }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      setShowAutoCatPanel(false);
+      notify.success(`Updated ${data.updated} transaction${data.updated !== 1 ? 's' : ''}`);
+    },
+    onError: () => notify.error('Auto-categorize failed. Please try again.'),
+  });
 
   const accounts = accountsData?.groups?.flatMap((g) => g.accounts) ?? [];
   const categories = categoriesData ?? [];
@@ -1371,10 +1271,10 @@ export default function TransactionsPage() {
   const someSelected = selectedIds.size > 0;
 
   return (
-    <div style={{ padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+    <div className="py-4 flex flex-col gap-3">
       {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--color-text)', margin: 0, marginRight: 'auto' }}>
+      <div className="flex items-center gap-3 flex-wrap">
+        <h1 className="text-[1.375rem] font-bold text-[var(--color-text)] m-0 mr-auto">
           Transactions
         </h1>
 
@@ -1394,49 +1294,55 @@ export default function TransactionsPage() {
             type="date"
             value={searchParams.get('startDate') ?? ''}
             onChange={(e) => setParam('startDate', e.target.value)}
-            style={{
-              padding: '0.4rem 0.625rem', borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)',
-              color: 'var(--color-text)', fontSize: '0.8125rem', fontFamily: 'inherit',
-            }}
+            className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
           />
-          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem' }}>–</span>
+          <span className="text-[var(--color-text-muted)] text-[0.8125rem]">–</span>
           <input
             type="date"
             value={searchParams.get('endDate') ?? ''}
             onChange={(e) => setParam('endDate', e.target.value)}
-            style={{
-              padding: '0.4rem 0.625rem', borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)',
-              color: 'var(--color-text)', fontSize: '0.8125rem', fontFamily: 'inherit',
-            }}
+            className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
           />
         </div>
 
         {/* Filters button */}
         <button
           onClick={() => setShowFilters(true)}
+          className="flex items-center gap-1.5 py-[0.4rem] px-[0.875rem] rounded-[var(--radius-md)] border border-[var(--color-border)] cursor-pointer text-sm font-medium"
           style={{
-            display: 'flex', alignItems: 'center', gap: '0.375rem',
-            padding: '0.4rem 0.875rem', borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--color-border)',
             backgroundColor: activeFilterCount > 0 ? 'var(--color-accent-light)' : 'var(--color-surface)',
             color: activeFilterCount > 0 ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-            cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
           }}
         >
           <SlidersHorizontal size={14} />
           Filters
           {activeFilterCount > 0 && (
-            <span style={{
-              backgroundColor: 'var(--color-accent)', color: '#fff',
-              borderRadius: 'var(--radius-full)', padding: '0 0.375rem',
-              fontSize: '0.6875rem', fontWeight: 700,
-            }}>
+            <span className="bg-[var(--color-accent)] text-white rounded-[var(--radius-full)] px-1.5 text-[0.6875rem] font-bold">
               {activeFilterCount}
             </span>
           )}
         </button>
+
+        {/* Auto-categorize button */}
+        <Button
+          variant="secondary"
+          icon={<Sparkles size={14} />}
+          onClick={async () => {
+            setShowAutoCatPanel(true);
+            await refetchAutoCatStatus();
+          }}
+        >
+          Auto-categorize
+        </Button>
+
+        {/* Scan Receipt button */}
+        <Button
+          variant="secondary"
+          icon={<Camera size={14} />}
+          onClick={() => setShowReceiptModal(true)}
+        >
+          Scan Receipt
+        </Button>
 
         {/* Import CSV button */}
         <Button
@@ -1457,6 +1363,44 @@ export default function TransactionsPage() {
         </Button>
       </div>
 
+      {/* Auto-categorize panel */}
+      {showAutoCatPanel && (
+        <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4 flex flex-col gap-3">
+          {autoCatStatusFetching && (
+            <p className="text-sm text-[color:var(--color-text-secondary)]">Checking AI status…</p>
+          )}
+          {!autoCatStatusFetching && autoCatStatus?.notConfigured && (
+            <>
+              <AiSetupNudge message="Auto-categorize requires an AI provider. Set one up to automatically categorize your uncategorized transactions." />
+              <div className="flex justify-end">
+                <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--color-text-secondary)] hover:underline">Dismiss</button>
+              </div>
+            </>
+          )}
+          {!autoCatStatusFetching && autoCatStatus && !autoCatStatus.notConfigured && (
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm text-[color:var(--color-text-secondary)]">
+                {autoCatStatus.uncategorizedCount > 0
+                  ? `Auto-categorize ${autoCatStatus.uncategorizedCount} uncategorized transaction${autoCatStatus.uncategorizedCount !== 1 ? 's' : ''}?`
+                  : 'All transactions are already categorized.'}
+              </p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--color-text-secondary)] hover:underline">Cancel</button>
+                {autoCatStatus.uncategorizedCount > 0 && (
+                  <Button
+                    variant="primary"
+                    disabled={autoCatMutation.isPending}
+                    onClick={() => autoCatMutation.mutate()}
+                  >
+                    {autoCatMutation.isPending ? 'Categorizing…' : 'Confirm'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Bulk actions */}
       {someSelected && (
         <BulkActionsBar
@@ -1474,27 +1418,13 @@ export default function TransactionsPage() {
       {duplicateCount > 0 && (
         <button
           onClick={() => setShowDuplicateModal(true)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            width: '100%',
-            padding: '0.625rem 1rem',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid #f59e0b',
-            backgroundColor: '#fffbeb',
-            color: '#92400e',
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            textAlign: 'left',
-          }}
+          className="flex items-center gap-2 w-full py-2.5 px-4 rounded-[var(--radius-md)] border border-[#f59e0b] bg-[#fffbeb] text-[#92400e] cursor-pointer text-sm font-medium text-left"
         >
-          <span style={{ fontSize: '1rem' }}>⚠</span>
+          <span className="text-base">⚠</span>
           <span>
             <strong>{duplicateCount}</strong> potential duplicate transaction
             {duplicateCount !== 1 ? 's' : ''} found —{' '}
-            <span style={{ textDecoration: 'underline' }}>Review</span>
+            <span className="underline">Review</span>
           </span>
         </button>
       )}
@@ -1503,32 +1433,26 @@ export default function TransactionsPage() {
       <div className="overflow-x-auto">
       <Card padding="none">
         {/* Column header */}
-        <div style={{
-          display: 'flex', alignItems: 'center',
-          height: 40, padding: '0 0.75rem',
-          gap: '0.75rem',
-          borderBottom: '1px solid var(--color-border)',
-          backgroundColor: 'var(--color-bg)',
-        }}>
+        <div className="flex items-center h-10 px-3 gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
           <input
             type="checkbox"
             checked={allSelected}
             onChange={toggleSelectAll}
-            style={{ accentColor: 'var(--color-accent)', flexShrink: 0, cursor: 'pointer' }}
+            className="accent-[var(--color-accent)] shrink-0 cursor-pointer"
           />
-          <div style={{ width: 32, flexShrink: 0 }} />
-          <div style={{ flex: '1 1 180px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Merchant</div>
-          <div className="hidden sm:block" style={{ flex: '0 0 130px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Category</div>
-          <div className="hidden md:block" style={{ flex: '0 0 150px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Account</div>
-          <div className="hidden sm:block" style={{ flex: '0 0 auto', minWidth: 60 }} />
-          <div style={{ flex: '0 0 90px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'right' }}>Amount</div>
-          <div style={{ width: 24, flexShrink: 0 }} />
+          <div className="w-8 shrink-0" />
+          <div className="flex-[1_1_180px] text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-[0.04em]">Merchant</div>
+          <div className="hidden sm:block flex-[0_0_130px] text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-[0.04em]">Category</div>
+          <div className="hidden md:block flex-[0_0_150px] text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-[0.04em]">Account</div>
+          <div className="hidden sm:block flex-[0_0_auto] min-w-[60px]" />
+          <div className="flex-[0_0_90px] text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-[0.04em] text-right">Amount</div>
+          <div className="w-6 shrink-0" />
         </div>
 
         {txnsLoading ? (
-          <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div className="p-4 flex flex-col gap-2">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', height: 52 }}>
+              <div key={i} className="flex items-center gap-3 h-[52px]">
                 <Skeleton width={16} height={16} />
                 <Skeleton width={32} height={32} rounded />
                 <Skeleton height={14} style={{ flex: '1 1 180px' }} />
@@ -1539,27 +1463,21 @@ export default function TransactionsPage() {
             ))}
           </div>
         ) : groups.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+          <div className="p-12 text-center text-[var(--color-text-muted)] text-sm">
             No transactions found.
           </div>
         ) : (
           groups.map((group) => (
             <div key={group.date}>
               {/* Date group header */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '0.375rem 0.75rem',
-                backgroundColor: 'var(--color-bg)',
-                borderBottom: '1px solid var(--color-border)',
-                borderTop: '1px solid var(--color-border)',
-              }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="flex items-center justify-between py-1.5 px-3 bg-[var(--color-bg)] border-b border-[var(--color-border)] border-t border-t-[var(--color-border)]">
+                <span className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-[0.04em]">
                   {fmtGroupDate(group.date)}
                 </span>
-                <span style={{
-                  fontSize: '0.8125rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums',
-                  color: group.dayTotal < 0 ? 'var(--color-danger)' : 'var(--color-success)',
-                }}>
+                <span
+                  className="text-[0.8125rem] font-semibold [font-variant-numeric:tabular-nums]"
+                  style={{ color: group.dayTotal < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}
+                >
                   {group.dayTotal < 0 ? '-' : '+'}{fmtCurrency(group.dayTotal)}
                 </span>
               </div>
@@ -1576,7 +1494,7 @@ export default function TransactionsPage() {
                     onSplit={setSplitTxn}
                   />
                   {idx < group.transactions.length - 1 && (
-                    <div style={{ height: 1, backgroundColor: 'var(--color-border)', marginLeft: '0.75rem' }} />
+                    <div className="h-px bg-[var(--color-border)] ml-3" />
                   )}
                 </div>
               ))}
@@ -1586,7 +1504,7 @@ export default function TransactionsPage() {
 
         {/* Pagination */}
         {!txnsLoading && total > PAGE_SIZE && (
-          <div style={{ padding: '0 0.75rem' }}>
+          <div className="px-3">
             <Pagination page={page} total={total} pageSize={PAGE_SIZE} onChange={setPage} />
           </div>
         )}
@@ -1605,10 +1523,10 @@ export default function TransactionsPage() {
 
         return (
           <Card padding="lg">
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>
+            <div className="text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-[0.06em] mb-3">
               Summary
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
               {[
                 { label: 'Total transactions', value: String(transactions.length) },
                 { label: 'Total spending', value: fmtCurrency(totalSpending) },
@@ -1618,8 +1536,8 @@ export default function TransactionsPage() {
                 { label: 'Last transaction', value: lastDate },
               ].map(({ label, value }) => (
                 <div key={label}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.125rem' }}>{label}</div>
-                  <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                  <div className="text-xs text-[var(--color-text-muted)] mb-0.5">{label}</div>
+                  <div className="text-[0.9375rem] font-semibold text-[var(--color-text)] [font-variant-numeric:tabular-nums]">{value}</div>
                 </div>
               ))}
             </div>
@@ -1659,6 +1577,13 @@ export default function TransactionsPage() {
         onClose={() => setShowImportModal(false)}
         onImported={() => queryClient.invalidateQueries({ queryKey: ['transactions'] })}
       />
+
+      {/* Receipt OCR modal */}
+      {showReceiptModal && (
+        <ReceiptOcrModal
+          onClose={() => setShowReceiptModal(false)}
+        />
+      )}
 
       {/* Duplicate review modal */}
       <DuplicateReviewModal

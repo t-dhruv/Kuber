@@ -49,51 +49,27 @@ const fmtDate = (iso: string) =>
 
 function TxCard({ tx, label }: { tx: DuplicateTx; label: string }) {
   return (
-    <div
-      style={{
-        flex: '1 1 0',
-        padding: '1rem',
-        borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--color-border)',
-        backgroundColor: 'var(--color-bg)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.5rem',
-      }}
-    >
-      <div
-        style={{
-          fontSize: '0.6875rem',
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '0.06em',
-          color: 'var(--color-text-muted)',
-          marginBottom: '0.125rem',
-        }}
-      >
+    <div className="flex-1 p-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] flex flex-col gap-2">
+      <div className="text-[0.6875rem] font-bold uppercase tracking-[0.06em] text-[var(--color-text-muted)] mb-[0.125rem]">
         {label}
       </div>
 
       {/* Merchant / description */}
-      <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--color-text)' }}>
+      <div className="text-[0.9375rem] font-semibold text-[var(--color-text)]">
         {tx.merchantName}
       </div>
 
       {/* Amount */}
       <div
-        style={{
-          fontSize: '1.125rem',
-          fontWeight: 700,
-          fontVariantNumeric: 'tabular-nums',
-          color: tx.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)',
-        }}
+        className="text-lg font-bold [font-variant-numeric:tabular-nums]"
+        style={{ color: tx.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}
       >
         {tx.amount < 0 ? '-' : '+'}
         {fmtCurrency(tx.amount)}
       </div>
 
       {/* Meta */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+      <div className="flex flex-col gap-1">
         <MetaRow label="Date" value={fmtDate(tx.date)} />
         <MetaRow label="Account" value={tx.accountName} />
         {tx.categoryName && (
@@ -109,11 +85,11 @@ function TxCard({ tx, label }: { tx: DuplicateTx; label: string }) {
 
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.8125rem' }}>
-      <span style={{ color: 'var(--color-text-muted)', flexShrink: 0, minWidth: 60 }}>
+    <div className="flex gap-2 text-[0.8125rem]">
+      <span className="text-[var(--color-text-muted)] shrink-0 min-w-[60px]">
         {label}
       </span>
-      <span style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>{value}</span>
+      <span className="text-[var(--color-text-secondary)] font-medium">{value}</span>
     </div>
   );
 }
@@ -190,81 +166,49 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
       size="lg"
     >
       {isLoading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.5rem 0' }}>
+        <div className="flex flex-col gap-3 py-2">
           <Skeleton height={20} width={200} />
-          <div style={{ display: 'flex', gap: '1rem' }}>
+          <div className="flex gap-4">
             <Skeleton height={160} style={{ flex: 1 }} />
             <Skeleton height={160} style={{ flex: 1 }} />
           </div>
         </div>
       ) : total === 0 ? (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '2rem 0',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '0.75rem',
-          }}
-        >
-          <CheckCircle size={40} style={{ color: 'var(--color-success)' }} />
-          <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text)' }}>
+        <div className="text-center py-8 flex flex-col items-center gap-3">
+          <CheckCircle size={40} className="text-[var(--color-success)]" />
+          <div className="text-base font-semibold text-[var(--color-text)]">
             No duplicate transactions found
           </div>
-          <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+          <div className="text-sm text-[var(--color-text-muted)]">
             Your transactions look clean!
           </div>
         </div>
       ) : allDone ? (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '2rem 0',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '0.75rem',
-          }}
-        >
-          <CheckCircle size={40} style={{ color: 'var(--color-success)' }} />
-          <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--color-text)' }}>
+        <div className="text-center py-8 flex flex-col items-center gap-3">
+          <CheckCircle size={40} className="text-[var(--color-success)]" />
+          <div className="text-base font-semibold text-[var(--color-text)]">
             All duplicates reviewed!
           </div>
-          <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+          <div className="text-sm text-[var(--color-text-muted)]">
             You reviewed {reviewedCount} potential duplicate{reviewedCount !== 1 ? 's' : ''}.
           </div>
         </div>
       ) : current ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="flex flex-col gap-4">
           {/* Header row */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '0.5rem',
-            }}
-          >
-            <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="text-sm text-[var(--color-text-muted)]">
               Reviewing{' '}
-              <strong style={{ color: 'var(--color-text)' }}>
+              <strong className="text-[var(--color-text)]">
                 {currentIndex + 1} of {total}
               </strong>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div className="flex items-center gap-2">
               {/* Confidence badge */}
               <span
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-full)] text-xs font-semibold"
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                  padding: '0.25rem 0.625rem',
-                  borderRadius: 'var(--radius-full)',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
                   backgroundColor:
                     current.confidence === 'high'
                       ? 'var(--color-danger-light, #fee2e2)'
@@ -283,14 +227,10 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
               <button
                 onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
                 disabled={currentIndex === 0}
+                className="bg-none border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-[var(--color-text-secondary)]"
                 style={{
-                  background: 'none',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '0.25rem 0.5rem',
                   cursor: currentIndex === 0 ? 'not-allowed' : 'pointer',
                   opacity: currentIndex === 0 ? 0.4 : 1,
-                  color: 'var(--color-text-secondary)',
                 }}
               >
                 <ChevronLeft size={14} />
@@ -298,14 +238,10 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
               <button
                 onClick={() => setCurrentIndex((i) => Math.min(total - 1, i + 1))}
                 disabled={currentIndex === total - 1}
+                className="bg-none border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-[var(--color-text-secondary)]"
                 style={{
-                  background: 'none',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '0.25rem 0.5rem',
                   cursor: currentIndex === total - 1 ? 'not-allowed' : 'pointer',
                   opacity: currentIndex === total - 1 ? 0.4 : 1,
-                  color: 'var(--color-text-secondary)',
                 }}
               >
                 <ChevronRight size={14} />
@@ -314,7 +250,7 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
           </div>
 
           {/* Side-by-side cards */}
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <div className="flex gap-4 flex-wrap">
             <TxCard tx={current.transactions[0]} label="Transaction 1" />
             <TxCard tx={current.transactions[1]} label="Transaction 2" />
           </div>
@@ -327,7 +263,7 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
             Close
           </Button>
         ) : current ? (
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', width: '100%' }}>
+          <div className="flex gap-2 flex-wrap w-full">
             <Button
               variant="secondary"
               disabled={isBusy}
@@ -364,7 +300,7 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
             >
               Merge (Keep Second)
             </Button>
-            <div style={{ marginLeft: 'auto' }}>
+            <div className="ml-auto">
               <Button variant="ghost" onClick={handleClose}>
                 Close
               </Button>

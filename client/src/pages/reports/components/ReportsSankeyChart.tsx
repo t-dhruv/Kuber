@@ -20,12 +20,13 @@ export interface SankeyData {
 
 const SVG_WIDTH = 900
 const SVG_HEIGHT = 500
+const LEFT_OVERFLOW = 130   // space for income-source labels on the left
 const V_PADDING = 20
 const AVAILABLE_HEIGHT = SVG_HEIGHT - V_PADDING * 2
 const NODE_WIDTH = 80
 const GAP = 8
 
-// Column left-edge X positions
+// Column left-edge X positions (all shifted right so left-side labels fit)
 const COL_SOURCES_X = 0
 const COL_TOTAL_X = 200
 const COL_BUCKETS_X = 420
@@ -72,7 +73,7 @@ function layoutColumn(
 
   const totalGap = GAP * (items.length - 1)
   const usableHeight = AVAILABLE_HEIGHT - totalGap
-  let nodes: LayoutNode[] = []
+  const nodes: LayoutNode[] = []
   let stackHeight = 0
 
   for (const item of items) {
@@ -310,16 +311,16 @@ export function ReportsSankeyChart({ data }: ReportsSankeyChartProps) {
   }
 
   return (
-    <div className="relative w-full">
+    <div className="relative w-full" style={{ overflow: 'visible' }}>
       {/* Small screen guard */}
       <div className="flex items-center justify-center h-40 text-sm md:hidden" style={{ color: 'var(--color-text-muted)' }}>
         View on a larger screen to see the money flow diagram.
       </div>
 
       {/* SVG chart — hidden on small screens */}
-      <div className="hidden md:block relative">
+      <div className="hidden md:block relative" style={{ overflow: 'visible' }}>
         <svg
-          viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
+          viewBox={`-${LEFT_OVERFLOW} 0 ${SVG_WIDTH + LEFT_OVERFLOW} ${SVG_HEIGHT}`}
           width="100%"
           style={{ display: 'block', overflow: 'visible' }}
         >

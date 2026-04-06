@@ -6,7 +6,13 @@ import { toCSV, setCsvHeaders } from '../lib/csvExport';
 
 const router = Router();
 
-const VALID_ACCOUNT_TYPES = ['CHECKING', 'SAVINGS', 'CREDIT_CARD', 'INVESTMENT', 'LOAN', 'OTHER'];
+const VALID_ACCOUNT_TYPES = [
+  'CHECKING', 'SAVINGS', 'CREDIT_CARD', 'INVESTMENT', 'LOAN', 'OTHER',
+  // Canadian registered accounts
+  'TFSA', 'RRSP', 'FHSA', 'RESP',
+  // US retirement accounts
+  '401K', 'IRA', 'ROTH_IRA',
+];
 
 function formatAccount(account: {
   id: string;
@@ -342,6 +348,31 @@ router.post('/:id/close', async (req: AuthRequest, res: Response) => {
     return res.json({ success: true });
   } catch (err) {
     console.error('[accounts/POST /:id/close]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/v1/accounts/:id
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+
+    const existing = await prisma.account.findUnique({ where: { id } });
+    if (!existing || existing.householdId !== householdId) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    // Soft-delete all transactions belonging to this account, then delete the account
+    await prisma.transaction.updateMany({
+      where: { accountId: id, householdId },
+      data: { isHidden: true },
+    });
+    await prisma.account.delete({ where: { id } });
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[accounts/DELETE /:id]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -6,7 +6,15 @@ const DISCLAIMER = `\nNote: This is informational only and not professional fina
 
 export function chatSystemPrompt(ctx: ChatContext): string {
   const inv = ctx.investments;
+  const recentTxLines = ctx.recentTransactions.length > 0
+    ? ctx.recentTransactions.map(t =>
+        `- ${t.date} | ${t.description} | ${t.amount >= 0 ? '+' : ''}${ctx.currency}${t.amount}${t.category ? ` (${t.category})` : ''}`
+      ).join('\n')
+    : '- No recent transactions';
+
   return `You are Kuber, a personal AI financial advisor. You have access to the user's real financial data. Be concise, specific, and reference actual numbers when relevant. Do not be generic.
+
+Format your responses using markdown. Use **bold** for key figures, bullet lists for multiple items, and code blocks for calculations.
 ${DISCLAIMER}
 
 ## Financial Snapshot (${new Date().toLocaleDateString('en-CA', { month: 'long', year: 'numeric' })})
@@ -28,7 +36,10 @@ ${ctx.goals.map(g => `- ${g.name}: ${g.progressPct}% of ${ctx.currency}${g.targe
 
 **Investments:**
 - Total Value: ${ctx.currency} ${inv.totalValue.toLocaleString()} | Gain/Loss: ${ctx.currency} ${inv.gainLoss.toLocaleString()} (${inv.gainLossPct}%)
-- Allocation: ${inv.allocation.map(a => `${a.assetClass} ${a.pct}%`).join(', ')}`;
+- Allocation: ${inv.allocation.map(a => `${a.assetClass} ${a.pct}%`).join(', ')}
+
+**Recent Transactions (last 10):**
+${recentTxLines}`;
 }
 
 // ─── Spending analysis prompt ─────────────────────────────────────────────────

@@ -178,7 +178,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     }
 
     const validTypes = ['savings', 'vacation', 'home', 'wedding', 'education', 'car', 'other', 'debt'];
-    if (!validTypes.includes(type)) {
+    const normalizedType = typeof type === 'string' ? type.toLowerCase() : type;
+    if (!validTypes.includes(normalizedType)) {
       return res.status(400).json({ error: `type must be one of: ${validTypes.join(', ')}` });
     }
 
@@ -196,7 +197,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       data: {
         householdId,
         name,
-        type,
+        type: normalizedType,
         targetAmount: parseFloat(targetAmount),
         currentAmount: currentAmount !== undefined ? parseFloat(currentAmount) : 0,
         targetDate: targetDate ? new Date(targetDate) : null,
@@ -256,7 +257,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       where: { id },
       data: {
         ...(name !== undefined && { name }),
-        ...(type !== undefined && { type }),
+        ...(type !== undefined && { type: typeof type === 'string' ? type.toLowerCase() : type }),
         ...(targetAmount !== undefined && { targetAmount: parseFloat(targetAmount) }),
         ...(currentAmount !== undefined && { currentAmount: parseFloat(currentAmount) }),
         ...(targetDate !== undefined && { targetDate: targetDate ? new Date(targetDate) : null }),

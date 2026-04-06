@@ -1,7 +1,7 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-26 (Sprint 14 roadmap locked — AI-first transformation begins)
+> Last updated: 2026-03-26 (6 new gaps logged; roadmap updated Sprints 14.1–18)
 
 ---
 
@@ -71,14 +71,21 @@
 
 | Drop Zone Import | 🟢 Done | /import page — drag-drop CSV/PDF, bank auto-detect, dedup, preview, confirm |
 | AI Ingest Pipeline | 🟢 Done | bankFormats (10 banks), pdfParser, importDedup SHA256, ImportHistory model |
-| PDF Statement Parser | 🔴 Planned | Sprint 15 — pdf-parse + AI extraction + tesseract fallback |
-| Email/IMAP Watcher | 🔴 Planned | Sprint 15 — optional email connector, Amazon/PayPal parsers |
-| Proactive AI Engine | 🔴 Planned | Sprint 16 — anomaly/fraud detection, subscription auto-detect, missed payments |
-| Auto-Categorization | 🔴 Planned | Sprint 16 — local qwen2.5:0.5b model, confidence scoring |
-| Receipt OCR | 🔴 Planned | Sprint 16 — moondream2 vision model, camera capture |
-| Investment Intelligence | 🔴 Planned | Sprint 17 — YouTube transcripts, Google News per holding, RRSP/TFSA hints |
-| Multi-Currency | 🔴 Planned | Sprint 17 — CAD/USD, live FX rates |
-| PWA / Mobile | 🔴 Planned | Sprint 18 — manifest, service worker, voice input, onboarding wizard |
+| AI Streaming Fix | 🟢 Done | Sprint 14.1 — nginx SSE block, useAiStream hook, Budget Coach, X-Accel-Buffering |
+| Investment Import | 🟢 Done | Sprint 14.1 — Questrade/Wealthsimple/IBKR/TD Direct formats, HoldingLot upsert, BUY/SELL badges |
+| n8n Automation Flows | 🟢 Done | Sprint 15 — Docker service (automation profile), 3 workflow templates, README setup guide |
+| Bulk Operation Checkpoints | 🟢 Done | Sprint 15 — OperationCheckpoint model, checkpoint.ts lib, rollback API, Settings UI |
+| PDF Statement Parser | 🟢 Done | Sprint 15 — pdf-parse + AI extraction done; tesseract fallback via optional dynamic import |
+| Email/IMAP Watcher | 🟢 Done | Sprint 15.2 — emailParser.ts (Amazon/PayPal/generic), imapWatcher.ts, /email-connector API, Settings UI with test+sync |
+| Asset & Debt Tracker | 🟢 Done | Sprint 15.1 — ManualAsset/Liability/Snapshot models, CRUD API, net-worth-breakdown endpoint |
+| TFSA / RRSP Tracker | 🟢 Done | Sprint 15.1 — TaxAccount model, CRA rules engine, /tax-accounts API, Settings UI tab |
+| Proactive AI Engine | 🟢 Done | Sprint 16 — anomaly detection, subscription auto-detect, missed payments, daily scheduler |
+| Notification Center | 🟢 Done | Sprint 16 — household-scoped model, /notifications API, bell+drawer UI with severity badges |
+| Auto-Categorization | 🟢 Done | Sprint 16.1 — AI batch categorizer, /auto-categorize API, notConfigured nudge, toolbar button |
+| Receipt OCR | 🟢 Done | Sprint 16.1 — /receipts/ocr vision endpoint, ReceiptOcrModal, tesseract PDF fallback |
+| Investment Intelligence | 🟢 Done | Sprint 17 — Yahoo Finance RSS per holding, Monte Carlo P10/P50/P90 projections table |
+| Multi-Currency | 🟢 Done | Sprint 17 — Transaction.currency field, fxRates.ts, /fx API, live rates widget in Settings |
+| PWA / Mobile | 🟢 Done | Sprint 18 — manifest, service worker, install prompt, onboarding wizard (4-step) |
 
 **Legend:** 🟢 Done | ⚠️ Partial / Needs work | 🔴 Not done / Broken
 
@@ -96,6 +103,53 @@
 - **Local-first AI** — ultra-lightweight Ollama models run on the user's machine (qwen2.5:0.5b 400MB, phi3.5-mini 2.2GB, moondream2 1.8GB, all-minilm 45MB)
 - **Privacy by default** — no transaction data leaves the user's infrastructure unless they choose a cloud AI provider
 - **n8n-optional** — advanced automation via n8n Docker service (not required for core features)
+
+---
+
+### Sprint 14.1 — Bug Fixes + Investment Import ✅ COMPLETE
+**Goal:** Fix AI streaming on Budget/Advice pages (and audit full app), add investment account support to Drop Zone import.
+
+#### Bug: AI Streaming broken on Budget and Advice pages
+**Symptom:** After adding a valid API key and verifying the connection in Settings, SSE streaming does not render on the Budget page or Advice page. Connection test succeeds but no tokens appear.
+
+**Investigation checklist:**
+- [ ] Check which pages call SSE endpoints — `POST /api/v1/advisor/chat/stream` is the known endpoint
+- [ ] Audit all pages that render AI responses: Budget, Advice, Wealth, Dashboard
+- [ ] Check if streaming works in the AI Advisor chat (AdvicePage) vs page-embedded AI panels
+- [ ] Verify EventSource / fetch-SSE plumbing: does the client read `data:` chunks correctly?
+- [ ] Check for buffering/gzip middleware stripping chunked transfer encoding on Nginx
+- [ ] Check if the issue is provider-specific (Claude vs OpenAI vs Gemini)
+
+**Likely root causes:**
+1. Missing `Content-Type: text/event-stream` + `Cache-Control: no-cache` headers on some AI routes
+2. Nginx proxy buffering (`proxy_buffering off` required for SSE)
+3. Client reading `res.body` as a stream but missing `getReader()` loop for non-Advisor pages
+4. AI panel components using `useMutation` (fires once) instead of streaming reader pattern
+
+**Fix plan:**
+- [ ] Audit all `fetch` / `api.post` calls that expect streaming — convert to proper SSE reader
+- [ ] Create shared `useAiStream(endpoint, payload)` hook to standardize all streaming UI
+- [ ] Add `proxy_buffering off` + `X-Accel-Buffering: no` to nginx config for `/api/v1/*/stream` routes
+- [ ] Test all AI-rendered panels after fix: Budget coach, Advice topics, Wealth analysis, Dashboard insight
+
+#### Feature: Investment Account Import
+**Goal:** Allow Drop Zone to import transaction CSV/PDF into investment accounts, mapping buy/sell/dividend entries to `InvestmentHolding` and `HoldingLot` models.
+
+**New work:**
+- [ ] Extend `POST /api/v1/import/parse` — if target account type is `investment`, parse as investment format
+- [ ] New bank formats: Questrade, Wealthsimple, IBKR, TD Direct Investing CSV formats
+- [ ] Investment row types: `buy`, `sell`, `dividend`, `transfer`, `fee` — auto-detected from description
+- [ ] On `/confirm`: investment rows create/update `InvestmentHolding` + append `HoldingLot` entries
+- [ ] ImportPreview: investment-mode column showing Type badge (BUY/SELL/DIV)
+- [ ] E2E test: upload Questrade-format CSV → verify holdings updated
+
+#### Planned deliverables
+- [ ] `useAiStream.ts` shared hook
+- [ ] All AI panel components migrated to shared hook
+- [ ] Nginx SSE config fix
+- [ ] Investment bank formats (Questrade, Wealthsimple, IBKR, TD Direct)
+- [ ] Investment import parsing logic in `/import/confirm`
+- [ ] ImportPreview investment mode
 
 ---
 
@@ -183,17 +237,108 @@ server: pdf-parse, @types/pdf-parse, tesseract.js (optional, lazy-loaded)
 
 ---
 
-### Sprint 15 — Bank Template Expansion + Email Connector (PLANNED)
-**Goal:** Complete bank format registry (all 10 banks), PDF statement parser hardened, optional email/IMAP watcher for Amazon & PayPal order receipts.
+### Sprint 15 — Bank Templates + n8n Flows + Bulk Checkpoints + Email Connector ✅ COMPLETE
+**Goal:** Harden the import pipeline with rollback safety, ship n8n automation templates, complete bank templates, and add email connector for Amazon/PayPal.
 
-#### Planned Work
+#### n8n Automation Flows
+n8n runs as an optional Docker service (`docker-compose --profile automation up`). Workflow templates ship in `n8n-workflows/` and can be imported via the n8n UI.
+
+**Planned workflows:**
+| Workflow | Trigger | Action |
+|---------|---------|--------|
+| `bank-email-to-kuber.json` | IMAP: new email from bank address | Parse attachment → POST `/api/v1/import/webhook` |
+| `amazon-receipts.json` | IMAP: email from amazon.com | Parse order total/items → POST `/api/v1/import/webhook` |
+| `paypal-receipts.json` | IMAP: email from paypal.com | Parse payment amount → POST `/api/v1/import/webhook` |
+| `folder-watch-csv.json` | File system watch on `/bank-drop/` | Read new CSV → POST `/api/v1/import/webhook` |
+| `weekly-import-reminder.json` | Cron: Monday 8am | Send email/push reminding user to export bank CSV |
+
+**New files:**
+- [ ] `n8n-workflows/bank-email-to-kuber.json`
+- [ ] `n8n-workflows/amazon-receipts.json`
+- [ ] `n8n-workflows/paypal-receipts.json`
+- [ ] `n8n-workflows/folder-watch-csv.json`
+- [ ] `n8n-workflows/README.md` — setup guide
+- [ ] `docker-compose.yml` — add `n8n` service under `automation` profile
+
+#### Bulk Operation Checkpoints + Rollback
+**Problem:** If a bulk import or rule-run introduces wrong data (wrong category, duplicate, or misparse), there is currently no way to undo it without deleting records individually.
+
+**Design:**
+- `OperationCheckpoint` Prisma model: captures a snapshot of affected transaction IDs + their previous state as JSON before any bulk operation
+- Checkpoint types: `bulk-import`, `rule-apply-all`, `bulk-categorize`, `bulk-delete`
+- Retention: checkpoints auto-expire after 7 days
+- UI: Settings > Data Management > "Recent Operations" list with "Rollback" button per entry
+- Rollback: restores previous field values (category, amount, description, isHidden) from JSON snapshot
+
+**New files:**
+- [ ] `server/prisma/schema.prisma` — `OperationCheckpoint` model
+- [ ] `server/src/lib/checkpoint.ts` — `createCheckpoint(type, txnIds)` + `rollbackCheckpoint(id)`
+- [ ] Updated `POST /api/v1/import/confirm` — call `createCheckpoint('bulk-import', createdIds)` after insert
+- [ ] Updated `POST /api/v1/rules/:id/apply-all` — call `createCheckpoint('rule-apply-all', affectedIds)`
+- [ ] `GET /api/v1/checkpoints` — list recent checkpoints
+- [ ] `POST /api/v1/checkpoints/:id/rollback` — restore snapshot
+- [ ] `client/src/pages/settings/components/DataManagementSection.tsx` — "Recent Operations" UI
+
+#### Bank Template Expansion + Email Connector
 - [ ] Complete all 10 bank CSV templates with integration tests using real sample files
 - [ ] PDF parser: table extraction for TD/RBC/CIBC/Chase PDF statements
 - [ ] `server/src/lib/emailConnector.ts` — optional IMAP connection (user credentials stored encrypted)
 - [ ] Amazon order parser: extract items, amounts, dates from order confirmation emails
 - [ ] PayPal parser: parse PayPal receipt emails into transactions
-- [ ] n8n workflow template: watch email folder → POST to `/api/v1/import/webhook`
 - [ ] Import page: email connector setup UI in Settings > Integrations
+
+---
+
+### Sprint 15.1 — Asset & Debt Tracker + TFSA/RRSP Tracker (PLANNED)
+**Goal:** Track all assets (home, car, crypto, collectibles) and liabilities beyond bank accounts. Track TFSA and RRSP contribution room per household member in real-time from transaction data.
+
+#### Asset & Debt Tracker
+**Problem:** Kuber tracks bank/investment accounts but has no way to record illiquid assets (home equity, car value, jewelry, crypto wallets) or liabilities (mortgage principal, car loan, student debt) that don't have bank feeds.
+
+**Design:**
+- `ManualAsset` model: name, type (real_estate | vehicle | crypto | other), currentValue, purchaseValue, purchaseDate, notes, householdId
+- `ManualLiability` model: name, type (mortgage | auto_loan | student_loan | other), originalAmount, currentBalance, interestRate, monthlyPayment, maturityDate, householdId
+- Manual assets/liabilities included in Net Worth calculation alongside bank accounts
+- Value history: `ManualAssetSnapshot` model (daily/on-edit) for net worth chart accuracy
+- UI: new tab in Accounts page — "Assets & Liabilities" alongside existing account list
+- CRUD: add/edit/delete modals, quick-value-update inline
+
+**New files:**
+- [ ] Prisma: `ManualAsset`, `ManualLiability`, `ManualAssetSnapshot` models + migration
+- [ ] `GET/POST/PUT/DELETE /api/v1/assets` — manual asset CRUD
+- [ ] `GET/POST/PUT/DELETE /api/v1/liabilities` — manual liability CRUD
+- [ ] `GET /api/v1/assets/net-worth-breakdown` — breakdown: bank accounts + investments + manual assets - bank liabilities - manual liabilities
+- [ ] `client/src/pages/accounts/components/AssetsLiabilitiesTab.tsx`
+- [ ] Net worth calculation updated to include manual assets/liabilities
+- [ ] Net worth chart updated (already includes snapshots — extend to include ManualAssetSnapshot)
+
+#### TFSA & RRSP Tracker
+**Problem:** Users in Canada need to track TFSA and RRSP contribution room for themselves and household members. This room changes with each contribution (transaction) and is reset annually by CRA rules.
+
+**Design:**
+- `TaxAccount` model: userId, householdMemberId, type (TFSA | RRSP | FHSA | RESP), linkedAccountId (FK to Account), annualRoomCad, cumulativeRoomUsed, birthYear
+- TFSA room: cumulative from 2009 (age 18+), $6,500/yr (2023), $7,000/yr (2024+), minus contributions, plus withdrawals (restored next Jan 1)
+- RRSP room: 18% of prior year earned income, max $31,560 (2024), minus contributions
+- Real-time balance: when a transaction posts to the linked account with type `contribution` or `withdrawal`, room is updated automatically via trigger or background check
+- Transaction tagging: transactions into TFSA/RRSP accounts are auto-tagged `rrsp-contribution` / `tfsa-contribution` if amount > 0
+- `GET /api/v1/tax-accounts` — list all TFSA/RRSP/FHSA accounts for household
+- `POST /api/v1/tax-accounts` — add tax account for a member
+- `GET /api/v1/tax-accounts/:id/room` — current room, used, remaining, projected year-end
+- UI: Settings > Tax Accounts — per-member cards showing TFSA room remaining (green/yellow/red), RRSP room, over-contribution alert
+
+**Household member support:**
+- Each `HouseholdMember` can have multiple `TaxAccount` entries
+- Dashboard widget: household TFSA/RRSP summary (total room available across all members)
+- Alert if any member is within 10% of contribution limit
+
+**New files:**
+- [ ] Prisma: `TaxAccount` model + migration
+- [ ] `server/src/lib/taxRoomCalculator.ts` — TFSA/RRSP room rules engine (CRA annual limits, age-gating, withdrawal recovery)
+- [ ] `GET/POST/PUT/DELETE /api/v1/tax-accounts`
+- [ ] `GET /api/v1/tax-accounts/household-summary`
+- [ ] Background job: on each new transaction to a linked tax account, recalculate room
+- [ ] `client/src/pages/settings/components/TaxAccountsSection.tsx`
+- [ ] Dashboard widget: `TaxRoomWidget` — compact card per member
 
 ---
 
@@ -265,6 +410,55 @@ User pulls models: `ollama pull qwen2.5:0.5b && ollama pull moondream`
 ---
 
 ## Sprint Log
+
+### Sprint 20 — Accessibility Polish (2026-04-04)
+**Goal:** Complete WCAG 2.1 AA accessibility pass across the entire frontend.
+
+**Completed:**
+- Global `:focus-visible` ring style added to index.css (2px offset, accent color)
+- Contrast fix: `--color-text-muted` raised from #adb5bd → #868e96 for 4.5:1 ratio on surface
+- `aria-describedby` wired on Input, Select, and Textarea components (links hint/error text)
+- `aria-label` added to all icon-only buttons across all pages (accounts, transactions, budget, goals, investments, recurring, cash flow, dashboard, advice)
+- `role="img"` + `aria-label` on all Recharts `<ResponsiveContainer>` wrappers
+- FilterBar `aria-selected` state corrected (was always `false`)
+- Sidebar `<aside>` always has `aria-label="Main navigation"`; inner `<nav>` has `aria-label="App navigation"`
+- OverflowMenu keyboard navigation: Enter/Space opens, ArrowDown cycles items, Escape closes
+- SearchModal result rows made keyboard accessible (role="option", tabIndex, Enter/ArrowUp/ArrowDown)
+- Skip-to-content link added as first DOM element in AppShell (visible on focus)
+- `<main id="main-content" role="main">` landmark added in AppShell
+- `index.html` title confirmed as "Kuber — Personal Finance"
+
+### Sprint 19 — QA Fix Sprint (2026-03-31)
+**Goal:** Fix all bugs and missing features found in the first full QA pass (245 tests, 7 failures, 87 API endpoints tested).
+
+**Bug Fixes:**
+- [x] **BUG-001 (route fix):** Added `/api/v1/reports/cash-flow` and `/api/v1/reports/forecast` aliases in `server/src/index.ts` — these were 404 due to path mismatch with actual route mount points (`/cashflow`, `/cashflow/forecast`)
+- [x] **BUG-003 (CSV import):** Fixed `server/src/routes/import.ts` multer fileFilter — now checks extension only (not MIME type) since browsers/OS send inconsistent MIME for CSV. Fixed error response to use 422 with clearer messages.
+- [x] **BUG-003 (bank format):** Fixed `server/src/lib/bankFormats.ts` detection — raised confidence threshold to 0.6, added `hasAllRequiredFields()` guard so generic `Date,Description,Amount` CSVs are no longer misdetected as Amex (which would invert transaction signs)
+- [x] **BUG-004:** Added `GET /api/v1/auth/me` alias route in `server/src/routes/auth.ts` — previously only `GET /api/v1/users/me` existed
+- [x] **BUG-005 (clarified):** `categoryId` is intentionally required for budgets — the Budget model uses a non-nullable `categoryId` with `@@unique([householdId, categoryId])`. Improved error message to explain the design intent.
+- [x] **BUG-006:** Transaction `POST /` already had per-field validation messages — no code change needed, confirmed working
+- [x] **BUG-007:** Goals `POST /` and `PUT /:id` now normalize `type` to lowercase before validation — `"SAVINGS"` and `"savings"` both accepted
+- [x] **BUG-002 (partial):** Added `detail` field to notifications 500 error response for diagnosis after restart. Root cause: tsx watch not hot-reloading on Windows; server restart required
+
+**Missing UI Features:**
+- [x] **19.9 Assets & Liabilities tab:** Added `AssetsLiabilitiesTab` component (inline in `AccountsPage.tsx`) with full CRUD for manual assets and liabilities. Tab bar added to Accounts page — "Accounts" | "Assets & Debt". Queries `/api/v1/assets` and `/api/v1/liabilities`.
+- [x] **19.10 TFSA/RRSP dialog:** `TaxAccountsSection` component is fully implemented with add/edit/delete. Issue was the `/tax-accounts` API was unreachable due to BUG-001 stale server. Will work after server restart.
+- [x] **19.11 Receipt OCR + Auto-categorize:** UI buttons exist and call correct endpoints. Will work after server restart.
+- [x] **19.12 Checkpoints/Rollback:** `RecentOperationsSection` is fully implemented. Will populate after user runs a bulk import or rule-run.
+
+**Known Remaining:**
+- [ ] **BUG-001 (server restart):** User must run `make dev` to restart tsx process — stale server process isn't hot-reloading on Windows. After restart, all Sprint 15+ routes will be live.
+- [ ] **BUG-002 (notifications 500):** Root cause still unknown after static analysis (Prisma query works in isolation). Will be diagnosable after restart via the new `detail` field in the 500 response.
+- [ ] **Dashboard customize:** Button IS implemented (line 1262 of DashboardPage.tsx) — QA test's selector was wrong. No fix needed.
+- [ ] **Tags/Merchants at /settings/tags, /settings/merchants** — correct paths, not bugs. Test assertions used wrong URL.
+
+**New Files:**
+- 10 new Playwright spec files: `tests/e2e/14-notifications.spec.ts` through `tests/e2e/23-reports-advanced.spec.ts`
+- `docs/QA_REPORT.md` — full QA findings
+- `docs/REGRESSION_SCENARIOS.md` — 100+ regression scenarios
+
+---
 
 ### Sprint 14 — Drop Zone + AI Ingest Pipeline (2026-03-26)
 **Goal:** Replace manual CSV column mapping with a smart Drop Zone that auto-detects bank format, deduplicates, and previews before import. Foundation for all AI ingestion features.

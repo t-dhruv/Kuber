@@ -46,10 +46,18 @@ export async function parsePdfStatement(
 
   try {
     const data = await pdfParse(buffer);
-    const rows = extractTransactionsFromText(data.text);
+    let rawText = data.text;
+
+    // If text is empty (scanned PDF), try tesseract OCR fallback
+    if (!rawText.trim()) {
+      const ocrText = await ocrPdfBuffer(buffer).catch(() => null);
+      if (ocrText) rawText = ocrText;
+    }
+
+    const rows = extractTransactionsFromText(rawText);
     return {
       rows,
-      rawText: data.text,
+      rawText,
       pageCount: data.numpages,
       method: 'pdf-parse',
     };
@@ -124,6 +132,38 @@ function extractTransactionsFromText(
   }
 
   return results;
+}
+
+/**
+ * Try to extract text from a scanned PDF using tesseract.js (if available).
+ * Returns null if tesseract is not installed.
+ */
+export async function ocrPdfBuffer(buffer: Buffer): Promise<string | null> {
+  try {
+    // Dynamic import — tesseract.js is optional
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore optional peer dependency
+    const Tesseract = await import('tesseract.js').catch(() => null) as any;
+    if (!Tesseract) return null;
+
+    // Convert first page of PDF to image using pdf-to-img (also optional)
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore optional peer dependency
+    const pdfToImg = await import('pdf-to-img').catch(() => null) as any;
+    if (!pdfToImg) return null;
+
+    const pages = await (pdfToImg as any).pdf(buffer, { scale: 2 });
+    let fullText = '';
+    for await (const page of pages) {
+      const { data } = await Tesseract.default.recognize(page, 'eng', {
+        logger: () => {}, // suppress progress logs
+      });
+      fullText += data.text + '\n';
+    }
+    return fullText.trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 /**

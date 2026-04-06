@@ -23,7 +23,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.userId! } });
     if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json({ data: { user: toUserDto(user, req.householdId!) } });
+    return res.json(toUserDto(user, req.householdId!));
   } catch (err) {
     console.error('[users/me GET]', err);
     return res.status(500).json({ error: 'Internal server error' });

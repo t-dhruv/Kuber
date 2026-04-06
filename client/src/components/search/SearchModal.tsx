@@ -391,7 +391,15 @@ function ResultRow({
 }) {
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -400,6 +408,13 @@ function ResultRow({
         cursor: 'pointer',
         backgroundColor: active ? 'var(--color-accent-light)' : 'transparent',
         transition: 'background 0.1s',
+        outline: 'none',
+      }}
+      onFocus={(e) => {
+        e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)';
+      }}
+      onBlur={(e) => {
+        if (!active) e.currentTarget.style.backgroundColor = 'transparent';
       }}
       onMouseEnter={(e) => {
         if (!active) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)';

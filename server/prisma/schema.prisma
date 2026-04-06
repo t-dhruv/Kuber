@@ -26,10 +26,10 @@ model User {
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   householdMembers    HouseholdMember[]
-  notifications       Notification[]
   preferences         UserPreference[]
   refreshTokens       RefreshToken[]
   auditLogs           AuditLog[]
+  apiTokens           ApiToken[]
 
   @@map("users")
 }
@@ -60,6 +60,13 @@ model Household {
   duplicateDismissals     DuplicateDismissal[]
   reportSchedule          ReportSchedule?
   importHistory           ImportHistory[]
+  operationCheckpoints    OperationCheckpoint[]
+  notifications           Notification[]
+  manualAssets            ManualAsset[]
+  manualLiabilities       ManualLiability[]
+  taxAccounts             TaxAccount[]
+  apiTokens               ApiToken[]
+  investmentIntel         InvestmentIntel[]
 
   @@map("households")
 }
@@ -165,6 +172,7 @@ model Account {
   goals               Goal[]
   investmentHoldings  InvestmentHolding[]
   balanceSnapshots    AccountBalanceSnapshot[]
+  taxAccounts         TaxAccount[]
 
   @@map("accounts")
 }
@@ -177,6 +185,7 @@ model Transaction {
   description         String
   originalDescription String
   amount              Float
+  currency            String           @default("USD")
   categoryId          String?
   merchantId          String?
   notes               String?
@@ -237,7 +246,8 @@ model CategoryGroup {
 model Budget {
   id          String    @id @default(cuid())
   householdId String
-  categoryId  String
+  categoryId  String?
+  name        String?   // label for catch-all/uncategorized budgets
   amount      Float
   period      String    @default("monthly")
   rollover    Boolean   @default(false)
@@ -246,9 +256,7 @@ model Budget {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@unique([householdId, categoryId])
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   @@map("budgets")
 }
 
@@ -353,6 +361,78 @@ model RecurringInvestment {
   @@map("recurring_investments")
 }
 
+model ManualAsset {
+  id            String               @id @default(cuid())
+  householdId   String
+  name          String
+  type          String               @default("other") // real_estate | vehicle | crypto | collectible | other
+  currentValue  Float
+  purchaseValue Float?
+  purchaseDate  DateTime?
+  notes         String?
+  currency      String               @default("USD")
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  household     Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  snapshots     ManualAssetSnapshot[]
+
+  @@index([householdId])
+  @@map("manual_assets")
+}
+
+model ManualLiability {
+  id              String   @id @default(cuid())
+  householdId     String
+  name            String
+  type            String   @default("other") // mortgage | auto_loan | student_loan | credit_card | other
+  originalAmount  Float
+  currentBalance  Float
+  interestRate    Float?
+  monthlyPayment  Float?
+  maturityDate    DateTime?
+  notes           String?
+  currency        String   @default("USD")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@map("manual_liabilities")
+}
+
+model TaxAccount {
+  id               String    @id @default(cuid())
+  householdId      String
+  name             String
+  type             String          // "TFSA" | "RRSP" | "FHSA" | "RESP" | "401k" | "IRA"
+  linkedAccountId  String?         // FK to Account (optional)
+  memberName       String?         // household member name for display
+  birthYear        Int?            // for TFSA age-gating (must be 18+)
+  annualRoomCad    Float           @default(0)  // CRA-set room for current year
+  totalRoomEver    Float           @default(0)  // cumulative room since account type inception
+  contributionsYtd Float           @default(0)  // contributions this calendar year
+  withdrawalsYtd   Float           @default(0)  // withdrawals (TFSA room restored next Jan 1)
+  notes            String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  household        Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  linkedAccount    Account?        @relation(fields: [linkedAccountId], references: [id])
+
+  @@index([householdId])
+  @@map("tax_accounts")
+}
+
+model ManualAssetSnapshot {
+  id        String      @id @default(cuid())
+  assetId   String
+  value     Float
+  date      DateTime    @default(now())
+  asset     ManualAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId, date])
+  @@map("manual_asset_snapshots")
+}
+
 model Merchant {
   id           String        @id @default(cuid())
   householdId  String
@@ -403,16 +483,20 @@ model Rule {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  type      String
-  title     String
-  body      String
-  isRead    Boolean  @default(false)
-  metadata  Json?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String    @id @default(cuid())
+  householdId      String
+  userId           String?
+  type             String    // "anomaly" | "subscription" | "missed_payment" | "over_budget" | "info"
+  severity         String    @default("info") // "info" | "warning" | "alert"
+  title            String
+  body             String
+  read             Boolean   @default(false)
+  linkedEntityId   String?   // transaction ID, account ID, etc.
+  linkedEntityType String?   // "transaction" | "account" | "goal"
+  createdAt        DateTime  @default(now())
+  household        Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
+  @@index([householdId, read, createdAt])
   @@map("notifications")
 }
 
@@ -574,4 +658,53 @@ model ImportHistory {
 
   @@index([householdId, createdAt])
   @@map("import_history")
+}
+
+model ApiToken {
+  id          String    @id @default(cuid())
+  householdId String
+  userId      String
+  name        String
+  tokenHash   String    @unique
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@map("api_tokens")
+}
+
+model InvestmentIntel {
+  id          String    @id @default(cuid())
+  householdId String
+  source      String
+  title       String
+  summary     String    @db.Text
+  url         String?
+  ticker      String?
+  sentiment   String?
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, createdAt])
+  @@map("investment_intel")
+}
+
+model OperationCheckpoint {
+  id          String   @id @default(cuid())
+  householdId String
+  type        String   // "bulk-import" | "rule-apply-all" | "bulk-categorize" | "bulk-delete"
+  label       String   // human-readable description e.g. "Imported 47 rows from td-statement.csv"
+  snapshot    Json     // array of { id, amount, description, categoryId, merchantId, isHidden, date }
+  txnCount    Int
+  rolledBack  Boolean  @default(false)
+  expiresAt   DateTime // now + 7 days
+  createdAt   DateTime @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, createdAt])
+  @@map("operation_checkpoints")
 }

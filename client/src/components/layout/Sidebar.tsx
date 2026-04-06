@@ -18,6 +18,7 @@ import {
   Zap,
   Layers,
   Upload,
+  LogOut,
 } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
@@ -131,7 +132,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                     : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]'
                 }`
               }
-              aria-label={collapsed ? item.label : undefined}
+              aria-label={item.label}
+              title={item.label}
             >
               <span className="flex-shrink-0">{item.icon}</span>
               {!collapsed && <span className="truncate">{item.label}</span>}
@@ -142,50 +144,43 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
       {/* Bottom section */}
       <div className="flex flex-col gap-1 px-2 pb-3 border-t border-[var(--color-border)] pt-3 flex-shrink-0">
-        {/* AI Assistant */}
-        <Tooltip content="AI Assistant" placement="right" disabled={!collapsed}>
-          <NavLink
-            to="/advice"
-            onClick={handleNavClick}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm font-medium transition-colors ${
-                collapsed ? 'justify-center' : ''
-              } ${
-                isActive
-                  ? 'bg-[var(--color-accent-light)] text-[var(--color-accent)]'
-                  : 'bg-gradient-to-r from-[var(--color-accent-light)] to-transparent text-[var(--color-accent)] hover:opacity-80'
-              }`
-            }
-          >
-            <Sparkles size={18} className="flex-shrink-0" />
-            {!collapsed && <span className="truncate">AI Assistant</span>}
-          </NavLink>
-        </Tooltip>
-
         {/* User profile */}
         <div className={`flex items-center ${collapsed ? 'justify-center px-0' : 'gap-2 px-1'} py-2`}>
-          <Avatar
-            name={user ? `${user.firstName} ${user.lastName}` : 'User'}
-            size="sm"
-            className="flex-shrink-0 cursor-pointer"
-            onClick={handleLogout}
-            title="Click to sign out"
-          />
+          <Tooltip content="Sign out" placement="right" disabled={!collapsed}>
+            <Avatar
+              name={user ? `${user.firstName} ${user.lastName}` : 'User'}
+              size="sm"
+              className="flex-shrink-0 cursor-pointer"
+              onClick={handleLogout}
+              title="Click to sign out"
+            />
+          </Tooltip>
           {!collapsed && (
             <div className="flex-1 min-w-0 flex items-center justify-between">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-[var(--color-text)] truncate">{user ? `${user.firstName} ${user.lastName}` : 'User'}</p>
                 <p className="text-xs text-[var(--color-text-muted)] truncate">{user?.email ?? ''}</p>
               </div>
-              <Tooltip content="Settings" placement="top">
-                <NavLink
-                  to="/settings"
-                  className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] transition-colors flex-shrink-0"
-                  aria-label="Settings"
-                >
-                  <Settings size={14} />
-                </NavLink>
-              </Tooltip>
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                <Tooltip content="Settings" placement="top">
+                  <NavLink
+                    to="/settings"
+                    className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] transition-colors"
+                    aria-label="Settings"
+                  >
+                    <Settings size={14} />
+                  </NavLink>
+                </Tooltip>
+                <Tooltip content="Sign out" placement="top">
+                  <button
+                    onClick={handleLogout}
+                    className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)] transition-colors"
+                    aria-label="Sign out"
+                  >
+                    <LogOut size={14} />
+                  </button>
+                </Tooltip>
+              </div>
             </div>
           )}
         </div>

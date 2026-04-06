@@ -1,39 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
-import { useLocation, NavLink } from 'react-router-dom';
-import { Menu, Search, Bell, Settings } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocation, NavLink, useNavigate } from 'react-router-dom';
+import { Menu, Search, Bell, Settings, LogOut, User } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/lib/api';
 import { SearchModal } from '@/components/search';
+import { NotificationDrawer } from '@/components/notifications/NotificationDrawer';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Notification {
-  id: string;
-  title: string;
-  body: string;
-  icon?: string;
-  read: boolean;
-  createdAt: string;
-}
-
-interface NotificationCount {
-  unread: number;
+interface NotificationsResponse {
+  items: unknown[];
+  unreadCount: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmtRelative(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return mins <= 1 ? 'just now' : `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 const routeLabels: Record<string, string> = {
   '/': 'Dashboard',
@@ -61,245 +44,44 @@ interface HeaderProps {
   onToggleSidebar?: () => void;
 }
 
-// ─── Notifications dropdown ───────────────────────────────────────────────────
-
-function NotificationsDropdown({ onClose }: { onClose: () => void }) {
-  const queryClient = useQueryClient();
-
-  const { data: notifData } = useQuery<Notification[]>({
-    queryKey: ['notifications'],
-    queryFn: () =>
-      api.get('/notifications?limit=10').then((r) => r.data),
-    refetchInterval: 30_000,
-  });
-
-  const markReadMutation = useMutation({
-    mutationFn: (id: string) => api.put(`/notifications/${id}/read`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications-count'] });
-    },
-  });
-
-  const markAllReadMutation = useMutation({
-    mutationFn: () => api.put('/notifications/read-all'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications-count'] });
-    },
-  });
-
-  const notifications = notifData ?? [];
-
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 'calc(100% + 0.5rem)',
-        right: 0,
-        width: 280,
-        maxHeight: 400,
-        backgroundColor: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-lg)',
-        boxShadow: 'var(--shadow-lg)',
-        zIndex: 500,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0.75rem 1rem',
-          borderBottom: '1px solid var(--color-border)',
-          flexShrink: 0,
-        }}
-      >
-        <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
-          Notifications
-        </span>
-        <button
-          onClick={() => markAllReadMutation.mutate()}
-          disabled={markAllReadMutation.isPending}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '0.75rem',
-            color: 'var(--color-accent)',
-            fontWeight: 500,
-            padding: 0,
-          }}
-        >
-          Mark all read
-        </button>
-      </div>
-
-      {/* List */}
-      <div style={{ overflowY: 'auto', flex: 1 }}>
-        {notifications.length === 0 ? (
-          <div
-            style={{
-              padding: '2rem 1rem',
-              textAlign: 'center',
-              color: 'var(--color-text-muted)',
-              fontSize: '0.875rem',
-            }}
-          >
-            No notifications
-          </div>
-        ) : (
-          notifications.map((notif) => (
-            <div
-              key={notif.id}
-              onClick={() => {
-                if (!notif.read) markReadMutation.mutate(notif.id);
-              }}
-              style={{
-                display: 'flex',
-                gap: '0.625rem',
-                padding: '0.75rem 1rem',
-                cursor: notif.read ? 'default' : 'pointer',
-                backgroundColor: notif.read ? 'transparent' : 'var(--color-accent-light)',
-                borderBottom: '1px solid var(--color-border)',
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                if (!notif.read)
-                  e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)';
-              }}
-              onMouseLeave={(e) => {
-                if (!notif.read)
-                  e.currentTarget.style.backgroundColor = 'var(--color-accent-light)';
-              }}
-            >
-              {/* Unread dot */}
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  backgroundColor: notif.read ? 'transparent' : 'var(--color-accent)',
-                  marginTop: '0.375rem',
-                  flexShrink: 0,
-                }}
-              />
-
-              {/* Icon + text */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '0.375rem',
-                    alignItems: 'flex-start',
-                    marginBottom: '0.125rem',
-                  }}
-                >
-                  {notif.icon && (
-                    <span style={{ fontSize: '0.875rem', flexShrink: 0 }}>{notif.icon}</span>
-                  )}
-                  <span
-                    style={{
-                      fontSize: '0.8125rem',
-                      fontWeight: notif.read ? 400 : 600,
-                      color: 'var(--color-text)',
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    {notif.title}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontSize: '0.75rem',
-                    color: 'var(--color-text-secondary)',
-                    lineHeight: 1.4,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {notif.body}
-                </div>
-                <div
-                  style={{
-                    fontSize: '0.6875rem',
-                    color: 'var(--color-text-muted)',
-                    marginTop: '0.25rem',
-                  }}
-                >
-                  {fmtRelative(notif.createdAt)}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* Footer */}
-      <div
-        style={{
-          padding: '0.5rem 1rem',
-          borderTop: '1px solid var(--color-border)',
-          flexShrink: 0,
-        }}
-      >
-        <button
-          onClick={onClose}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '0.8125rem',
-            color: 'var(--color-accent)',
-            fontWeight: 500,
-            width: '100%',
-            textAlign: 'center',
-            padding: '0.25rem 0',
-          }}
-        >
-          View all notifications →
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Header ───────────────────────────────────────────────────────────────────
 
 export function Header({ onToggleSidebar }: HeaderProps) {
   const location = useLocation();
-  const { user } = useAuthStore();
+  const { user, clearAuth } = useAuthStore();
+  const navigate = useNavigate();
   const pageLabel = getPageLabel(location.pathname);
-  const [showNotifs, setShowNotifs] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const notifsRef = useRef<HTMLDivElement>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Fetch unread count (poll every 30s)
-  const { data: countData } = useQuery<NotificationCount>({
-    queryKey: ['notifications-count'],
-    queryFn: () => api.get('/notifications/count').then((r) => r.data),
-    refetchInterval: 30_000,
-  });
+  const handleLogout = () => {
+    clearAuth();
+    navigate('/login');
+  };
 
-  const unreadCount = countData?.unread ?? 0;
-
-  // Close notifications on click-outside
+  // Close user menu on outside click
   useEffect(() => {
-    if (!showNotifs) return;
     function handler(e: MouseEvent) {
-      if (notifsRef.current && !notifsRef.current.contains(e.target as Node)) {
-        setShowNotifs(false);
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
       }
     }
-    document.addEventListener('mousedown', handler);
+    if (userMenuOpen) {
+      document.addEventListener('mousedown', handler);
+    }
     return () => document.removeEventListener('mousedown', handler);
-  }, [showNotifs]);
+  }, [userMenuOpen]);
+
+  // Fetch unread count via the notifications list query (shared with drawer)
+  const { data: notifData } = useQuery<NotificationsResponse>({
+    queryKey: ['notifications'],
+    queryFn: () => api.get('/notifications').then((r) => r.data),
+    refetchInterval: 60_000,
+  });
+
+  const unreadCount = notifData?.unreadCount ?? 0;
 
   // Global Cmd+K / Ctrl+K
   useEffect(() => {
@@ -350,25 +132,20 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           </Tooltip>
 
           {/* Notifications */}
-          <div ref={notifsRef} style={{ position: 'relative' }}>
+          <Tooltip content="Notifications" placement="bottom">
             <button
-              onClick={() => setShowNotifs((v) => !v)}
+              onClick={() => setNotifOpen(true)}
               className="relative p-2 rounded-[var(--radius-md)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
               aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
             >
               <Bell size={18} />
               {unreadCount > 0 && (
                 <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--color-danger)] text-[10px] font-bold text-white leading-none">
-                  {unreadCount > 99 ? '99+' : unreadCount}
+                  {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
             </button>
-
-            {showNotifs && (
-              <NotificationsDropdown onClose={() => setShowNotifs(false)} />
-            )}
-          </div>
-
+          </Tooltip>
           {/* Settings */}
           <Tooltip content="Settings" placement="bottom">
             <NavLink
@@ -380,19 +157,71 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             </NavLink>
           </Tooltip>
 
-          {/* User avatar */}
-          <div className="ml-1">
-            <Avatar
-              name={user ? `${user.firstName} ${user.lastName}` : 'User'}
-              size="sm"
-              className="cursor-pointer"
-            />
+          {/* User avatar + dropdown menu */}
+          <div className="ml-1 relative" ref={userMenuRef}>
+            <Tooltip content="Account" placement="bottom" disabled={userMenuOpen}>
+              <button
+                onClick={() => setUserMenuOpen((v) => !v)}
+                className="rounded-full focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+                aria-label="Open user menu"
+                aria-expanded={userMenuOpen}
+              >
+                <Avatar
+                  name={user ? `${user.firstName} ${user.lastName}` : 'User'}
+                  size="sm"
+                  className="cursor-pointer"
+                />
+              </button>
+            </Tooltip>
+
+            {/* Dropdown */}
+            {userMenuOpen && (
+              <div
+                className="absolute right-0 top-full mt-2 w-52 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] z-50 overflow-hidden"
+                role="menu"
+              >
+                {/* User info */}
+                <div className="px-4 py-3 border-b border-[var(--color-border)]">
+                  <p className="text-sm font-semibold text-[var(--color-text)] truncate">
+                    {user ? `${user.firstName} ${user.lastName}` : 'User'}
+                  </p>
+                  <p className="text-xs text-[var(--color-text-muted)] truncate mt-0.5">
+                    {user?.email ?? ''}
+                  </p>
+                </div>
+
+                {/* Menu items */}
+                <div className="py-1">
+                  <NavLink
+                    to="/settings"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] transition-colors"
+                    role="menuitem"
+                  >
+                    <User size={14} />
+                    Profile &amp; Settings
+                  </NavLink>
+
+                  <button
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 transition-colors"
+                    role="menuitem"
+                  >
+                    <LogOut size={14} />
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
       {/* Global search modal */}
       <SearchModal open={showSearch} onClose={() => setShowSearch(false)} />
+
+      {/* Notification drawer — rendered outside header flex to avoid layout interference */}
+      <NotificationDrawer open={notifOpen} onClose={() => setNotifOpen(false)} />
     </>
   );
 }

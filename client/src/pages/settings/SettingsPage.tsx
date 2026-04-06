@@ -3,13 +3,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   User, Monitor, Bell, Shield, Home, Tag, Database, CreditCard,
   Pencil, Trash2, Plus, ChevronDown, ChevronRight, Upload, ShieldCheck, ShieldOff, Mail, Bot,
-  CheckCircle2, XCircle, Receipt,
+  CheckCircle2, XCircle, Receipt, Zap,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Button, Input, Select, Checkbox, Avatar, Card, CardDivider, Modal, ModalFooter, notify, Skeleton,
 } from '@/components/ui';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { TaxAccountsSection } from './components/TaxAccountsSection';
+import { EmailConnectorSection } from './components/EmailConnectorSection';
+import { AutomationSection } from './components/AutomationSection';
 import { useAuthStore } from '@/stores/authStore';
 import { useTotpStatus, useTotpSetup, useTotpEnable, useTotpDisable } from '@/hooks/useAuth';
 
@@ -91,6 +94,10 @@ const CURRENCY_OPTIONS = [
   { value: 'GBP', label: 'GBP — British Pound' },
   { value: 'CAD', label: 'CAD — Canadian Dollar' },
   { value: 'AUD', label: 'AUD — Australian Dollar' },
+  { value: 'CHF', label: 'CHF — Swiss Franc' },
+  { value: 'JPY', label: 'JPY — Japanese Yen' },
+  { value: 'MXN', label: 'MXN — Mexican Peso' },
+  { value: 'NZD', label: 'NZD — New Zealand Dollar' },
   { value: 'INR', label: 'INR — Indian Rupee' },
 ];
 
@@ -111,7 +118,9 @@ type NavSection =
   | 'integrations'
   | 'report-digest'
   | 'data'
-  | 'billing';
+  | 'billing'
+  | 'tax-accounts'
+  | 'automation';
 
 const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'profile', label: 'Profile', icon: <User size={16} /> },
@@ -126,6 +135,8 @@ const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'report-digest', label: 'Report Digest', icon: <Receipt size={16} /> },
   { id: 'data', label: 'Data', icon: <Database size={16} /> },
   { id: 'billing', label: 'Billing', icon: <CreditCard size={16} /> },
+  { id: 'tax-accounts', label: 'Tax Accounts', icon: <Receipt size={16} /> },
+  { id: 'automation', label: 'Automation', icon: <Zap size={16} /> },
 ];
 
 // ─── Section: Profile ─────────────────────────────────────────────────────────
@@ -172,11 +183,11 @@ function ProfileSection() {
       <SectionHeader title="Profile" description="Manage your personal information." />
 
       {isLoading ? (
-        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>Loading...</div>
+        <div className="text-[var(--color-text-muted)] text-sm">Loading...</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div className="flex flex-col gap-6">
           {/* Avatar row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          <div className="flex items-center gap-5">
             <Avatar
               src={data?.avatarUrl}
               name={fullName || 'User'}
@@ -192,14 +203,14 @@ function ProfileSection() {
               >
                 Upload photo
               </Button>
-              <p style={{ marginTop: '0.375rem', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+              <p className="mt-1.5 text-xs text-[var(--color-text-muted)]">
                 JPG, PNG or GIF. Max 2 MB.
               </p>
             </div>
           </div>
 
           {/* Name row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="grid grid-cols-2 gap-4">
             <Input
               label="First Name"
               value={firstName}
@@ -216,7 +227,7 @@ function ProfileSection() {
             label="Email"
             value={data?.email ?? ''}
             readOnly
-            style={{ backgroundColor: 'var(--color-surface-hover)', cursor: 'not-allowed' }}
+            className="bg-[var(--color-surface-hover)] cursor-not-allowed"
           />
 
           <Select
@@ -276,25 +287,19 @@ function DisplaySection() {
       <SectionHeader title="Display" description="Customize the visual appearance of Kuber." />
 
       <Card padding="lg" style={{ maxWidth: 480 }}>
-        <div style={{ marginBottom: '0.75rem' }}>
-          <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+        <div className="mb-3">
+          <span className="text-sm font-semibold text-[var(--color-text)]">
             Visual Appearance
           </span>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div className="flex flex-col gap-3">
           {options.map((opt) => (
             <label
               key={opt.value}
+              className="flex items-center gap-3 p-3 rounded-[var(--radius-md)] cursor-pointer transition-[border-color,background-color] duration-[0.15s]"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.75rem',
-                borderRadius: 'var(--radius-md)',
                 border: `1px solid ${theme === opt.value ? 'var(--color-accent)' : 'var(--color-border)'}`,
                 backgroundColor: theme === opt.value ? 'var(--color-accent-light)' : 'transparent',
-                cursor: 'pointer',
-                transition: 'border-color 0.15s, background-color 0.15s',
               }}
             >
               <input
@@ -303,13 +308,13 @@ function DisplaySection() {
                 value={opt.value}
                 checked={theme === opt.value}
                 onChange={() => handleThemeChange(opt.value)}
-                style={{ accentColor: 'var(--color-accent)' }}
+                className="accent-[var(--color-accent)]"
               />
               <div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>
+                <div className="text-sm font-medium text-[var(--color-text)]">
                   {opt.label}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                <div className="text-xs text-[var(--color-text-muted)]">
                   {opt.description}
                 </div>
               </div>
@@ -398,7 +403,7 @@ function NotificationsSection() {
     return (
       <div>
         <SectionHeader title="Notifications" description="Choose what you want to be notified about." />
-        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>Loading...</div>
+        <div className="text-[var(--color-text-muted)] text-sm">Loading...</div>
       </div>
     );
   }
@@ -407,23 +412,15 @@ function NotificationsSection() {
     <div>
       <SectionHeader title="Notifications" description="Choose what you want to be notified about." />
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '0.5rem 0.75rem', color: 'var(--color-text-muted)', fontWeight: 500, width: '100%' }} />
+              <th className="text-left px-3 py-2 text-[var(--color-text-muted)] font-medium w-full" />
               {channels.map((ch) => (
                 <th
                   key={ch.key}
-                  style={{
-                    textAlign: 'center',
-                    padding: '0.5rem 1rem',
-                    color: 'var(--color-text-secondary)',
-                    fontWeight: 600,
-                    fontSize: '0.75rem',
-                    whiteSpace: 'nowrap',
-                    minWidth: 72,
-                  }}
+                  className="text-center px-4 py-2 text-[var(--color-text-secondary)] font-semibold text-xs whitespace-nowrap min-w-[72px]"
                 >
                   {ch.label}
                 </th>
@@ -436,14 +433,7 @@ function NotificationsSection() {
                 <tr key={`group-${groupName}`}>
                   <td
                     colSpan={4}
-                    style={{
-                      padding: '0.875rem 0.75rem 0.375rem',
-                      fontSize: '0.6875rem',
-                      fontWeight: 700,
-                      color: 'var(--color-text-muted)',
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                    }}
+                    className="px-3 pt-3.5 pb-1.5 text-[0.6875rem] font-bold text-[var(--color-text-muted)] tracking-[0.06em] uppercase"
                   >
                     {groupName}
                   </td>
@@ -451,25 +441,18 @@ function NotificationsSection() {
                 {rows.map((row, idx) => (
                   <tr
                     key={row.key}
-                    style={{
-                      borderTop: `1px solid var(--color-border)`,
-                    }}
+                    className="border-t border-[var(--color-border)]"
                   >
-                    <td style={{ padding: '0.625rem 0.75rem', color: 'var(--color-text)' }}>
+                    <td className="px-3 py-2.5 text-[var(--color-text)]">
                       {row.label}
                     </td>
                     {channels.map((ch) => (
-                      <td key={ch.key} style={{ textAlign: 'center', padding: '0.625rem 1rem' }}>
+                      <td key={ch.key} className="text-center px-4 py-2.5">
                         <input
                           type="checkbox"
                           checked={prefs[row.key][ch.key]}
                           onChange={() => togglePref(row.key, ch.key)}
-                          style={{
-                            width: 16,
-                            height: 16,
-                            accentColor: 'var(--color-accent)',
-                            cursor: 'pointer',
-                          }}
+                          className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer"
                           aria-label={`${row.label} — ${ch.label}`}
                         />
                       </td>
@@ -545,17 +528,17 @@ function TwoFactorCard() {
   return (
     <>
       <Card padding="lg">
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex gap-3 items-start">
             {isEnabled
-              ? <ShieldCheck size={20} style={{ color: 'var(--color-success)', flexShrink: 0, marginTop: 2 }} />
-              : <ShieldOff size={20} style={{ color: 'var(--color-text-muted)', flexShrink: 0, marginTop: 2 }} />
+              ? <ShieldCheck size={20} className="text-[var(--color-success)] shrink-0 mt-0.5" />
+              : <ShieldOff size={20} className="text-[var(--color-text-muted)] shrink-0 mt-0.5" />
             }
             <div>
-              <div style={{ fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
+              <div className="font-semibold text-[var(--color-text)] mb-1">
                 Two-Factor Authentication
               </div>
-              <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', margin: 0 }}>
+              <p className="text-sm text-[var(--color-text-secondary)] m-0">
                 {isEnabled
                   ? `Enabled — ${status?.backupCodesRemaining ?? 0} backup code${status?.backupCodesRemaining !== 1 ? 's' : ''} remaining`
                   : 'Add an extra layer of security using an authenticator app.'}
@@ -564,11 +547,11 @@ function TwoFactorCard() {
           </div>
           {step === 'idle' && (
             isEnabled ? (
-              <Button variant="outline" size="sm" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)', flexShrink: 0 }} onClick={() => setDisableModalOpen(true)}>
+              <Button variant="outline" size="sm" className="border-[var(--color-danger)] text-[var(--color-danger)] shrink-0" onClick={() => setDisableModalOpen(true)}>
                 Disable
               </Button>
             ) : (
-              <Button variant="secondary" size="sm" loading={setupMutation.isPending} onClick={handleStartSetup} style={{ flexShrink: 0 }}>
+              <Button variant="secondary" size="sm" loading={setupMutation.isPending} onClick={handleStartSetup} className="shrink-0">
                 Set up
               </Button>
             )
@@ -577,17 +560,17 @@ function TwoFactorCard() {
 
         {/* Step: Show QR code */}
         {step === 'qr' && qrData && (
-          <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '1.5rem' }}>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+          <div className="mt-6 border-t border-[var(--color-border)] pt-6">
+            <p className="text-sm text-[var(--color-text-secondary)] mb-4">
               Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.), then click <strong>Next</strong>.
             </p>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-              <img src={qrData.qrCodeDataUrl} alt="TOTP QR code" style={{ width: 180, height: 180, borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }} />
+            <div className="flex justify-center mb-4">
+              <img src={qrData.qrCodeDataUrl} alt="TOTP QR code" className="w-[180px] h-[180px] rounded-[var(--radius-md)] border border-[var(--color-border)]" />
             </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textAlign: 'center', marginBottom: '1rem' }}>
-              Can't scan? Enter this key manually: <code style={{ userSelect: 'all' }}>{qrData.secret}</code>
+            <p className="text-xs text-[var(--color-text-muted)] text-center mb-4">
+              Can't scan? Enter this key manually: <code className="select-all">{qrData.secret}</code>
             </p>
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <div className="flex gap-3 justify-end">
               <Button variant="secondary" onClick={() => { setStep('idle'); setQrData(null); }}>Cancel</Button>
               <Button variant="primary" onClick={() => setStep('confirm')}>Next</Button>
             </div>
@@ -596,8 +579,8 @@ function TwoFactorCard() {
 
         {/* Step: Confirm code */}
         {step === 'confirm' && (
-          <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '1.5rem' }}>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+          <div className="mt-6 border-t border-[var(--color-border)] pt-6">
+            <p className="text-sm text-[var(--color-text-secondary)] mb-4">
               Enter the 6-digit code from your authenticator app to verify setup.
             </p>
             <input
@@ -608,19 +591,14 @@ function TwoFactorCard() {
               placeholder="000000"
               maxLength={6}
               autoFocus
-              style={{
-                width: '100%', padding: '0.625rem 0.875rem', borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border-strong)', backgroundColor: 'var(--color-bg)',
-                color: 'var(--color-text)', fontSize: '1.375rem', letterSpacing: '0.4em',
-                textAlign: 'center', outline: 'none', boxSizing: 'border-box', marginBottom: '0.75rem',
-              }}
+              className="w-full px-3.5 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] text-[1.375rem] tracking-[0.4em] text-center outline-none box-border mb-3"
             />
             {errorMessage && (
-              <div style={{ padding: '0.625rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-danger-light)', color: 'var(--color-danger)', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+              <div className="p-2.5 rounded-[var(--radius-md)] bg-[var(--color-danger-light)] text-[var(--color-danger)] text-sm mb-3">
                 {errorMessage}
               </div>
             )}
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <div className="flex gap-3 justify-end">
               <Button variant="secondary" onClick={() => setStep('qr')}>Back</Button>
               <Button
                 variant="primary"
@@ -636,23 +614,19 @@ function TwoFactorCard() {
 
         {/* Step: Show backup codes */}
         {step === 'backup-codes' && (
-          <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '1.5rem' }}>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 600, marginBottom: '0.5rem' }}>
+          <div className="mt-6 border-t border-[var(--color-border)] pt-6">
+            <p className="text-sm text-[var(--color-text)] font-semibold mb-2">
               Save your backup codes
             </p>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+            <p className="text-sm text-[var(--color-text-secondary)] mb-4">
               Store these codes somewhere safe. Each can be used once if you lose access to your authenticator app.
             </p>
-            <div style={{
-              display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem',
-              backgroundColor: 'var(--color-surface-hover)', borderRadius: 'var(--radius-md)',
-              padding: '1rem', marginBottom: '1rem', fontFamily: 'monospace', fontSize: '0.9375rem',
-            }}>
+            <div className="grid grid-cols-2 gap-2 bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] p-4 mb-4 font-mono text-[0.9375rem]">
               {backupCodes.map((code) => (
-                <div key={code} style={{ color: 'var(--color-text)', letterSpacing: '0.05em' }}>{code}</div>
+                <div key={code} className="text-[var(--color-text)] tracking-[0.05em]">{code}</div>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <div className="flex gap-3 justify-end">
               <Button variant="secondary" size="sm" onClick={() => {
                 navigator.clipboard.writeText(backupCodes.join('\n'));
                 notify.success('Backup codes copied to clipboard');
@@ -672,8 +646,8 @@ function TwoFactorCard() {
         title="Disable Two-Factor Authentication"
         size="sm"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <p style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-[var(--color-text)]">
             Enter your password to confirm disabling 2FA.
           </p>
           <Input
@@ -747,13 +721,13 @@ function SecuritySection() {
     <div>
       <SectionHeader title="Security" description="Manage your password and account access." />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 480 }}>
+      <div className="flex flex-col gap-6" style={{ maxWidth: 480 }}>
         {/* Change Password */}
         <Card padding="lg">
-          <div style={{ marginBottom: '1.25rem', fontWeight: 600, color: 'var(--color-text)' }}>
+          <div className="mb-5 font-semibold text-[var(--color-text)]">
             Change Password
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="flex flex-col gap-4">
             <Input
               label="Current password"
               type="password"
@@ -780,7 +754,7 @@ function SecuritySection() {
               variant="primary"
               loading={passwordMutation.isPending}
               onClick={handlePasswordSubmit}
-              style={{ alignSelf: 'flex-start' }}
+              className="self-start"
             >
               Update password
             </Button>
@@ -791,19 +765,16 @@ function SecuritySection() {
         <TwoFactorCard />
 
         {/* Danger Zone */}
-        <Card padding="lg" style={{ borderColor: 'var(--color-danger)' }}>
-          <div style={{ marginBottom: '0.5rem', fontWeight: 600, color: 'var(--color-danger)' }}>
+        <Card padding="lg" className="border-[var(--color-danger)]">
+          <div className="mb-2 font-semibold text-[var(--color-danger)]">
             Danger Zone
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+          <p className="text-sm text-[var(--color-text-secondary)] mb-4">
             Permanently delete your account and all associated data. This cannot be undone.
           </p>
           <Button
             variant="outline"
-            style={{
-              borderColor: 'var(--color-danger)',
-              color: 'var(--color-danger)',
-            }}
+            className="border-[var(--color-danger)] text-[var(--color-danger)]"
             onClick={() => setDeleteModalOpen(true)}
           >
             Delete account
@@ -819,8 +790,8 @@ function SecuritySection() {
         description="This action is permanent and cannot be undone."
         size="sm"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <p style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-[var(--color-text)]">
             Type <strong>DELETE</strong> to confirm.
           </p>
           <Input
@@ -856,6 +827,18 @@ function HouseholdSection() {
 
   const [householdName, setHouseholdName] = useState('');
   const [currency, setCurrency] = useState('USD');
+
+  const {
+    data: fxData,
+    isFetching: fxFetching,
+    refetch: refetchFx,
+    dataUpdatedAt: fxUpdatedAt,
+  } = useQuery<{ base: string; rates: Array<{ code: string; rate: number }> }>({
+    queryKey: ['fx', 'snapshot', currency],
+    queryFn: () => api.get(`/fx/snapshot?base=${currency}`).then((r) => r.data),
+    staleTime: 60 * 60 * 1000,
+    enabled: !!currency,
+  });
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Member');
   const [removeTarget, setRemoveTarget] = useState<HouseholdMember | null>(null);
@@ -896,7 +879,7 @@ function HouseholdSection() {
     return (
       <div>
         <SectionHeader title="Household" description="Manage your household settings and members." />
-        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>Loading...</div>
+        <div className="text-[var(--color-text-muted)] text-sm">Loading...</div>
       </div>
     );
   }
@@ -905,10 +888,10 @@ function HouseholdSection() {
     <div>
       <SectionHeader title="Household" description="Manage your household settings and members." />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 560 }}>
+      <div className="flex flex-col gap-6" style={{ maxWidth: 560 }}>
         {/* Household settings */}
         <Card padding="lg">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="flex flex-col gap-4">
             <Input
               label="Household Name"
               value={householdName}
@@ -924,48 +907,70 @@ function HouseholdSection() {
               variant="primary"
               loading={saveMutation.isPending}
               onClick={() => saveMutation.mutate()}
-              style={{ alignSelf: 'flex-start' }}
+              className="self-start"
             >
               Save
             </Button>
           </div>
         </Card>
 
+        {/* Live FX Rates */}
+        <Card padding="lg">
+          <div className="flex items-center justify-between mb-3">
+            <div className="font-semibold text-[var(--color-text)]">Live FX Rates</div>
+            <div className="flex items-center gap-3">
+              {fxUpdatedAt ? (
+                <span className="text-xs text-[var(--color-text-muted)]">
+                  Updated {new Date(fxUpdatedAt).toLocaleTimeString()}
+                </span>
+              ) : null}
+              <Button variant="ghost" size="sm" loading={fxFetching} onClick={() => refetchFx()}>
+                Refresh
+              </Button>
+            </div>
+          </div>
+          {fxData ? (
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+              {fxData.rates.map((r) => (
+                <div
+                  key={r.code}
+                  className="px-3 py-2 rounded-[0.375rem] bg-[var(--color-surface-elevated)] text-[0.8125rem] text-[var(--color-text)]"
+                >
+                  <span className="font-semibold">1 {fxData.base}</span>
+                  {' = '}
+                  <span className="text-[var(--color-primary)]">{r.rate} {r.code}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-[var(--color-text-muted)]">
+              {fxFetching ? 'Loading rates...' : 'Rates unavailable'}
+            </div>
+          )}
+        </Card>
+
         {/* Members */}
         <Card padding="lg">
-          <div style={{ marginBottom: '1rem', fontWeight: 600, color: 'var(--color-text)' }}>
+          <div className="mb-4 font-semibold text-[var(--color-text)]">
             Members
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div className="flex flex-col gap-3">
             {(data?.members ?? []).map((member) => {
               const fullName = `${member.firstName} ${member.lastName}`.trim();
               const isOwnerMember = member.role.toLowerCase() === 'owner';
               return (
                 <div
                   key={member.userId}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '0.625rem 0',
-                    borderBottom: '1px solid var(--color-border)',
-                  }}
+                  className="flex items-center gap-3 py-2.5 border-b border-[var(--color-border)]"
                 >
                   <Avatar src={null} name={fullName} size="sm" />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-[var(--color-text)]">
                       {fullName}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{member.email}</div>
+                    <div className="text-xs text-[var(--color-text-muted)]">{member.email}</div>
                   </div>
-                  <span style={{
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    padding: '0.125rem 0.5rem',
-                    borderRadius: 'var(--radius-full)',
-                    backgroundColor: 'var(--color-surface-hover)',
-                    color: 'var(--color-text-secondary)',
-                  }}>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]">
                     {member.role}
                   </span>
                   {!isOwnerMember && (
@@ -973,7 +978,7 @@ function HouseholdSection() {
                       variant="ghost"
                       size="sm"
                       icon={<Trash2 size={13} />}
-                      style={{ color: 'var(--color-danger)' }}
+                      className="text-[var(--color-danger)]"
                       onClick={() => setRemoveTarget(member)}
                     >
                       Remove
@@ -987,11 +992,11 @@ function HouseholdSection() {
           <CardDivider />
 
           {/* Invite */}
-          <div style={{ marginTop: '0.75rem' }}>
-            <div style={{ marginBottom: '0.75rem', fontWeight: 600, color: 'var(--color-text)', fontSize: '0.875rem' }}>
+          <div className="mt-3">
+            <div className="mb-3 font-semibold text-[var(--color-text)] text-sm">
               Invite Member
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="flex flex-col gap-3">
               <Input
                 label="Email"
                 type="email"
@@ -1010,7 +1015,7 @@ function HouseholdSection() {
                 loading={inviteMutation.isPending}
                 disabled={!inviteEmail}
                 onClick={() => inviteMutation.mutate()}
-                style={{ alignSelf: 'flex-start' }}
+                className="self-start"
               >
                 Send invite
               </Button>
@@ -1026,7 +1031,7 @@ function HouseholdSection() {
         title="Remove Member"
         size="sm"
       >
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+        <p className="text-sm text-[var(--color-text)] mb-2">
           Remove <strong>{removeTarget ? `${removeTarget.firstName} ${removeTarget.lastName}`.trim() : ''}</strong> from the household?
         </p>
         <ModalFooter>
@@ -1074,60 +1079,33 @@ function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string)
 
   return (
     <div>
-      <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.375rem' }}>
+      <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
         Emoji
       </label>
-      <div style={{ position: 'relative' }} ref={ref}>
+      <div className="relative" ref={ref}>
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.625rem',
-            padding: '0.5rem 0.875rem',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--color-border-strong)',
-            backgroundColor: 'var(--color-bg)',
-            cursor: 'pointer',
-            fontSize: '1.5rem',
-            lineHeight: 1,
-            minWidth: 120,
-          }}
+          className="flex items-center gap-2.5 px-3.5 py-2 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-bg)] cursor-pointer text-2xl leading-none min-w-[120px]"
         >
           <span>{value || '—'}</span>
-          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>Pick ▾</span>
+          <span className="text-xs text-[var(--color-text-muted)] ml-auto">Pick ▾</span>
         </button>
 
         {open && (
-          <div style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            zIndex: 100,
-            backgroundColor: 'var(--color-surface-elevated, var(--color-surface))',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: 'var(--shadow-lg)',
-            width: 300,
-            marginTop: 4,
-          }}>
+          <div className="absolute top-full left-0 z-[100] bg-[var(--color-surface-elevated,var(--color-surface))] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-[var(--shadow-lg)] w-[300px] mt-1">
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--color-border)', overflowX: 'auto', padding: '0.25rem 0.5rem 0' }}>
+            <div className="flex border-b border-[var(--color-border)] overflow-x-auto px-2 pt-1">
               {EMOJI_GROUPS.map((g, i) => (
                 <button
                   key={g.label}
                   type="button"
                   onClick={() => setTab(i)}
+                  className="bg-none border-none cursor-pointer px-2 py-1 text-[0.6875rem] whitespace-nowrap shrink-0"
                   style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '0.25rem 0.5rem',
-                    fontSize: '0.6875rem',
                     fontWeight: tab === i ? 700 : 400,
                     color: tab === i ? 'var(--color-accent)' : 'var(--color-text-muted)',
                     borderBottom: tab === i ? '2px solid var(--color-accent)' : '2px solid transparent',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
                   }}
                 >
                   {g.label}
@@ -1135,23 +1113,14 @@ function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string)
               ))}
             </div>
             {/* Emoji grid */}
-            <div style={{ padding: '0.5rem', display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '0.125rem' }}>
+            <div className="p-2 grid grid-cols-8 gap-0.5">
               {EMOJI_GROUPS[tab].emojis.map((em) => (
                 <button
                   key={em}
                   type="button"
                   onClick={() => { onChange(em); setOpen(false); }}
-                  style={{
-                    background: value === em ? 'var(--color-accent-light)' : 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: '1.25rem',
-                    padding: '0.25rem',
-                    lineHeight: 1,
-                    textAlign: 'center',
-                    transition: 'background 0.1s',
-                  }}
+                  className="border-none cursor-pointer rounded-[var(--radius-sm)] text-xl p-1 leading-none text-center transition-[background] duration-100"
+                  style={{ background: value === em ? 'var(--color-accent-light)' : 'none' }}
                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = value === em ? 'var(--color-accent-light)' : 'transparent')}
                   title={em}
@@ -1161,18 +1130,14 @@ function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string)
               ))}
             </div>
             {/* Manual input for custom */}
-            <div style={{ borderTop: '1px solid var(--color-border)', padding: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', flexShrink: 0 }}>Custom:</span>
+            <div className="border-t border-[var(--color-border)] p-2 flex gap-2 items-center">
+              <span className="text-xs text-[var(--color-text-muted)] shrink-0">Custom:</span>
               <input
                 value={value}
                 onChange={(e) => onChange(e.target.value.slice(0, 2))}
                 placeholder="✏️"
                 maxLength={2}
-                style={{
-                  flex: 1, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
-                  padding: '0.25rem 0.5rem', fontSize: '1rem', backgroundColor: 'var(--color-bg)',
-                  color: 'var(--color-text)', outline: 'none',
-                }}
+                className="flex-1 border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-base bg-[var(--color-bg)] text-[var(--color-text)] outline-none"
               />
             </div>
           </div>
@@ -1385,22 +1350,22 @@ function CategoriesSection() {
     return (
       <div>
         <SectionHeader title="Categories" description="Manage transaction categories." />
-        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>Loading...</div>
+        <div className="text-[var(--color-text-muted)] text-sm">Loading...</div>
       </div>
     );
   }
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+      <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
         <SectionHeader title="Categories" description="Manage transaction categories and 50/30/20 buckets." inline />
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div className="flex gap-2 items-center">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => resetBucketsMutation.mutate()}
             loading={resetBucketsMutation.isPending}
-            style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem' }}
+            className="text-[var(--color-text-muted)] text-[0.8125rem]"
           >
             Reset buckets to defaults
           </Button>
@@ -1410,32 +1375,22 @@ function CategoriesSection() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1.25rem' }}>
+      <div className="flex flex-col gap-2 mt-5">
         {(data?.groups ?? []).map((group) => {
           const isCollapsed = collapsed[group.name];
           return (
-            <Card key={group.name} padding="none" style={{ overflow: 'hidden' }}>
+            <Card key={group.name} padding="none" className="overflow-hidden">
               {/* Group header */}
               <button
                 onClick={() => setCollapsed((prev) => ({ ...prev, [group.name]: !isCollapsed }))}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  width: '100%',
-                  padding: '0.75rem 1rem',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  borderBottom: isCollapsed ? 'none' : '1px solid var(--color-border)',
-                }}
+                className="flex items-center gap-2 w-full px-4 py-3 bg-none border-none cursor-pointer text-left"
+                style={{ borderBottom: isCollapsed ? 'none' : '1px solid var(--color-border)' }}
               >
-                {isCollapsed ? <ChevronRight size={14} style={{ color: 'var(--color-text-muted)' }} /> : <ChevronDown size={14} style={{ color: 'var(--color-text-muted)' }} />}
-                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                {isCollapsed ? <ChevronRight size={14} className="text-[var(--color-text-muted)]" /> : <ChevronDown size={14} className="text-[var(--color-text-muted)]" />}
+                <span className="text-sm font-semibold text-[var(--color-text)]">
                   {group.name}
                 </span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
+                <span className="text-xs text-[var(--color-text-muted)] ml-1">
                   ({group.categories.length})
                 </span>
               </button>
@@ -1450,18 +1405,13 @@ function CategoriesSection() {
                     return (
                     <div
                       key={cat.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        padding: '0.625rem 1rem 0.625rem 2rem',
-                        borderBottom: idx < group.categories.length - 1 ? '1px solid var(--color-border)' : 'none',
-                      }}
+                      className="flex items-center gap-3 pl-8 pr-4 py-2.5"
+                      style={{ borderBottom: idx < group.categories.length - 1 ? '1px solid var(--color-border)' : 'none' }}
                     >
-                      <span style={{ fontSize: '1.625rem', lineHeight: 1, width: 28, textAlign: 'center', flexShrink: 0 }}>
+                      <span className="text-[1.625rem] leading-none w-7 text-center shrink-0">
                         {cat.emoji || '·'}
                       </span>
-                      <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--color-text)' }}>
+                      <span className="flex-1 text-sm text-[var(--color-text)]">
                         {cat.name}
                       </span>
                       {/* Bucket badge / dropdown */}
@@ -1476,15 +1426,7 @@ function CategoriesSection() {
                             });
                           }}
                           onBlur={() => setEditingBucket(null)}
-                          style={{
-                            fontSize: '0.75rem',
-                            padding: '0.125rem 0.375rem',
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid var(--color-border)',
-                            background: 'var(--color-surface)',
-                            color: 'var(--color-text)',
-                            cursor: 'pointer',
-                          }}
+                          className="text-xs px-1.5 py-0.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] cursor-pointer"
                         >
                           <option value="needs">Needs</option>
                           <option value="wants">Wants</option>
@@ -1495,18 +1437,8 @@ function CategoriesSection() {
                         <button
                           onClick={() => setEditingBucket(cat.id)}
                           title="Click to change bucket"
-                          style={{
-                            fontSize: '0.6875rem',
-                            fontWeight: 600,
-                            padding: '0.1875rem 0.5rem',
-                            borderRadius: '9999px',
-                            background: bucketMeta.bg,
-                            color: bucketMeta.text,
-                            border: 'none',
-                            cursor: 'pointer',
-                            flexShrink: 0,
-                            letterSpacing: '0.01em',
-                          }}
+                          className="text-[0.6875rem] font-semibold py-[0.1875rem] px-2 rounded-full border-none cursor-pointer shrink-0 tracking-[0.01em]"
+                          style={{ background: bucketMeta.bg, color: bucketMeta.text }}
                         >
                           {bucketMeta.label}
                         </button>
@@ -1515,20 +1447,11 @@ function CategoriesSection() {
                       <button
                         onClick={() => toggleTaxMutation.mutate({ categoryId: cat.id, isTaxDeductible: !cat.isTaxDeductible })}
                         title={cat.isTaxDeductible ? 'Tax deductible (click to remove)' : 'Mark as tax deductible'}
+                        className="flex items-center gap-1 py-[0.1875rem] px-[0.4375rem] rounded-full text-[0.6875rem] font-semibold border cursor-pointer shrink-0"
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.25rem',
-                          padding: '0.1875rem 0.4375rem',
-                          borderRadius: '9999px',
-                          fontSize: '0.6875rem',
-                          fontWeight: 600,
-                          border: '1px solid',
                           borderColor: cat.isTaxDeductible ? 'var(--color-success)' : 'var(--color-border)',
                           background: cat.isTaxDeductible ? 'color-mix(in srgb, var(--color-success) 12%, transparent)' : 'transparent',
                           color: cat.isTaxDeductible ? 'var(--color-success)' : 'var(--color-text-secondary)',
-                          cursor: 'pointer',
-                          flexShrink: 0,
                           opacity: toggleTaxMutation.isPending ? 0.5 : 1,
                         }}
                       >
@@ -1540,7 +1463,7 @@ function CategoriesSection() {
                         size="sm"
                         icon={<Pencil size={13} />}
                         onClick={() => openEdit(cat)}
-                        style={{ color: 'var(--color-text-secondary)' }}
+                        className="text-[var(--color-text-secondary)]"
                       >
                         Edit
                       </Button>
@@ -1549,7 +1472,7 @@ function CategoriesSection() {
                         size="sm"
                         icon={<Trash2 size={13} />}
                         onClick={() => setDeleteTarget(cat)}
-                        style={{ color: 'var(--color-danger)' }}
+                        className="text-[var(--color-danger)]"
                       >
                         Delete
                       </Button>
@@ -1559,19 +1482,7 @@ function CategoriesSection() {
                   {/* Add to group */}
                   <button
                     onClick={() => openAdd(group.name)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      width: '100%',
-                      padding: '0.625rem 1rem 0.625rem 2rem',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '0.8125rem',
-                      color: 'var(--color-accent)',
-                      fontWeight: 500,
-                    }}
+                    className="flex items-center gap-2 w-full pl-8 pr-4 py-2.5 bg-none border-none cursor-pointer text-[0.8125rem] text-[var(--color-accent)] font-medium"
                   >
                     <Plus size={13} />
                     Add category to group
@@ -1590,7 +1501,7 @@ function CategoriesSection() {
         title={modal?.mode === 'edit' ? 'Edit Category' : 'Add Category'}
         size="sm"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="flex flex-col gap-4">
           <Input
             label="Name"
             value={catName}
@@ -1626,7 +1537,7 @@ function CategoriesSection() {
         title="Delete Category"
         size="sm"
       >
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+        <p className="text-sm text-[var(--color-text)]">
           Delete <strong>{deleteTarget?.emoji} {deleteTarget?.name}</strong>? This cannot be undone.
         </p>
         <ModalFooter>
@@ -1736,14 +1647,14 @@ function TagsSection() {
     return (
       <div>
         <SectionHeader title="Tags" description="Manage transaction tags." />
-        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>Loading...</div>
+        <div className="text-[var(--color-text-muted)] text-sm">Loading...</div>
       </div>
     );
   }
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+      <div className="flex items-center justify-between mb-5">
         <SectionHeader title="Tags" description="Manage transaction tags." inline />
         <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={openAdd}>
           New Tag
@@ -1752,36 +1663,27 @@ function TagsSection() {
 
       <Card padding="none">
         {(!tags || tags.length === 0) ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+          <div className="p-8 text-center text-[var(--color-text-muted)] text-sm">
             No tags yet. Create one to start organizing transactions.
           </div>
         ) : (
           tags.map((tag, idx) => (
             <div
               key={tag.id}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.75rem',
-                padding: '0.625rem 1rem',
-                borderBottom: idx < tags.length - 1 ? '1px solid var(--color-border)' : 'none',
-              }}
+              className="flex items-center gap-3 px-4 py-2.5"
+              style={{ borderBottom: idx < tags.length - 1 ? '1px solid var(--color-border)' : 'none' }}
             >
               {/* Color swatch */}
-              <div style={{
-                width: 16, height: 16, borderRadius: 'var(--radius-full)',
-                backgroundColor: tag.color, flexShrink: 0,
-              }} />
+              <div
+                className="w-4 h-4 rounded-[var(--radius-full)] shrink-0"
+                style={{ backgroundColor: tag.color }}
+              />
               {/* Name */}
-              <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 500 }}>
+              <span className="flex-1 text-sm text-[var(--color-text)] font-medium">
                 {tag.name}
               </span>
               {/* Transaction count badge */}
-              <span style={{
-                fontSize: '0.75rem', fontWeight: 600,
-                color: 'var(--color-text-muted)',
-                backgroundColor: 'var(--color-surface-hover)',
-                borderRadius: 'var(--radius-full)',
-                padding: '0.125rem 0.5rem',
-              }}>
+              <span className="text-xs font-semibold text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] rounded-[var(--radius-full)] px-2 py-0.5">
                 {tag.transactionCount} {tag.transactionCount === 1 ? 'tx' : 'txs'}
               </span>
               <Button
@@ -1789,7 +1691,7 @@ function TagsSection() {
                 size="sm"
                 icon={<Pencil size={13} />}
                 onClick={() => openEdit(tag)}
-                style={{ color: 'var(--color-text-secondary)' }}
+                className="text-[var(--color-text-secondary)]"
               >
                 Edit
               </Button>
@@ -1798,7 +1700,7 @@ function TagsSection() {
                 size="sm"
                 icon={<Trash2 size={13} />}
                 onClick={() => setDeleteTarget(tag)}
-                style={{ color: 'var(--color-danger)' }}
+                className="text-[var(--color-danger)]"
               >
                 Delete
               </Button>
@@ -1814,7 +1716,7 @@ function TagsSection() {
         title={modal?.mode === 'edit' ? 'Edit Tag' : 'New Tag'}
         size="sm"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className="flex flex-col gap-4">
           <Input
             label="Name"
             value={tagName}
@@ -1823,20 +1725,19 @@ function TagsSection() {
             error={tagError || undefined}
           />
           <div>
-            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+            <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
               Color
             </label>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div className="flex gap-2">
               {TAG_PRESET_COLORS.map((c) => (
                 <div
                   key={c}
                   onClick={() => setTagColor(c)}
+                  className="w-7 h-7 rounded-[var(--radius-full)] cursor-pointer transition-[outline] duration-100"
                   style={{
-                    width: 28, height: 28, borderRadius: 'var(--radius-full)',
-                    backgroundColor: c, cursor: 'pointer',
+                    backgroundColor: c,
                     outline: tagColor === c ? `3px solid ${c}` : '3px solid transparent',
                     outlineOffset: 2,
-                    transition: 'outline 0.1s',
                   }}
                 />
               ))}
@@ -1862,7 +1763,7 @@ function TagsSection() {
         title="Delete Tag"
         size="sm"
       >
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+        <p className="text-sm text-[var(--color-text)]">
           This tag will be removed from all transactions. Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
         </p>
         <ModalFooter>
@@ -1955,19 +1856,18 @@ function MerchantsSection() {
       />
 
       {/* Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <Input
           placeholder="Search merchants..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{ maxWidth: 260 }}
         />
-        <div style={{ display: 'flex', gap: '0.375rem' }}>
+        <div className="flex gap-1.5">
           <button
             onClick={() => setOrder('TRANSACTION_COUNT')}
+            className="px-3 py-1.5 rounded-[var(--radius-sm)] text-[0.8125rem] font-semibold border border-[var(--color-border)] cursor-pointer"
             style={{
-              padding: '0.375rem 0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem',
-              fontWeight: 600, border: '1px solid var(--color-border)', cursor: 'pointer',
               backgroundColor: order === 'TRANSACTION_COUNT' ? 'var(--color-accent)' : 'var(--color-surface)',
               color: order === 'TRANSACTION_COUNT' ? '#fff' : 'var(--color-text-secondary)',
             }}
@@ -1976,9 +1876,8 @@ function MerchantsSection() {
           </button>
           <button
             onClick={() => setOrder('NAME')}
+            className="px-3 py-1.5 rounded-[var(--radius-sm)] text-[0.8125rem] font-semibold border border-[var(--color-border)] cursor-pointer"
             style={{
-              padding: '0.375rem 0.75rem', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem',
-              fontWeight: 600, border: '1px solid var(--color-border)', cursor: 'pointer',
               backgroundColor: order === 'NAME' ? 'var(--color-accent)' : 'var(--color-surface)',
               color: order === 'NAME' ? '#fff' : 'var(--color-text-secondary)',
             }}
@@ -1990,22 +1889,19 @@ function MerchantsSection() {
 
       <Card padding="none">
         {isLoading ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+          <div className="p-8 text-center text-[var(--color-text-muted)] text-sm">
             Loading merchants...
           </div>
         ) : visible.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+          <div className="p-8 text-center text-[var(--color-text-muted)] text-sm">
             {search ? 'No merchants match your search.' : 'No merchants yet.'}
           </div>
         ) : (
           visible.map((m, idx) => (
             <div
               key={m.id}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.75rem',
-                padding: '0.625rem 1rem',
-                borderBottom: idx < visible.length - 1 ? '1px solid var(--color-border)' : 'none',
-              }}
+              className="flex items-center gap-3 px-4 py-2.5"
+              style={{ borderBottom: idx < visible.length - 1 ? '1px solid var(--color-border)' : 'none' }}
             >
               {/* Name or inline editor */}
               {editingId === m.id ? (
@@ -2015,21 +1911,13 @@ function MerchantsSection() {
                   onChange={e => setEditValue(e.target.value)}
                   onKeyDown={e => handleEditKeyDown(e, m.id)}
                   onBlur={() => commitEdit(m.id)}
-                  style={{
-                    flex: 1, fontSize: '0.875rem', fontWeight: 500,
-                    padding: '0.25rem 0.5rem',
-                    border: '1px solid var(--color-accent)',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    outline: 'none',
-                  }}
+                  className="flex-1 text-sm font-medium px-2 py-1 border border-[var(--color-accent)] rounded-[var(--radius-sm)] bg-[var(--color-surface)] text-[var(--color-text)] outline-none"
                 />
               ) : (
-                <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 500 }}>
+                <span className="flex-1 text-sm text-[var(--color-text)] font-medium">
                   {m.displayName}
                   {m.displayName !== m.name && (
-                    <span style={{ marginLeft: '0.375rem', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                    <span className="ml-1.5 text-xs text-[var(--color-text-muted)]">
                       ({m.name})
                     </span>
                   )}
@@ -2037,14 +1925,7 @@ function MerchantsSection() {
               )}
 
               {/* Transaction count badge */}
-              <span style={{
-                fontSize: '0.75rem', fontWeight: 600,
-                color: 'var(--color-text-muted)',
-                backgroundColor: 'var(--color-surface-hover)',
-                borderRadius: 'var(--radius-full)',
-                padding: '0.125rem 0.5rem',
-                flexShrink: 0,
-              }}>
+              <span className="text-xs font-semibold text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] rounded-[var(--radius-full)] px-2 py-0.5 shrink-0">
                 {m.transactionCount} {m.transactionCount === 1 ? 'tx' : 'txs'}
               </span>
 
@@ -2053,7 +1934,7 @@ function MerchantsSection() {
                 size="sm"
                 icon={<Pencil size={13} />}
                 onClick={() => startEdit(m)}
-                style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}
+                className="text-[var(--color-text-secondary)] shrink-0"
               >
                 Edit
               </Button>
@@ -2062,7 +1943,7 @@ function MerchantsSection() {
                 size="sm"
                 icon={<Trash2 size={13} />}
                 onClick={() => setDeleteTarget(m)}
-                style={{ color: 'var(--color-danger)', flexShrink: 0 }}
+                className="text-[var(--color-danger)] shrink-0"
               >
                 Delete
               </Button>
@@ -2073,7 +1954,7 @@ function MerchantsSection() {
 
       {/* Show more */}
       {filtered.length > showCount && (
-        <div style={{ marginTop: '0.75rem', textAlign: 'center' }}>
+        <div className="mt-3 text-center">
           <Button variant="secondary" size="sm" onClick={() => setShowCount(c => c + 50)}>
             Show more ({filtered.length - showCount} remaining)
           </Button>
@@ -2087,7 +1968,7 @@ function MerchantsSection() {
         title="Remove Merchant"
         size="sm"
       >
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+        <p className="text-sm text-[var(--color-text)]">
           Remove this merchant? Transactions will become unlinked.{' '}
           Are you sure you want to remove <strong>{deleteTarget?.displayName}</strong>?
         </p>
@@ -2193,28 +2074,27 @@ function AiAdvisorCard() {
   return (
     <Card padding="lg">
       {/* Header + status */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+      <div className="flex items-center gap-2 mb-2">
         <Bot size={18} color="var(--color-primary)" />
-        <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>AI Advisor</span>
+        <span className="font-semibold text-[var(--color-text)]">AI Advisor</span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-        <span style={{
-          width: 8, height: 8, borderRadius: '50%',
-          backgroundColor: isConfigured ? 'var(--color-success, #22c55e)' : 'var(--color-text-muted)',
-          display: 'inline-block', flexShrink: 0,
-        }} />
-        <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+      <div className="flex items-center gap-2 mb-4">
+        <span
+          className="w-2 h-2 rounded-full inline-block shrink-0"
+          style={{ backgroundColor: isConfigured ? 'var(--color-success, #22c55e)' : 'var(--color-text-muted)' }}
+        />
+        <span className="text-[0.8125rem] text-[var(--color-text-secondary)]">
           {isConfigured
             ? `Configured — ${PROVIDER_DEFAULTS[config.provider]?.label ?? config.provider} (${config.model})`
             : 'Not configured'}
         </span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+      <div className="flex flex-col gap-3.5">
         {/* Provider */}
         <div>
-          <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', display: 'block', marginBottom: '0.375rem' }}>
+          <label className="text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5">
             Provider
           </label>
           <Select
@@ -2227,7 +2107,7 @@ function AiAdvisorCard() {
         {/* Model */}
         {provider !== 'none' && (
           <div>
-            <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', display: 'block', marginBottom: '0.375rem' }}>
+            <label className="text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5">
               Model
             </label>
             <Input
@@ -2241,10 +2121,10 @@ function AiAdvisorCard() {
         {/* API Key */}
         {provider !== 'none' && (
           <div>
-            <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', display: 'block', marginBottom: '0.375rem' }}>
+            <label className="text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5">
               API Key
               {keyHint && (
-                <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: '0.5rem' }}>
+                <span className="font-normal text-[var(--color-text-muted)] ml-2">
                   — get yours at {keyHint}
                 </span>
               )}
@@ -2261,7 +2141,7 @@ function AiAdvisorCard() {
         {/* Base URL (OpenRouter only) */}
         {provider === 'openrouter' && (
           <div>
-            <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--color-text)', display: 'block', marginBottom: '0.375rem' }}>
+            <label className="text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5">
               API Base URL
             </label>
             <Input
@@ -2274,11 +2154,10 @@ function AiAdvisorCard() {
 
         {/* Test result */}
         {testResult && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '0.5rem',
-            fontSize: '0.8125rem',
-            color: testResult.valid ? 'var(--color-success, #22c55e)' : 'var(--color-danger, #ef4444)',
-          }}>
+          <div
+            className="flex items-center gap-2 text-[0.8125rem]"
+            style={{ color: testResult.valid ? 'var(--color-success, #22c55e)' : 'var(--color-danger, #ef4444)' }}
+          >
             {testResult.valid
               ? <><CheckCircle2 size={14} /> Connection successful</>
               : <><XCircle size={14} /> {testResult.error ?? 'Connection failed'}</>}
@@ -2286,7 +2165,7 @@ function AiAdvisorCard() {
         )}
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+        <div className="flex gap-3 mt-1">
           <Button
             variant="primary"
             size="sm"
@@ -2321,31 +2200,25 @@ function IntegrationsSection() {
     <div>
       <SectionHeader title="Integrations" description="Configure external services used by Kuber." />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 560 }}>
+      <div className="flex flex-col gap-6" style={{ maxWidth: 560 }}>
         {/* AI Advisor */}
         <AiAdvisorCard />
 
+        {/* Email / IMAP Connector */}
+        <EmailConnectorSection />
+
         {/* SMTP */}
         <Card padding="lg">
-          <div style={{ marginBottom: '0.75rem' }}>
-            <div style={{ fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
+          <div className="mb-3">
+            <div className="font-semibold text-[var(--color-text)] mb-1">
               Email (SMTP)
             </div>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', margin: 0 }}>
+            <p className="text-sm text-[var(--color-text-secondary)] m-0">
               Kuber uses SMTP for password reset emails and account notifications. Configure SMTP via environment variables on your server:
             </p>
           </div>
 
-          <div style={{
-            backgroundColor: 'var(--color-surface-hover)',
-            borderRadius: 'var(--radius-md)',
-            padding: '0.875rem 1rem',
-            fontFamily: 'monospace',
-            fontSize: '0.8125rem',
-            color: 'var(--color-text-secondary)',
-            marginBottom: '1rem',
-            lineHeight: 1.6,
-          }}>
+          <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-4 py-3.5 font-mono text-[0.8125rem] text-[var(--color-text-secondary)] mb-4 leading-[1.6]">
             <div>SMTP_HOST=smtp.gmail.com</div>
             <div>SMTP_PORT=587</div>
             <div>SMTP_USER=you@gmail.com</div>
@@ -2428,14 +2301,14 @@ function ReportDigestSection() {
           {isLoading ? (
             <Skeleton height={120} />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div className="flex flex-col gap-5">
               {/* Enable toggle */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+              <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div style={{ fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
+                  <div className="font-semibold text-[var(--color-text)] mb-1">
                     Enable digest emails
                   </div>
-                  <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', margin: 0 }}>
+                  <p className="text-sm text-[var(--color-text-secondary)] m-0">
                     You'll receive a summary of your finances including net worth change,
                     top spending categories, budget status, and upcoming bills.
                   </p>
@@ -2450,15 +2323,7 @@ function ReportDigestSection() {
               {/* Frequency selector — only shown when enabled */}
               {enabled && (
                 <div>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      color: 'var(--color-text)',
-                      marginBottom: '0.5rem',
-                    }}
-                  >
+                  <label className="block text-sm font-medium text-[var(--color-text)] mb-2">
                     Frequency
                   </label>
                   <Select
@@ -2475,14 +2340,7 @@ function ReportDigestSection() {
 
               {/* Last sent info */}
               {lastSent && (
-                <div
-                  style={{
-                    fontSize: '0.8125rem',
-                    color: 'var(--color-text-secondary)',
-                    borderTop: '1px solid var(--color-border)',
-                    paddingTop: '0.75rem',
-                  }}
-                >
+                <div className="text-[0.8125rem] text-[var(--color-text-secondary)] border-t border-[var(--color-border)] pt-3">
                   Last sent: {lastSent}
                 </div>
               )}
@@ -2493,6 +2351,8 @@ function ReportDigestSection() {
     </div>
   );
 }
+
+import RecentOperationsSection from './components/RecentOperationsSection';
 
 // ─── Section: Data ────────────────────────────────────────────────────────────
 
@@ -2538,27 +2398,27 @@ function DataSection() {
     <div>
       <SectionHeader title="Data" description="Export your data or manage transaction history." />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 560 }}>
+      <div className="flex flex-col gap-6" style={{ maxWidth: 560 }}>
         {/* Export */}
         <Card padding="lg">
-          <div style={{ marginBottom: '1rem', fontWeight: 600, color: 'var(--color-text)' }}>
+          <div className="mb-4 font-semibold text-[var(--color-text)]">
             Export Data
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
               <div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>Transactions</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Download all transactions as CSV</div>
+                <div className="text-sm font-medium text-[var(--color-text)]">Transactions</div>
+                <div className="text-xs text-[var(--color-text-muted)]">Download all transactions as CSV</div>
               </div>
               <Button variant="secondary" size="sm" onClick={() => downloadFile('/transactions/export/csv', 'transactions.csv')}>
                 Download CSV
               </Button>
             </div>
-            <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="h-px bg-[var(--color-border)]" />
+            <div className="flex items-center justify-between">
               <div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>Account Balances</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Download account balance history as CSV</div>
+                <div className="text-sm font-medium text-[var(--color-text)]">Account Balances</div>
+                <div className="text-xs text-[var(--color-text-muted)]">Download account balance history as CSV</div>
               </div>
               <Button variant="secondary" size="sm" onClick={() => downloadFile('/accounts/export/csv', 'account-balances.csv')}>
                 Download CSV
@@ -2567,15 +2427,20 @@ function DataSection() {
           </div>
         </Card>
 
+        {/* Recent Operations / Rollback */}
+        <Card padding="lg">
+          <RecentOperationsSection />
+        </Card>
+
         {/* Delete history */}
-        <Card padding="lg" style={{ borderColor: 'var(--color-warning)' }}>
-          <div style={{ marginBottom: '0.5rem', fontWeight: 600, color: 'var(--color-warning)' }}>
+        <Card padding="lg" className="border-[var(--color-warning)]">
+          <div className="mb-2 font-semibold text-[var(--color-warning)]">
             Delete History
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
+          <p className="text-sm text-[var(--color-text-secondary)] mb-4">
             Set a clean start date — all transactions before this date will be permanently deleted.
           </p>
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
+          <div className="flex gap-3 items-end">
             <Input
               label="Delete transactions before"
               type="date"
@@ -2585,7 +2450,7 @@ function DataSection() {
             />
             <Button
               variant="outline"
-              style={{ borderColor: 'var(--color-warning)', color: 'var(--color-warning)', marginBottom: 2 }}
+              className="border-[var(--color-warning)] text-[var(--color-warning)] mb-0.5"
               disabled={!cleanStartDate}
               onClick={() => setDeleteHistoryModalOpen(true)}
             >
@@ -2603,7 +2468,7 @@ function DataSection() {
         description="This action is permanent and cannot be undone."
         size="sm"
       >
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text)' }}>
+        <p className="text-sm text-[var(--color-text)]">
           All transactions before <strong>{cleanStartDate}</strong> will be permanently deleted.
         </p>
         <ModalFooter>
@@ -2625,18 +2490,18 @@ function BillingSection() {
       <SectionHeader title="Billing" description="Manage your subscription." />
 
       <Card padding="lg" style={{ maxWidth: 400 }}>
-        <div style={{ marginBottom: '0.375rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <div className="mb-1.5 text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-[0.06em]">
           Current Plan
         </div>
-        <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+        <div className="text-xl font-bold text-[var(--color-text)] mb-2">
           Kuber Free
         </div>
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginBottom: '1.25rem' }}>
+        <p className="text-sm text-[var(--color-text-secondary)] mb-5">
           Upgrade to Pro for unlimited accounts, advanced reports, and priority support.
         </p>
         <Button
           variant="outline"
-          style={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
+          className="border-[var(--color-accent)] text-[var(--color-accent)]"
           onClick={() => notify.info('Billing portal not yet available')}
         >
           Upgrade to Pro — $9.99/mo
@@ -2659,12 +2524,12 @@ function SectionHeader({
 }) {
   if (inline) return null; // when used alongside a button row, caller handles layout
   return (
-    <div style={{ marginBottom: '1.5rem' }}>
-      <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+    <div className="mb-6">
+      <h2 className="text-lg font-bold text-[var(--color-text)] m-0">
         {title}
       </h2>
       {description && (
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginTop: '0.25rem' }}>
+        <p className="text-sm text-[var(--color-text-secondary)] mt-1">
           {description}
         </p>
       )}
@@ -2691,47 +2556,33 @@ export default function SettingsPage() {
       case 'report-digest': return <ReportDigestSection />;
       case 'data': return <DataSection />;
       case 'billing': return <BillingSection />;
+      case 'tax-accounts': return <TaxAccountsSection />;
+      case 'automation': return <AutomationSection />;
     }
   }
 
   return (
-    <div style={{ display: 'flex', gap: 0, minHeight: '100%' }}>
+    <div className="flex min-h-full">
       {/* Sidebar */}
       <nav
         aria-label="Settings navigation"
-        style={{
-          width: 200,
-          flexShrink: 0,
-          paddingRight: '1rem',
-          borderRight: '1px solid var(--color-border)',
-          marginRight: '2rem',
-        }}
+        className="w-[200px] shrink-0 pr-4 border-r border-[var(--color-border)] mr-8"
       >
-        <div style={{ marginBottom: '0.75rem', fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <div className="mb-3 text-[0.6875rem] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.06em]">
           Settings
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
+        <div className="flex flex-col gap-0.5">
           {NAV_ITEMS.map((item) => {
             const isActive = activeSection === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => setActiveSection(item.id)}
+                className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-[var(--radius-md)] border-none cursor-pointer text-left text-sm transition-[background-color,color] duration-[0.15s]"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.625rem',
-                  width: '100%',
-                  padding: '0.5rem 0.625rem',
-                  borderRadius: 'var(--radius-md)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  fontSize: '0.875rem',
                   fontWeight: isActive ? 600 : 400,
                   backgroundColor: isActive ? 'var(--color-accent-light)' : 'transparent',
                   color: isActive ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                  transition: 'background-color 0.15s, color 0.15s',
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) {
@@ -2747,7 +2598,7 @@ export default function SettingsPage() {
                 }}
                 aria-current={isActive ? 'page' : undefined}
               >
-                <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                <span className="shrink-0 flex items-center">
                   {item.icon}
                 </span>
                 {item.label}
@@ -2758,7 +2609,7 @@ export default function SettingsPage() {
       </nav>
 
       {/* Main content */}
-      <main style={{ flex: 1, minWidth: 0, paddingBottom: '2rem' }}>
+      <main className="flex-1 min-w-0 pb-8">
         {renderSection()}
       </main>
     </div>

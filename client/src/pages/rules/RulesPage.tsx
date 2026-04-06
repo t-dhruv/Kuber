@@ -141,7 +141,7 @@ function RuleBuilderModal({
 
   return (
     <Modal open={open} onClose={onClose} title={initial.name ? 'Edit Rule' : 'New Rule'} size="md">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div className="flex flex-col gap-5">
         <Input
           label="Rule name"
           value={form.name}
@@ -151,13 +151,13 @@ function RuleBuilderModal({
 
         {/* Conditions */}
         <div>
-          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+          <div className="text-sm font-semibold text-[var(--color-text)] mb-2">
             When…
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div className="flex flex-col gap-2">
             {form.conditions.map((cond, i) => (
-              <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-                <div style={{ flex: '0 0 150px' }}>
+              <div key={i} className="flex gap-2 items-end">
+                <div className="w-[150px] shrink-0">
                   <Select
                     label={i === 0 ? 'Field' : undefined}
                     value={cond.field}
@@ -165,7 +165,7 @@ function RuleBuilderModal({
                     onChange={e => updateCondition(i, { field: e.target.value as ConditionField })}
                   />
                 </div>
-                <div style={{ flex: '0 0 140px' }}>
+                <div className="w-[140px] shrink-0">
                   <Select
                     label={i === 0 ? 'Operator' : undefined}
                     value={cond.operator}
@@ -173,7 +173,7 @@ function RuleBuilderModal({
                     onChange={e => updateCondition(i, { operator: e.target.value as ConditionOperator })}
                   />
                 </div>
-                <div style={{ flex: 1 }}>
+                <div className="flex-1">
                   <Input
                     label={i === 0 ? 'Value' : undefined}
                     value={cond.value}
@@ -185,7 +185,7 @@ function RuleBuilderModal({
                 {form.conditions.length > 1 && (
                   <button
                     onClick={() => setForm(f => ({ ...f, conditions: f.conditions.filter((_, idx) => idx !== i) }))}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', padding: '0 0.25rem', marginBottom: 2 }}
+                    className="bg-transparent border-none cursor-pointer text-[var(--color-danger)] px-1 mb-0.5"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -194,7 +194,7 @@ function RuleBuilderModal({
             ))}
             <button
               onClick={() => setForm(f => ({ ...f, conditions: [...f.conditions, { ...EMPTY_CONDITION }] }))}
-              style={{ alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-accent)', fontSize: '0.8125rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}
+              className="self-start bg-transparent border-none cursor-pointer text-[var(--color-accent)] text-[0.8125rem] font-medium flex items-center gap-1 p-0"
             >
               <Plus size={13} /> Add condition
             </button>
@@ -203,13 +203,13 @@ function RuleBuilderModal({
 
         {/* Actions */}
         <div>
-          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+          <div className="text-sm font-semibold text-[var(--color-text)] mb-2">
             Then…
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div className="flex flex-col gap-2">
             {form.actions.map((action, i) => (
-              <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-                <div style={{ flex: '0 0 180px' }}>
+              <div key={i} className="flex gap-2 items-end">
+                <div className="w-[180px] shrink-0">
                   <Select
                     label={i === 0 ? 'Action' : undefined}
                     value={action.type}
@@ -218,7 +218,7 @@ function RuleBuilderModal({
                   />
                 </div>
                 {(action.type === 'setCategory') && (
-                  <div style={{ flex: 1 }}>
+                  <div className="flex-1">
                     <Select
                       label={i === 0 ? 'Category' : undefined}
                       value={action.value ?? ''}
@@ -228,7 +228,7 @@ function RuleBuilderModal({
                   </div>
                 )}
                 {action.type === 'addTag' && (
-                  <div style={{ flex: 1 }}>
+                  <div className="flex-1">
                     <Input
                       label={i === 0 ? 'Tag' : undefined}
                       value={action.value ?? ''}
@@ -238,14 +238,14 @@ function RuleBuilderModal({
                   </div>
                 )}
                 {(action.type === 'hide' || action.type === 'markReviewed') && (
-                  <div style={{ flex: 1, fontSize: '0.8125rem', color: 'var(--color-text-muted)', paddingBottom: 6 }}>
+                  <div className="flex-1 text-[0.8125rem] text-[var(--color-text-muted)] pb-1.5">
                     (no additional value needed)
                   </div>
                 )}
                 {form.actions.length > 1 && (
                   <button
                     onClick={() => setForm(f => ({ ...f, actions: f.actions.filter((_, idx) => idx !== i) }))}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', padding: '0 0.25rem', marginBottom: 2 }}
+                    className="bg-transparent border-none cursor-pointer text-[var(--color-danger)] px-1 mb-0.5"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -254,7 +254,7 @@ function RuleBuilderModal({
             ))}
             <button
               onClick={() => setForm(f => ({ ...f, actions: [...f.actions, { ...EMPTY_ACTION }] }))}
-              style={{ alignSelf: 'flex-start', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-accent)', fontSize: '0.8125rem', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}
+              className="self-start bg-transparent border-none cursor-pointer text-[var(--color-accent)] text-[0.8125rem] font-medium flex items-center gap-1 p-0"
             >
               <Plus size={13} /> Add action
             </button>
@@ -262,7 +262,7 @@ function RuleBuilderModal({
         </div>
 
         {error && (
-          <div style={{ padding: '0.625rem', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-danger-light)', color: 'var(--color-danger)', fontSize: '0.875rem' }}>
+          <div className="px-2.5 py-2.5 rounded-[var(--radius-md)] bg-[var(--color-danger-light)] text-[var(--color-danger)] text-sm">
             {error}
           </div>
         )}
@@ -380,16 +380,16 @@ export default function RulesPage() {
     : defaultForm();
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div className="max-w-[760px]">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>Rules</h1>
-          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', marginTop: '0.25rem' }}>
+          <h1 className="text-xl font-bold text-[var(--color-text)] m-0">Rules</h1>
+          <p className="text-sm text-[var(--color-text-secondary)] mt-1">
             Automatically categorize, tag, or hide transactions based on conditions.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div className="flex gap-3">
           <Button
             variant="secondary"
             size="sm"
@@ -412,58 +412,67 @@ export default function RulesPage() {
 
       {/* Rule list */}
       {isLoading ? (
-        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>Loading…</div>
+        <div className="text-[var(--color-text-muted)] text-sm">Loading…</div>
       ) : sortedRules.length === 0 ? (
-        <Card padding="lg" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>
-          <p style={{ marginBottom: '1rem' }}>No rules yet. Create your first rule to automate transaction categorization.</p>
+        <Card padding="lg" className="text-center text-[var(--color-text-muted)]">
+          <p className="mb-4">No rules yet. Create your first rule to automate transaction categorization.</p>
           <Button variant="primary" size="sm" icon={<Plus size={15} />} onClick={() => setModal({ mode: 'add' })}>
             New rule
           </Button>
         </Card>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div className="flex flex-col gap-2">
           {sortedRules.map((rule, idx) => (
             <Card key={rule.id} padding="md">
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+              <div className="flex gap-3 items-start">
                 {/* Reorder buttons */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem', flexShrink: 0, marginTop: 2 }}>
+                <div className="flex flex-col gap-0.5 shrink-0 mt-0.5">
                   <button
                     onClick={() => handleReorder(rule.id, 'up')}
                     disabled={idx === 0}
-                    style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'not-allowed' : 'pointer', color: idx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: '0 0.125rem' }}
+                    className="bg-transparent border-none px-0.5"
+                    style={{
+                      cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                      color: idx === 0 ? 'var(--color-border)' : 'var(--color-text-muted)',
+                    }}
                   >
                     <ChevronUp size={14} />
                   </button>
                   <button
                     onClick={() => handleReorder(rule.id, 'down')}
                     disabled={idx === sortedRules.length - 1}
-                    style={{ background: 'none', border: 'none', cursor: idx === sortedRules.length - 1 ? 'not-allowed' : 'pointer', color: idx === sortedRules.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)', padding: '0 0.125rem' }}
+                    className="bg-transparent border-none px-0.5"
+                    style={{
+                      cursor: idx === sortedRules.length - 1 ? 'not-allowed' : 'pointer',
+                      color: idx === sortedRules.length - 1 ? 'var(--color-border)' : 'var(--color-text-muted)',
+                    }}
                   >
                     <ChevronDown size={14} />
                   </button>
                 </div>
 
                 {/* Content */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--color-text)' }}>{rule.name}</span>
-                    <span style={{
-                      fontSize: '0.6875rem', fontWeight: 600, padding: '0.125rem 0.4rem',
-                      borderRadius: 'var(--radius-full)',
-                      backgroundColor: rule.isActive ? 'var(--color-success-light, #dcfce7)' : 'var(--color-surface-hover)',
-                      color: rule.isActive ? 'var(--color-success, #16a34a)' : 'var(--color-text-muted)',
-                    }}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="font-semibold text-[0.9375rem] text-[var(--color-text)]">{rule.name}</span>
+                    <span
+                      className="text-[0.6875rem] font-semibold px-[0.4rem] py-0.5 rounded-full"
+                      style={{
+                        backgroundColor: rule.isActive ? 'var(--color-success-light, #dcfce7)' : 'var(--color-surface-hover)',
+                        color: rule.isActive ? 'var(--color-success, #16a34a)' : 'var(--color-text-muted)',
+                      }}
+                    >
                       {rule.isActive ? 'Active' : 'Disabled'}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
-                    <span style={{ fontWeight: 500 }}>When: </span>
+                  <div className="text-[0.8125rem] text-[var(--color-text-secondary)]">
+                    <span className="font-medium">When: </span>
                     {rule.conditions.map((c, i) => (
                       <span key={i}>{i > 0 ? ' AND ' : ''}{conditionLabel(c)}</span>
                     ))}
                   </div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginTop: '0.125rem' }}>
-                    <span style={{ fontWeight: 500 }}>Then: </span>
+                  <div className="text-[0.8125rem] text-[var(--color-text-secondary)] mt-0.5">
+                    <span className="font-medium">Then: </span>
                     {rule.actions.map((a, i) => (
                       <span key={i}>{i > 0 ? ', ' : ''}{actionLabel(a)}</span>
                     ))}
@@ -471,7 +480,7 @@ export default function RulesPage() {
                 </div>
 
                 {/* Actions */}
-                <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
+                <div className="flex gap-1.5 shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -493,7 +502,7 @@ export default function RulesPage() {
                     variant="ghost"
                     size="sm"
                     icon={<Trash2 size={13} />}
-                    style={{ color: 'var(--color-danger)' }}
+                    className="text-[var(--color-danger)]"
                     onClick={() => deleteMutation.mutate(rule.id)}
                     loading={deleteMutation.isPending && deleteMutation.variables === rule.id}
                   >
@@ -525,10 +534,10 @@ export default function RulesPage() {
         title="Apply Rule"
         size="sm"
       >
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+        <p className="text-sm text-[var(--color-text)] mb-2">
           Apply <strong>{applyTarget?.name}</strong> to all existing transactions?
         </p>
-        <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+        <p className="text-[0.8125rem] text-[var(--color-text-secondary)]">
           Matching transactions will be updated immediately.
         </p>
         <ModalFooter>
@@ -550,10 +559,10 @@ export default function RulesPage() {
         title="Apply All Rules"
         size="sm"
       >
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+        <p className="text-sm text-[var(--color-text)] mb-2">
           Apply all {rules.length} active rule{rules.length !== 1 ? 's' : ''} to all existing transactions?
         </p>
-        <p style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+        <p className="text-[0.8125rem] text-[var(--color-text-secondary)]">
           Rules are applied in order. This may update many transactions.
         </p>
         <ModalFooter>
