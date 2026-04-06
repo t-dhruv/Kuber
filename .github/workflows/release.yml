@@ -90,8 +90,9 @@ jobs:
             type=edge,branch=master
             type=edge,branch=main
             type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
           flavor: |
-            latest=auto
+            latest=false
 
       - name: Docker metadata — client
         id: meta-client
@@ -105,8 +106,9 @@ jobs:
             type=edge,branch=master
             type=edge,branch=main
             type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
           flavor: |
-            latest=auto
+            latest=false
 
       - name: Build and push server image
         uses: docker/build-push-action@v5
