@@ -1,6 +1,6 @@
 # Build context: monorepo root
 # ---- Builder stage ----
-FROM node:20-alpine AS builder
+FROM node:25-alpine AS builder
 
 WORKDIR /app
 
@@ -27,7 +27,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # ---- Runner stage ----
-FROM node:20-alpine AS runner
+FROM node:25-alpine AS runner
 
 WORKDIR /app
 
