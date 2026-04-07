@@ -611,8 +611,10 @@ function AllRecurringView({
   }
 
   return (
+    <div className="overflow-x-auto -mx-1 px-1">
     <Card padding="lg">
-      {/* Table header */}
+      {/* Table header — min-width ensures horizontal scroll on mobile */}
+      <div className="min-w-[780px]">
       <div className="grid gap-2 pb-2 border-b border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-muted)]" style={{ gridTemplateColumns: '1fr 90px 100px 110px 140px 120px 80px 80px' }}>
         <span>Name</span>
         <span className="text-right">Amount</span>
@@ -679,7 +681,9 @@ function AllRecurringView({
           )}
         </div>
       ))}
+      </div>
     </Card>
+    </div>
   );
 }
 

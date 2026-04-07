@@ -385,11 +385,7 @@ function KpiCards({ data, isLoading }: { data?: MonthData; isLoading: boolean })
   ];
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(4, 1fr)',
-      gap: '0.75rem',
-    }}>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {cards.map((card) => (
         <Card key={card.label} padding="lg">
           {isLoading ? (

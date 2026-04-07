@@ -94,6 +94,34 @@ body {
   outline-offset: 2px;
 }
 
+/* Slide-up animation for BottomSheet */
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
+
+/* Touch targets — ensure minimum 44px tap area on mobile */
+@media (max-width: 767px) {
+  /* Sidebar nav links */
+  nav a, nav button {
+    min-height: 44px;
+  }
+  /* Small icon-only buttons: use pseudo-element to expand tap area without affecting layout */
+  .icon-btn {
+    position: relative;
+  }
+  .icon-btn::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 /* Skeleton animation */
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 1; }
