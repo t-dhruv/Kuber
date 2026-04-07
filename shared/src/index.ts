@@ -8,7 +8,7 @@ export type HouseholdRole = 'owner' | 'member' | 'viewer';
 
 // Core DTOs
 export interface UserDto { id: string; email: string; firstName: string; lastName: string; avatar: string | null; timezone: string; theme: 'light' | 'dark' | 'system'; householdId: string; }
-export interface AccountDto { id: string; name: string; type: AccountType; institution: string | null; lastFour: string | null; balance: number; currency: string; isHidden: boolean; excludeFromNetWorth: boolean; lastSynced: string | null; }
+export interface AccountDto { id: string; name: string; type: AccountType; institution: string | null; lastFour: string | null; balance: number; currency: string; creditLimit: number | null; availableCredit: number | null; isHidden: boolean; excludeFromNetWorth: boolean; lastSynced: string | null; }
 export interface TransactionDto { id: string; date: string; description: string; originalDescription: string; amount: number; categoryId: string | null; categoryName: string | null; categoryEmoji: string | null; accountId: string; accountName: string; merchantId: string | null; merchantName: string | null; notes: string | null; tags: string[]; isRecurring: boolean; needsReview: boolean; isHidden: boolean; isSplit: boolean; }
 export interface CategoryDto { id: string; name: string; emoji: string | null; type: CategoryType; groupId: string | null; groupName: string | null; sortOrder: number; }
 export interface BudgetDto { id: string; categoryId: string; categoryName: string; categoryEmoji: string | null; amount: number; actual: number; remaining: number; rollover: boolean; rolloverAmount: number; }

@@ -139,13 +139,14 @@ model HouseholdInvite {
 }
 
 model RefreshToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique // SHA-256 of the raw token
-  familyId  String // shared across all rotations in a session
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique // SHA-256 of the raw token
+  familyId   String // shared across all rotations in a session
+  userId     String
+  expiresAt  DateTime
+  rememberMe Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([familyId])
   @@map("refresh_tokens")
@@ -161,6 +162,7 @@ model Account {
   lastFour            String?
   balance             Float                    @default(0)
   currency            String                   @default("USD")
+  creditLimit         Float?
   isHidden            Boolean                  @default(false)
   excludeFromNetWorth Boolean                  @default(false)
   lastSynced          DateTime?

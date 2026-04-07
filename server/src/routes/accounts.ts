@@ -23,11 +23,16 @@ function formatAccount(account: {
   lastFour: string | null;
   balance: number;
   currency: string;
+  creditLimit: number | null;
   isHidden: boolean;
   excludeFromNetWorth: boolean;
   lastSynced: Date | null;
   createdAt: Date;
 }) {
+  const availableCredit =
+    account.type === 'CREDIT_CARD' && account.creditLimit != null
+      ? account.creditLimit + account.balance
+      : null;
   return {
     id: account.id,
     name: account.name,
@@ -37,6 +42,8 @@ function formatAccount(account: {
     lastFour: account.lastFour,
     balance: account.balance,
     currency: account.currency,
+    creditLimit: account.creditLimit ?? null,
+    availableCredit,
     isHidden: account.isHidden,
     excludeFromNetWorth: account.excludeFromNetWorth,
     lastSyncedAt: account.lastSynced ? account.lastSynced.toISOString() : null,
@@ -260,7 +267,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { name, type, institution, institutionLogo, lastFour, balance, currency, notes } = req.body;
+    const { name, type, institution, institutionLogo, lastFour, balance, currency, creditLimit, notes } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'name is required' });
@@ -283,6 +290,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         lastFour: lastFour ?? null,
         balance,
         currency: currency ?? 'USD',
+        creditLimit: normalizedType === 'CREDIT_CARD' && typeof creditLimit === 'number' && creditLimit > 0 ? creditLimit : null,
         // notes is not a field on the Account model per schema — ignored
       },
     });
@@ -320,6 +328,10 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (lastFour !== undefined) data.lastFour = lastFour;
     if (isHidden !== undefined) data.isHidden = isHidden;
     if (excludeFromNetWorth !== undefined) data.excludeFromNetWorth = excludeFromNetWorth;
+    const { creditLimit } = req.body;
+    if (creditLimit !== undefined) {
+      data.creditLimit = typeof creditLimit === 'number' && creditLimit > 0 ? creditLimit : null;
+    }
 
     const account = await prisma.account.update({ where: { id }, data });
     logAudit({ householdId, userId: req.userId!, action: 'UPDATE', entity: 'ACCOUNT', entityId: id, before: { name: existing.name }, after: { name: account.name } });

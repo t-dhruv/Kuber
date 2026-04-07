@@ -1,25 +1,32 @@
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 
-const FROM = process.env.SMTP_FROM ?? process.env.RESEND_FROM ?? 'Kuber <noreply@kuber.app>';
 const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:3000';
+const DEFAULT_FROM = 'Kuber <noreply@kuber.app>';
 
 // ─── Provider detection ────────────────────────────────────────────────────────
 
-function getResendClient(): Resend | null {
-  if (!process.env.RESEND_API_KEY) return null;
-  return new Resend(process.env.RESEND_API_KEY);
+function getResendClient(): { client: Resend; from: string } | null {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  // Use RESEND_FROM if set, then SMTP_FROM, then default
+  const from = process.env.RESEND_FROM || process.env.SMTP_FROM || DEFAULT_FROM;
+  return { client: new Resend(key), from };
 }
 
-function getSmtpTransport(): ReturnType<typeof nodemailer.createTransport> | null {
+function getSmtpTransport(): { transport: ReturnType<typeof nodemailer.createTransport>; from: string } | null {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null;
-  return nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: parseInt(SMTP_PORT ?? '587', 10),
-    secure: parseInt(SMTP_PORT ?? '587', 10) === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-  });
+  const from = process.env.SMTP_FROM || DEFAULT_FROM;
+  return {
+    transport: nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: parseInt(SMTP_PORT ?? '587', 10),
+      secure: parseInt(SMTP_PORT ?? '587', 10) === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    }),
+    from,
+  };
 }
 
 // ─── Core send ────────────────────────────────────────────────────────────────
@@ -28,8 +35,8 @@ export async function sendMail(opts: { to: string; subject: string; html: string
   // Resend takes priority if API key is set
   const resend = getResendClient();
   if (resend) {
-    const { error } = await resend.emails.send({
-      from: FROM,
+    const { error } = await resend.client.emails.send({
+      from: resend.from,
       to: opts.to,
       subject: opts.subject,
       html: opts.html,
@@ -40,9 +47,9 @@ export async function sendMail(opts: { to: string; subject: string; html: string
   }
 
   // Fall back to SMTP
-  const transport = getSmtpTransport();
-  if (transport) {
-    await transport.sendMail({ from: FROM, ...opts });
+  const smtp = getSmtpTransport();
+  if (smtp) {
+    await smtp.transport.sendMail({ from: smtp.from, ...opts });
     return;
   }
 

@@ -39,6 +39,8 @@ server/prisma/*.db-journal
 # Testing artifacts
 coverage/
 playwright-report/
+playwright-report-responsive/
 test-results/
 tests/e2e/artifacts
 .playwright-mcp/
+tests/screenshots/

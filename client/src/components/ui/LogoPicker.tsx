@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Search, X, ChevronDown } from 'lucide-react';
 import { LOGO_CATALOG } from '@/lib/logoCatalog';
 import { InstitutionLogo } from './InstitutionLogo';
@@ -12,8 +12,10 @@ interface LogoPickerProps {
 export function LogoPicker({ value, institutionName, onChange }: LogoPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [visibleCount, setVisibleCount] = useState(60);
   const containerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
   useEffect(() => {
@@ -27,17 +29,35 @@ export function LogoPicker({ value, institutionName, onChange }: LogoPickerProps
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  // Focus search when opened
+  // Focus search when opened, reset visible count
   useEffect(() => {
-    if (open) setTimeout(() => searchRef.current?.focus(), 50);
-    else setSearch('');
+    if (open) {
+      setTimeout(() => searchRef.current?.focus(), 50);
+      setVisibleCount(60);
+    } else {
+      setSearch('');
+    }
   }, [open]);
+
+  // Reset visible count when search changes
+  useEffect(() => { setVisibleCount(60); }, [search]);
+
+  // Load more on scroll
+  const handleGridScroll = useCallback(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+      setVisibleCount(c => c + 60);
+    }
+  }, []);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return LOGO_CATALOG;
     const q = search.toLowerCase();
     return LOGO_CATALOG.filter(e => e.slug.includes(q) || e.label.toLowerCase().includes(q));
   }, [search]);
+
+  const visible = filtered.slice(0, visibleCount);
 
   const selectedEntry = value ? LOGO_CATALOG.find(e => e.slug === value) : null;
 
@@ -136,58 +156,69 @@ export function LogoPicker({ value, institutionName, onChange }: LogoPickerProps
           </div>
 
           {/* Logo grid */}
-          <div style={{
-            maxHeight: 280,
-            overflowY: 'auto',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
-            gap: 2,
-            padding: 6,
-          }}>
+          <div
+            ref={gridRef}
+            onScroll={handleGridScroll}
+            style={{
+              maxHeight: 280,
+              overflowY: 'auto',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
+              gap: 2,
+              padding: 6,
+            }}
+          >
             {filtered.length === 0 ? (
               <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '20px', color: 'var(--color-text-secondary)', fontSize: '0.8125rem' }}>
                 No logos found
               </div>
             ) : (
-              filtered.map(entry => (
-                <div
-                  key={entry.slug}
-                  onClick={() => { onChange(entry.slug); setOpen(false); }}
-                  title={entry.label}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 4,
-                    padding: '6px 4px',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                    background: value === entry.slug ? 'var(--color-accent-subtle, rgba(99,102,241,0.1))' : 'transparent',
-                    outline: value === entry.slug ? '2px solid var(--color-accent)' : 'none',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => {
-                    if (value !== entry.slug) (e.currentTarget as HTMLDivElement).style.background = 'var(--color-border)';
-                  }}
-                  onMouseLeave={e => {
-                    if (value !== entry.slug) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                  }}
-                >
-                  <InstitutionLogo name={entry.label} logoSlug={entry.slug} size={32} />
-                  <span style={{
-                    fontSize: '0.625rem',
-                    color: 'var(--color-text-secondary)',
-                    textAlign: 'center',
-                    lineHeight: 1.2,
-                    maxWidth: 64,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {entry.label}
-                  </span>
-                </div>
-              ))
+              <>
+                {visible.map(entry => (
+                  <div
+                    key={entry.slug}
+                    onClick={() => { onChange(entry.slug); setOpen(false); }}
+                    title={entry.label}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '6px 4px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      background: value === entry.slug ? 'var(--color-accent-subtle, rgba(99,102,241,0.1))' : 'transparent',
+                      outline: value === entry.slug ? '2px solid var(--color-accent)' : 'none',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => {
+                      if (value !== entry.slug) (e.currentTarget as HTMLDivElement).style.background = 'var(--color-border)';
+                    }}
+                    onMouseLeave={e => {
+                      if (value !== entry.slug) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                    }}
+                  >
+                    <InstitutionLogo name={entry.label} logoSlug={entry.slug} size={32} />
+                    <span style={{
+                      fontSize: '0.625rem',
+                      color: 'var(--color-text-secondary)',
+                      textAlign: 'center',
+                      lineHeight: 1.2,
+                      maxWidth: 64,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {entry.label}
+                    </span>
+                  </div>
+                ))}
+                {visibleCount < filtered.length && (
+                  <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '8px', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                    Scroll for more ({filtered.length - visibleCount} remaining)
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

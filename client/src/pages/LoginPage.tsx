@@ -31,12 +31,13 @@ function PasswordStep({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const login = useLogin();
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     login.mutate(
-      { email, password },
+      { email, password, rememberMe },
       {
         onSuccess: (data) => {
           if (data.requireTotp) onRequireTotp(data.tempToken);
@@ -93,6 +94,18 @@ function PasswordStep({
           </Link>
         </div>
       </div>
+
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={rememberMe}
+          onChange={(e) => setRememberMe(e.target.checked)}
+          className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer"
+        />
+        <span className="text-sm text-[color:var(--color-text-secondary)]">
+          Remember me for 90 days
+        </span>
+      </label>
 
       {errorMessage && <ErrorBox message={errorMessage} />}
 
