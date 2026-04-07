@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
 import { AppShell } from '@/components/layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import InstallPrompt from '@/components/pwa/InstallPrompt';
 import { OnboardingWizard, shouldShowOnboarding } from '@/components/onboarding/OnboardingWizard';
 import { api } from '@/lib/api';
 
