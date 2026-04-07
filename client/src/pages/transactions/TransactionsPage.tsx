@@ -1430,7 +1430,6 @@ export default function TransactionsPage() {
       )}
 
       {/* Transaction list */}
-      <div className="overflow-x-auto">
       <Card padding="none">
         {/* Column header */}
         <div className="flex items-center h-10 px-3 gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
@@ -1509,7 +1508,6 @@ export default function TransactionsPage() {
           </div>
         )}
       </Card>
-      </div>
 
       {/* Summary Stats Panel */}
       {!txnsLoading && transactions.length > 0 && (() => {

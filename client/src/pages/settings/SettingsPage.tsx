@@ -412,57 +412,42 @@ function NotificationsSection() {
     <div>
       <SectionHeader title="Notifications" description="Choose what you want to be notified about." />
 
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr>
-              <th className="text-left px-3 py-2 text-[var(--color-text-muted)] font-medium w-full" />
+      <div className="flex flex-col gap-0">
+        {Object.entries(groups).map(([groupName, rows]) => (
+          <div key={groupName}>
+            <div className="px-3 pt-3.5 pb-1.5 text-[0.6875rem] font-bold text-[var(--color-text-muted)] tracking-[0.06em] uppercase">
+              {groupName}
+            </div>
+            {/* Channel headers */}
+            <div className="flex items-center border-t border-[var(--color-border)] px-3 py-1">
+              <div className="flex-1 text-xs font-medium text-[var(--color-text-muted)]" />
               {channels.map((ch) => (
-                <th
-                  key={ch.key}
-                  className="text-center px-4 py-2 text-[var(--color-text-secondary)] font-semibold text-xs whitespace-nowrap min-w-[72px]"
-                >
+                <div key={ch.key} className="w-16 text-center text-[0.6875rem] font-semibold text-[var(--color-text-secondary)]">
                   {ch.label}
-                </th>
+                </div>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(groups).map(([groupName, rows]) => (
-              <>
-                <tr key={`group-${groupName}`}>
-                  <td
-                    colSpan={4}
-                    className="px-3 pt-3.5 pb-1.5 text-[0.6875rem] font-bold text-[var(--color-text-muted)] tracking-[0.06em] uppercase"
-                  >
-                    {groupName}
-                  </td>
-                </tr>
-                {rows.map((row, idx) => (
-                  <tr
-                    key={row.key}
-                    className="border-t border-[var(--color-border)]"
-                  >
-                    <td className="px-3 py-2.5 text-[var(--color-text)]">
-                      {row.label}
-                    </td>
-                    {channels.map((ch) => (
-                      <td key={ch.key} className="text-center px-4 py-2.5">
-                        <input
-                          type="checkbox"
-                          checked={prefs[row.key][ch.key]}
-                          onChange={() => togglePref(row.key, ch.key)}
-                          className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer"
-                          aria-label={`${row.label} — ${ch.label}`}
-                        />
-                      </td>
-                    ))}
-                  </tr>
+            </div>
+            {rows.map((row) => (
+              <div
+                key={row.key}
+                className="flex items-center border-t border-[var(--color-border)] px-3 py-2.5"
+              >
+                <div className="flex-1 text-sm text-[var(--color-text)] pr-2">{row.label}</div>
+                {channels.map((ch) => (
+                  <div key={ch.key} className="w-16 flex justify-center">
+                    <input
+                      type="checkbox"
+                      checked={prefs[row.key][ch.key]}
+                      onChange={() => togglePref(row.key, ch.key)}
+                      className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer"
+                      aria-label={`${row.label} — ${ch.label}`}
+                    />
+                  </div>
                 ))}
-              </>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        ))}
       </div>
     </div>
   );
