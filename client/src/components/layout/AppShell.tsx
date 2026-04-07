@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { BottomNav } from './BottomNav';
 
 const STORAGE_KEY = 'kuber-sidebar-collapsed';
 
@@ -90,10 +91,12 @@ export function AppShell() {
             }
           }}
         />
-        <main id="main-content" role="main" className="flex-1 overflow-auto p-4 md:p-6">
+        <main id="main-content" role="main" className="flex-1 overflow-auto p-4 md:p-6 pb-20 md:pb-6">
           <Outlet />
         </main>
       </div>
+
+      <BottomNav onOpenSidebar={() => setMobileOpen(true)} />
     </div>
   );
 }

@@ -1178,7 +1178,7 @@ function AssetsLiabilitiesTab() {
   return (
     <div className="flex flex-col gap-5">
       {/* Summary bar */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
           { label: 'Manual Assets', value: totalAssets, color: 'var(--color-success)' },
           { label: 'Manual Liabilities', value: totalLiabs, color: 'var(--color-danger)' },
@@ -1366,7 +1366,7 @@ export default function AccountsPage() {
           Failed to load accounts.
         </div>
       ) : (
-        <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)' }}>
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 items-start">
           {/* Left column: net worth chart + groups */}
           <div className="flex flex-col gap-4">
             <NetWorthChart />

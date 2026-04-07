@@ -194,9 +194,8 @@ export function SearchModal({ open, onClose }: SearchModalProps) {
         {/* Modal */}
         <div
           onClick={(e) => e.stopPropagation()}
+          className="w-full sm:w-[600px] mx-4 sm:mx-0"
           style={{
-            width: 600,
-            maxWidth: 'calc(100vw - 2rem)',
             backgroundColor: 'var(--color-surface)',
             borderRadius: 'var(--radius-xl)',
             boxShadow: 'var(--shadow-lg)',

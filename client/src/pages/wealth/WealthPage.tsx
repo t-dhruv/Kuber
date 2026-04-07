@@ -416,8 +416,8 @@ function WhereToCut({ analysis }: { analysis: WealthAnalysis }) {
   return (
     <Card className="p-5">
       <CardHeader title="Where to Cut" description="Top categories contributing to overspend" />
-      <div className="overflow-x-auto -mx-1 px-1 mt-3">
-      <div className="flex flex-col divide-y divide-[var(--color-border)] min-w-[320px]">
+      <div className="mt-3">
+      <div className="flex flex-col divide-y divide-[var(--color-border)]">
         {withOverage.map((c, i) => (
           <div key={c.id} className="flex items-center gap-3 py-2.5 text-sm">
             <span className="text-[var(--color-text-muted)] w-5 text-center font-mono text-xs flex-shrink-0">{i + 1}</span>
@@ -698,8 +698,24 @@ function PortfolioProjections() {
             )}
           </div>
 
-          <div className="overflow-x-auto mt-4 -mx-1 px-1">
-            <table className="w-full text-sm min-w-[400px]">
+          {/* Mobile: stacked cards per horizon */}
+          <div className="flex flex-col divide-y divide-[var(--color-border)] mt-4 sm:hidden">
+            {data.horizons.map((h) => (
+              <div key={h.years} className="py-3 grid grid-cols-2 gap-y-1 gap-x-4 text-sm">
+                <div className="col-span-2 font-semibold text-[var(--color-text)] mb-1">{h.years}-year horizon</div>
+                <div className="text-xs text-[var(--color-text-muted)]">Conservative</div>
+                <div className="text-xs text-right text-[var(--color-text-secondary)]">{fmtCompact(h.p10)}</div>
+                <div className="text-xs text-[var(--color-accent)] font-medium">Expected</div>
+                <div className="text-xs text-right font-semibold text-[var(--color-text)]">{fmtCompact(h.p50)}</div>
+                <div className="text-xs text-[var(--color-text-muted)]">Optimistic</div>
+                <div className="text-xs text-right" style={{ color: 'var(--color-success,#22c55e)' }}>{fmtCompact(h.p90)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: full table */}
+          <div className="hidden sm:block mt-4">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--color-border)]">
                   <th className="text-left py-2 pr-4 text-[var(--color-text-muted)] font-medium">Years</th>

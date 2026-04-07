@@ -611,74 +611,140 @@ function AllRecurringView({
   }
 
   return (
-    <Card padding="lg">
-      {/* Table header */}
-      <div className="grid gap-2 pb-2 border-b border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-muted)]" style={{ gridTemplateColumns: '1fr 90px 100px 110px 140px 120px 80px 80px' }}>
-        <span>Name</span>
-        <span className="text-right">Amount</span>
-        <span>Frequency</span>
-        <span>Next Date</span>
-        <span>Account</span>
-        <span>Category</span>
-        <span>Status</span>
-        <span>Actions</span>
-      </div>
-
-      {data.map((item, idx) => (
-        <div key={item.id}>
-          <div className="grid gap-2 py-[0.625rem] items-center text-[0.8125rem]" style={{ gridTemplateColumns: '1fr 90px 100px 110px 140px 120px 80px 80px' }}>
-            <div className="font-medium text-[var(--color-text)] whitespace-nowrap overflow-hidden text-ellipsis">
-              {item.name}
+    <Card padding="none">
+      {/* ── Mobile card layout (below sm) ── */}
+      <div className="flex flex-col divide-y divide-[var(--color-border)] sm:hidden">
+        {data.map((item) => (
+          <div key={item.id} className="flex flex-col gap-1.5 p-4">
+            {/* Row 1: name + amount */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-base leading-none">{item.categoryIcon ?? '🔄'}</span>
+                <span className="font-semibold text-[var(--color-text)] text-sm truncate">{item.name}</span>
+              </div>
+              <span
+                className="font-bold text-sm shrink-0"
+                style={{ color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}
+              >
+                {item.amount < 0 ? '-' : '+'}{fmtCurrency(item.amount)}
+              </span>
             </div>
-            <span className="text-right font-semibold" style={{ color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
-              {item.amount < 0 ? '-' : '+'}{fmtCurrency(item.amount)}
-            </span>
-            <span className="text-[var(--color-text-secondary)]">{FREQUENCY_LABELS[item.frequency]}</span>
-            <span className="text-[var(--color-text-secondary)]">{fmtDate(item.nextDate)}</span>
-            <span className="text-[var(--color-text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis">
-              {accountLabel(item)}
-            </span>
-            <span className="text-[var(--color-text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis">
-              {item.categoryIcon ? `${item.categoryIcon} ` : ''}{item.categoryName}
-            </span>
-            <span
-              className="inline-flex items-center py-0.5 px-2 rounded-[var(--radius-full)] text-[0.6875rem] font-semibold"
-              style={{
-                backgroundColor: item.isActive ? 'var(--color-success-light)' : 'var(--color-border)',
-                color: item.isActive ? 'var(--color-success)' : 'var(--color-text-muted)',
-              }}
-            >
-              {item.isActive ? 'Active' : 'Paused'}
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => onToggle(item)}
-                title={item.isActive ? 'Pause' : 'Resume'}
-                className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-surface-hover)]"
-              >
-                {item.isActive ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
-              </button>
-              <button
-                onClick={() => onEdit(item)}
-                title="Edit"
-                className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-surface-hover)]"
-              >
-                <Pencil size={14} />
-              </button>
-              <button
-                onClick={() => onDelete(item)}
-                title="Delete"
-                className="bg-transparent border-none cursor-pointer text-[var(--color-danger)] p-1 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-danger-light)]"
-              >
-                <Trash2 size={14} />
-              </button>
+            {/* Row 2: frequency · next date */}
+            <div className="text-xs text-[var(--color-text-muted)]">
+              {FREQUENCY_LABELS[item.frequency]} · Next: {fmtDate(item.nextDate)}
+            </div>
+            {/* Row 3: category badge + actions */}
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="inline-flex items-center py-0.5 px-2 rounded-[var(--radius-full)] text-[0.6875rem] font-semibold shrink-0"
+                  style={{
+                    backgroundColor: item.isActive ? 'var(--color-success-light)' : 'var(--color-border)',
+                    color: item.isActive ? 'var(--color-success)' : 'var(--color-text-muted)',
+                  }}
+                >
+                  {item.isActive ? 'Active' : 'Paused'}
+                </span>
+                {item.categoryName && (
+                  <span className="text-xs text-[var(--color-text-muted)] truncate">{item.categoryName}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => onToggle(item)}
+                  title={item.isActive ? 'Pause' : 'Resume'}
+                  className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1.5 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-surface-hover)]"
+                >
+                  {item.isActive ? <PauseCircle size={16} /> : <PlayCircle size={16} />}
+                </button>
+                <button
+                  onClick={() => onEdit(item)}
+                  title="Edit"
+                  className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1.5 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-surface-hover)]"
+                >
+                  <Pencil size={16} />
+                </button>
+                <button
+                  onClick={() => onDelete(item)}
+                  title="Delete"
+                  className="bg-transparent border-none cursor-pointer text-[var(--color-danger)] p-1.5 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-danger-light)]"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </div>
           </div>
-          {idx < data.length - 1 && (
-            <div className="h-px bg-[var(--color-border)]" />
-          )}
+        ))}
+      </div>
+
+      {/* ── Desktop table layout (sm and above) ── */}
+      <div className="hidden sm:block px-4 py-3">
+        <div className="grid gap-2 pb-2 border-b border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-muted)]" style={{ gridTemplateColumns: '1fr 90px 100px 110px 140px 120px 80px 80px' }}>
+          <span>Name</span>
+          <span className="text-right">Amount</span>
+          <span>Frequency</span>
+          <span>Next Date</span>
+          <span>Account</span>
+          <span>Category</span>
+          <span>Status</span>
+          <span>Actions</span>
         </div>
-      ))}
+        {data.map((item, idx) => (
+          <div key={item.id}>
+            <div className="grid gap-2 py-[0.625rem] items-center text-[0.8125rem]" style={{ gridTemplateColumns: '1fr 90px 100px 110px 140px 120px 80px 80px' }}>
+              <div className="font-medium text-[var(--color-text)] whitespace-nowrap overflow-hidden text-ellipsis">
+                {item.name}
+              </div>
+              <span className="text-right font-semibold" style={{ color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                {item.amount < 0 ? '-' : '+'}{fmtCurrency(item.amount)}
+              </span>
+              <span className="text-[var(--color-text-secondary)]">{FREQUENCY_LABELS[item.frequency]}</span>
+              <span className="text-[var(--color-text-secondary)]">{fmtDate(item.nextDate)}</span>
+              <span className="text-[var(--color-text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis">
+                {accountLabel(item)}
+              </span>
+              <span className="text-[var(--color-text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis">
+                {item.categoryIcon ? `${item.categoryIcon} ` : ''}{item.categoryName}
+              </span>
+              <span
+                className="inline-flex items-center py-0.5 px-2 rounded-[var(--radius-full)] text-[0.6875rem] font-semibold"
+                style={{
+                  backgroundColor: item.isActive ? 'var(--color-success-light)' : 'var(--color-border)',
+                  color: item.isActive ? 'var(--color-success)' : 'var(--color-text-muted)',
+                }}
+              >
+                {item.isActive ? 'Active' : 'Paused'}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => onToggle(item)}
+                  title={item.isActive ? 'Pause' : 'Resume'}
+                  className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-surface-hover)]"
+                >
+                  {item.isActive ? <PauseCircle size={14} /> : <PlayCircle size={14} />}
+                </button>
+                <button
+                  onClick={() => onEdit(item)}
+                  title="Edit"
+                  className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-surface-hover)]"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => onDelete(item)}
+                  title="Delete"
+                  className="bg-transparent border-none cursor-pointer text-[var(--color-danger)] p-1 rounded-[var(--radius-sm)] flex items-center hover:bg-[var(--color-danger-light)]"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+            {idx < data.length - 1 && (
+              <div className="h-px bg-[var(--color-border)]" />
+            )}
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }

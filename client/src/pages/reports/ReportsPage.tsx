@@ -504,13 +504,7 @@ function KpiCards({
   isLoading: boolean;
 }) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
-        gap: "0.75rem",
-      }}
-    >
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {cards.map((card) => (
         <Card key={card.label} padding="lg">
           {isLoading ? (
@@ -1083,14 +1077,7 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "" }: CategoryTab
       </div>
 
       {/* Main 2-column chart layout */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "55% 45%",
-          gap: "1rem",
-          alignItems: "start",
-        }}
-      >
+      <div className="grid grid-cols-1 lg:grid-cols-[55fr_45fr] gap-4 items-start">
         {/* Left: chart */}
         <Card padding="lg">
           {viewMode === 'change' ? (

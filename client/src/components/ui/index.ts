@@ -40,3 +40,5 @@ export { ConfirmDialog } from './ConfirmDialog';
 export { Textarea } from './Textarea';
 
 export { SegmentControl } from './SegmentControl';
+
+export { BottomSheet } from './BottomSheet';

@@ -292,7 +292,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
 
       {/* Drawer */}
       <div
-        className="fixed top-0 right-0 bottom-0 w-[380px] z-50 bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[var(--shadow-lg)] flex flex-col overflow-y-auto transition-transform duration-[250ms] ease-[ease]"
+        className="fixed top-0 right-0 bottom-0 w-full sm:w-[380px] z-50 bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[var(--shadow-lg)] flex flex-col overflow-y-auto transition-transform duration-[250ms] ease-[ease]"
         style={{ transform: open ? 'translateX(0)' : 'translateX(100%)' }}
       >
         {/* Header */}
@@ -687,7 +687,7 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
         />
       )}
       <div
-        className="fixed top-0 right-0 bottom-0 w-[320px] z-[35] bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[var(--shadow-lg)] flex flex-col overflow-y-auto transition-transform duration-[250ms] ease-[ease]"
+        className="fixed top-0 right-0 bottom-0 w-full sm:w-[320px] z-[35] bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[var(--shadow-lg)] flex flex-col overflow-y-auto transition-transform duration-[250ms] ease-[ease]"
         style={{ transform: open ? 'translateX(0)' : 'translateX(100%)' }}
       >
         {/* Header */}
@@ -1430,7 +1430,6 @@ export default function TransactionsPage() {
       )}
 
       {/* Transaction list */}
-      <div className="overflow-x-auto">
       <Card padding="none">
         {/* Column header */}
         <div className="flex items-center h-10 px-3 gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
@@ -1509,7 +1508,6 @@ export default function TransactionsPage() {
           </div>
         )}
       </Card>
-      </div>
 
       {/* Summary Stats Panel */}
       {!txnsLoading && transactions.length > 0 && (() => {
