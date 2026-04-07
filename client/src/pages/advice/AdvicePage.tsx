@@ -61,7 +61,7 @@ function TopicDetailPanel({
       onClick={onClose}
     >
       <div
-        className="w-[480px] max-w-[100vw] h-screen bg-[var(--color-surface)] flex flex-col overflow-hidden"
+        className="w-full sm:w-[480px] h-screen bg-[var(--color-surface)] flex flex-col overflow-hidden"
         style={{ boxShadow: '-4px 0 24px rgba(0,0,0,0.18)' }}
         onClick={(e) => e.stopPropagation()}
       >

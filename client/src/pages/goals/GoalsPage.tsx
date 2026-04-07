@@ -535,7 +535,7 @@ function AddGoalModal({
             <p className="text-sm font-medium text-[var(--color-text)] mb-2.5">
               Goal type
             </p>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {GOAL_TYPES.map((gt) => (
                 <button
                   key={gt.value}
@@ -935,7 +935,7 @@ function PayDownGoals({
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[1, 2].map((i) => (
           <Card key={i} padding="none">
             <Skeleton height={80} width="100%" style={{ borderRadius: '0' }} />
@@ -966,7 +966,7 @@ function PayDownGoals({
   return (
     <>
       <PayDownSummary goals={debtGoals} />
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {debtGoals.map((goal) => (
           <DebtGoalCard
             key={goal.id}
@@ -1072,7 +1072,7 @@ export default function GoalsPage() {
           onPayment={setContributeTarget}
         />
       ) : isLoading ? (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i} padding="none">
               <Skeleton height={80} width="100%" style={{ borderRadius: '0' }} />
@@ -1093,7 +1093,7 @@ export default function GoalsPage() {
       ) : !saveUpGoals.length ? (
         <GoalsEmptyState onAdd={openAdd} />
       ) : (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {saveUpGoals.map((goal) => (
             <GoalCard
               key={goal.id}

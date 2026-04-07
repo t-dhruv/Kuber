@@ -716,7 +716,7 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
 
       {isLoading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[1, 2, 3].map(i => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                 <Skeleton height={12} width="60%" />
@@ -733,7 +733,7 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
         <>
           {/* Stat tiles — horizontal scroll on mobile */}
           <div className="overflow-x-auto -mx-1 px-1 mb-5">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(130px, 1fr))', gap: '0.75rem', minWidth: 360 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" style={{ minWidth: 360 }}>
             {/* Spending */}
             <div style={{
               backgroundColor: 'var(--color-surface-hover)',
@@ -1256,7 +1256,7 @@ export default function DashboardPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', padding: '1rem 0' }}>
+    <div className="grid grid-cols-1 gap-4 py-4">
       {/* Dashboard header with Customize button */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)' }}>

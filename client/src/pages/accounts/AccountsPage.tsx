@@ -1178,7 +1178,7 @@ function AssetsLiabilitiesTab() {
   return (
     <div className="flex flex-col gap-5">
       {/* Summary bar */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
           { label: 'Manual Assets', value: totalAssets, color: 'var(--color-success)' },
           { label: 'Manual Liabilities', value: totalLiabs, color: 'var(--color-danger)' },

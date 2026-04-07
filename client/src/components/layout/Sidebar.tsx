@@ -189,7 +189,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="absolute -right-3 top-16 flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] shadow-[var(--shadow-sm)] hover:text-[var(--color-text)] hover:shadow-[var(--shadow-md)] transition-all z-40"
+        className="hidden md:flex absolute -right-3 top-16 h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] shadow-[var(--shadow-sm)] hover:text-[var(--color-text)] hover:shadow-[var(--shadow-md)] transition-all z-40"
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       >
         {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
