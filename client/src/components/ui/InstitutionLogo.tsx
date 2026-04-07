@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LOGO_CATALOG } from '@/lib/logoCatalog';
 
 // ─── Slug mapping ─────────────────────────────────────────────────────────────
 // Maps institution name fragments (lowercased) → local SVG slug.
@@ -84,8 +85,17 @@ const SLUG_MAP: [string, string][] = [
 
 function getSlug(institutionName: string): string | null {
   const lower = institutionName.toLowerCase();
+  // Priority 1: curated SLUG_MAP (handles aliases, abbreviations, common names)
   for (const [key, slug] of SLUG_MAP) {
     if (lower.includes(key)) return slug;
+  }
+  // Priority 2: search full catalog by slug (e.g. "TD Bank" → "tdbank")
+  const compact = lower.replace(/[^a-z0-9]/g, '');
+  for (const entry of LOGO_CATALOG) {
+    const slugNorm = entry.slug.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (slugNorm === compact || slugNorm.startsWith(compact) || compact.startsWith(slugNorm)) {
+      if (compact.length >= 3) return entry.slug;
+    }
   }
   return null;
 }
@@ -151,6 +161,7 @@ export function InstitutionLogo({ name, logoSlug, size = 32, style }: Institutio
           alt={name}
           width={size}
           height={size}
+          loading="lazy"
           style={{ objectFit: 'contain', padding: 3 }}
           onError={() => setImgFailed(true)}
         />

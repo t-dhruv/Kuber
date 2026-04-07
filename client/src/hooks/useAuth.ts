@@ -12,7 +12,7 @@ export function useLogin() {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
   return useMutation({
-    mutationFn: (data: { email: string; password: string }) =>
+    mutationFn: (data: { email: string; password: string; rememberMe?: boolean }) =>
       api.post<LoginResponse>('/auth/login', data).then(r => r.data),
     onSuccess: (data) => {
       if (data.requireTotp) return; // caller handles 2FA step

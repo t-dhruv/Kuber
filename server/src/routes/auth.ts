@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { generateSecret as totpGenerateSecret, verify as totpVerify, generateURI as totpGenerateURI } from 'otplib';
 import { toDataURL } from 'qrcode';
 import { prisma } from '../lib/prisma';
-import { createRefreshToken, invalidateFamily, hashToken } from '../lib/token';
+import { createRefreshToken, invalidateFamily, hashToken, DEFAULT_REFRESH_TTL_MS, REMEMBER_ME_REFRESH_TTL_MS } from '../lib/token';
 import { sendPasswordResetEmail, sendAccountLockoutEmail } from '../lib/email';
 import { requireAuth } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
@@ -50,12 +50,13 @@ function signAccessToken(userId: string, householdId: string, email: string): st
   return jwt.sign({ userId, householdId, email }, process.env.JWT_SECRET!, { expiresIn: ACCESS_TOKEN_TTL });
 }
 
-function setRefreshCookie(res: Response, rawToken: string) {
+function setRefreshCookie(res: Response, rawToken: string, rememberMe = false) {
+  const maxAge = rememberMe ? REMEMBER_ME_REFRESH_TTL_MS : DEFAULT_REFRESH_TTL_MS;
   res.cookie('refreshToken', rawToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge,
     path: '/',
   });
 }
@@ -106,7 +107,7 @@ router.post('/signup', async (req: Request, res: Response) => {
 
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body as { email: string; password: string };
+    const { email, password, rememberMe = false } = req.body as { email: string; password: string; rememberMe?: boolean };
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
@@ -161,7 +162,7 @@ router.post('/login', async (req: Request, res: Response) => {
     // 2FA check
     if (user.totpEnabled) {
       const tempToken = jwt.sign(
-        { userId: user.id, purpose: '2fa' },
+        { userId: user.id, purpose: '2fa', rememberMe: !!rememberMe },
         process.env.JWT_SECRET!,
         { expiresIn: '5m' },
       );
@@ -169,8 +170,8 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const accessToken = signAccessToken(user.id, householdId, user.email);
-    const { rawToken } = await createRefreshToken(user.id);
-    setRefreshCookie(res, rawToken);
+    const { rawToken } = await createRefreshToken(user.id, undefined, !!rememberMe);
+    setRefreshCookie(res, rawToken, !!rememberMe);
 
     return res.json({ user: toUserDto(user, householdId), accessToken });
   } catch (err) {
@@ -208,10 +209,11 @@ router.post('/refresh', async (req: Request, res: Response) => {
     const householdId = stored.user.householdMembers[0]?.householdId;
     if (!householdId) return res.status(400).json({ error: 'User has no household' });
 
-    // Rotate: delete old, issue new in same family
+    // Rotate: delete old, issue new in same family (inherit rememberMe from original session)
+    const rememberMe = stored.rememberMe;
     await prisma.refreshToken.delete({ where: { tokenHash } });
-    const { rawToken: newRawToken } = await createRefreshToken(stored.userId, stored.familyId);
-    setRefreshCookie(res, newRawToken);
+    const { rawToken: newRawToken } = await createRefreshToken(stored.userId, stored.familyId, rememberMe);
+    setRefreshCookie(res, newRawToken, rememberMe);
 
     const accessToken = signAccessToken(stored.userId, householdId, stored.user.email);
     return res.json({ accessToken });
@@ -414,7 +416,7 @@ router.post('/2fa/validate', async (req: Request, res: Response) => {
     const { tempToken, code } = req.body as { tempToken: string; code: string };
     if (!tempToken || !code) return res.status(400).json({ error: 'tempToken and code are required' });
 
-    let payload: { userId: string; purpose: string };
+    let payload: { userId: string; purpose: string; rememberMe?: boolean };
     try {
       payload = jwt.verify(tempToken, process.env.JWT_SECRET!) as typeof payload;
     } catch {
@@ -437,9 +439,10 @@ router.post('/2fa/validate', async (req: Request, res: Response) => {
     const householdId = user.householdMembers[0]?.householdId;
     if (!householdId) return res.status(400).json({ error: 'User has no household' });
 
+    const rememberMe2fa = !!payload.rememberMe;
     const accessToken = signAccessToken(user.id, householdId, user.email);
-    const { rawToken } = await createRefreshToken(user.id);
-    setRefreshCookie(res, rawToken);
+    const { rawToken } = await createRefreshToken(user.id, undefined, rememberMe2fa);
+    setRefreshCookie(res, rawToken, rememberMe2fa);
 
     return res.json({ user: toUserDto(user, householdId), accessToken });
   } catch (err) {
@@ -455,7 +458,7 @@ router.post('/2fa/use-backup', async (req: Request, res: Response) => {
     const { tempToken, backupCode } = req.body as { tempToken: string; backupCode: string };
     if (!tempToken || !backupCode) return res.status(400).json({ error: 'tempToken and backupCode are required' });
 
-    let payload: { userId: string; purpose: string };
+    let payload: { userId: string; purpose: string; rememberMe?: boolean };
     try {
       payload = jwt.verify(tempToken, process.env.JWT_SECRET!) as typeof payload;
     } catch {
@@ -486,9 +489,10 @@ router.post('/2fa/use-backup', async (req: Request, res: Response) => {
     const householdId = user.householdMembers[0]?.householdId;
     if (!householdId) return res.status(400).json({ error: 'User has no household' });
 
+    const rememberMe2fa = !!payload.rememberMe;
     const accessToken = signAccessToken(user.id, householdId, user.email);
-    const { rawToken } = await createRefreshToken(user.id);
-    setRefreshCookie(res, rawToken);
+    const { rawToken } = await createRefreshToken(user.id, undefined, rememberMe2fa);
+    setRefreshCookie(res, rawToken, rememberMe2fa);
 
     return res.json({ user: toUserDto(user, householdId), accessToken, backupCodesRemaining: newCodes.length });
   } catch (err) {

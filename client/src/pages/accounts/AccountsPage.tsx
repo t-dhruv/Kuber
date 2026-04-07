@@ -24,6 +24,8 @@ interface Account {
   lastFour?: string | null;
   balance: number;
   currency: string;
+  creditLimit?: number | null;
+  availableCredit?: number | null;
   excludeFromNetWorth?: boolean;
   isHidden?: boolean;
   lastSyncedAt?: string | null;
@@ -86,6 +88,7 @@ interface AccountFormValues {
   lastFour: string;
   balance: string;
   currency: string;
+  creditLimit: string;
 }
 
 const EMPTY_FORM: AccountFormValues = {
@@ -96,9 +99,23 @@ const EMPTY_FORM: AccountFormValues = {
   lastFour: '',
   balance: '',
   currency: 'USD',
+  creditLimit: '',
 };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
+
+const CURRENCY_OPTIONS = [
+  { value: 'USD', label: 'USD — US Dollar' },
+  { value: 'EUR', label: 'EUR — Euro' },
+  { value: 'GBP', label: 'GBP — British Pound' },
+  { value: 'CAD', label: 'CAD — Canadian Dollar' },
+  { value: 'AUD', label: 'AUD — Australian Dollar' },
+  { value: 'CHF', label: 'CHF — Swiss Franc' },
+  { value: 'JPY', label: 'JPY — Japanese Yen' },
+  { value: 'MXN', label: 'MXN — Mexican Peso' },
+  { value: 'NZD', label: 'NZD — New Zealand Dollar' },
+  { value: 'INR', label: 'INR — Indian Rupee' },
+];
 
 const TYPE_OPTIONS = [
   { value: 'checking', label: 'Checking' },
@@ -502,18 +519,18 @@ function NetWorthChart() {
 
       {/* Assets vs Liabilities breakdown */}
       {!isLoading && current && (
-        <div className="flex gap-6 mt-4 pt-4 border-t border-[var(--color-border)] flex-wrap">
-          <div className="flex-1 min-w-[100px]">
+        <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-[var(--color-border)]">
+          <div>
             <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.04em] mb-1">Assets</div>
-            <div className="text-base font-bold text-[var(--color-success)]">{fmtCurrency(current.assets)}</div>
+            <div className="text-base font-bold text-[var(--color-success)] truncate">{fmtCurrency(current.assets)}</div>
           </div>
-          <div className="flex-1 min-w-[100px]">
+          <div>
             <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.04em] mb-1">Liabilities</div>
-            <div className="text-base font-bold text-[var(--color-danger)]">{fmtCurrency(current.liabilities)}</div>
+            <div className="text-base font-bold text-[var(--color-danger)] truncate">{fmtCurrency(current.liabilities)}</div>
           </div>
-          <div className="flex-1 min-w-[100px]">
+          <div>
             <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.04em] mb-1">Net Worth</div>
-            <div className="text-base font-bold" style={{ color: current.netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>{fmtCurrency(current.netWorth)}</div>
+            <div className="text-base font-bold truncate" style={{ color: current.netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>{fmtCurrency(current.netWorth)}</div>
           </div>
         </div>
       )}
@@ -627,14 +644,24 @@ function AccountForm({
           maxLength={4}
           inputMode="numeric"
         />
-        <Input
+        <Select
           label="Currency"
           value={values.currency}
-          onChange={(e) => onChange('currency', e.target.value.toUpperCase().slice(0, 3))}
-          placeholder="USD"
-          maxLength={3}
+          onChange={(e) => onChange('currency', e.target.value)}
+          options={CURRENCY_OPTIONS}
         />
       </div>
+      {values.type === 'credit_card' && (
+        <Input
+          label="Credit Limit"
+          value={values.creditLimit}
+          onChange={(e) => onChange('creditLimit', e.target.value)}
+          placeholder="5000.00"
+          type="number"
+          step="0.01"
+          min="0"
+        />
+      )}
       {!hideBalance && (
         <Input
           label="Starting Balance"
@@ -668,7 +695,13 @@ function AddAccountModal({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [values, setValues] = useState<AccountFormValues>(EMPTY_FORM);
+  const { data: householdData } = useQuery<{ currency: string }>({
+    queryKey: ['settings', 'household'],
+    queryFn: () => api.get('/settings/household').then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+  const defaultCurrency = householdData?.currency ?? 'USD';
+  const [values, setValues] = useState<AccountFormValues>({ ...EMPTY_FORM, currency: defaultCurrency });
   const [errors, setErrors] = useState<Partial<Record<keyof AccountFormValues, string>>>({});
 
   function handleChange(field: keyof AccountFormValues, value: string) {
@@ -686,7 +719,7 @@ function AddAccountModal({
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       notify.success('Account added');
       onClose();
-      setValues(EMPTY_FORM);
+      setValues({ ...EMPTY_FORM, currency: defaultCurrency });
     },
     onError: () => notify.error('Failed to add account'),
   });
@@ -702,12 +735,13 @@ function AddAccountModal({
       lastFour: values.lastFour || undefined,
       balance: Number(values.balance),
       currency: values.currency || 'USD',
+      creditLimit: values.type === 'credit_card' && values.creditLimit ? Number(values.creditLimit) : undefined,
     });
   }
 
   function handleClose() {
     onClose();
-    setValues(EMPTY_FORM);
+    setValues({ ...EMPTY_FORM, currency: defaultCurrency });
     setErrors({});
   }
 
@@ -745,6 +779,7 @@ function EditAccountModal({
         lastFour: account.lastFour ?? '',
         balance: String(account.balance),
         currency: account.currency ?? 'USD',
+        creditLimit: account.creditLimit != null ? String(account.creditLimit) : '',
       });
       setErrors({});
     }
@@ -780,6 +815,7 @@ function EditAccountModal({
       lastFour: values.lastFour || undefined,
       balance: Number(values.balance),
       currency: values.currency || 'USD',
+      creditLimit: values.type === 'credit_card' && values.creditLimit ? Number(values.creditLimit) : null,
     });
   }
 
@@ -892,6 +928,20 @@ function AccountDetailDrawer({
                   {detail?.type?.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                   {detail?.currency !== 'USD' ? ` · ${detail?.currency}` : ''}
                 </div>
+                {detail?.type?.toUpperCase() === 'CREDIT_CARD' && detail.creditLimit != null && (
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2">
+                      <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em]">Credit Limit</div>
+                      <div className="text-[0.9375rem] font-semibold text-[var(--color-text)]">{fmtCurrency(detail.creditLimit, detail.currency)}</div>
+                    </div>
+                    <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2">
+                      <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em]">Available</div>
+                      <div className="text-[0.9375rem] font-semibold" style={{ color: (detail.availableCredit ?? 0) < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                        {fmtCurrency(detail.availableCredit ?? 0, detail.currency)}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Balance history chart */}

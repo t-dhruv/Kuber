@@ -647,7 +647,7 @@ function SankeyChart({ data, year, month }: { data?: MonthData; year: number; mo
 
 function HorizontalBar({ pct, color }: { pct: number; color: string }) {
   return (
-    <div style={{ flex: 1, height: 8, backgroundColor: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden', minWidth: 80 }}>
+    <div style={{ flex: 1, height: 8, backgroundColor: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden', minWidth: 40 }}>
       <div style={{
         height: '100%',
         width: `${Math.min(pct, 100)}%`,
@@ -685,11 +685,11 @@ function BarChartView({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
           {incomeCategories.map((cat) => (
             <div key={cat.categoryId} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1rem', width: 20, textAlign: 'center' }}>{cat.categoryIcon ?? ''}</span>
-              <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', minWidth: 120, whiteSpace: 'nowrap' }}>{cat.categoryName}</span>
+              <span style={{ fontSize: '1rem', width: 20, textAlign: 'center', flexShrink: 0 }}>{cat.categoryIcon ?? ''}</span>
+              <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.categoryName}</span>
               <HorizontalBar pct={cat.percent} color="var(--color-success)" />
-              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', minWidth: 72, textAlign: 'right' }}>{fmtCurrency(cat.amount)}</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(cat.percent)}</span>
+              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', flexShrink: 0, textAlign: 'right' }}>{fmtCurrency(cat.amount)}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', flexShrink: 0, textAlign: 'right' }}>{fmtPct(cat.percent)}</span>
             </div>
           ))}
           {incomeCategories.length === 0 && (

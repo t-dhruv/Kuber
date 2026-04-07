@@ -11,18 +11,25 @@ export function generateRawToken(bytes = 40): string {
   return crypto.randomBytes(bytes).toString('hex');
 }
 
+const DEFAULT_REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;    // 7 days
+const REMEMBER_ME_REFRESH_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+export { DEFAULT_REFRESH_TTL_MS, REMEMBER_ME_REFRESH_TTL_MS };
+
 // Create a refresh token row, returns the raw (unhashed) token to set as a cookie
 export async function createRefreshToken(
   userId: string,
   familyId?: string,
+  rememberMe = false,
 ): Promise<{ rawToken: string; familyId: string }> {
   const rawToken = generateRawToken();
   const tokenHash = hashToken(rawToken);
   const family = familyId ?? crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const ttlMs = rememberMe ? REMEMBER_ME_REFRESH_TTL_MS : DEFAULT_REFRESH_TTL_MS;
+  const expiresAt = new Date(Date.now() + ttlMs);
 
   await prisma.refreshToken.create({
-    data: { tokenHash, familyId: family, userId, expiresAt },
+    data: { tokenHash, familyId: family, userId, expiresAt, rememberMe },
   });
 
   return { rawToken, familyId: family };
