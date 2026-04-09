@@ -1,7 +1,27 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
+
+const VALID_GOAL_TYPES = ['savings', 'vacation', 'home', 'wedding', 'education', 'car', 'other', 'debt'] as const;
+
+const goalCreateSchema = z.object({
+  name: z.string().min(1),
+  type: z.enum(VALID_GOAL_TYPES),
+  targetAmount: z.number().positive(),
+  currentAmount: z.number().nonnegative().optional(),
+  targetDate: z.string().optional().nullable(),
+  monthlyContribution: z.number().nonnegative().optional(),
+  imageUrl: z.string().optional().nullable(),
+  accountId: z.string().optional().nullable(),
+});
+
+const goalUpdateSchema = goalCreateSchema.partial();
+
+const contributeSchema = z.object({
+  amount: z.number().positive(),
+});
 
 const router = Router();
 
@@ -24,7 +44,13 @@ function computeGoalStatus(
     (targetDate.getFullYear() - now.getFullYear()) * 12 +
       (targetDate.getMonth() - now.getMonth()),
   );
-  const projected = monthlyContribution * monthsLeft;
+  if (monthsLeft === 0) return remaining <= 0 ? 'completed' : 'at_risk';
+
+  // Use stored contribution if set; otherwise compute required contribution
+  const effectiveMonthly = monthlyContribution > 0
+    ? monthlyContribution
+    : remaining / monthsLeft;
+  const projected = effectiveMonthly * monthsLeft;
   return projected >= remaining ? 'on_track' : 'at_risk';
 }
 
@@ -76,6 +102,11 @@ function formatGoal(
     );
   }
 
+  // Compute required monthly contribution to hit target on time
+  const requiredMonthly = monthsRemaining && monthsRemaining > 0 && !isCompleted
+    ? Math.round((remaining / monthsRemaining) * 100) / 100
+    : 0;
+
   return {
     id: g.id,
     name: g.name,
@@ -84,6 +115,7 @@ function formatGoal(
     currentAmount: effectiveCurrent,
     targetDate: g.targetDate ? g.targetDate.toISOString() : null,
     monthlyContribution: g.monthlyContribution,
+    requiredMonthly,
     imageUrl: g.imageUrl,
     accountId: g.accountId ?? null,
     isCompleted,
@@ -162,26 +194,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const {
-      name,
-      type,
-      targetAmount,
-      currentAmount,
-      targetDate,
-      monthlyContribution,
-      imageUrl,
-      accountId,
-    } = req.body;
-
-    if (!name || !type || targetAmount === undefined) {
-      return res.status(400).json({ error: 'name, type, and targetAmount are required' });
-    }
-
-    const validTypes = ['savings', 'vacation', 'home', 'wedding', 'education', 'car', 'other', 'debt'];
-    const normalizedType = typeof type === 'string' ? type.toLowerCase() : type;
-    if (!validTypes.includes(normalizedType)) {
-      return res.status(400).json({ error: `type must be one of: ${validTypes.join(', ')}` });
-    }
+    const parse = goalCreateSchema.safeParse({ ...req.body, type: typeof req.body.type === 'string' ? req.body.type.toLowerCase() : req.body.type });
+    if (!parse.success) return res.status(400).json({ error: parse.error.errors[0]?.message });
+    const { name, type: normalizedType, targetAmount, currentAmount, targetDate, monthlyContribution, imageUrl, accountId } = parse.data;
 
     let linkedAccount: LinkedAccount | null = null;
     if (accountId) {
@@ -198,10 +213,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         householdId,
         name,
         type: normalizedType,
-        targetAmount: parseFloat(targetAmount),
-        currentAmount: currentAmount !== undefined ? parseFloat(currentAmount) : 0,
+        targetAmount,
+        currentAmount: currentAmount ?? 0,
         targetDate: targetDate ? new Date(targetDate) : null,
-        monthlyContribution: monthlyContribution !== undefined ? parseFloat(monthlyContribution) : 0,
+        monthlyContribution: monthlyContribution ?? 0,
         imageUrl: imageUrl ?? null,
         accountId: accountId ?? null,
       },
@@ -225,16 +240,9 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (!existing) return res.status(404).json({ error: 'Not found' });
     if (existing.householdId !== householdId) return res.status(403).json({ error: 'Forbidden' });
 
-    const {
-      name,
-      type,
-      targetAmount,
-      currentAmount,
-      targetDate,
-      monthlyContribution,
-      imageUrl,
-      accountId,
-    } = req.body;
+    const parse = goalUpdateSchema.safeParse({ ...req.body, type: typeof req.body.type === 'string' ? req.body.type.toLowerCase() : req.body.type });
+    if (!parse.success) return res.status(400).json({ error: parse.error.errors[0]?.message });
+    const { name, type, targetAmount, currentAmount, targetDate, monthlyContribution, imageUrl, accountId } = parse.data;
 
     let linkedAccount: LinkedAccount | null = null;
     if (accountId && accountId !== existing.accountId) {
@@ -257,11 +265,11 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       where: { id },
       data: {
         ...(name !== undefined && { name }),
-        ...(type !== undefined && { type: typeof type === 'string' ? type.toLowerCase() : type }),
-        ...(targetAmount !== undefined && { targetAmount: parseFloat(targetAmount) }),
-        ...(currentAmount !== undefined && { currentAmount: parseFloat(currentAmount) }),
+        ...(type !== undefined && { type }),
+        ...(targetAmount !== undefined && { targetAmount }),
+        ...(currentAmount !== undefined && { currentAmount }),
         ...(targetDate !== undefined && { targetDate: targetDate ? new Date(targetDate) : null }),
-        ...(monthlyContribution !== undefined && { monthlyContribution: parseFloat(monthlyContribution) }),
+        ...(monthlyContribution !== undefined && { monthlyContribution }),
         ...(imageUrl !== undefined && { imageUrl: imageUrl ?? null }),
         ...(accountId !== undefined && { accountId: accountId ?? null }),
       },
@@ -300,11 +308,9 @@ router.post('/:id/contribute', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const { id } = req.params;
-    const { amount } = req.body;
-
-    if (amount === undefined || typeof amount !== 'number' || amount <= 0) {
-      return res.status(400).json({ error: 'amount must be a positive number' });
-    }
+    const parse = contributeSchema.safeParse(req.body);
+    if (!parse.success) return res.status(400).json({ error: parse.error.errors[0]?.message });
+    const { amount } = parse.data;
 
     const existing = await prisma.goal.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Not found' });

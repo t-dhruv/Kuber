@@ -52,7 +52,7 @@ router.put('/me', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    return res.json({ data: { user: toUserDto(updated, req.householdId!) } });
+    return res.json(toUserDto(updated, req.householdId!));
   } catch (err) {
     console.error('[users/me PUT]', err);
     return res.status(500).json({ error: 'Internal server error' });

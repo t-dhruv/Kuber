@@ -355,7 +355,7 @@ function RecurringModal({
           </div>
         </div>
         <ModalFooter>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={isPending}>{editing ? 'Save' : 'Add'}</Button>
         </ModalFooter>
       </form>
@@ -926,6 +926,98 @@ function CalendarView({
   );
 }
 
+// ─── Detected Subscriptions Banner ───────────────────────────────────────────
+
+interface DetectedSubscription {
+  name: string;
+  amount: number;
+  frequency: Frequency;
+  nextDate: string;
+}
+
+function DetectedSubscriptionsBanner({ onAdded }: { onAdded: () => void }) {
+  const qc = useQueryClient();
+  const [dismissed, setDismissed] = useState(false);
+  const [pending, setPending] = useState<Set<string>>(new Set());
+
+  const { data: detected = [] } = useQuery<DetectedSubscription[]>({
+    queryKey: ['recurring-detect'],
+    queryFn: () => api.post('/recurring/detect').then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const addMut = useMutation({
+    mutationFn: (item: DetectedSubscription) => api.post('/recurring', item).then((r) => r.data),
+    onSuccess: (_data, item) => {
+      qc.invalidateQueries({ queryKey: ['recurring-monthly'] });
+      qc.invalidateQueries({ queryKey: ['recurring-all'] });
+      qc.setQueryData<DetectedSubscription[]>(['recurring-detect'], (prev) =>
+        (prev ?? []).filter((d) => d.name !== item.name || d.amount !== item.amount)
+      );
+      setPending((p) => { const n = new Set(p); n.delete(`${item.name}${item.amount}`); return n; });
+      notify.success(`Added ${item.name}`);
+      onAdded();
+    },
+    onError: (_err, item) => {
+      setPending((p) => { const n = new Set(p); n.delete(`${item.name}${item.amount}`); return n; });
+      notify.error('Failed to add item');
+    },
+  });
+
+  if (dismissed || detected.length === 0) return null;
+
+  function handleAdd(item: DetectedSubscription) {
+    const key = `${item.name}${item.amount}`;
+    setPending((p) => new Set(p).add(key));
+    addMut.mutate(item);
+  }
+
+  return (
+    <div className="mb-4 p-4 rounded-[var(--radius-lg)] border border-[var(--color-accent)] bg-[var(--color-surface)]">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <p className="text-sm font-semibold text-[var(--color-text)] m-0">
+          We detected {detected.length} potential subscription{detected.length > 1 ? 's' : ''}
+        </p>
+        <button
+          onClick={() => setDismissed(true)}
+          className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] leading-none p-0 shrink-0"
+          aria-label="Dismiss"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="flex flex-col gap-2">
+        {detected.map((item) => {
+          const key = `${item.name}${item.amount}`;
+          return (
+            <div key={key} className="flex items-center justify-between gap-3 py-1.5 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface-hover)]">
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-medium text-[var(--color-text)] truncate">{item.name}</span>
+                <span className="text-xs text-[var(--color-text-muted)]">
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(item.amount))} · {FREQUENCY_LABELS[item.frequency]}
+                </span>
+              </div>
+              <button
+                onClick={() => handleAdd(item)}
+                disabled={pending.has(key)}
+                className="shrink-0 py-1 px-3 rounded-[var(--radius-sm)] border-none cursor-pointer text-xs font-semibold bg-[var(--color-accent)] text-white disabled:opacity-50"
+              >
+                {pending.has(key) ? 'Adding…' : 'Add'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <button
+        onClick={() => setDismissed(true)}
+        className="mt-3 bg-transparent border-none cursor-pointer text-xs text-[var(--color-text-muted)] underline p-0"
+      >
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
 // ─── Delete Confirm Modal ─────────────────────────────────────────────────────
 
 function DeleteConfirmModal({
@@ -955,7 +1047,7 @@ function DeleteConfirmModal({
         Delete <strong>{item?.name}</strong>? This cannot be undone.
       </p>
       <ModalFooter>
-        <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+        <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
         <Button variant="danger" loading={deleteMut.isPending} onClick={() => deleteMut.mutate()}>Delete</Button>
       </ModalFooter>
     </Modal>
@@ -1068,6 +1160,8 @@ export default function RecurringPage() {
           Add recurring
         </Button>
       </div>
+
+      <DetectedSubscriptionsBanner onAdded={() => qc.invalidateQueries({ queryKey: ['recurring-all'] })} />
 
       {/* Content */}
       {view === 'monthly' ? (

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   User, Monitor, Bell, Shield, Home, Tag, Database, CreditCard,
   Pencil, Trash2, Plus, ChevronDown, ChevronRight, Upload, ShieldCheck, ShieldOff, Mail, Bot,
-  CheckCircle2, XCircle, Receipt, Zap,
+  CheckCircle2, XCircle, Receipt, Zap, Globe, Eye, EyeOff,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
@@ -120,7 +120,8 @@ type NavSection =
   | 'data'
   | 'billing'
   | 'tax-accounts'
-  | 'automation';
+  | 'automation'
+  | 'webhooks';
 
 const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'profile', label: 'Profile', icon: <User size={16} /> },
@@ -137,6 +138,7 @@ const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'billing', label: 'Billing', icon: <CreditCard size={16} /> },
   { id: 'tax-accounts', label: 'Tax Accounts', icon: <Receipt size={16} /> },
   { id: 'automation', label: 'Automation', icon: <Zap size={16} /> },
+  { id: 'webhooks', label: 'Webhooks', icon: <Globe size={16} /> },
 ];
 
 // ─── Section: Profile ─────────────────────────────────────────────────────────
@@ -355,23 +357,117 @@ const DEFAULT_NOTIF_PREFS: NotificationPrefs = {
   weeklyDigest: { inApp: true, email: true, push: false },
 };
 
+function PushSubscriptionButton() {
+  const [status, setStatus] = useState<'unknown' | 'subscribed' | 'unsubscribed' | 'unsupported'>('unknown');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setStatus('unsupported');
+      return;
+    }
+    navigator.serviceWorker.ready.then(async (reg) => {
+      const sub = await reg.pushManager.getSubscription();
+      setStatus(sub ? 'subscribed' : 'unsubscribed');
+    }).catch(() => setStatus('unsubscribed'));
+  }, []);
+
+  async function subscribe() {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/push/vapid-public-key');
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: data.publicKey,
+      });
+      const json = sub.toJSON();
+      await api.post('/push/subscribe', {
+        endpoint: json.endpoint,
+        keys: { p256dh: json.keys?.p256dh, auth: json.keys?.auth },
+      });
+      setStatus('subscribed');
+      notify.success('Push notifications enabled');
+    } catch (err: any) {
+      notify.error(err?.response?.data?.error ?? 'Could not enable push notifications');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function unsubscribe() {
+    setLoading(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await api.delete('/push/unsubscribe', { data: { endpoint: sub.endpoint } });
+        await sub.unsubscribe();
+      }
+      setStatus('unsubscribed');
+      notify.success('Push notifications disabled');
+    } catch {
+      notify.error('Failed to unsubscribe');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (status === 'unsupported') return null;
+  if (status === 'unknown') return null;
+
+  return (
+    <div className="flex items-center justify-between px-3 py-3 border border-[var(--color-border)] rounded-[var(--radius-lg)] bg-[var(--color-surface)]">
+      <div>
+        <div className="text-sm font-medium text-[var(--color-text)]">Browser push notifications</div>
+        <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
+          {status === 'subscribed' ? 'This browser will receive push notifications.' : 'Subscribe to receive push alerts on this device.'}
+        </div>
+      </div>
+      <Button
+        variant={status === 'subscribed' ? 'secondary' : 'primary'}
+        size="sm"
+        loading={loading}
+        onClick={status === 'subscribed' ? unsubscribe : subscribe}
+      >
+        {status === 'subscribed' ? 'Unsubscribe' : 'Enable'}
+      </Button>
+    </div>
+  );
+}
+
 function NotificationsSection() {
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_NOTIF_PREFS);
+  const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number | null>(null);
+  const [lowBalanceInput, setLowBalanceInput] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lowBalanceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data, isLoading } = useQuery<{ preferences: NotificationPrefs }>({
+  const { data, isLoading } = useQuery<{ preferences: NotificationPrefs & { lowBalanceThreshold?: number | null } }>({
     queryKey: ['settings', 'notifications'],
     queryFn: () => api.get('/settings/notifications').then((r) => r.data),
   });
 
   useEffect(() => {
-    if (data?.preferences) setPrefs(data.preferences);
+    if (data?.preferences) {
+      const { lowBalanceThreshold: lbt, ...rest } = data.preferences as NotificationPrefs & { lowBalanceThreshold?: number | null };
+      setPrefs(rest as NotificationPrefs);
+      const threshold = lbt ?? null;
+      setLowBalanceThreshold(threshold);
+      if (threshold != null) setLowBalanceInput(String(threshold));
+    }
   }, [data]);
 
   const saveMutation = useMutation({
     mutationFn: (updated: NotificationPrefs) =>
       api.put('/settings/notifications', { preferences: updated }),
     onError: () => notify.error('Failed to save notification preferences'),
+  });
+
+  const saveLowBalanceMutation = useMutation({
+    mutationFn: (threshold: number | null) =>
+      api.put('/settings/notifications', { lowBalanceThreshold: threshold }),
+    onError: () => notify.error('Failed to save low balance threshold'),
   });
 
   function togglePref(key: NotifKey, channel: NotifChannel) {
@@ -384,6 +480,23 @@ function NotificationsSection() {
       debounceRef.current = setTimeout(() => saveMutation.mutate(updated), 500);
       return updated;
     });
+  }
+
+  function toggleLowBalance(enabled: boolean) {
+    const threshold = enabled ? (parseFloat(lowBalanceInput) || 100) : null;
+    if (enabled) setLowBalanceInput(String(threshold));
+    setLowBalanceThreshold(threshold);
+    saveLowBalanceMutation.mutate(threshold);
+  }
+
+  function handleLowBalanceAmount(val: string) {
+    setLowBalanceInput(val);
+    const parsed = parseFloat(val);
+    if (!isNaN(parsed) && parsed >= 0) {
+      setLowBalanceThreshold(parsed);
+      if (lowBalanceDebounceRef.current) clearTimeout(lowBalanceDebounceRef.current);
+      lowBalanceDebounceRef.current = setTimeout(() => saveLowBalanceMutation.mutate(parsed), 500);
+    }
   }
 
   // Group rows by their group label
@@ -411,6 +524,8 @@ function NotificationsSection() {
   return (
     <div>
       <SectionHeader title="Notifications" description="Choose what you want to be notified about." />
+
+      <PushSubscriptionButton />
 
       <div className="flex flex-col gap-0">
         {Object.entries(groups).map(([groupName, rows]) => (
@@ -448,6 +563,39 @@ function NotificationsSection() {
             ))}
           </div>
         ))}
+
+        {/* Low balance alert */}
+        <div>
+          <div className="px-3 pt-3.5 pb-1.5 text-[0.6875rem] font-bold text-[var(--color-text-muted)] tracking-[0.06em] uppercase">
+            ALERTS
+          </div>
+          <div className="flex items-center border-t border-[var(--color-border)] px-3 py-2.5 gap-3">
+            <div className="flex-1 text-sm text-[var(--color-text)]">Low balance alert</div>
+            <div className="flex items-center gap-2">
+              {lowBalanceThreshold != null && (
+                <div className="flex items-center gap-1">
+                  <span className="text-sm text-[var(--color-text-muted)]">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={lowBalanceInput}
+                    onChange={(e) => handleLowBalanceAmount(e.target.value)}
+                    className="w-20 text-sm border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 bg-[var(--color-surface)] text-[var(--color-text)]"
+                    aria-label="Low balance threshold amount"
+                  />
+                </div>
+              )}
+              <input
+                type="checkbox"
+                checked={lowBalanceThreshold != null}
+                onChange={(e) => toggleLowBalance(e.target.checked)}
+                className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer"
+                aria-label="Enable low balance alert"
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -556,7 +704,7 @@ function TwoFactorCard() {
               Can't scan? Enter this key manually: <code className="select-all">{qrData.secret}</code>
             </p>
             <div className="flex gap-3 justify-end">
-              <Button variant="secondary" onClick={() => { setStep('idle'); setQrData(null); }}>Cancel</Button>
+              <Button variant="ghost" onClick={() => { setStep('idle'); setQrData(null); }}>Cancel</Button>
               <Button variant="primary" onClick={() => setStep('confirm')}>Next</Button>
             </div>
           </div>
@@ -644,7 +792,7 @@ function TwoFactorCard() {
             error={disableError || undefined}
           />
           <ModalFooter>
-            <Button variant="secondary" onClick={() => { setDisableModalOpen(false); setDisablePassword(''); }}>Cancel</Button>
+            <Button variant="ghost" onClick={() => { setDisableModalOpen(false); setDisablePassword(''); }}>Cancel</Button>
             <Button
               variant="danger"
               loading={disableMutation.isPending}
@@ -668,7 +816,8 @@ function SecuritySection() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [pwError, setPwError] = useState('');
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteInput, setDeleteInput] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const clearAuth = useAuthStore((s) => s.clearAuth);
 
   const passwordMutation = useMutation({
     mutationFn: () => api.put('/settings/password', { currentPassword, newPassword }),
@@ -695,11 +844,20 @@ function SecuritySection() {
     passwordMutation.mutate();
   }
 
+  const deleteMutation = useMutation({
+    mutationFn: () => api.delete('/settings/account', { data: { confirmPassword: deletePassword } }),
+    onSuccess: () => {
+      notify.success('Account deleted');
+      clearAuth();
+    },
+    onError: (err: { response?: { data?: { error?: string } } }) => {
+      notify.error(err.response?.data?.error ?? 'Failed to delete account');
+    },
+  });
+
   function handleDeleteConfirm() {
-    if (deleteInput !== 'DELETE') return;
-    setDeleteModalOpen(false);
-    setDeleteInput('');
-    notify.info('Account deletion requires contacting support.');
+    if (!deletePassword) return;
+    deleteMutation.mutate();
   }
 
   return (
@@ -770,27 +928,30 @@ function SecuritySection() {
       {/* Delete confirmation modal */}
       <Modal
         open={deleteModalOpen}
-        onClose={() => { setDeleteModalOpen(false); setDeleteInput(''); }}
+        onClose={() => { setDeleteModalOpen(false); setDeletePassword(''); }}
         title="Delete Account"
         description="This action is permanent and cannot be undone."
         size="sm"
       >
         <div className="flex flex-col gap-4">
           <p className="text-sm text-[var(--color-text)]">
-            Type <strong>DELETE</strong> to confirm.
+            Enter your password to permanently delete your account and all associated data.
           </p>
           <Input
-            value={deleteInput}
-            onChange={(e) => setDeleteInput(e.target.value)}
-            placeholder="DELETE"
+            label="Password"
+            type="password"
+            value={deletePassword}
+            onChange={(e) => setDeletePassword(e.target.value)}
+            autoComplete="current-password"
           />
           <ModalFooter>
-            <Button variant="secondary" onClick={() => { setDeleteModalOpen(false); setDeleteInput(''); }}>
+            <Button variant="secondary" onClick={() => { setDeleteModalOpen(false); setDeletePassword(''); }}>
               Cancel
             </Button>
             <Button
               variant="danger"
-              disabled={deleteInput !== 'DELETE'}
+              disabled={!deletePassword || deleteMutation.isPending}
+              loading={deleteMutation.isPending}
               onClick={handleDeleteConfirm}
             >
               Delete my account
@@ -1020,7 +1181,7 @@ function HouseholdSection() {
           Remove <strong>{removeTarget ? `${removeTarget.firstName} ${removeTarget.lastName}`.trim() : ''}</strong> from the household?
         </p>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setRemoveTarget(null)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setRemoveTarget(null)}>Cancel</Button>
           <Button
             variant="danger"
             loading={removeMutation.isPending}
@@ -1503,7 +1664,7 @@ function CategoriesSection() {
             error={catError || undefined}
           />
           <ModalFooter>
-            <Button variant="secondary" onClick={closeModal}>Cancel</Button>
+            <Button variant="ghost" onClick={closeModal}>Cancel</Button>
             <Button
               variant="primary"
               loading={createMutation.isPending || updateMutation.isPending}
@@ -1526,7 +1687,7 @@ function CategoriesSection() {
           Delete <strong>{deleteTarget?.emoji} {deleteTarget?.name}</strong>? This cannot be undone.
         </p>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
           <Button
             variant="danger"
             loading={deleteMutation.isPending}
@@ -1729,7 +1890,7 @@ function TagsSection() {
             </div>
           </div>
           <ModalFooter>
-            <Button variant="secondary" onClick={closeModal}>Cancel</Button>
+            <Button variant="ghost" onClick={closeModal}>Cancel</Button>
             <Button
               variant="primary"
               loading={createMutation.isPending || updateMutation.isPending}
@@ -1752,7 +1913,7 @@ function TagsSection() {
           This tag will be removed from all transactions. Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
         </p>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
           <Button
             variant="danger"
             loading={deleteMutation.isPending}
@@ -1958,7 +2119,7 @@ function MerchantsSection() {
           Are you sure you want to remove <strong>{deleteTarget?.displayName}</strong>?
         </p>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
           <Button
             variant="danger"
             loading={deleteMutation.isPending}
@@ -2409,6 +2570,16 @@ function DataSection() {
                 Download CSV
               </Button>
             </div>
+            <div className="h-px bg-[var(--color-border)]" />
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-[var(--color-text)]">All Data</div>
+                <div className="text-xs text-[var(--color-text-muted)]">Export all your financial data as a multi-sheet Excel workbook</div>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => downloadFile('/settings/export', `kuber-export-${new Date().toISOString().split('T')[0]}.xlsx`)}>
+                Export All
+              </Button>
+            </div>
           </div>
         </Card>
 
@@ -2457,7 +2628,7 @@ function DataSection() {
           All transactions before <strong>{cleanStartDate}</strong> will be permanently deleted.
         </p>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setDeleteHistoryModalOpen(false)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setDeleteHistoryModalOpen(false)}>Cancel</Button>
           <Button variant="danger" onClick={handleDeleteHistory} disabled={deleteMutation.isPending}>
             {deleteMutation.isPending ? 'Deleting…' : 'Delete history'}
           </Button>
@@ -2468,6 +2639,202 @@ function DataSection() {
 }
 
 // ─── Section: Billing ─────────────────────────────────────────────────────────
+
+// ─── Section: Webhooks ────────────────────────────────────────────────────────
+
+const WEBHOOK_EVENTS = [
+  'transaction.created',
+  'transaction.updated',
+  'transaction.deleted',
+  'goal.created',
+  'goal.updated',
+] as const;
+
+type WebhookEventType = typeof WEBHOOK_EVENTS[number];
+
+interface WebhookItem {
+  id: string;
+  name: string;
+  url: string;
+  events: WebhookEventType[];
+  secret?: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+const emptyWebhookForm = { name: '', url: '', events: [] as WebhookEventType[], secret: '', isActive: true };
+
+function WebhooksSection() {
+  const queryClient = useQueryClient();
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<WebhookItem | null>(null);
+  const [form, setForm] = useState(emptyWebhookForm);
+  const [showSecret, setShowSecret] = useState(false);
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  const { data: webhooks = [], isLoading } = useQuery<WebhookItem[]>({
+    queryKey: ['webhooks'],
+    queryFn: () => api.get('/webhooks').then((r) => r.data),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (data: typeof emptyWebhookForm) =>
+      editing
+        ? api.put(`/webhooks/${editing.id}`, data).then((r) => r.data)
+        : api.post('/webhooks', data).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['webhooks'] });
+      setShowModal(false);
+      setEditing(null);
+      setForm(emptyWebhookForm);
+      notify.success(editing ? 'Webhook updated' : 'Webhook created');
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to save webhook'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/webhooks/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['webhooks'] });
+      notify.success('Webhook deleted');
+    },
+  });
+
+  async function testWebhook(id: string) {
+    setTestingId(id);
+    try {
+      const { data } = await api.post(`/webhooks/${id}/test`);
+      notify.success(`Ping sent — server responded ${data.status}`);
+    } catch (err: any) {
+      notify.error(err?.response?.data?.error ?? 'Delivery failed');
+    } finally {
+      setTestingId(null);
+    }
+  }
+
+  function openAdd() {
+    setEditing(null);
+    setForm(emptyWebhookForm);
+    setShowSecret(false);
+    setShowModal(true);
+  }
+
+  function openEdit(hook: WebhookItem) {
+    setEditing(hook);
+    setForm({ name: hook.name, url: hook.url, events: hook.events, secret: hook.secret ?? '', isActive: hook.isActive });
+    setShowSecret(false);
+    setShowModal(true);
+  }
+
+  function toggleEvent(ev: WebhookEventType) {
+    setForm((f) => ({
+      ...f,
+      events: f.events.includes(ev) ? f.events.filter((e) => e !== ev) : [...f.events, ev],
+    }));
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <SectionHeader
+        title="Webhooks"
+        description="Send real-time HTTP POST notifications to external URLs when events occur in Kuber."
+      />
+
+      <Button variant="primary" icon={<Plus size={14} />} onClick={openAdd} style={{ alignSelf: 'flex-start' }}>
+        Add Webhook
+      </Button>
+
+      {isLoading ? (
+        <div className="flex flex-col gap-2">{[1,2].map((i) => <Skeleton key={i} height={56} />)}</div>
+      ) : webhooks.length === 0 ? (
+        <p className="text-sm text-[var(--color-text-muted)]">No webhooks configured yet.</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {webhooks.map((hook) => (
+            <Card key={hook.id} padding="md">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm text-[var(--color-text)]">{hook.name}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${hook.isActive ? 'bg-[var(--color-success-light,#f0fdf4)] text-[var(--color-success)]' : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'}`}>
+                      {hook.isActive ? 'Active' : 'Paused'}
+                    </span>
+                  </div>
+                  <span className="text-xs text-[var(--color-text-muted)] truncate">{hook.url}</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {hook.events.map((ev) => (
+                      <span key={ev} className="text-[0.6875rem] px-1.5 py-0.5 rounded bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border)]">{ev}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button variant="ghost" size="sm" onClick={() => testWebhook(hook.id)} loading={testingId === hook.id}>Test</Button>
+                  <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(hook)} />
+                  <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => deleteMutation.mutate(hook.id)} />
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Modal open={showModal} onClose={() => { setShowModal(false); setEditing(null); }} title={editing ? 'Edit Webhook' : 'Add Webhook'} size="md">
+        <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(form); }}>
+          <div className="flex flex-col gap-4 p-1">
+            <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="My webhook" />
+            <Input label="URL" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://example.com/hook" />
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text)] mb-2">Events</label>
+              <div className="flex flex-wrap gap-2">
+                {WEBHOOK_EVENTS.map((ev) => (
+                  <button
+                    key={ev}
+                    type="button"
+                    onClick={() => toggleEvent(ev)}
+                    className="text-xs px-2.5 py-1 rounded-full border transition-colors"
+                    style={{
+                      background: form.events.includes(ev) ? 'var(--color-accent)' : 'var(--color-surface-hover)',
+                      color: form.events.includes(ev) ? '#fff' : 'var(--color-text-secondary)',
+                      borderColor: form.events.includes(ev) ? 'var(--color-accent)' : 'var(--color-border)',
+                    }}
+                  >
+                    {ev}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="relative">
+              <Input
+                label="Signing secret (optional)"
+                type={showSecret ? 'text' : 'password'}
+                value={form.secret}
+                onChange={(e) => setForm((f) => ({ ...f, secret: e.target.value }))}
+                placeholder="Leave blank to skip signature"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSecret((s) => !s)}
+                className="absolute right-2 top-8 text-[var(--color-text-muted)] bg-transparent border-none cursor-pointer"
+              >
+                {showSecret ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={form.isActive} onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))} className="accent-[var(--color-accent)]" />
+              <span className="text-[var(--color-text)]">Active</span>
+            </label>
+          </div>
+          <ModalFooter>
+            <Button variant="ghost" type="button" onClick={() => { setShowModal(false); setEditing(null); }}>Cancel</Button>
+            <Button variant="primary" type="submit" loading={saveMutation.isPending} disabled={!form.name || !form.url || form.events.length === 0}>
+              {editing ? 'Save Changes' : 'Create Webhook'}
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
+    </div>
+  );
+}
 
 function BillingSection() {
   return (
@@ -2543,6 +2910,7 @@ export default function SettingsPage() {
       case 'billing': return <BillingSection />;
       case 'tax-accounts': return <TaxAccountsSection />;
       case 'automation': return <AutomationSection />;
+      case 'webhooks': return <WebhooksSection />;
     }
   }
 

@@ -18,6 +18,8 @@ import { detectBankFormat, mapRowToTransaction } from '../lib/bankFormats.js';
 import { computeDedupHash, markDuplicates } from '../lib/importDedup.js';
 import { parsePdfStatement } from '../lib/pdfParser.js';
 import { parseDate } from '../lib/dateUtils.js';
+import { detectColumnMapping } from '../lib/csvColumnDetector.js';
+import { detectLocaleFormat, parseAmount, mergeDebitCredit } from '../lib/amountParser.js';
 
 const router = Router();
 
@@ -210,6 +212,178 @@ function extractTicker(description: string): string | null {
   const match = description.match(/\b([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\b/);
   return match?.[1] ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/import/detect-mapping
+// Upload CSV → fuzzy-detect column mapping → return mapping + sample rows
+// No DB writes. Used by the UI mapping confirmation step.
+// ---------------------------------------------------------------------------
+router.post('/detect-mapping', upload.single('file'), async (req: AuthRequest, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const ext = req.file.originalname.split('.').pop()?.toLowerCase();
+  if (ext !== 'csv') return res.status(400).json({ error: 'Only CSV files are supported for mapping detection' });
+
+  try {
+    const text = req.file.buffer.toString('utf-8');
+    const rows = parseCSV(text);
+    if (rows.length < 2) return res.status(400).json({ error: 'CSV must have at least a header row and one data row' });
+
+    const headers = rows[0];
+    const sampleRows = rows.slice(1, 6); // up to 5 data rows for preview
+
+    // Fuzzy column detection
+    const detection = detectColumnMapping(headers);
+
+    // Detect amount locale from amount/debit/credit column samples
+    const amountField = detection.mappings.find((m) => m.field === 'amount' || m.field === 'debit' || m.field === 'credit');
+    const amountSamples = amountField
+      ? sampleRows.map((r) => r[headers.indexOf(amountField.csvHeader)] ?? '').filter(Boolean)
+      : [];
+    const localeFormat = detectLocaleFormat(amountSamples);
+
+    // Parse sample rows using detected mapping
+    const dateField = detection.mappings.find((m) => m.field === 'date');
+    const descField = detection.mappings.find((m) => m.field === 'description');
+    const debitField = detection.mappings.find((m) => m.field === 'debit');
+    const creditField = detection.mappings.find((m) => m.field === 'credit');
+    const singleAmtField = detection.mappings.find((m) => m.field === 'amount');
+
+    const preview = sampleRows.map((row) => {
+      const get = (header: string) => row[headers.indexOf(header)] ?? '';
+
+      const rawDate = dateField ? get(dateField.csvHeader) : '';
+      const description = descField ? get(descField.csvHeader) : '';
+
+      let amount: number | null = null;
+      if (detection.amountStrategy === 'debit-credit' && (debitField || creditField)) {
+        amount = mergeDebitCredit(
+          debitField ? get(debitField.csvHeader) : '',
+          creditField ? get(creditField.csvHeader) : '',
+          localeFormat,
+        );
+      } else if (singleAmtField) {
+        amount = parseAmount(get(singleAmtField.csvHeader), localeFormat);
+      }
+
+      return {
+        rawDate,
+        parsedDate: rawDate ? parseDate(rawDate) : null,
+        description,
+        amount,
+      };
+    });
+
+    return res.json({
+      headers,
+      mappings: detection.mappings,
+      unmapped: detection.unmapped,
+      amountStrategy: detection.amountStrategy,
+      localeFormat,
+      preview,
+    });
+  } catch (err) {
+    console.error('[import/detect-mapping]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/import/parse-with-mapping
+// Upload CSV + confirmed column mapping → parse all rows → dedup flag → preview
+// Used after the user has confirmed/adjusted the mapping from /detect-mapping.
+// ---------------------------------------------------------------------------
+const ParseWithMappingSchema = z.object({
+  accountId: z.string(),
+  dateColumn: z.string(),
+  descriptionColumn: z.string(),
+  amountStrategy: z.enum(['single', 'debit-credit']),
+  amountColumn: z.string().optional(),
+  debitColumn: z.string().optional(),
+  creditColumn: z.string().optional(),
+  localeFormat: z.enum(['us', 'eu']).default('us'),
+});
+
+router.post('/parse-with-mapping', upload.single('file'), async (req: AuthRequest, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const parsed = ParseWithMappingSchema.safeParse(
+    typeof req.body === 'string' ? JSON.parse(req.body) : req.body,
+  );
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+
+  const { accountId, dateColumn, descriptionColumn, amountStrategy, amountColumn, debitColumn, creditColumn, localeFormat } = parsed.data;
+
+  try {
+    const account = await prisma.account.findFirst({
+      where: { id: accountId, householdId: req.householdId! },
+    });
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+
+    const text = req.file.buffer.toString('utf-8');
+    const rows = parseCSV(text);
+    if (rows.length < 2) return res.status(400).json({ error: 'CSV must have at least one data row' });
+
+    const headers = rows[0];
+    const dataRows = rows.slice(1);
+
+    // Fetch existing transactions for dedup (recompute hash from date+desc+amount)
+    const existingTxns = await prisma.transaction.findMany({
+      where: { accountId, householdId: req.householdId!, isHidden: false },
+      select: { date: true, description: true, amount: true },
+    });
+    const hashSet = new Set(
+      existingTxns.map((t) =>
+        computeDedupHash(t.date.toISOString().slice(0, 10), t.description, t.amount)
+      )
+    );
+
+    const get = (row: string[], colName: string) => row[headers.indexOf(colName)] ?? '';
+
+    const parsedRows = dataRows.map((row) => {
+      const rawDate = get(row, dateColumn);
+      const description = get(row, descriptionColumn).trim();
+      const parsedDate = rawDate ? parseDate(rawDate) : null;
+
+      let amount: number | null = null;
+      if (amountStrategy === 'debit-credit') {
+        amount = mergeDebitCredit(
+          debitColumn ? get(row, debitColumn) : '',
+          creditColumn ? get(row, creditColumn) : '',
+          localeFormat,
+        );
+      } else if (amountColumn) {
+        amount = parseAmount(get(row, amountColumn), localeFormat);
+      }
+
+      if (!parsedDate || !description || amount === null || isNaN(amount)) {
+        return { status: 'invalid' as const, rawDate, description, amount: amount ?? 0, hash: '', date: rawDate };
+      }
+
+      const hash = computeDedupHash(parsedDate, description, amount);
+      const status = hashSet.has(hash) ? 'duplicate' as const : 'new' as const;
+
+      return { status, date: parsedDate, description, amount, hash };
+    });
+
+    const newCount = parsedRows.filter((r) => r.status === 'new').length;
+    const dupCount = parsedRows.filter((r) => r.status === 'duplicate').length;
+    const invalidCount = parsedRows.filter((r) => r.status === 'invalid').length;
+
+    return res.json({
+      bankSource: 'custom-mapping',
+      confidence: 100,
+      totalRows: dataRows.length,
+      newCount,
+      dupCount,
+      invalidCount,
+      rows: parsedRows.slice(0, 200),
+    });
+  } catch (err) {
+    console.error('[import/parse-with-mapping]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // POST /api/v1/import/parse

@@ -20,14 +20,23 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   const householdId = req.householdId!;
   const userId = req.userId!;
 
-  const plaintext = crypto.randomBytes(32).toString('hex');
-  const tokenHash = crypto.createHash('sha256').update(plaintext).digest('hex');
+  try {
+    const plaintext = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(plaintext).digest('hex');
 
-  const token = await prisma.apiToken.create({
-    data: { householdId, userId, name, tokenHash, expiresAt: expiresAt ? new Date(expiresAt) : null },
-  });
+    const token = await prisma.apiToken.create({
+      data: { householdId, userId, name, tokenHash, expiresAt: expiresAt ? new Date(expiresAt) : null },
+    });
 
-  return res.status(201).json({ id: token.id, name: token.name, token: plaintext, createdAt: token.createdAt });
+    return res.status(201).json({ id: token.id, name: token.name, token: plaintext, createdAt: token.createdAt });
+  } catch (err: unknown) {
+    const isPrismaUniqueViolation = typeof err === 'object' && err !== null && 'code' in err && (err as { code: string }).code === 'P2002';
+    if (isPrismaUniqueViolation) {
+      return res.status(409).json({ error: 'An API token with this name already exists' });
+    }
+    console.error('[apiTokens/POST]', err);
+    return res.status(500).json({ error: 'Failed to create API token' });
+  }
 });
 
 // GET / — list tokens

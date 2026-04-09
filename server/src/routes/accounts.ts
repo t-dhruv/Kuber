@@ -1,8 +1,66 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
+import multer from 'multer';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
+
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = file.originalname.split('.').pop()?.toLowerCase();
+    if (ext === 'csv') cb(null, true);
+    else cb(new Error('Only CSV files are accepted'));
+  },
+});
+
+// CSV parser (RFC 4180 compliant — handles quoted fields)
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+    if (inQuotes) {
+      if (ch === '"' && next === '"') { field += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { field += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { row.push(field.trim()); field = ''; }
+      else if (ch === '\n' || (ch === '\r' && next === '\n')) {
+        if (ch === '\r') i++;
+        row.push(field.trim()); field = '';
+        if (row.some((c) => c)) rows.push(row);
+        row = [];
+      } else if (ch === '\r') {
+        row.push(field.trim()); field = '';
+        if (row.some((c) => c)) rows.push(row);
+        row = [];
+      } else { field += ch; }
+    }
+  }
+  if (field || row.length > 0) { row.push(field.trim()); if (row.some((c) => c)) rows.push(row); }
+  return rows;
+}
+
+const BULK_ACCOUNT_COLUMNS = ['name', 'type', 'balance', 'institution', 'last_four', 'currency', 'credit_limit', 'exclude_from_net_worth', 'id'] as const;
+
+const bulkRowSchema = z.object({
+  name:                  z.string().min(1),
+  type:                  z.string().min(1),
+  balance:               z.number(),
+  institution:           z.string().optional(),
+  last_four:             z.string().max(4).optional(),
+  currency:              z.string().length(3).default('USD'),
+  credit_limit:          z.number().min(0).optional(),
+  exclude_from_net_worth: z.boolean().default(false),
+  id:                    z.string().optional(), // present → update; absent → create
+});
 
 const router = Router();
 
@@ -455,6 +513,201 @@ router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
     });
   } catch (err) {
     console.error('[accounts/GET /:id/transactions]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── GET /api/v1/accounts/bulk-import/template ────────────────────────────────
+// Returns a CSV template the user can fill in.
+
+router.get('/bulk-import/template', (_req: AuthRequest, res: Response) => {
+  const header = 'name,type,balance,institution,last_four,currency,credit_limit,exclude_from_net_worth,id';
+  const example = [
+    'Chase Checking,CHECKING,2500.00,Chase Bank,4321,USD,,,',
+    'Scotia Visa,CREDIT_CARD,-1200.00,Scotia Bank,8899,CAD,5000,,',
+    'TD Savings,SAVINGS,8000.00,TD Bank,,USD,,,',
+  ].join('\n');
+  setCsvHeaders(res, 'accounts-import-template.csv');
+  return res.send(`${header}\n${example}`);
+});
+
+// ── POST /api/v1/accounts/bulk-import/preview ────────────────────────────────
+// Parses the CSV and returns a preview with per-row validation — no DB writes.
+
+router.post('/bulk-import/preview', csvUpload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const householdId = req.householdId!;
+    const text = req.file.buffer.toString('utf-8');
+    const rows = parseCSV(text);
+    if (rows.length < 2) return res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
+
+    // Normalise header: lowercase + trim + spaces→underscore
+    const header = rows[0].map((h) => h.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_'));
+    const dataRows = rows.slice(1);
+
+    // Fetch existing accounts so we can resolve update targets and detect name conflicts
+    const existingAccounts = await prisma.account.findMany({
+      where: { householdId },
+      select: { id: true, name: true, type: true },
+    });
+    const existingById   = new Map(existingAccounts.map((a) => [a.id, a]));
+    const existingByName = new Map(existingAccounts.map((a) => [a.name.toLowerCase(), a]));
+
+    type RowResult = {
+      rowIndex: number;
+      action:   'create' | 'update' | 'skip';
+      data:     Record<string, unknown>;
+      errors:   string[];
+      warnings: string[];
+    };
+
+    const results: RowResult[] = dataRows.map((cols, idx) => {
+      const raw: Record<string, string> = {};
+      header.forEach((h, i) => { raw[h] = cols[i] ?? ''; });
+
+      const errors: string[]   = [];
+      const warnings: string[] = [];
+
+      // Map raw strings to typed values
+      const parsed: Record<string, unknown> = {
+        name:                  raw.name?.trim(),
+        type:                  raw.type?.trim().toUpperCase().replace(/\s+/g, '_') || undefined,
+        balance:               raw.balance !== '' ? parseFloat(raw.balance) : undefined,
+        institution:           raw.institution?.trim() || undefined,
+        last_four:             raw.last_four?.replace(/\D/g, '').slice(0, 4) || undefined,
+        currency:              raw.currency?.trim().toUpperCase() || 'USD',
+        credit_limit:          raw.credit_limit !== '' && raw.credit_limit ? parseFloat(raw.credit_limit) : undefined,
+        exclude_from_net_worth: raw.exclude_from_net_worth === 'true' || raw.exclude_from_net_worth === '1',
+        id:                    raw.id?.trim() || undefined,
+      };
+
+      const validated = bulkRowSchema.safeParse(parsed);
+      if (!validated.success) {
+        validated.error.errors.forEach((e) => errors.push(`${e.path.join('.')}: ${e.message}`));
+      }
+
+      if (isNaN(parsed.balance as number)) errors.push('balance must be a valid number');
+      if (parsed.type && !VALID_ACCOUNT_TYPES.includes(parsed.type as string)) {
+        errors.push(`type "${parsed.type}" is not valid — must be one of: ${VALID_ACCOUNT_TYPES.join(', ')}`);
+      }
+
+      // Determine action
+      let action: 'create' | 'update' | 'skip' = 'create';
+      if (parsed.id) {
+        if (existingById.has(parsed.id as string)) {
+          action = 'update';
+        } else {
+          errors.push(`id "${parsed.id}" not found in this household`);
+          action = 'skip';
+        }
+      } else {
+        // Check name collision → treat as update suggestion
+        const match = existingByName.get((parsed.name as string)?.toLowerCase());
+        if (match) {
+          warnings.push(`Account named "${parsed.name}" already exists (id: ${match.id}) — will be treated as UPDATE`);
+          parsed.id = match.id;
+          action = 'update';
+        }
+      }
+
+      return { rowIndex: idx + 2, action, data: parsed, errors, warnings };
+    });
+
+    const summary = {
+      total:   results.length,
+      creates: results.filter((r) => r.action === 'create').length,
+      updates: results.filter((r) => r.action === 'update').length,
+      errors:  results.filter((r) => r.errors.length > 0).length,
+    };
+
+    return res.json({ summary, rows: results });
+  } catch (err) {
+    console.error('[accounts/bulk-import/preview]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── POST /api/v1/accounts/bulk-import/confirm ────────────────────────────────
+// Applies validated rows: creates new accounts and updates existing ones.
+
+router.post('/bulk-import/confirm', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+
+    const rowsSchema = z.array(z.object({
+      action: z.enum(['create', 'update']),
+      data:   z.record(z.unknown()),
+    }));
+    const parsed = rowsSchema.safeParse(req.body.rows);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid rows payload' });
+
+    const rows = parsed.data.filter((r) => r.action === 'create' || r.action === 'update');
+    if (rows.length === 0) return res.status(400).json({ error: 'No rows to import' });
+
+    const created: unknown[] = [];
+    const updated: unknown[] = [];
+    const failed:  Array<{ rowIndex?: number; error: string }> = [];
+
+    for (const row of rows) {
+      const d = row.data as Record<string, unknown>;
+      try {
+        const normalizedType = String(d.type ?? '').toUpperCase().replace(/\s+/g, '_');
+
+        if (row.action === 'create') {
+          const account = await prisma.account.create({
+            data: {
+              householdId,
+              name:        String(d.name).trim(),
+              type:        normalizedType,
+              balance:     Number(d.balance),
+              institution: d.institution ? String(d.institution) : null,
+              lastFour:    d.last_four   ? String(d.last_four)   : null,
+              currency:    d.currency    ? String(d.currency)    : 'USD',
+              creditLimit: normalizedType === 'CREDIT_CARD' && d.credit_limit ? Number(d.credit_limit) : null,
+              excludeFromNetWorth: Boolean(d.exclude_from_net_worth),
+            },
+          });
+          logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'ACCOUNT', entityId: account.id, after: { name: account.name, type: account.type, source: 'bulk-import' } });
+          created.push(formatAccount(account));
+        } else {
+          // update
+          const existing = await prisma.account.findUnique({ where: { id: String(d.id) } });
+          if (!existing || existing.householdId !== householdId) {
+            failed.push({ error: `Account ${d.id} not found` });
+            continue;
+          }
+          const updateData: Record<string, unknown> = {};
+          if (d.name        !== undefined) updateData.name        = String(d.name).trim();
+          if (d.balance     !== undefined) updateData.balance     = Number(d.balance);
+          if (d.institution !== undefined) updateData.institution = d.institution ? String(d.institution) : null;
+          if (d.last_four   !== undefined) updateData.lastFour    = d.last_four   ? String(d.last_four)   : null;
+          if (d.currency    !== undefined) updateData.currency    = String(d.currency);
+          if (d.credit_limit !== undefined) {
+            updateData.creditLimit = existing.type === 'CREDIT_CARD' && d.credit_limit ? Number(d.credit_limit) : null;
+          }
+          if (d.exclude_from_net_worth !== undefined) updateData.excludeFromNetWorth = Boolean(d.exclude_from_net_worth);
+
+          const account = await prisma.account.update({ where: { id: String(d.id) }, data: updateData });
+          logAudit({ householdId, userId: req.userId!, action: 'UPDATE', entity: 'ACCOUNT', entityId: account.id, before: { name: existing.name }, after: { name: account.name, source: 'bulk-import' } });
+          updated.push(formatAccount(account));
+        }
+      } catch (rowErr) {
+        console.error('[bulk-import/confirm] row error', rowErr);
+        failed.push({ error: `Failed to ${row.action} account "${d.name}": ${(rowErr as Error).message}` });
+      }
+    }
+
+    return res.json({
+      created: created.length,
+      updated: updated.length,
+      failed:  failed.length,
+      errors:  failed,
+      accounts: [...created, ...updated],
+    });
+  } catch (err) {
+    console.error('[accounts/bulk-import/confirm]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

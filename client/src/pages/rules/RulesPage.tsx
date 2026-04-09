@@ -268,7 +268,7 @@ function RuleBuilderModal({
         )}
 
         <ModalFooter>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button variant="primary" loading={saving} onClick={handleSave}>Save rule</Button>
         </ModalFooter>
       </div>
@@ -541,7 +541,7 @@ export default function RulesPage() {
           Matching transactions will be updated immediately.
         </p>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setApplyTarget(null)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setApplyTarget(null)}>Cancel</Button>
           <Button
             variant="primary"
             loading={applyMutation.isPending}
@@ -566,7 +566,7 @@ export default function RulesPage() {
           Rules are applied in order. This may update many transactions.
         </p>
         <ModalFooter>
-          <Button variant="secondary" onClick={() => setApplyAllConfirm(false)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setApplyAllConfirm(false)}>Cancel</Button>
           <Button
             variant="primary"
             loading={applyAllMutation.isPending}

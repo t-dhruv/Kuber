@@ -1,6 +1,16 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+
+const categoryCreateSchema = z.object({
+  name: z.string().min(1),
+  type: z.string().min(1),
+  emoji: z.string().optional().nullable(),
+  groupId: z.string().optional().nullable(),
+  bucketType: z.string().optional(),
+  isTaxDeductible: z.boolean().optional(),
+});
 
 const router = Router();
 
@@ -36,21 +46,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { name, emoji, type, groupId, bucketType, isTaxDeductible } = req.body as {
-      name?: string;
-      emoji?: string;
-      type?: string;
-      groupId?: string;
-      bucketType?: string;
-      isTaxDeductible?: boolean;
-    };
-
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return res.status(400).json({ error: 'name is required' });
-    }
-    if (!type || typeof type !== 'string') {
-      return res.status(400).json({ error: 'type is required (e.g. expense, income)' });
-    }
+    const parse = categoryCreateSchema.safeParse(req.body);
+    if (!parse.success) return res.status(400).json({ error: parse.error.errors[0]?.message });
+    const { name, emoji, type, groupId, bucketType, isTaxDeductible } = parse.data;
 
     const category = await prisma.category.create({
       data: {

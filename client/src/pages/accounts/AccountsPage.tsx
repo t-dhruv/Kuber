@@ -1,15 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line,
 } from 'recharts';
-import { ChevronDown, ChevronRight, RefreshCw, Plus, MoreHorizontal, Pencil, EyeOff, MinusCircle, Trash2, X, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, Plus, MoreHorizontal, Pencil, EyeOff, MinusCircle, Trash2, X, ExternalLink, Upload } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Card, Button, Input, Select, Modal, ModalFooter, Skeleton, InstitutionLogo, LogoPicker,
 } from '@/components/ui';
 import { notify } from '@/components/ui';
+import { LiabilityDetailPanel } from './components/LiabilityDetailPanel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1107,15 +1109,24 @@ interface ManualAsset {
 }
 
 interface ManualLiability {
-  id: string;
-  name: string;
-  type: string;
-  currentBalance: number;
-  originalAmount: number;
-  interestRate?: number | null;
-  monthlyPayment?: number | null;
-  notes?: string | null;
-  currency: string;
+  id:               string;
+  name:             string;
+  type:             string;
+  currentBalance:   number;
+  originalAmount:   number;
+  interestRate?:    number | null;
+  monthlyPayment?:  number | null;
+  notes?:           string | null;
+  currency:         string;
+  // amortization fields
+  region?:           string | null;
+  rateType?:         string | null;
+  primeRate?:        number | null;
+  primeDiscount?:    number | null;
+  termStartDate?:    string | null;
+  termEndDate?:      string | null;
+  amortizationYears?: number | null;
+  paymentFrequency?: string | null;
 }
 
 const ASSET_TYPES = ['real_estate', 'vehicle', 'crypto', 'collectible', 'other'];
@@ -1125,15 +1136,25 @@ function labelType(t: string) {
   return t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const EMPTY_LIAB_FORM = {
+  name: '', type: 'other', currentBalance: '', originalAmount: '',
+  interestRate: '', monthlyPayment: '', notes: '',
+  // amortization
+  region: 'US', rateType: 'fixed', primeRate: '', primeDiscount: '',
+  termStartDate: '', termEndDate: '', amortizationYears: '', paymentFrequency: 'monthly',
+};
+
 function AssetsLiabilitiesTab() {
   const qc = useQueryClient();
   const [showAssetForm, setShowAssetForm] = useState(false);
   const [showLiabForm, setShowLiabForm] = useState(false);
   const [editAsset, setEditAsset] = useState<ManualAsset | null>(null);
   const [editLiab, setEditLiab] = useState<ManualLiability | null>(null);
+  const [selectedLiab, setSelectedLiab] = useState<ManualLiability | null>(null);
+  const [showAmortFields, setShowAmortFields] = useState(false);
 
   const [assetForm, setAssetForm] = useState({ name: '', type: 'other', currentValue: '', purchaseValue: '', notes: '' });
-  const [liabForm, setLiabForm] = useState({ name: '', type: 'other', currentBalance: '', originalAmount: '', interestRate: '', monthlyPayment: '', notes: '' });
+  const [liabForm, setLiabForm] = useState(EMPTY_LIAB_FORM);
 
   const { data: assets = [], isLoading: assetsLoading } = useQuery<ManualAsset[]>({
     queryKey: ['manual-assets'],
@@ -1182,7 +1203,7 @@ function AssetsLiabilitiesTab() {
   });
 
   function resetAssetForm() { setAssetForm({ name: '', type: 'other', currentValue: '', purchaseValue: '', notes: '' }); setShowAssetForm(false); setEditAsset(null); }
-  function resetLiabForm() { setLiabForm({ name: '', type: 'other', currentBalance: '', originalAmount: '', interestRate: '', monthlyPayment: '', notes: '' }); setShowLiabForm(false); setEditLiab(null); }
+  function resetLiabForm() { setLiabForm(EMPTY_LIAB_FORM); setShowLiabForm(false); setEditLiab(null); setShowAmortFields(false); }
 
   function openEditAsset(a: ManualAsset) {
     setAssetForm({ name: a.name, type: a.type, currentValue: String(a.currentValue), purchaseValue: String(a.purchaseValue ?? ''), notes: a.notes ?? '' });
@@ -1191,7 +1212,19 @@ function AssetsLiabilitiesTab() {
   }
 
   function openEditLiab(l: ManualLiability) {
-    setLiabForm({ name: l.name, type: l.type, currentBalance: String(l.currentBalance), originalAmount: String(l.originalAmount), interestRate: String(l.interestRate ?? ''), monthlyPayment: String(l.monthlyPayment ?? ''), notes: l.notes ?? '' });
+    setLiabForm({
+      name: l.name, type: l.type,
+      currentBalance: String(l.currentBalance), originalAmount: String(l.originalAmount),
+      interestRate: String(l.interestRate ?? ''), monthlyPayment: String(l.monthlyPayment ?? ''),
+      notes: l.notes ?? '',
+      region: l.region ?? 'US', rateType: l.rateType ?? 'fixed',
+      primeRate: String(l.primeRate ?? ''), primeDiscount: String(l.primeDiscount ?? ''),
+      termStartDate: l.termStartDate ? l.termStartDate.slice(0, 10) : '',
+      termEndDate:   l.termEndDate   ? l.termEndDate.slice(0, 10)   : '',
+      amortizationYears: String(l.amortizationYears ?? ''),
+      paymentFrequency: l.paymentFrequency ?? 'monthly',
+    });
+    setShowAmortFields(!!(l.region || l.amortizationYears || l.rateType));
     setEditLiab(l);
     setShowLiabForm(true);
   }
@@ -1209,15 +1242,27 @@ function AssetsLiabilitiesTab() {
   }
 
   function submitLiab() {
-    const payload = {
-      name: liabForm.name,
-      type: liabForm.type,
+    const payload: Record<string, unknown> = {
+      name:           liabForm.name,
+      type:           liabForm.type,
       currentBalance: parseFloat(liabForm.currentBalance) || 0,
       originalAmount: parseFloat(liabForm.originalAmount) || 0,
-      ...(liabForm.interestRate ? { interestRate: parseFloat(liabForm.interestRate) } : {}),
-      ...(liabForm.monthlyPayment ? { monthlyPayment: parseFloat(liabForm.monthlyPayment) } : {}),
-      ...(liabForm.notes ? { notes: liabForm.notes } : {}),
+      ...(liabForm.interestRate    ? { interestRate:   parseFloat(liabForm.interestRate) }   : {}),
+      ...(liabForm.monthlyPayment  ? { monthlyPayment: parseFloat(liabForm.monthlyPayment) } : {}),
+      ...(liabForm.notes           ? { notes: liabForm.notes }                               : {}),
     };
+    if (showAmortFields) {
+      payload.region   = liabForm.region || 'US';
+      payload.rateType = liabForm.rateType || 'fixed';
+      payload.paymentFrequency = liabForm.paymentFrequency || 'monthly';
+      if (liabForm.amortizationYears) payload.amortizationYears = parseInt(liabForm.amortizationYears, 10);
+      if (liabForm.termStartDate)     payload.termStartDate = new Date(liabForm.termStartDate).toISOString();
+      if (liabForm.termEndDate)       payload.termEndDate   = new Date(liabForm.termEndDate).toISOString();
+      if (liabForm.rateType === 'variable') {
+        if (liabForm.primeRate)     payload.primeRate     = parseFloat(liabForm.primeRate);
+        if (liabForm.primeDiscount) payload.primeDiscount = parseFloat(liabForm.primeDiscount);
+      }
+    }
     if (editLiab) updateLiab.mutate({ id: editLiab.id, ...payload });
     else createLiab.mutate(payload);
   }
@@ -1275,18 +1320,36 @@ function AssetsLiabilitiesTab() {
         {liabsLoading ? <Skeleton height={60} /> : liabilities.length === 0 ? (
           <p className="text-[var(--color-text-muted)] text-sm m-0">No manual liabilities yet. Add mortgages, loans, or other debts.</p>
         ) : liabilities.map((l) => (
-          <div key={l.id} className="flex items-center justify-between py-2.5 border-b border-[var(--color-border)]">
-            <div>
-              <div className="font-medium text-[0.9rem]">{l.name}</div>
-              <div className="text-xs text-[var(--color-text-muted)]">{labelType(l.type)}{l.interestRate ? ` · ${l.interestRate}% APR` : ''}</div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="font-semibold text-[var(--color-danger)]">{fmtCurrency(l.currentBalance)}</span>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => openEditLiab(l)} />
-                <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => deleteLiab.mutate(l.id)} />
+          <div key={l.id}>
+            <div
+              className="flex items-center justify-between py-2.5 cursor-pointer rounded-[var(--radius-sm)] px-1"
+              onClick={() => setSelectedLiab(selectedLiab?.id === l.id ? null : l)}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <div>
+                <div className="font-medium text-[0.9rem]">{l.name}</div>
+                <div className="text-xs text-[var(--color-text-muted)]">
+                  {labelType(l.type)}
+                  {l.interestRate ? ` · ${l.interestRate}% APR` : ''}
+                  {l.region ? ` · ${l.region}` : ''}
+                  {l.amortizationYears ? ` · ${l.amortizationYears}yr amort.` : ''}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-[var(--color-danger)]">{fmtCurrency(l.currentBalance)}</span>
+                <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => openEditLiab(l)} />
+                  <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => deleteLiab.mutate(l.id)} />
+                </div>
               </div>
             </div>
+            {/* Inline amortization panel */}
+            {selectedLiab?.id === l.id && (
+              <div className="ml-2 mr-1 mb-2 border border-[var(--color-border)] rounded-[var(--radius-md)] p-4 bg-[var(--color-surface)]">
+                <LiabilityDetailPanel liability={l as any} currency={l.currency} />
+              </div>
+            )}
           </div>
         ))}
       </Card>
@@ -1310,15 +1373,90 @@ function AssetsLiabilitiesTab() {
 
       {/* Liability form modal */}
       {showLiabForm && (
-        <Modal open onClose={resetLiabForm} title={editLiab ? 'Edit Liability' : 'Add Liability'}>
+        <Modal open onClose={resetLiabForm} title={editLiab ? 'Edit Liability' : 'Add Liability'} size="md">
           <div className="flex flex-col gap-3">
-            <Input label="Name" value={liabForm.name} onChange={(e) => setLiabForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Mortgage" />
+            {/* Core fields */}
+            <Input label="Name" value={liabForm.name} onChange={(e) => setLiabForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Scotia Mortgage" />
             <Select label="Type" value={liabForm.type} onChange={(e) => setLiabForm((f) => ({ ...f, type: e.target.value }))} options={LIABILITY_TYPES.map((t) => ({ value: t, label: labelType(t) }))} />
-            <Input label="Current Balance" type="number" value={liabForm.currentBalance} onChange={(e) => setLiabForm((f) => ({ ...f, currentBalance: e.target.value }))} placeholder="0.00" />
-            <Input label="Original Amount" type="number" value={liabForm.originalAmount} onChange={(e) => setLiabForm((f) => ({ ...f, originalAmount: e.target.value }))} placeholder="0.00" />
-            <Input label="Interest Rate % (optional)" type="number" value={liabForm.interestRate} onChange={(e) => setLiabForm((f) => ({ ...f, interestRate: e.target.value }))} placeholder="e.g. 5.5" />
-            <Input label="Monthly Payment (optional)" type="number" value={liabForm.monthlyPayment} onChange={(e) => setLiabForm((f) => ({ ...f, monthlyPayment: e.target.value }))} placeholder="0.00" />
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Current Balance" type="number" value={liabForm.currentBalance} onChange={(e) => setLiabForm((f) => ({ ...f, currentBalance: e.target.value }))} placeholder="0.00" />
+              <Input label="Original Amount" type="number" value={liabForm.originalAmount} onChange={(e) => setLiabForm((f) => ({ ...f, originalAmount: e.target.value }))} placeholder="0.00" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Interest Rate % (fixed)" type="number" value={liabForm.interestRate} onChange={(e) => setLiabForm((f) => ({ ...f, interestRate: e.target.value }))} placeholder="e.g. 5.25" />
+              <Input label="Monthly Payment" type="number" value={liabForm.monthlyPayment} onChange={(e) => setLiabForm((f) => ({ ...f, monthlyPayment: e.target.value }))} placeholder="0.00" />
+            </div>
             <Input label="Notes (optional)" value={liabForm.notes} onChange={(e) => setLiabForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Any notes..." />
+
+            {/* Amortization toggle */}
+            <button
+              type="button"
+              onClick={() => setShowAmortFields((v) => !v)}
+              className="flex items-center gap-1.5 text-[0.8125rem] font-medium bg-transparent border-0 cursor-pointer p-0 self-start"
+              style={{ color: 'var(--color-accent)' }}
+            >
+              <ChevronDown size={14} style={{ transform: showAmortFields ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              {showAmortFields ? 'Hide' : 'Add'} amortization settings
+            </button>
+
+            {showAmortFields && (
+              <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <Select
+                    label="Region"
+                    value={liabForm.region}
+                    onChange={(e) => setLiabForm((f) => ({ ...f, region: e.target.value }))}
+                    options={[{ value: 'US', label: 'United States' }, { value: 'CA', label: 'Canada' }]}
+                  />
+                  <Select
+                    label="Rate Type"
+                    value={liabForm.rateType}
+                    onChange={(e) => setLiabForm((f) => ({ ...f, rateType: e.target.value }))}
+                    options={[{ value: 'fixed', label: 'Fixed' }, { value: 'variable', label: 'Variable (Prime − Discount)' }]}
+                  />
+                </div>
+
+                {liabForm.rateType === 'variable' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input label="Lender Prime Rate %" type="number" step="0.01" value={liabForm.primeRate} onChange={(e) => setLiabForm((f) => ({ ...f, primeRate: e.target.value }))} placeholder="e.g. 6.70" />
+                    <Input label="Your Discount %" type="number" step="0.01" value={liabForm.primeDiscount} onChange={(e) => setLiabForm((f) => ({ ...f, primeDiscount: e.target.value }))}
+                      placeholder="e.g. 0.90"
+                    />
+                  </div>
+                )}
+                {liabForm.rateType === 'variable' && liabForm.primeRate && liabForm.primeDiscount && (
+                  <div className="text-[0.8125rem] text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2">
+                    Effective rate: <strong style={{ color: 'var(--color-text)' }}>
+                      {Math.max(0, parseFloat(liabForm.primeRate) - parseFloat(liabForm.primeDiscount)).toFixed(2)}%
+                    </strong>
+                    {' '}({liabForm.region === 'CA' ? 'semi-annual compounding' : 'monthly compounding'})
+                  </div>
+                )}
+                {liabForm.rateType === 'fixed' && liabForm.region && liabForm.interestRate && (
+                  <div className="text-[0.8125rem] text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2">
+                    {liabForm.region === 'CA' ? 'Canada fixed: semi-annual compounding (Interest Act)' : 'US fixed: monthly compounding'}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Amortization (years)" type="number" value={liabForm.amortizationYears} onChange={(e) => setLiabForm((f) => ({ ...f, amortizationYears: e.target.value }))} placeholder="e.g. 25" />
+                  <Select
+                    label="Payment Frequency"
+                    value={liabForm.paymentFrequency}
+                    onChange={(e) => setLiabForm((f) => ({ ...f, paymentFrequency: e.target.value }))}
+                    options={[
+                      { value: 'monthly',   label: 'Monthly' },
+                      { value: 'biweekly',  label: 'Bi-weekly' },
+                      { value: 'weekly',    label: 'Weekly' },
+                    ]}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Term Start" type="date" value={liabForm.termStartDate} onChange={(e) => setLiabForm((f) => ({ ...f, termStartDate: e.target.value }))} />
+                  <Input label="Term End / Renewal" type="date" value={liabForm.termEndDate} onChange={(e) => setLiabForm((f) => ({ ...f, termEndDate: e.target.value }))} />
+                </div>
+              </div>
+            )}
           </div>
           <ModalFooter>
             <Button variant="ghost" onClick={resetLiabForm}>Cancel</Button>
@@ -1334,6 +1472,7 @@ function AssetsLiabilitiesTab() {
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data, isLoading, isError } = useQuery<AccountsData>({
     queryKey: ['accounts'],
@@ -1384,6 +1523,7 @@ export default function AccountsPage() {
         <div className="flex gap-2">
           {activeTab === 'accounts' && <>
             <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />} onClick={() => notify.info('Manual refresh is not available')}>Refresh all</Button>
+            <Button variant="outline" size="sm" icon={<Upload size={14} />} onClick={() => navigate('/accounts/bulk-import')}>Import CSV</Button>
             <Button size="sm" icon={<Plus size={14} />} onClick={() => setShowAdd(true)}>Add account</Button>
           </>}
         </div>
@@ -1414,6 +1554,13 @@ export default function AccountsPage() {
       ) : isError || !data ? (
         <div className="p-8 text-center text-[var(--color-danger)] text-sm">
           Failed to load accounts.
+        </div>
+      ) : grouped && !GROUP_ORDER.some((t) => (grouped.get(t) ?? []).length > 0) ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
+          <div className="text-[2.5rem]">🏦</div>
+          <p className="text-base font-semibold text-[var(--color-text)] m-0">No accounts yet</p>
+          <p className="text-sm text-[var(--color-text-muted)] m-0">Add your first account to get started.</p>
+          <Button icon={<Plus size={14} />} onClick={() => setShowAdd(true)}>Add Account</Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 items-start">

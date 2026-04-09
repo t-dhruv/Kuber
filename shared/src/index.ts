@@ -16,5 +16,38 @@ export interface GoalDto { id: string; name: string; type: GoalType; targetAmoun
 export interface RecurringItemDto { id: string; name: string; amount: number; frequency: RecurringFrequency; nextDate: string; accountId: string; accountName: string; categoryId: string | null; categoryName: string | null; isAutopay: boolean; isActive: boolean; }
 export interface InvestmentHoldingDto { id: string; symbol: string; name: string; shares: number; costBasis: number; currentPrice: number; currentValue: number; gainLoss: number; gainLossPercent: number; assetClass: AssetClass; }
 export interface NotificationDto { id: string; type: string; title: string; body: string; isRead: boolean; createdAt: string; }
+/** Client-side only — server returns data directly (no wrapper). Do not use in server route responses. */
 export interface ApiResponse<T> { data: T; message?: string; }
 export interface PaginatedResponse<T> { data: T[]; total: number; cursor: string | null; hasMore: boolean; }
+
+// ── Mortgage / amortization types ────────────────────────────────────────────
+export type MortgageRegion   = 'US' | 'CA';
+export type LoanRateType     = 'fixed' | 'variable';
+export type PaymentFrequency = 'monthly' | 'biweekly' | 'weekly';
+
+export interface AmortizationPeriod {
+  period:    number;
+  payment:   number;
+  principal: number;
+  interest:  number;
+  balance:   number;
+}
+
+export interface PayoffResult {
+  newPayoffMonths:   number;
+  monthsSaved:       number;
+  interestSaved:     number;
+  totalInterestBase: number;
+  totalInterestNew:  number;
+}
+
+export interface AmortizationResponse {
+  effectiveMonthlyRate:   number;
+  calculatedPayment:      number;
+  nextPrincipalPortion:   number;
+  nextInterestPortion:    number;
+  remainingPayments:      number;
+  payoffDate:             string;
+  totalInterestRemaining: number;
+  periods:                AmortizationPeriod[];
+}

@@ -248,7 +248,7 @@ export function SplitTransactionModal({ transaction, categories, isOpen, onClose
       </div>
 
       <ModalFooter>
-        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
         <Button
           variant="primary"
           disabled={!canSubmit}

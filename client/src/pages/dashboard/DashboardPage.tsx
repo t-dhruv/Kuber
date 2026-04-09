@@ -114,14 +114,6 @@ interface WeeklyRecapData {
 
 const CHECKLIST_KEY = 'kuber_checklist_dismissed';
 
-const CHECKLIST_ITEMS = [
-  { label: 'Create your account', done: true },
-  { label: 'Add your first account', done: true },
-  { label: 'Set up a budget', done: false },
-  { label: 'Create a savings goal', done: false },
-  { label: 'Add a recurring bill', done: false },
-];
-
 const NET_WORTH_TABS = ['1M', '3M', '6M', '1Y'] as const;
 type NetWorthTab = typeof NET_WORTH_TABS[number];
 
@@ -369,26 +361,75 @@ function BudgetWidget({ data, isLoading, isError }: { data?: BudgetData; isLoadi
 // ─── Widget: Getting Started Checklist ───────────────────────────────────────
 
 function ChecklistWidget() {
+  const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem(CHECKLIST_KEY) === 'true'
   );
 
-  if (dismissed) return null;
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
 
-  const doneCount = CHECKLIST_ITEMS.filter((i) => i.done).length;
-  const total = CHECKLIST_ITEMS.length;
+  const { data: accountsData } = useQuery<{ groups: { accounts: unknown[] }[] }>({
+    queryKey: ['accounts'],
+    queryFn: () => api.get('/accounts').then((r) => r.data),
+    enabled: !dismissed,
+  });
+  const { data: budgetsData } = useQuery<unknown[]>({
+    queryKey: ['budgets', month, year],
+    queryFn: () => api.get(`/budgets?month=${month}&year=${year}`).then((r) => r.data),
+    enabled: !dismissed,
+  });
+  const { data: goalsData } = useQuery<unknown[]>({
+    queryKey: ['goals'],
+    queryFn: () => api.get('/goals').then((r) => r.data),
+    enabled: !dismissed,
+  });
+  const { data: recurringData } = useQuery<unknown[]>({
+    queryKey: ['recurring-all'],
+    queryFn: () => api.get('/recurring').then((r) => r.data),
+    enabled: !dismissed,
+  });
+
+  const items = [
+    {
+      label: 'Add an account',
+      done: accountsData?.groups?.some((g) => g.accounts.length > 0) ?? false,
+      path: '/accounts',
+    },
+    {
+      label: 'Create a budget',
+      done: Array.isArray(budgetsData) && budgetsData.length > 0,
+      path: '/budgets',
+    },
+    {
+      label: 'Set a goal',
+      done: Array.isArray(goalsData) && goalsData.length > 0,
+      path: '/goals',
+    },
+    {
+      label: 'Add a recurring bill',
+      done: Array.isArray(recurringData) && recurringData.length > 0,
+      path: '/recurring',
+    },
+  ];
+
+  const doneCount = items.filter((i) => i.done).length;
+  const total = items.length;
   const pct = (doneCount / total) * 100;
+  const allDone = doneCount === total;
 
   function dismiss() {
     localStorage.setItem(CHECKLIST_KEY, 'true');
     setDismissed(true);
   }
 
+  if (dismissed || allDone) return null;
+
   return (
     <Card padding="lg">
       <WidgetHeader title="Getting Started" />
 
-      {/* Progress bar */}
       <div style={{ marginBottom: '1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', color: 'var(--color-text-secondary)', marginBottom: '0.375rem' }}>
           <span>{doneCount} of {total} complete</span>
@@ -400,8 +441,12 @@ function ChecklistWidget() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-        {CHECKLIST_ITEMS.map((item, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+        {items.map((item) => (
+          <div
+            key={item.label}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: item.done ? 'default' : 'pointer' }}
+            onClick={item.done ? undefined : () => navigate(item.path)}
+          >
             <div style={{
               width: 20, height: 20, borderRadius: 'var(--radius-full)', flexShrink: 0,
               backgroundColor: item.done ? 'var(--color-success)' : 'transparent',
@@ -412,8 +457,8 @@ function ChecklistWidget() {
             </div>
             <span style={{
               fontSize: '0.875rem',
-              color: item.done ? 'var(--color-text-muted)' : 'var(--color-text)',
-              textDecoration: item.done ? 'line-through' : 'none',
+              color: item.done ? 'var(--color-text-muted)' : 'var(--color-accent)',
+              textDecoration: item.done ? 'line-through' : 'underline',
             }}>
               {item.label}
             </span>
@@ -839,6 +884,65 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
   );
 }
 
+// ─── Widget: Financial Health Score ──────────────────────────────────────────
+
+interface HealthScoreData {
+  score: number;
+  summary: string;
+}
+
+function HealthScoreWidget() {
+  const { data, isLoading, isError } = useQuery<HealthScoreData>({
+    queryKey: ['dashboard-health-score'],
+    queryFn: () => api.get('/dashboard/health-score').then((r) => r.data),
+  });
+
+  function scoreColor(score: number): string {
+    if (score >= 70) return 'var(--color-success)';
+    if (score >= 40) return 'var(--color-warning)';
+    return 'var(--color-danger)';
+  }
+
+  return (
+    <Card padding="lg">
+      <WidgetHeader title="Financial Health" />
+
+      {isLoading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <Skeleton height={56} width={80} />
+          <Skeleton height={6} width="100%" />
+          <Skeleton height={14} width="80%" />
+        </div>
+      ) : isError || !data ? (
+        <WidgetError />
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem', marginBottom: '0.75rem' }}>
+            <span style={{ fontSize: '3rem', fontWeight: 700, lineHeight: 1, color: scoreColor(data.score) }}>
+              {data.score}
+            </span>
+            <span style={{ fontSize: '1rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>/100</span>
+          </div>
+
+          <div style={{ height: 8, backgroundColor: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden', marginBottom: '0.75rem' }}>
+            <div style={{
+              height: '100%',
+              width: `${data.score}%`,
+              backgroundColor: scoreColor(data.score),
+              borderRadius: 'var(--radius-full)',
+              transition: 'width 0.4s ease',
+            }} />
+          </div>
+
+          <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+            {data.summary}
+          </p>
+        </>
+      )}
+    </Card>
+  );
+}
+
 // ─── Widget Layout Types & Defaults ──────────────────────────────────────────
 
 interface WidgetLayout {
@@ -852,6 +956,7 @@ const WIDGET_META: Array<{ id: string; label: string; column: 'left' | 'right' }
   { id: 'weeklyRecap',         label: 'Weekly Recap',         column: 'left' },
   { id: 'budgetProgress',      label: 'Budget Progress',      column: 'left' },
   { id: 'gettingStarted',      label: 'Getting Started',      column: 'left' },
+  { id: 'healthScore',         label: 'Financial Health',     column: 'left' },
   { id: 'spendingChart',       label: 'Spending Chart',       column: 'right' },
   { id: 'recentTransactions',  label: 'Recent Transactions',  column: 'right' },
   { id: 'recurring',           label: 'Recurring Bills',      column: 'right' },
@@ -1205,6 +1310,8 @@ export default function DashboardPage() {
         );
       case 'gettingStarted':
         return <ChecklistWidget key={id} />;
+      case 'healthScore':
+        return <HealthScoreWidget key={id} />;
       case 'spendingChart':
         return (
           <SpendingWidget

@@ -36,6 +36,11 @@ server/prisma/*.db-journal
 # Turborepo
 .turbo/
 
+# Tooling / AI agents
+.omc/
+.claude/
+.windsurf/
+
 # Testing artifacts
 coverage/
 playwright-report/

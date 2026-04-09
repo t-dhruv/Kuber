@@ -28,6 +28,7 @@ const SettingsPage = lazy(() => import('@/pages/settings'));
 const RulesPage = lazy(() => import('@/pages/rules/RulesPage'));
 const WealthPage = lazy(() => import('@/pages/wealth/WealthPage'));
 const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
+const AccountBulkImportPage = lazy(() => import('@/pages/accounts/AccountBulkImportPage'));
 
 // ─── Loading fallback ─────────────────────────────────────────────────────────
 
@@ -139,6 +140,14 @@ export default function App() {
           element={
             <Suspense fallback={<PageLoader />}>
               <AccountsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/accounts/bulk-import"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <AccountBulkImportPage />
             </Suspense>
           }
         />

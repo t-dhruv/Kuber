@@ -4,6 +4,7 @@ import multer from 'multer';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
+import { fireWebhooks } from '../lib/webhookFire';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
 
 // multer: memory storage, CSV only, 10 MB limit
@@ -59,6 +60,8 @@ function formatTx(t: any) {
     isPending: t.isPending,
     isSplit: t.isSplit,
     splitDetails: t.splitDetails ?? null,
+    isTransfer: t.isTransfer ?? false,
+    transferId: t.transferId ?? null,
     notes: t.notes ?? null,
     tags: (t.tags ?? []).map((tt: any) => ({
       id: tt.tag.id,
@@ -831,6 +834,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     });
 
     logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'TRANSACTION', entityId: tx.id, after: { amount: tx.amount, description: tx.description } });
+    fireWebhooks(householdId, 'transaction.created', formatTx(tx)).catch(() => {});
     return res.status(201).json(formatTx(tx));
   } catch (err) {
     console.error('[transactions/create]', err);
@@ -1131,6 +1135,80 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
     return res.json({ updated: ids.length });
   } catch (err: any) {
     console.error('[transactions/bulk]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/transactions/transfer
+// ---------------------------------------------------------------------------
+const TransferSchema = z.object({
+  fromAccountId: z.string().min(1),
+  toAccountId:   z.string().min(1),
+  amount:        z.number().positive(),
+  date:          z.string().min(1),
+  notes:         z.string().optional(),
+});
+
+router.post('/transfer', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const parsed = TransferSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid input' });
+    }
+    const { fromAccountId, toAccountId, amount, date, notes } = parsed.data;
+
+    if (fromAccountId === toAccountId) {
+      return res.status(400).json({ error: 'Source and destination accounts must differ' });
+    }
+
+    // Verify both accounts belong to this household
+    const accounts = await prisma.account.findMany({
+      where: { id: { in: [fromAccountId, toAccountId] }, householdId },
+      select: { id: true, name: true },
+    });
+    if (accounts.length !== 2) {
+      return res.status(404).json({ error: 'One or both accounts not found' });
+    }
+
+    const transferId = crypto.randomUUID();
+    const txDate = new Date(date);
+
+    const [debit, credit] = await prisma.$transaction([
+      prisma.transaction.create({
+        data: {
+          householdId,
+          accountId: fromAccountId,
+          amount: -Math.abs(amount),
+          date: txDate,
+          description: `Transfer to ${accounts.find(a => a.id === toAccountId)!.name}`,
+          originalDescription: `Transfer to ${accounts.find(a => a.id === toAccountId)!.name}`,
+          isTransfer: true,
+          transferId,
+          notes: notes ?? null,
+        },
+        include: TX_INCLUDE,
+      }),
+      prisma.transaction.create({
+        data: {
+          householdId,
+          accountId: toAccountId,
+          amount: Math.abs(amount),
+          date: txDate,
+          description: `Transfer from ${accounts.find(a => a.id === fromAccountId)!.name}`,
+          originalDescription: `Transfer from ${accounts.find(a => a.id === fromAccountId)!.name}`,
+          isTransfer: true,
+          transferId,
+          notes: notes ?? null,
+        },
+        include: TX_INCLUDE,
+      }),
+    ]);
+
+    return res.status(201).json({ debit: formatTx(debit), credit: formatTx(credit) });
+  } catch (err: any) {
+    console.error('[transactions/transfer]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
