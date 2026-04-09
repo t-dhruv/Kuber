@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, MoreHorizontal, Pencil, Trash2, MessageSquare, Wallet, CreditCard } from 'lucide-react';
+import { Plus, MoreHorizontal, Pencil, Trash2, MessageSquare, Wallet, CreditCard, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Card, Button, Input, Modal, ModalFooter, Skeleton, Select,
@@ -609,7 +609,7 @@ function AddGoalModal({
         </div>
 
         <ModalFooter>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={isPending}>{editing ? 'Save' : 'Create goal'}</Button>
         </ModalFooter>
       </form>
@@ -778,7 +778,7 @@ function AddDebtGoalModal({
         </div>
 
         <ModalFooter>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={isPending}>{editing ? 'Save' : 'Create debt goal'}</Button>
         </ModalFooter>
       </form>
@@ -867,7 +867,7 @@ function ContributeModal({
           required
         />
         <ModalFooter>
-          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={contributeMut.isPending}>
             {isDebt ? 'Record payment' : 'Add funds'}
           </Button>
@@ -905,7 +905,7 @@ function DeleteGoalModal({
         Delete <strong>{goal?.name}</strong>? This cannot be undone.
       </p>
       <ModalFooter>
-        <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+        <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
         <Button variant="danger" loading={deleteMut.isPending} onClick={() => deleteMut.mutate()}>Delete</Button>
       </ModalFooter>
     </Modal>
@@ -978,6 +978,141 @@ function PayDownGoals({
         ))}
       </div>
     </>
+  );
+}
+
+// ─── Debt Payoff Panel ────────────────────────────────────────────────────────
+
+interface PayoffEntry {
+  id: string;
+  name: string;
+  months: number;
+  totalInterest: number;
+  payoffDate: string;
+}
+
+interface DebtPayoffData {
+  totalMinMonthly: number;
+  extraMonthly: number;
+  avalanche: PayoffEntry[];
+  snowball: PayoffEntry[];
+  totalInterest: { avalanche: number; snowball: number };
+}
+
+function DebtPayoffPanel() {
+  const [open, setOpen] = useState(false);
+  const [extra, setExtra] = useState('0');
+
+  const { data, isLoading, refetch } = useQuery<DebtPayoffData>({
+    queryKey: ['debt-payoff', extra],
+    queryFn: () =>
+      api.get(`/liabilities/debt-payoff?extraMonthly=${parseFloat(extra) || 0}`).then((r) => r.data),
+    enabled: open,
+  });
+
+  const fmtC = (n: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+
+  const interestSaved = data
+    ? Math.max(0, data.totalInterest.snowball - data.totalInterest.avalanche)
+    : 0;
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 w-full text-left px-4 py-3 rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] text-[var(--color-text-muted)] text-sm hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors"
+      >
+        <TrendingDown size={15} />
+        <span>Show payoff strategy (avalanche vs snowball)</span>
+        <ChevronDown size={14} className="ml-auto" />
+      </button>
+    );
+  }
+
+  return (
+    <Card padding="none">
+      <button
+        onClick={() => setOpen(false)}
+        className="flex items-center gap-2 w-full text-left px-4 py-3 border-b border-[var(--color-border)] bg-transparent"
+      >
+        <TrendingDown size={15} style={{ color: 'var(--color-danger)' }} />
+        <span className="text-sm font-semibold text-[var(--color-text)]">Payoff Strategy</span>
+        <ChevronUp size={14} className="ml-auto text-[var(--color-text-muted)]" />
+      </button>
+
+      <div className="p-4 flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-[var(--color-text-secondary)] whitespace-nowrap">Extra monthly payment</label>
+          <input
+            type="number"
+            min="0"
+            step="50"
+            value={extra}
+            onChange={(e) => setExtra(e.target.value)}
+            onBlur={() => refetch()}
+            className="w-28 px-2 py-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-input-bg)] text-sm text-[var(--color-text)] text-right"
+          />
+        </div>
+
+        {isLoading && (
+          <div className="flex flex-col gap-2">
+            {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-[var(--color-surface-hover)] rounded animate-pulse" />)}
+          </div>
+        )}
+
+        {data && data.avalanche.length === 0 && (
+          <p className="text-sm text-[var(--color-text-muted)]">No liabilities with an interest rate found. Add liabilities in the Net Worth section to use this tool.</p>
+        )}
+
+        {data && data.avalanche.length > 0 && (
+          <>
+            {interestSaved > 0 && (
+              <div className="rounded-[var(--radius-md)] bg-[var(--color-success-light,#f0fdf4)] border border-[var(--color-success)] px-3 py-2 text-sm text-[var(--color-success)]">
+                Avalanche saves <strong>{fmtC(interestSaved)}</strong> in interest vs snowball
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">
+                    <th className="text-left py-1.5 pr-3 font-semibold">Debt</th>
+                    <th className="text-right py-1.5 px-2 font-semibold">Avalanche</th>
+                    <th className="text-right py-1.5 px-2 font-semibold">Snowball</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.avalanche.map((av) => {
+                    const sw = data.snowball.find((s) => s.id === av.id);
+                    return (
+                      <tr key={av.id} className="border-t border-[var(--color-border)]">
+                        <td className="py-2 pr-3 text-[var(--color-text)] font-medium">{av.name}</td>
+                        <td className="py-2 px-2 text-right">
+                          <div className="text-[var(--color-text)]">{av.payoffDate}</div>
+                          <div className="text-xs text-[var(--color-text-muted)]">{fmtC(av.totalInterest)} interest</div>
+                        </td>
+                        <td className="py-2 px-2 text-right">
+                          <div className="text-[var(--color-text)]">{sw?.payoffDate ?? '—'}</div>
+                          <div className="text-xs text-[var(--color-text-muted)]">{sw ? fmtC(sw.totalInterest) : '—'} interest</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-[var(--color-border)]">
+                    <td className="py-2 pr-3 text-xs font-semibold text-[var(--color-text-muted)] uppercase">Total interest</td>
+                    <td className="py-2 px-2 text-right font-semibold text-[var(--color-danger)]">{fmtC(data.totalInterest.avalanche)}</td>
+                    <td className="py-2 px-2 text-right font-semibold text-[var(--color-danger)]">{fmtC(data.totalInterest.snowball)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -1062,15 +1197,18 @@ export default function GoalsPage() {
 
       {/* Content */}
       {subTab === 'pay_down' ? (
-        <PayDownGoals
-          goals={goals}
-          isLoading={isLoading}
-          isError={isError}
-          onAdd={openAdd}
-          onEdit={openEdit}
-          onDelete={setDeleteTarget}
-          onPayment={setContributeTarget}
-        />
+        <div className="flex flex-col gap-4">
+          <PayDownGoals
+            goals={goals}
+            isLoading={isLoading}
+            isError={isError}
+            onAdd={openAdd}
+            onEdit={openEdit}
+            onDelete={setDeleteTarget}
+            onPayment={setContributeTarget}
+          />
+          <DebtPayoffPanel />
+        </div>
       ) : isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (

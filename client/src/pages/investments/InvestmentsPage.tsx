@@ -1425,7 +1425,7 @@ function AddHoldingModal({
         )}
       </div>
       <ModalFooter>
-        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
         <Button onClick={handleSubmit} loading={mutation.isPending}>Add Holding</Button>
       </ModalFooter>
     </Modal>
@@ -1524,7 +1524,7 @@ function AddLotModal({
         />
       </div>
       <ModalFooter>
-        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
         <Button onClick={handleSubmit} loading={mutation.isPending}>Add Purchase</Button>
       </ModalFooter>
     </Modal>
@@ -1792,20 +1792,16 @@ function BulkImportModal({
           Optional: name, date.
         </div>
 
-        <div>
-          <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>Account</label>
-          <select
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)', fontSize: '0.875rem' }}
-          >
-            <option value="">Select account…</option>
-            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </div>
+        <Select
+          label="Account"
+          value={accountId}
+          onChange={(e) => setAccountId(e.target.value)}
+          placeholder="Select account…"
+          options={accounts.map((a) => ({ value: a.id, label: a.name }))}
+        />
 
         <div>
-          <label style={{ fontSize: '0.8125rem', fontWeight: 500, display: 'block', marginBottom: 4 }}>CSV File</label>
+          <label className="text-sm font-medium text-[var(--color-text)]">CSV File</label>
           <input
             ref={fileRef}
             type="file"
@@ -1855,7 +1851,7 @@ function BulkImportModal({
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button
             onClick={() => importMutation.mutate()}
             loading={importMutation.isPending}

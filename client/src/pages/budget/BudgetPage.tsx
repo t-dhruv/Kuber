@@ -291,62 +291,48 @@ function AddBudgetModal({
       title={preselectedCategoryName ? `Add budget for ${preselectedCategoryName}` : 'Add Budget'}
       size="sm"
     >
-      <div className="flex flex-col gap-4">
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="flex flex-col gap-4">
         {!preselectedCategoryId && (
-          <div>
-            <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Category
-            </label>
-            <Select
-              value={selectedCategoryId}
-              onChange={(e) => setSelectedCategoryId(e.target.value)}
-              placeholder="Select a category..."
-              options={allCategories.map((c) => ({
-                value: c.id,
-                label: c.icon ? `${c.icon} ${c.name}` : c.name,
-              }))}
-            />
-          </div>
+          <Select
+            label="Category"
+            value={selectedCategoryId}
+            onChange={(e) => setSelectedCategoryId(e.target.value)}
+            placeholder="Select a category..."
+            options={allCategories.map((c) => ({
+              value: c.id,
+              label: c.icon ? `${c.icon} ${c.name}` : c.name,
+            }))}
+          />
         )}
 
-        <div>
-          <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
-            Budget amount
-          </label>
-          <Input
-            type="number"
-            placeholder="0.00"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            min="0"
-            step="0.01"
-          />
-        </div>
+        <Input
+          label="Budget amount"
+          type="number"
+          placeholder="0.00"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          min="0"
+          step="0.01"
+        />
 
-        <div>
-          <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
-            Budget type
-          </label>
-          <Select
-            value={budgetType}
-            onChange={(e) => setBudgetType(e.target.value as BudgetType)}
-            options={BUDGET_TYPE_OPTIONS}
-          />
-        </div>
-      </div>
+        <Select
+          label="Budget type"
+          value={budgetType}
+          onChange={(e) => setBudgetType(e.target.value as BudgetType)}
+          options={BUDGET_TYPE_OPTIONS}
+        />
 
-      <ModalFooter>
-        <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={handleSubmit}
-          loading={mutation.isPending}
-          disabled={!selectedCategoryId || !amount}
-        >
-          Add Budget
-        </Button>
-      </ModalFooter>
+        <ModalFooter>
+          <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
+          <Button
+            type="submit"
+            loading={mutation.isPending}
+            disabled={!selectedCategoryId || !amount}
+          >
+            Add Budget
+          </Button>
+        </ModalFooter>
+      </form>
     </Modal>
   );
 }
@@ -413,62 +399,46 @@ function AddCategoryModal({
       title={`Add category to ${groupName}`}
       size="sm"
     >
-      <div className="flex flex-col gap-4">
-        <div>
-          <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
-            Category
-          </label>
-          <Select
-            value={selectedCategoryId}
-            onChange={(e) => setSelectedCategoryId(e.target.value)}
-            placeholder="Select a category..."
-            options={availableCategories.map((c) => ({
-              value: c.id,
-              label: c.icon ? `${c.icon} ${c.name}` : c.name,
-            }))}
-          />
-        </div>
+      <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="flex flex-col gap-4">
+        <Select
+          label="Category"
+          value={selectedCategoryId}
+          onChange={(e) => setSelectedCategoryId(e.target.value)}
+          placeholder="Select a category..."
+          options={availableCategories.map((c) => ({
+            value: c.id,
+            label: c.icon ? `${c.icon} ${c.name}` : c.name,
+          }))}
+        />
 
-        <div>
-          <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
-            Budget amount
-          </label>
-          <Input
-            type="number"
-            placeholder="0.00"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            min="0"
-            step="0.01"
-          />
-        </div>
+        <Input
+          label="Budget amount"
+          type="number"
+          placeholder="0.00"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          min="0"
+          step="0.01"
+        />
 
-        <div>
-          <label className="block text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
-            Budget type
-          </label>
-          <Select
-            value={budgetType}
-            onChange={(e) => setBudgetType(e.target.value as BudgetType)}
-            options={BUDGET_TYPE_OPTIONS}
-          />
-        </div>
-      </div>
+        <Select
+          label="Budget type"
+          value={budgetType}
+          onChange={(e) => setBudgetType(e.target.value as BudgetType)}
+          options={BUDGET_TYPE_OPTIONS}
+        />
 
-      <ModalFooter>
-        <Button variant="secondary" size="sm" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={handleSubmit}
-          loading={mutation.isPending}
-          disabled={!selectedCategoryId || !amount}
-        >
-          Add to Budget
-        </Button>
-      </ModalFooter>
+        <ModalFooter>
+          <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
+          <Button
+            type="submit"
+            loading={mutation.isPending}
+            disabled={!selectedCategoryId || !amount}
+          >
+            Add to Budget
+          </Button>
+        </ModalFooter>
+      </form>
     </Modal>
   );
 }
