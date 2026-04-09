@@ -29,7 +29,7 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
       where: { householdId, isHidden: false, excludeFromNetWorth: false },
       select: { balance: true },
     });
-    const netWorthCurrent = accounts.reduce((sum, a) => sum + a.balance, 0);
+    const netWorthCurrent = Math.round(accounts.reduce((sum, a) => sum + a.balance, 0) * 100) / 100;
 
     // Transactions this month and last month scoped to household
     const [thisMonthTxns, lastMonthTxns] = await Promise.all([
@@ -51,10 +51,11 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
       }),
     ]);
 
-    const incomeThisMonth = thisMonthTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-    const expensesThisMonth = thisMonthTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
-    const incomeLastMonth = lastMonthTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-    const expensesLastMonth = lastMonthTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const incomeThisMonth = r2(thisMonthTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0));
+    const expensesThisMonth = r2(thisMonthTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0));
+    const incomeLastMonth = r2(lastMonthTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0));
+    const expensesLastMonth = r2(lastMonthTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0));
 
     const netWorthChangeAmount = incomeThisMonth - expensesThisMonth;
     const netWorthChangePercent = netWorthCurrent !== 0
@@ -383,8 +384,14 @@ router.get('/goals-summary', async (req: AuthRequest, res: Response) => {
           (g.targetDate.getFullYear() - now.getFullYear()) * 12 +
             (g.targetDate.getMonth() - now.getMonth())
         );
-        const projectedContribution = g.monthlyContribution * monthsLeft;
-        status = projectedContribution >= remaining ? 'on_track' : 'at_risk';
+        if (monthsLeft === 0) {
+          status = remaining <= 0 ? 'completed' : 'at_risk';
+        } else {
+          const effectiveMonthly = g.monthlyContribution > 0
+            ? g.monthlyContribution
+            : remaining / monthsLeft;
+          status = effectiveMonthly * monthsLeft >= remaining ? 'on_track' : 'at_risk';
+        }
       }
 
       return {
@@ -527,6 +534,77 @@ router.get('/weekly-recap', async (req: AuthRequest, res: Response) => {
     });
   } catch (err) {
     console.error('[dashboard/weekly-recap]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/v1/dashboard/health-score
+router.get('/health-score', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const now = new Date();
+    const thisMonth = getMonthBounds(now);
+
+    // ── Savings rate (30 pts) ──
+    const monthTxns = await prisma.transaction.findMany({
+      where: { householdId, date: { gte: thisMonth.start, lt: thisMonth.end }, isHidden: false },
+      select: { amount: true },
+    });
+    const incomeThisMonth = monthTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+    const expensesThisMonth = monthTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+    const savingsRate = incomeThisMonth > 0 ? (incomeThisMonth - expensesThisMonth) / incomeThisMonth : 0;
+    const savingsScore = Math.round(Math.min(1, Math.max(0, savingsRate)) * 30);
+
+    // ── Budget adherence (25 pts) ──
+    const budgets = await prisma.budget.findMany({ where: { householdId }, select: { categoryId: true, amount: true } });
+    let budgetScore = 0;
+    if (budgets.length > 0) {
+      const catIds = budgets.map(b => b.categoryId).filter((id): id is string => !!id);
+      const budgetTxns = await prisma.transaction.findMany({
+        where: { householdId, categoryId: { in: catIds }, date: { gte: thisMonth.start, lt: thisMonth.end }, amount: { lt: 0 }, isHidden: false },
+        select: { categoryId: true, amount: true },
+      });
+      const spentMap = new Map<string, number>();
+      for (const t of budgetTxns) {
+        if (t.categoryId) spentMap.set(t.categoryId, (spentMap.get(t.categoryId) ?? 0) + Math.abs(t.amount));
+      }
+      const underBudget = budgets.filter(b => b.categoryId && (spentMap.get(b.categoryId) ?? 0) <= b.amount).length;
+      budgetScore = Math.round((underBudget / budgets.length) * 25);
+    }
+
+    // ── Goal progress (25 pts) ──
+    const goals = await prisma.goal.findMany({ where: { householdId }, select: { targetAmount: true, currentAmount: true } });
+    let goalScore = 0;
+    if (goals.length > 0) {
+      const avgPct = goals.reduce((s, g) => s + (g.targetAmount > 0 ? Math.min(1, g.currentAmount / g.targetAmount) : 0), 0) / goals.length;
+      goalScore = Math.round(avgPct * 25);
+    }
+
+    // ── Emergency fund (20 pts) ──
+    const liquidAccounts = await prisma.account.findMany({
+      where: { householdId, type: { in: ['CHECKING', 'SAVINGS'] }, isHidden: false },
+      select: { balance: true },
+    });
+    const liquidBalance = liquidAccounts.reduce((s, a) => s + a.balance, 0);
+    const monthlyExpenses = expensesThisMonth > 0 ? expensesThisMonth : 1;
+    const emergencyRatio = liquidBalance / (monthlyExpenses * 3);
+    const emergencyScore = Math.round(Math.min(1, Math.max(0, emergencyRatio)) * 20);
+
+    const total = savingsScore + budgetScore + goalScore + emergencyScore;
+
+    let summary: string;
+    if (total >= 80) summary = 'Your finances are in great shape.';
+    else if (total >= 60) summary = 'Good progress — a few areas to improve.';
+    else if (total >= 40) summary = 'Some areas need attention.';
+    else summary = 'Focus on budgeting and building savings.';
+
+    return res.json({
+      score: total,
+      breakdown: { savingsScore, budgetScore, goalScore, emergencyScore },
+      summary,
+    });
+  } catch (err) {
+    console.error('[dashboard/health-score]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
