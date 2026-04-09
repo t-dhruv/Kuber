@@ -1,6 +1,19 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+
+const recurringCreateSchema = z.object({
+  name: z.string().min(1),
+  amount: z.number(),
+  frequency: z.enum(['weekly', 'biweekly', 'monthly', 'quarterly', 'annual']),
+  nextDate: z.string().min(1),
+  accountId: z.string().min(1),
+  categoryId: z.string().optional().nullable(),
+  isAutopay: z.boolean().optional(),
+});
+
+const recurringUpdateSchema = recurringCreateSchema.partial();
 
 const router = Router();
 
@@ -8,6 +21,82 @@ function daysUntil(date: Date): number {
   const now = new Date();
   return Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
+
+// POST /api/v1/recurring/detect
+// Must be defined before /:id routes
+router.post('/detect', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+
+    const txns = await prisma.transaction.findMany({
+      where: { householdId, date: { gte: cutoff }, amount: { lt: 0 }, isHidden: false },
+      include: { merchant: { select: { displayName: true } } },
+      orderBy: { date: 'asc' },
+    });
+
+    // Group by normalized merchant name + rounded amount (±5% tolerance)
+    const groups = new Map<string, typeof txns>();
+    for (const t of txns) {
+      const name = (t.merchant?.displayName ?? t.description).trim();
+      const amt = Math.round(Math.abs(t.amount) * 100) / 100;
+      const key = `${name.toLowerCase()}|${amt}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(t);
+    }
+
+    const existing = await prisma.recurringItem.findMany({
+      where: { householdId },
+      select: { name: true, amount: true },
+    });
+    const existingKeys = new Set(
+      existing.map(e => `${e.name.toLowerCase().trim()}|${Math.round(Math.abs(e.amount) * 100) / 100}`)
+    );
+
+    const suggestions: Array<{ name: string; amount: number; frequency: string; detectedCount: number; nextDate: string }> = [];
+
+    for (const [key, items] of groups) {
+      if (items.length < 2) continue;
+
+      const sorted = [...items].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const gaps: number[] = [];
+      for (let i = 1; i < sorted.length; i++) {
+        gaps.push((new Date(sorted[i].date).getTime() - new Date(sorted[i - 1].date).getTime()) / (1000 * 60 * 60 * 24));
+      }
+      const avgGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+
+      let frequency: string;
+      if (avgGap <= 9) frequency = 'weekly';
+      else if (avgGap <= 18) frequency = 'biweekly';
+      else if (avgGap <= 40) frequency = 'monthly';
+      else if (avgGap <= 100) frequency = 'quarterly';
+      else frequency = 'annual';
+
+      if (existingKeys.has(key)) continue;
+
+      const lastTxn = sorted[sorted.length - 1];
+      const name = lastTxn.merchant?.displayName ?? lastTxn.description;
+      const amt = Math.round(Math.abs(lastTxn.amount) * 100) / 100;
+
+      // Estimate next date based on frequency from last transaction
+      const lastDate = new Date(lastTxn.date);
+      const nextDate = new Date(lastDate);
+      if (frequency === 'weekly') nextDate.setDate(nextDate.getDate() + 7);
+      else if (frequency === 'biweekly') nextDate.setDate(nextDate.getDate() + 14);
+      else if (frequency === 'monthly') nextDate.setMonth(nextDate.getMonth() + 1);
+      else if (frequency === 'quarterly') nextDate.setMonth(nextDate.getMonth() + 3);
+      else nextDate.setFullYear(nextDate.getFullYear() + 1);
+
+      suggestions.push({ name, amount: -amt, frequency, detectedCount: items.length, nextDate: nextDate.toISOString().split('T')[0] });
+    }
+
+    return res.json(suggestions);
+  } catch (err) {
+    console.error('[recurring/detect]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // GET /api/v1/recurring
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -28,7 +117,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     }
 
     const items = await prisma.recurringItem.findMany({
-      where: where as any,
+      where: where as any, // TODO: replace with proper Prisma where type once recurring filters are typed
       include: {
         category: { select: { id: true, name: true, emoji: true } },
         account: { select: { id: true, name: true } },
@@ -149,11 +238,9 @@ router.get('/monthly-summary', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { name, amount, frequency, nextDate, categoryId, accountId } = req.body;
-
-    if (!name || amount === undefined || !frequency || !nextDate || !accountId) {
-      return res.status(400).json({ error: 'name, amount, frequency, nextDate, and accountId are required' });
-    }
+    const parse = recurringCreateSchema.safeParse(req.body);
+    if (!parse.success) return res.status(400).json({ error: parse.error.errors[0]?.message });
+    const { name, amount, frequency, nextDate, categoryId, accountId } = parse.data;
 
     // Verify account belongs to household
     const account = await prisma.account.findFirst({ where: { id: accountId, householdId } });
@@ -165,7 +252,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       data: {
         householdId,
         name,
-        amount: parseFloat(amount),
+        amount,
         frequency,
         nextDate: new Date(nextDate),
         accountId,
@@ -207,7 +294,9 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (!existing) return res.status(404).json({ error: 'Not found' });
     if (existing.householdId !== householdId) return res.status(403).json({ error: 'Forbidden' });
 
-    const { name, amount, frequency, nextDate, categoryId, accountId, isActive } = req.body;
+    const parse = recurringUpdateSchema.extend({ isActive: z.boolean().optional() }).safeParse(req.body);
+    if (!parse.success) return res.status(400).json({ error: parse.error.errors[0]?.message });
+    const { name, amount, frequency, nextDate, categoryId, accountId, isActive } = parse.data;
 
     // If accountId provided, verify it belongs to household
     if (accountId && accountId !== existing.accountId) {
@@ -219,7 +308,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       where: { id },
       data: {
         ...(name !== undefined && { name }),
-        ...(amount !== undefined && { amount: parseFloat(amount) }),
+        ...(amount !== undefined && { amount }),
         ...(frequency !== undefined && { frequency }),
         ...(nextDate !== undefined && { nextDate: new Date(nextDate) }),
         ...(categoryId !== undefined && { categoryId: categoryId || null }),

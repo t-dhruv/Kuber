@@ -60,7 +60,7 @@ If you cannot read the receipt clearly, return your best guess. Use today's date
           content: [
             { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
             { type: 'text', text: prompt },
-          ] as unknown as string, // cast — provider handles array content
+          ] as unknown as string, // TODO: replace when AI client types support array content natively
         }],
         maxTokens: 150,
         temperature: 0.1,

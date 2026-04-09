@@ -55,11 +55,13 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const months = Array.from({ length: 12 }, (_, i) => {
       const m = i + 1;
       const entry = monthMap.get(m) ?? { income: 0, expenses: 0 };
-      const net = entry.income - entry.expenses;
-      const savingsRate = entry.income > 0
-        ? Math.min(100, Math.max(0, (net / entry.income) * 100))
+      const income = Math.round(entry.income * 100) / 100;
+      const expenses = Math.round(entry.expenses * 100) / 100;
+      const net = Math.round((income - expenses) * 100) / 100;
+      const savingsRate = income > 0
+        ? Math.min(100, Math.max(0, Math.round((net / income) * 10000) / 100))
         : 0;
-      return { month: m, year, income: entry.income, expenses: entry.expenses, net, savingsRate };
+      return { month: m, year, income, expenses, net, savingsRate };
     });
 
     // YTD: only include months up to current month if current year, else all 12
@@ -67,17 +69,17 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       ? months
       : months.slice(0, now.getMonth() + 1);
 
-    const ytdIncome = ytdMonths.reduce((s, m) => s + m.income, 0);
-    const ytdExpenses = ytdMonths.reduce((s, m) => s + m.expenses, 0);
-    const ytdNet = ytdIncome - ytdExpenses;
+    const ytdIncome = Math.round(ytdMonths.reduce((s, m) => s + m.income, 0) * 100) / 100;
+    const ytdExpenses = Math.round(ytdMonths.reduce((s, m) => s + m.expenses, 0) * 100) / 100;
+    const ytdNet = Math.round((ytdIncome - ytdExpenses) * 100) / 100;
     const ytdSavingsRate = ytdIncome > 0
-      ? Math.min(100, Math.max(0, (ytdNet / ytdIncome) * 100))
+      ? Math.min(100, Math.max(0, Math.round((ytdNet / ytdIncome) * 10000) / 100))
       : 0;
 
     const monthsWithActivity = ytdMonths.filter(m => m.income > 0 || m.expenses > 0);
     const divisor = monthsWithActivity.length || 1;
-    const averageMonthlyIncome = ytdIncome / divisor;
-    const averageMonthlyExpenses = ytdExpenses / divisor;
+    const averageMonthlyIncome = Math.round((ytdIncome / divisor) * 100) / 100;
+    const averageMonthlyExpenses = Math.round((ytdExpenses / divisor) * 100) / 100;
 
     return res.json({
       year,
@@ -174,7 +176,7 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
         : t.description;
       const mId = t.merchantId ?? null;
 
-      if (catType === 'INCOME' || t.amount > 0) {
+      if (catType?.toUpperCase() === 'INCOME' || t.amount > 0) {
         const existing = incomeByCategory.get(catId);
         if (existing) {
           existing.amount += t.amount > 0 ? t.amount : Math.abs(t.amount);
@@ -305,21 +307,24 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
       };
     });
 
-    const net = totalIncome - totalExpenses;
-    const savingsRate = totalIncome > 0
-      ? Math.min(100, Math.max(0, (net / totalIncome) * 100))
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const roundedIncome = r2(totalIncome);
+    const roundedExpenses = r2(totalExpenses);
+    const net = r2(roundedIncome - roundedExpenses);
+    const savingsRate = roundedIncome > 0
+      ? Math.min(100, Math.max(0, Math.round((net / roundedIncome) * 10000) / 100))
       : 0;
 
     return res.json({
       month,
       year,
       income: {
-        total: totalIncome,
+        total: roundedIncome,
         byCategory: incomeBycat,
         byMerchant: incomeByMerchant,
       },
       expenses: {
-        total: totalExpenses,
+        total: roundedExpenses,
         byCategory: expenseByCat,
         byGroup,
         byMerchant: expenseByMerchant,
@@ -393,7 +398,7 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
       const catType = t.category?.type ?? 'EXPENSE';
       const bucketType = t.category?.bucketType ?? 'uncategorized';
 
-      if (catType === 'INCOME' || t.amount > 0) {
+      if (catType?.toUpperCase() === 'INCOME' || t.amount > 0) {
         const amt = Math.abs(t.amount);
         const existing = incomeMap.get(catId);
         if (existing) {

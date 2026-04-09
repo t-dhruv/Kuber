@@ -6,6 +6,7 @@ import { AuthRequest } from '../middleware/auth';
 import { sendTestEmail } from '../lib/email';
 import { encrypt } from '../lib/encryption';
 import { getAiClient, invalidateAiCache } from '../lib/ai';
+import ExcelJS from 'exceljs';
 
 const router = Router();
 
@@ -620,7 +621,11 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
       preferences = DEFAULT_NOTIFICATION_PREFERENCES;
     }
 
-    return res.json({ preferences });
+    const thresholdPref = await prisma.userPreference.findUnique({
+      where: { userId_key: { userId, key: 'low_balance_threshold' } },
+    });
+    const lowBalanceThreshold = thresholdPref ? parseFloat(thresholdPref.value) : null;
+    return res.json({ preferences, lowBalanceThreshold });
   } catch (err) {
     console.error('[settings/notifications GET]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -631,7 +636,7 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
 router.put('/notifications', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
-    const { preferences } = req.body;
+    const { preferences, lowBalanceThreshold } = req.body;
 
     if (!preferences || typeof preferences !== 'object') {
       return res.status(400).json({ error: 'preferences must be an object' });
@@ -643,7 +648,18 @@ router.put('/notifications', async (req: AuthRequest, res: Response) => {
       create: { userId, key: 'notification_preferences', value: JSON.stringify(preferences) },
     });
 
-    return res.json({ preferences });
+    if (lowBalanceThreshold !== undefined) {
+      if (lowBalanceThreshold === null) {
+        await prisma.userPreference.deleteMany({ where: { userId, key: 'low_balance_threshold' } });
+      } else if (typeof lowBalanceThreshold === 'number' && lowBalanceThreshold >= 0) {
+        await prisma.userPreference.upsert({
+          where: { userId_key: { userId, key: 'low_balance_threshold' } },
+          update: { value: String(lowBalanceThreshold) },
+          create: { userId, key: 'low_balance_threshold', value: String(lowBalanceThreshold) },
+        });
+      }
+    }
+    return res.json({ preferences, lowBalanceThreshold: lowBalanceThreshold ?? null });
   } catch (err) {
     console.error('[settings/notifications PUT]', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -869,6 +885,183 @@ router.put('/watch-tickers', async (req: AuthRequest, res: Response) => {
     create: { userId: req.userId!, key: 'watch_tickers', value: parse.data.tickers },
   });
   return res.json({ tickers: parse.data.tickers });
+});
+
+// DELETE /api/v1/settings/account — self-service account deletion
+router.delete('/account', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const householdId = req.householdId!;
+
+    const deleteSchema = z.object({ confirmPassword: z.string().min(1) });
+    const parse = deleteSchema.safeParse(req.body);
+    if (!parse.success) return res.status(400).json({ error: 'confirmPassword is required' });
+
+    // Verify password
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const valid = await bcrypt.compare(parse.data.confirmPassword, user.passwordHash);
+    if (!valid) return res.status(400).json({ error: 'Incorrect password' });
+
+    // Check if owner with other members
+    const membership = await prisma.householdMember.findFirst({ where: { userId, householdId } });
+    if (membership?.role === 'owner') {
+      const memberCount = await prisma.householdMember.count({ where: { householdId } });
+      if (memberCount > 1) {
+        return res.status(400).json({ error: 'Transfer ownership or remove all other members before deleting your account' });
+      }
+    }
+
+    // Invalidate all refresh tokens and API tokens
+    await prisma.refreshToken.deleteMany({ where: { userId } });
+    await prisma.apiToken.deleteMany({ where: { userId } });
+
+    if (membership?.role === 'owner') {
+      // Delete the household and all its data (cascade via Prisma)
+      await prisma.household.delete({ where: { id: householdId } });
+    }
+
+    // Delete user
+    await prisma.user.delete({ where: { id: userId } });
+
+    res.clearCookie('refreshToken');
+    return res.json({ message: 'Account deleted successfully' });
+  } catch (err) {
+    console.error('[settings/account DELETE]', err);
+    return res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
+// GET /api/v1/settings/export — full data export as multi-sheet Excel workbook
+router.get('/export', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Kuber';
+    workbook.created = new Date();
+
+    // Accounts
+    const accounts = await prisma.account.findMany({ where: { householdId }, orderBy: { name: 'asc' } });
+    const accSheet = workbook.addWorksheet('Accounts');
+    accSheet.columns = [
+      { header: 'Name', key: 'name', width: 24 },
+      { header: 'Type', key: 'type', width: 16 },
+      { header: 'Institution', key: 'institution', width: 24 },
+      { header: 'Balance', key: 'balance', width: 14 },
+      { header: 'Currency', key: 'currency', width: 10 },
+      { header: 'Credit Limit', key: 'creditLimit', width: 14 },
+      { header: 'Hidden', key: 'isHidden', width: 10 },
+    ];
+    accounts.forEach(a => accSheet.addRow({ name: a.name, type: a.type, institution: a.institution ?? '', balance: a.balance, currency: a.currency, creditLimit: a.creditLimit ?? '', isHidden: a.isHidden }));
+
+    // Transactions
+    const transactions = await prisma.transaction.findMany({
+      where: { householdId, isHidden: false },
+      include: { category: { select: { name: true } }, account: { select: { name: true } }, merchant: { select: { name: true } } },
+      orderBy: { date: 'desc' },
+    });
+    const txSheet = workbook.addWorksheet('Transactions');
+    txSheet.columns = [
+      { header: 'Date', key: 'date', width: 14 },
+      { header: 'Description', key: 'description', width: 36 },
+      { header: 'Amount', key: 'amount', width: 14 },
+      { header: 'Category', key: 'category', width: 20 },
+      { header: 'Account', key: 'account', width: 20 },
+      { header: 'Merchant', key: 'merchant', width: 20 },
+      { header: 'Notes', key: 'notes', width: 30 },
+    ];
+    transactions.forEach(t => txSheet.addRow({ date: t.date.toISOString().split('T')[0], description: t.description, amount: t.amount, category: t.category?.name ?? '', account: t.account?.name ?? '', merchant: t.merchant?.name ?? '', notes: t.notes ?? '' }));
+
+    // Budgets
+    const budgets = await prisma.budget.findMany({ where: { householdId }, include: { category: { select: { name: true } } } });
+    const budgetSheet = workbook.addWorksheet('Budgets');
+    budgetSheet.columns = [
+      { header: 'Category', key: 'category', width: 24 },
+      { header: 'Amount', key: 'amount', width: 14 },
+      { header: 'Period', key: 'period', width: 14 },
+      { header: 'Budget Type', key: 'budgetType', width: 14 },
+    ];
+    budgets.forEach(b => budgetSheet.addRow({ category: b.category?.name ?? b.name ?? '', amount: b.amount, period: b.period, budgetType: b.budgetType }));
+
+    // Goals
+    const goals = await prisma.goal.findMany({ where: { householdId }, orderBy: { createdAt: 'asc' } });
+    const goalsSheet = workbook.addWorksheet('Goals');
+    goalsSheet.columns = [
+      { header: 'Name', key: 'name', width: 24 },
+      { header: 'Type', key: 'type', width: 14 },
+      { header: 'Target Amount', key: 'targetAmount', width: 16 },
+      { header: 'Current Amount', key: 'currentAmount', width: 16 },
+      { header: 'Target Date', key: 'targetDate', width: 14 },
+      { header: 'Monthly Contribution', key: 'monthlyContribution', width: 22 },
+    ];
+    goals.forEach(g => goalsSheet.addRow({ name: g.name, type: g.type, targetAmount: g.targetAmount, currentAmount: g.currentAmount, targetDate: g.targetDate ? g.targetDate.toISOString().split('T')[0] : '', monthlyContribution: g.monthlyContribution }));
+
+    // Recurring
+    const recurring = await prisma.recurringItem.findMany({
+      where: { householdId },
+      include: { category: { select: { name: true } }, account: { select: { name: true } } },
+      orderBy: { nextDate: 'asc' },
+    });
+    const recurringSheet = workbook.addWorksheet('Recurring');
+    recurringSheet.columns = [
+      { header: 'Name', key: 'name', width: 24 },
+      { header: 'Amount', key: 'amount', width: 14 },
+      { header: 'Frequency', key: 'frequency', width: 14 },
+      { header: 'Next Date', key: 'nextDate', width: 14 },
+      { header: 'Account', key: 'account', width: 20 },
+      { header: 'Category', key: 'category', width: 20 },
+      { header: 'Active', key: 'isActive', width: 10 },
+    ];
+    recurring.forEach(r => recurringSheet.addRow({ name: r.name, amount: r.amount, frequency: r.frequency, nextDate: r.nextDate.toISOString().split('T')[0], account: r.account?.name ?? '', category: r.category?.name ?? '', isActive: r.isActive }));
+
+    // Investments
+    const investments = await prisma.investmentHolding.findMany({ where: { account: { householdId } }, orderBy: { symbol: 'asc' } });
+    const investSheet = workbook.addWorksheet('Investments');
+    investSheet.columns = [
+      { header: 'Symbol', key: 'symbol', width: 12 },
+      { header: 'Name', key: 'name', width: 28 },
+      { header: 'Shares', key: 'shares', width: 12 },
+      { header: 'Cost Basis', key: 'costBasis', width: 14 },
+      { header: 'Current Price', key: 'currentPrice', width: 14 },
+      { header: 'Asset Class', key: 'assetClass', width: 16 },
+    ];
+    investments.forEach(i => investSheet.addRow({ symbol: i.symbol, name: i.name, shares: i.shares, costBasis: i.costBasis, currentPrice: i.currentPrice, assetClass: i.assetClass }));
+
+    // Assets
+    const assets = await prisma.manualAsset.findMany({ where: { householdId }, orderBy: { name: 'asc' } });
+    const assetsSheet = workbook.addWorksheet('Assets');
+    assetsSheet.columns = [
+      { header: 'Name', key: 'name', width: 24 },
+      { header: 'Type', key: 'assetType', width: 16 },
+      { header: 'Current Value', key: 'currentValue', width: 16 },
+      { header: 'Purchase Value', key: 'purchaseValue', width: 16 },
+      { header: 'Currency', key: 'currency', width: 10 },
+    ];
+    assets.forEach(a => assetsSheet.addRow({ name: a.name, assetType: a.type, currentValue: a.currentValue, purchaseValue: a.purchaseValue ?? '', currency: a.currency }));
+
+    // Liabilities
+    const liabilities = await prisma.manualLiability.findMany({ where: { householdId }, orderBy: { name: 'asc' } });
+    const liabSheet = workbook.addWorksheet('Liabilities');
+    liabSheet.columns = [
+      { header: 'Name', key: 'name', width: 24 },
+      { header: 'Type', key: 'type', width: 16 },
+      { header: 'Current Balance', key: 'currentBalance', width: 16 },
+      { header: 'Interest Rate', key: 'interestRate', width: 14 },
+      { header: 'Monthly Payment', key: 'monthlyPayment', width: 16 },
+      { header: 'Currency', key: 'currency', width: 10 },
+    ];
+    liabilities.forEach(l => liabSheet.addRow({ name: l.name, type: l.type, currentBalance: l.currentBalance, interestRate: l.interestRate ?? '', monthlyPayment: l.monthlyPayment ?? '', currency: l.currency }));
+
+    // Stream the workbook
+    const fileName = `kuber-export-${new Date().toISOString().split('T')[0]}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    await workbook.xlsx.write(res);
+    return res.end();
+  } catch (err) {
+    console.error('[settings/export GET]', err);
+    return res.status(500).json({ error: 'Failed to generate export' });
+  }
 });
 
 // POST /api/v1/settings/email/test
