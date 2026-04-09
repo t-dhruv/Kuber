@@ -67,6 +67,8 @@ model Household {
   taxAccounts             TaxAccount[]
   apiTokens               ApiToken[]
   investmentIntel         InvestmentIntel[]
+  pushSubscriptions       PushSubscription[]
+  webhooks                Webhook[]
 
   @@map("households")
 }
@@ -197,6 +199,8 @@ model Transaction {
   isPending           Boolean          @default(false)
   isSplit             Boolean          @default(false)
   splitDetails        Json?
+  isTransfer          Boolean          @default(false)
+  transferId          String?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   account             Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -383,19 +387,30 @@ model ManualAsset {
 }
 
 model ManualLiability {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   householdId     String
   name            String
-  type            String   @default("other") // mortgage | auto_loan | student_loan | credit_card | other
+  type            String    @default("other") // mortgage | auto_loan | student_loan | credit_card | other
   originalAmount  Float
   currentBalance  Float
   interestRate    Float?
   monthlyPayment  Float?
   maturityDate    DateTime?
   notes           String?
-  currency        String   @default("USD")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  currency        String    @default("USD")
+
+  // Amortization metadata (all nullable — zero risk to existing rows)
+  region            String?   // 'US' | 'CA'
+  rateType          String?   // 'fixed' | 'variable'
+  primeRate         Float?    // lender prime rate (variable only, e.g. 6.70)
+  primeDiscount     Float?    // discount off prime (variable only, e.g. 0.90)
+  termStartDate     DateTime?
+  termEndDate       DateTime? // renewal / balloon date
+  amortizationYears Int?      // e.g. 25 or 30
+  paymentFrequency  String?   // 'monthly' | 'biweekly' | 'weekly'
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
   household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@index([householdId])
@@ -709,4 +724,34 @@ model OperationCheckpoint {
 
   @@index([householdId, createdAt])
   @@map("operation_checkpoints")
+}
+
+model PushSubscription {
+  id           String   @id @default(cuid())
+  householdId  String
+  userId       String
+  endpoint     String   @unique
+  p256dh       String
+  auth         String
+  createdAt    DateTime @default(now())
+  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@map("push_subscriptions")
+}
+
+model Webhook {
+  id          String   @id @default(cuid())
+  householdId String
+  name        String
+  url         String
+  events      String[] // e.g. ["transaction.created", "transaction.updated"]
+  secret      String?  // HMAC-SHA256 signing secret
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@map("webhooks")
 }

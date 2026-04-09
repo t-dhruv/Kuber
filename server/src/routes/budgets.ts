@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
@@ -7,6 +8,22 @@ const router = Router();
 
 const VALID_BUDGET_TYPES = ['FIXED', 'FLEXIBLE', 'NON_MONTHLY'] as const;
 type BudgetType = (typeof VALID_BUDGET_TYPES)[number];
+
+const budgetCreateSchema = z.object({
+  categoryId: z.string().optional(),
+  name: z.string().min(1).optional(),
+  amount: z.number().nonnegative(),
+  budgetType: z.enum(['FIXED', 'FLEXIBLE', 'NON_MONTHLY']).optional(),
+}).refine(data => data.categoryId || data.name, {
+  message: 'Provide either categoryId (category budget) or name (catch-all budget)',
+});
+
+const budgetUpdateSchema = z.object({
+  amount: z.number().nonnegative().optional(),
+  budgetType: z.enum(['FIXED', 'FLEXIBLE', 'NON_MONTHLY']).optional(),
+}).refine(data => data.amount !== undefined || data.budgetType !== undefined, {
+  message: 'At least one of budgetType or amount is required',
+});
 
 function getMonthBounds(year: number, month: number): { start: Date; end: Date } {
   const start = new Date(year, month - 1, 1);
@@ -53,7 +70,7 @@ router.get('/categories', async (req: AuthRequest, res: Response) => {
       };
 
       if (!cat.groupId || !cat.group) {
-        if (cat.type === 'INCOME') {
+        if (cat.type?.toUpperCase() === 'INCOME') {
           ungroupedIncome.push(catEntry);
         } else {
           ungroupedExpense.push(catEntry);
@@ -134,6 +151,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         householdId,
         date: { gte: start, lt: end },
         isHidden: false,
+        isTransfer: false,
       },
       select: { categoryId: true, amount: true },
     });
@@ -204,7 +222,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       const rawActual = actualByCategory.get(catId) ?? 0;
 
       let actual: number;
-      if (cat.type === 'INCOME') {
+      if (cat.type?.toUpperCase() === 'INCOME') {
         // income: positive amounts
         actual = rawActual > 0 ? rawActual : Math.abs(rawActual);
       } else {
@@ -212,8 +230,11 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         actual = rawActual < 0 ? Math.abs(rawActual) : rawActual;
       }
 
-      const remaining = budgeted - actual;
-      const percent = budgeted > 0 ? (actual / budgeted) * 100 : actual > 0 ? 100 : 0;
+      actual = Math.round(actual * 100) / 100;
+      const remaining = Math.round((budgeted - actual) * 100) / 100;
+      const percent = budgeted > 0
+        ? Math.round((actual / budgeted) * 10000) / 100
+        : actual > 0 ? 100 : 0;
 
       const row: CategoryRow = {
         id: cat.id,
@@ -226,7 +247,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         budgetType,
       };
 
-      if (cat.type === 'INCOME') {
+      if (cat.type?.toUpperCase() === 'INCOME') {
         incomeCategories.push(row);
       } else {
         // If the category has actual spend but NO budget row, add to unbudgeted
@@ -251,12 +272,14 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const incomeBudgeted = incomeCategories.reduce((s, c) => s + c.budgeted, 0);
-    const incomeActual = incomeCategories.reduce((s, c) => s + c.actual, 0);
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+
+    const incomeBudgeted = r2(incomeCategories.reduce((s, c) => s + c.budgeted, 0));
+    const incomeActual = r2(incomeCategories.reduce((s, c) => s + c.actual, 0));
 
     const expenseGroups = Array.from(expenseGroupMap.values());
-    const expensesBudgeted = expenseGroups.reduce((s, g) => s + g.budgeted, 0);
-    const expensesActual = expenseGroups.reduce((s, g) => s + g.actual, 0);
+    const expensesBudgeted = r2(expenseGroups.reduce((s, g) => s + g.budgeted, 0));
+    const expensesActual = r2(expenseGroups.reduce((s, g) => s + g.actual, 0));
 
     // Build byType breakdown: flatten all budgeted expense categories
     const allBudgetedExpenseRows = expenseGroups.flatMap(g => g.categories);
@@ -266,9 +289,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       nonMonthly: allBudgetedExpenseRows.filter(r => r.budgetType === 'NON_MONTHLY'),
     };
 
-    const leftToBudget = incomeActual - expensesActual;
+    const leftToBudget = r2(incomeActual - expensesActual);
     const savingsRate = incomeActual > 0
-      ? Math.min(100, Math.max(0, (leftToBudget / incomeActual) * 100))
+      ? Math.min(100, Math.max(0, Math.round((leftToBudget / incomeActual) * 10000) / 100))
       : 0;
 
     return res.json({
@@ -299,22 +322,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { categoryId, name, amount, budgetType } = req.body as {
-      categoryId?: string;
-      name?: string;
-      amount?: number;
-      budgetType?: string;
-    };
-
-    if (!categoryId && !name) {
-      return res.status(400).json({ error: 'Provide either categoryId (category budget) or name (catch-all budget)' });
-    }
-    if (amount === undefined || amount === null || typeof amount !== 'number' || amount < 0) {
-      return res.status(400).json({ error: 'amount must be a non-negative number' });
-    }
-    if (budgetType !== undefined && !VALID_BUDGET_TYPES.includes(budgetType as BudgetType)) {
-      return res.status(400).json({ error: `budgetType must be one of: ${VALID_BUDGET_TYPES.join(', ')}` });
-    }
+    const parse = budgetCreateSchema.safeParse(req.body);
+    if (!parse.success) return res.status(400).json({ error: parse.error.errors[0]?.message });
+    const { categoryId, name, amount, budgetType } = parse.data;
 
     // If categoryId provided, verify it belongs to this household
     if (categoryId) {
@@ -362,17 +372,9 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const { id } = req.params;
-    const { budgetType, amount } = req.body as { budgetType?: string; amount?: number };
-
-    if (budgetType !== undefined && !VALID_BUDGET_TYPES.includes(budgetType as BudgetType)) {
-      return res.status(400).json({ error: `budgetType must be one of: ${VALID_BUDGET_TYPES.join(', ')}` });
-    }
-    if (amount !== undefined && (typeof amount !== 'number' || amount < 0)) {
-      return res.status(400).json({ error: 'amount must be a non-negative number' });
-    }
-    if (budgetType === undefined && amount === undefined) {
-      return res.status(400).json({ error: 'At least one of budgetType or amount is required' });
-    }
+    const parse = budgetUpdateSchema.safeParse(req.body);
+    if (!parse.success) return res.status(400).json({ error: parse.error.errors[0]?.message });
+    const { budgetType, amount } = parse.data;
 
     const existing = await prisma.budget.findUnique({ where: { id } });
     if (!existing) {

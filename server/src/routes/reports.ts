@@ -33,6 +33,7 @@ async function fetchGroupedTransactions(
       date: { gte: start, lte: end },
       amount: amountWhere,
       isHidden: false,
+        isTransfer: false,
     },
     include: {
       category: { select: { id: true, name: true, emoji: true } },
@@ -194,6 +195,7 @@ router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
         date: { gte: range.start, lte: range.end },
         amount: { lt: 0 },
         isHidden: false,
+        isTransfer: false,
       },
       include: {
         category: { select: { id: true, name: true, emoji: true } },
@@ -286,6 +288,7 @@ router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
         date: { gte: range.start, lte: range.end },
         amount: { gt: 0 },
         isHidden: false,
+        isTransfer: false,
       },
       include: {
         category: { select: { id: true, name: true, emoji: true } },
@@ -382,6 +385,7 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
       date: { gte: range.start, lte: range.end },
       amount: amountWhere,
       isHidden: false,
+        isTransfer: false,
     };
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
@@ -536,6 +540,7 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
       date: { gte: range.start, lte: range.end },
       amount: amountWhere,
       isHidden: false,
+        isTransfer: false,
     };
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
@@ -670,6 +675,7 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
       householdId,
       date: { gte: range.start, lte: range.end },
       isHidden: false,
+        isTransfer: false,
     };
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
@@ -776,6 +782,7 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
       date: { gte: start, lt: end },
       amount: { lt: 0 },
       isHidden: false,
+        isTransfer: false,
     };
     if (categoryId) {
       whereClause.categoryId = categoryId;
@@ -857,6 +864,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
           householdId,
           date: { gte: range.start, lte: range.end },
           isHidden: false,
+        isTransfer: false,
         },
         select: { amount: true, date: true },
       });
@@ -900,6 +908,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
         date: { gte: range.start, lte: range.end },
         amount: amountFilter,
         isHidden: false,
+        isTransfer: false,
       },
       include: {
         category: { select: { name: true } },
@@ -1019,6 +1028,7 @@ router.get('/tax-summary', async (req: AuthRequest, res: Response) => {
       where: {
         householdId,
         isHidden: false,
+        isTransfer: false,
         date: { gte: start, lte: end },
         category: { isTaxDeductible: true },
       },
@@ -1079,6 +1089,7 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
         date: { gte: range.start, lte: range.end },
         amount: { lt: 0 },
         isHidden: false,
+        isTransfer: false,
         isSplit: false,
       },
       select: { categoryId: true, amount: true, category: { select: { id: true, name: true, emoji: true } } },
@@ -1133,6 +1144,107 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
     return res.json({ categories, totals });
   } catch (err) {
     console.error('[reports/budget-variance]', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/reports/benchmarks
+// Returns BLS Consumer Expenditure Survey averages vs. household actuals.
+// Query params: startDate, endDate (ISO dates, default = last 12 months)
+// ---------------------------------------------------------------------------
+
+// BLS Consumer Expenditure Survey 2023 annual averages (USD/month per household)
+const BLS_BENCHMARKS: Record<string, { label: string; monthlyAvg: number; pctOfIncome: number }> = {
+  housing:       { label: 'Housing',          monthlyAvg: 2025, pctOfIncome: 33.0 },
+  transportation:{ label: 'Transportation',   monthlyAvg:  985, pctOfIncome: 16.1 },
+  food:          { label: 'Food',             monthlyAvg:  770, pctOfIncome: 12.6 },
+  healthcare:    { label: 'Healthcare',       monthlyAvg:  470, pctOfIncome:  7.7 },
+  entertainment: { label: 'Entertainment',    monthlyAvg:  270, pctOfIncome:  4.4 },
+  personal:      { label: 'Personal Care',    monthlyAvg:   75, pctOfIncome:  1.2 },
+  education:     { label: 'Education',        monthlyAvg:  115, pctOfIncome:  1.9 },
+  clothing:      { label: 'Clothing',         monthlyAvg:  130, pctOfIncome:  2.1 },
+  utilities:     { label: 'Utilities',        monthlyAvg:  370, pctOfIncome:  6.0 },
+  misc:          { label: 'Miscellaneous',    monthlyAvg:  175, pctOfIncome:  2.9 },
+};
+
+// Map common category names → benchmark keys (case-insensitive prefix match)
+const CATEGORY_MAP: [RegExp, string][] = [
+  [/hous|rent|mortg/i, 'housing'],
+  [/transport|auto|car|gas|fuel|parking|uber|lyft|rideshare/i, 'transportation'],
+  [/food|grocer|restaur|dining|fast.?food|coffee|cafe/i, 'food'],
+  [/health|medical|pharma|drug|dental|vision|doctor/i, 'healthcare'],
+  [/entertain|netflix|spotify|hulu|subscri|stream|movie|theater/i, 'entertainment'],
+  [/personal|hair|salon|gym|fitness/i, 'personal'],
+  [/educat|tuition|school|book/i, 'education'],
+  [/cloth|apparel|fashion/i, 'clothing'],
+  [/util|electric|water|internet|phone|cable/i, 'utilities'],
+];
+
+function mapCategory(name: string): string {
+  for (const [re, key] of CATEGORY_MAP) {
+    if (re.test(name)) return key;
+  }
+  return 'misc';
+}
+
+router.get('/benchmarks', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const now = new Date();
+    const defaultEnd = now.toISOString().slice(0, 10);
+    const defaultStart = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+
+    const startDate = (req.query.startDate as string) || defaultStart;
+    const endDate   = (req.query.endDate   as string) || defaultEnd;
+
+    const months = Math.max(
+      1,
+      Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / (30 * 24 * 3600 * 1000)),
+    );
+
+    // Pull spending by category for the period (expenses only, no transfers)
+    const rows = await prisma.transaction.groupBy({
+      by: ['categoryId'],
+      where: {
+        householdId,
+        amount: { lt: 0 },
+        isHidden: false,
+        isTransfer: false,
+        date: { gte: new Date(startDate), lte: new Date(endDate) },
+      },
+      _sum: { amount: true },
+    });
+
+    // Resolve category names
+    const categoryIds = rows.map((r) => r.categoryId).filter(Boolean) as string[];
+    const categories = await prisma.category.findMany({
+      where: { id: { in: categoryIds } },
+      select: { id: true, name: true },
+    });
+    const catMap = Object.fromEntries(categories.map((c) => [c.id, c.name]));
+
+    // Accumulate actuals per benchmark key
+    const actuals: Record<string, number> = {};
+    for (const row of rows) {
+      const catName = row.categoryId ? catMap[row.categoryId] ?? 'Uncategorized' : 'Uncategorized';
+      const key = mapCategory(catName);
+      actuals[key] = (actuals[key] ?? 0) + Math.abs(row._sum.amount ?? 0);
+    }
+
+    // Build response
+    const result = Object.entries(BLS_BENCHMARKS).map(([key, bls]) => ({
+      key,
+      label: bls.label,
+      blsMonthlyAvg: bls.monthlyAvg,
+      blsPctOfIncome: bls.pctOfIncome,
+      actualTotal: Math.round((actuals[key] ?? 0) * 100) / 100,
+      actualMonthlyAvg: Math.round(((actuals[key] ?? 0) / months) * 100) / 100,
+    }));
+
+    return res.json({ startDate, endDate, months, categories: result });
+  } catch (err) {
+    console.error('[reports/benchmarks]', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
