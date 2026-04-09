@@ -39,10 +39,11 @@ interface Account {
 interface Props {
   accounts: Account[];
   onParsed: (result: ParseResult, filename: string, accountId: string) => void;
+  onSmartDetect?: (result: unknown, file: File, accountId: string) => void;
 }
 
 
-export default function DropZone({ accounts, onParsed }: Props) {
+export default function DropZone({ accounts, onParsed, onSmartDetect }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [accountId, setAccountId] = useState('');
@@ -88,8 +89,16 @@ export default function DropZone({ accounts, onParsed }: Props) {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('accountId', accountId);
-      const res = await api.post('/import/parse', formData);
-      onParsed(res.data, file.name, accountId);
+
+      const isCsv = file.name.endsWith('.csv') || file.type === 'text/csv';
+      if (isCsv && onSmartDetect) {
+        // For CSVs with smart detect enabled: call /detect-mapping first
+        const res = await api.post('/import/detect-mapping', formData);
+        onSmartDetect(res.data, file, accountId);
+      } else {
+        const res = await api.post('/import/parse', formData);
+        onParsed(res.data, file.name, accountId);
+      }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
       setError(msg ?? 'Parse failed. Check your file and try again.');
