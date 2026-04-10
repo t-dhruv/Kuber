@@ -201,6 +201,7 @@ model Transaction {
   splitDetails        Json?
   isTransfer          Boolean          @default(false)
   transferId          String?
+  isRefund            Boolean          @default(false)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   account             Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)

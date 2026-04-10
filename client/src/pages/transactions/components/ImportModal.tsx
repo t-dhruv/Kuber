@@ -243,12 +243,14 @@ interface Step2Props {
   headers: string[];
   csvText: string;
   mapping: CsvMapping;
+  invertAmounts: boolean;
   onMapping: (m: CsvMapping) => void;
+  onInvertAmounts: (v: boolean) => void;
   onBack: () => void;
   onNext: () => void;
 }
 
-function Step2Map({ headers, csvText, mapping, onMapping, onBack, onNext }: Step2Props) {
+function Step2Map({ headers, csvText, mapping, invertAmounts, onMapping, onInvertAmounts, onBack, onNext }: Step2Props) {
   const options = [SKIP, ...headers];
 
   const set = (key: keyof CsvMapping, val: string) => {
@@ -333,6 +335,17 @@ function Step2Map({ headers, csvText, mapping, onMapping, onBack, onNext }: Step
         </div>
       )}
 
+      {/* Sign convention */}
+      <label className="flex items-center gap-2 cursor-pointer text-[0.8125rem] text-[var(--color-text)]">
+        <input
+          type="checkbox"
+          checked={invertAmounts}
+          onChange={(e) => onInvertAmounts(e.target.checked)}
+          className="cursor-pointer"
+        />
+        <span>Invert amounts <span className="text-[var(--color-text-muted)]">(my bank exports positive = expense)</span></span>
+      </label>
+
       <ModalFooter style={{ marginTop: 0 }}>
         <Button variant="ghost" icon={<ArrowLeft size={14} />} onClick={onBack}>Back</Button>
         <Button
@@ -355,19 +368,21 @@ interface Step3Props {
   accountId: string;
   dateFormat: string;
   mapping: CsvMapping;
+  invertAmounts: boolean;
   onBack: () => void;
   onDone: () => void;
 }
 
-function Step3Preview({ file, accountId, dateFormat, mapping, onBack, onDone }: Step3Props) {
+function Step3Preview({ file, accountId, dateFormat, mapping, invertAmounts, onBack, onDone }: Step3Props) {
   const previewQuery = useQuery<PreviewResponse>({
-    queryKey: ['import-preview', file.name, accountId, dateFormat, JSON.stringify(mapping)],
+    queryKey: ['import-preview', file.name, accountId, dateFormat, JSON.stringify(mapping), invertAmounts],
     queryFn: async () => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('accountId', accountId);
       formData.append('dateFormat', dateFormat);
       formData.append('mapping', JSON.stringify(mapping));
+      formData.append('invertAmounts', String(invertAmounts));
       const res = await api.post<PreviewResponse>('/transactions/import/preview', formData);
       return res.data;
     },
@@ -381,6 +396,7 @@ function Step3Preview({ file, accountId, dateFormat, mapping, onBack, onDone }: 
       formData.append('accountId', accountId);
       formData.append('dateFormat', dateFormat);
       formData.append('mapping', JSON.stringify(mapping));
+      formData.append('invertAmounts', String(invertAmounts));
       const res = await api.post<ImportResponse>('/transactions/import', formData);
       return res.data;
     },
@@ -514,6 +530,7 @@ export function ImportModal({ open, onClose, onImported }: ImportModalProps) {
   const [accountId, setAccountId] = useState('');
   const [dateFormat, setDateFormat] = useState('YYYY-MM-DD');
   const [mapping, setMapping] = useState<CsvMapping>({ date: '', description: '', amount: '' });
+  const [invertAmounts, setInvertAmounts] = useState(false);
 
   const accountsQuery = useQuery({
     queryKey: ['accounts'],
@@ -601,7 +618,9 @@ export function ImportModal({ open, onClose, onImported }: ImportModalProps) {
           headers={headers}
           csvText={csvText}
           mapping={mapping}
+          invertAmounts={invertAmounts}
           onMapping={setMapping}
+          onInvertAmounts={setInvertAmounts}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
         />
@@ -612,6 +631,7 @@ export function ImportModal({ open, onClose, onImported }: ImportModalProps) {
           accountId={accountId}
           dateFormat={dateFormat}
           mapping={mapping}
+          invertAmounts={invertAmounts}
           onBack={() => setStep(2)}
           onDone={() => { onImported(); handleClose(); }}
         />
