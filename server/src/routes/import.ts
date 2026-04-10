@@ -487,6 +487,7 @@ router.post('/confirm', async (req: AuthRequest, res) => {
 
     let imported = 0;
     let skipped = 0;
+    let importedAmountSum = 0;
     const errors: Array<{ index: number; error: string }> = [];
 
     const isInvestmentAccount = account.type === 'investment';
@@ -495,7 +496,11 @@ router.post('/confirm', async (req: AuthRequest, res) => {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         try {
-          const txDate = new Date(row.date);
+          // Anchor to noon UTC to avoid timezone off-by-one-day issues
+          const rawDate = /^\d{4}-\d{2}-\d{2}$/.test(row.date)
+            ? row.date + 'T12:00:00.000Z'
+            : row.date;
+          const txDate = new Date(rawDate);
           if (isNaN(txDate.getTime())) {
             errors.push({ index: i, error: `Invalid date: ${row.date}` });
             skipped++;
@@ -593,6 +598,7 @@ router.post('/confirm', async (req: AuthRequest, res) => {
               needsReview: !resolvedCategoryId,
             },
           });
+          importedAmountSum += row.amount;
           imported++;
         } catch (err) {
           errors.push({ index: i, error: err instanceof Error ? err.message : 'Unknown error' });
@@ -600,6 +606,14 @@ router.post('/confirm', async (req: AuthRequest, res) => {
         }
       }
     });
+
+    // Update account running balance with sum of imported transaction amounts
+    if (imported > 0) {
+      await prisma.account.update({
+        where: { id: accountId },
+        data: { balance: { increment: importedAmountSum } },
+      });
+    }
 
     // Create rollback checkpoint
     if (imported > 0) {

@@ -15,7 +15,7 @@ import { LiabilityDetailPanel } from './components/LiabilityDetailPanel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type AccountType = 'checking' | 'savings' | 'credit_card' | 'investment' | 'loan' | 'other';
+type AccountType = 'checking' | 'savings' | 'credit_card' | 'investment' | 'loan' | 'other' | 'tfsa' | 'rrsp' | 'fhsa' | 'resp' | '401k' | 'ira' | 'roth_ira';
 
 interface Account {
   id: string;
@@ -126,6 +126,15 @@ const TYPE_OPTIONS = [
   { value: 'investment', label: 'Investment' },
   { value: 'loan', label: 'Loan' },
   { value: 'other', label: 'Other' },
+  // Canadian registered accounts
+  { value: 'tfsa', label: 'TFSA (Tax-Free Savings)' },
+  { value: 'rrsp', label: 'RRSP (Retirement Savings)' },
+  { value: 'fhsa', label: 'FHSA (First Home Savings)' },
+  { value: 'resp', label: 'RESP (Education Savings)' },
+  // US retirement accounts
+  { value: '401k', label: '401(k)' },
+  { value: 'ira', label: 'IRA' },
+  { value: 'roth_ira', label: 'Roth IRA' },
 ];
 
 // Display order: liquid first, then investment, then liabilities, then other
@@ -133,6 +142,13 @@ const GROUP_ORDER: AccountType[] = [
   'checking',
   'savings',
   'investment',
+  'tfsa',
+  'rrsp',
+  'fhsa',
+  'resp',
+  '401k',
+  'ira',
+  'roth_ira',
   'credit_card',
   'loan',
   'other',
@@ -145,6 +161,13 @@ const GROUP_LABELS: Record<AccountType, string> = {
   investment: 'Investment',
   loan: 'Loans',
   other: 'Other',
+  tfsa: 'TFSA',
+  rrsp: 'RRSP',
+  fhsa: 'FHSA',
+  resp: 'RESP',
+  '401k': '401(k)',
+  ira: 'IRA',
+  roth_ira: 'Roth IRA',
 };
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
@@ -172,9 +195,11 @@ function isLiability(type: AccountType): boolean {
   return type === 'credit_card' || type === 'loan';
 }
 
+const INVESTMENT_TYPES: AccountType[] = ['investment', 'tfsa', 'rrsp', 'fhsa', 'resp', '401k', 'ira', 'roth_ira'];
+
 function balanceColor(balance: number, type: AccountType): string {
   if (balance < 0) return 'var(--color-danger)';
-  if (type === 'investment' && balance > 0) return 'var(--color-success)';
+  if (INVESTMENT_TYPES.includes(type) && balance > 0) return 'var(--color-success)';
   return 'var(--color-text)';
 }
 
@@ -243,7 +268,7 @@ function OverflowMenu({
             setOpen(true);
           }
         }}
-        className="bg-transparent border-0 cursor-pointer p-1 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] flex items-center focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-1"
+        className="bg-transparent border-0 cursor-pointer p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-secondary)] flex items-center hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-1 transition-colors"
         aria-label="Account options"
         aria-haspopup="true"
         aria-expanded={open}
@@ -1522,7 +1547,7 @@ export default function AccountsPage() {
         </h1>
         <div className="flex gap-2">
           {activeTab === 'accounts' && <>
-            <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />} onClick={() => notify.info('Manual refresh is not available')}>Refresh all</Button>
+            <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />} onClick={() => queryClient.invalidateQueries({ queryKey: ['accounts'] })}>Refresh all</Button>
             <Button variant="outline" size="sm" icon={<Upload size={14} />} onClick={() => navigate('/accounts/bulk-import')}>Import CSV</Button>
             <Button size="sm" icon={<Plus size={14} />} onClick={() => setShowAdd(true)}>Add account</Button>
           </>}

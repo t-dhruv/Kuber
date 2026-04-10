@@ -1491,7 +1491,7 @@ export default function TransactionsPage() {
           {autoCatStatusFetching && (
             <p className="text-sm text-[color:var(--color-text-secondary)]">Checking AI status…</p>
           )}
-          {!autoCatStatusFetching && autoCatStatus?.notConfigured && (
+          {!autoCatStatusFetching && autoCatStatus && !autoCatStatus?.configured && (
             <>
               <AiSetupNudge message="Auto-categorize requires an AI provider. Set one up to automatically categorize your uncategorized transactions." />
               <div className="flex justify-end">
