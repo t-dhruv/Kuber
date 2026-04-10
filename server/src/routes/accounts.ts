@@ -372,7 +372,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    const { name, institution, institutionLogo, lastFour, isHidden, excludeFromNetWorth } = req.body;
+    const { name, type, institution, institutionLogo, lastFour, isHidden, excludeFromNetWorth } = req.body;
 
     const data: Record<string, unknown> = {};
     if (name !== undefined) {
@@ -380,6 +380,13 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ error: 'name must be a non-empty string' });
       }
       data.name = name.trim();
+    }
+    if (type !== undefined) {
+      const normalizedType = String(type).toUpperCase().replace(/\s+/g, '_');
+      if (!VALID_ACCOUNT_TYPES.includes(normalizedType)) {
+        return res.status(400).json({ error: `Invalid account type. Valid: ${VALID_ACCOUNT_TYPES.join(', ')}` });
+      }
+      data.type = normalizedType;
     }
     if (institution !== undefined) data.institution = institution;
     if (institutionLogo !== undefined) data.institutionLogo = institutionLogo ?? null;

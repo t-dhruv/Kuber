@@ -833,6 +833,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       include: TX_INCLUDE,
     });
 
+    // Update account running balance
+    await prisma.account.update({
+      where: { id: accountId },
+      data: { balance: { increment: amount } },
+    });
+
     logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'TRANSACTION', entityId: tx.id, after: { amount: tx.amount, description: tx.description } });
     fireWebhooks(householdId, 'transaction.created', formatTx(tx)).catch(() => {});
     return res.status(201).json(formatTx(tx));
@@ -934,6 +940,20 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       include: TX_INCLUDE,
     });
 
+    // Update account balance by amount delta
+    const newAmount = data.amount !== undefined ? (data.amount as number) : existing.amount;
+    const amountDelta = newAmount - existing.amount;
+    const targetAccountId = (data.accountId as string | undefined) ?? existing.accountId;
+    if (amountDelta !== 0 || data.accountId !== undefined) {
+      if (data.accountId !== undefined && data.accountId !== existing.accountId) {
+        // Account changed: undo on old account, apply on new account
+        await prisma.account.update({ where: { id: existing.accountId }, data: { balance: { increment: -existing.amount } } });
+        await prisma.account.update({ where: { id: targetAccountId }, data: { balance: { increment: newAmount } } });
+      } else if (amountDelta !== 0) {
+        await prisma.account.update({ where: { id: existing.accountId }, data: { balance: { increment: amountDelta } } });
+      }
+    }
+
     logAudit({ householdId, userId: req.userId!, action: 'UPDATE', entity: 'TRANSACTION', entityId: tx.id, before: { amount: existing.amount, description: existing.description }, after: { amount: tx.amount, description: tx.description } });
     return res.json(formatTx(tx));
   } catch (err) {
@@ -954,6 +974,13 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
 
     await prisma.transaction.delete({ where: { id } });
+
+    // Undo the transaction's effect on account balance
+    await prisma.account.update({
+      where: { id: existing.accountId },
+      data: { balance: { increment: -existing.amount } },
+    });
+
     logAudit({ householdId, userId: req.userId!, action: 'DELETE', entity: 'TRANSACTION', entityId: id, before: { amount: existing.amount, description: existing.description } });
 
     return res.json({ success: true });
