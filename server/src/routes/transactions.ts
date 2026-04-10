@@ -62,6 +62,7 @@ function formatTx(t: any) {
     splitDetails: t.splitDetails ?? null,
     isTransfer: t.isTransfer ?? false,
     transferId: t.transferId ?? null,
+    isRefund: t.isRefund ?? false,
     notes: t.notes ?? null,
     tags: (t.tags ?? []).map((tt: any) => ({
       id: tt.tag.id,
@@ -538,6 +539,7 @@ const ImportBodySchema = z.object({
   accountId: z.string().min(1),
   dateFormat: z.enum(['YYYY-MM-DD', 'MM/DD/YYYY', 'DD/MM/YYYY', 'MM-DD-YYYY']).default('YYYY-MM-DD'),
   mapping: z.string().min(1), // JSON string
+  invertAmounts: z.enum(['true', 'false']).optional(), // FormData sends strings
 });
 
 // ---------------------------------------------------------------------------
@@ -551,7 +553,8 @@ router.post('/import/preview', upload.single('file'), async (req: AuthRequest, r
     if (!bodyParsed.success) {
       return res.status(400).json({ error: bodyParsed.error.errors[0]?.message ?? 'Invalid request' });
     }
-    const { accountId, dateFormat, mapping: mappingStr } = bodyParsed.data;
+    const { accountId, dateFormat, mapping: mappingStr, invertAmounts: invertAmountsStr } = bodyParsed.data;
+    const invertAmounts = invertAmountsStr === 'true';
 
     let mapping: CsvMapping;
     try {
@@ -575,6 +578,7 @@ router.post('/import/preview', upload.single('file'), async (req: AuthRequest, r
     const dataRows = allRows.slice(1);
 
     const { parsed, errors } = parseImportRows(dataRows, headers, mapping, dateFormat, 5);
+    if (invertAmounts) parsed.forEach(p => { p.amount = -p.amount; });
 
     return res.json({
       headers,
@@ -605,7 +609,8 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
     if (!bodyParsed.success) {
       return res.status(400).json({ error: bodyParsed.error.errors[0]?.message ?? 'Invalid request' });
     }
-    const { accountId, dateFormat, mapping: mappingStr } = bodyParsed.data;
+    const { accountId, dateFormat, mapping: mappingStr, invertAmounts: invertAmountsStr } = bodyParsed.data;
+    const invertAmounts = invertAmountsStr === 'true';
 
     let mapping: CsvMapping;
     try {
@@ -629,6 +634,7 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
     const dataRows = allRows.slice(1);
 
     const { parsed, errors } = parseImportRows(dataRows, headers, mapping, dateFormat);
+    if (invertAmounts) parsed.forEach(p => { p.amount = -p.amount; });
 
     // If >10% of rows have errors, reject everything
     const totalAttempted = dataRows.length;
@@ -780,7 +786,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { date, description, amount, accountId, notes, tagIds, isRecurring } = req.body;
+    const { date, description, amount, accountId, notes, tagIds, isRecurring, isRefund } = req.body;
     // Normalize empty string categoryId to null to avoid Prisma FK constraint error
     const categoryId = req.body.categoryId || null;
 
@@ -823,6 +829,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         categoryId: categoryId ?? null,
         notes: notes ?? null,
         isRecurring: isRecurring ?? false,
+        isRefund: isRefund ?? false,
         needsReview: false,
         isHidden: false,
         isSplit: false,
@@ -895,7 +902,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
 
-    const allowed = ['date', 'description', 'amount', 'categoryId', 'accountId', 'notes', 'isRecurring', 'needsReview', 'isHidden'];
+    const allowed = ['date', 'description', 'amount', 'categoryId', 'accountId', 'notes', 'isRecurring', 'isRefund', 'needsReview', 'isHidden'];
     const data: any = {};
 
     for (const field of allowed) {
