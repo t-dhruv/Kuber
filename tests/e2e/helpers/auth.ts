@@ -63,6 +63,18 @@ export async function login(
   email = TEST_USER_EMAIL,
   password = TEST_USER_PASSWORD,
 ) {
+  // When running with storageState (global-setup), the auth session is already
+  // loaded into the browser context.  The app's React Router will redirect
+  // authenticated users away from /login — wait briefly for that to happen.
+  await page.goto('/login');
+  await page
+    .waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 4_000 })
+    .catch(() => {});
+  if (!new URL(page.url()).pathname.startsWith('/login')) {
+    // Already authenticated via storageState — nothing more to do.
+    return;
+  }
+
   const loggedIn = await tryLogin(page, email, password);
   if (loggedIn) return;
 

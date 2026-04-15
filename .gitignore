@@ -48,5 +48,6 @@ playwright-report/
 playwright-report-responsive/
 test-results/
 tests/e2e/artifacts
+tests/e2e/.auth/
 .playwright-mcp/
 tests/screenshots/

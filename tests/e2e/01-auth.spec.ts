@@ -19,28 +19,32 @@ test.describe('Authentication', () => {
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
   });
 
-  test('1.2 login with wrong password shows error', async ({ page }) => {
-    await page.goto('/login');
-    await page.locator('#email').fill(uniqueEmail('wrong-login'));
-    await page.locator('#password').fill('wrongpassword');
-    await page.getByRole('button', { name: /sign in/i }).click();
-    // Should stay on login page and show an error
-    await expect(page).toHaveURL('/login');
-    await expect(page.locator('body')).toContainText(/invalid|incorrect|wrong|failed/i, { timeout: 6_000 });
-  });
+  test.describe('unauthenticated login form', () => {
+    test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('1.3 login with empty fields keeps submit disabled or shows validation', async ({ page }) => {
-    await page.goto('/login');
-    // Clear pre-filled fields
-    await page.locator('#email').fill('');
-    await page.locator('#password').fill('');
-    const btn = page.getByRole('button', { name: /sign in/i });
-    // Either button is disabled or form shows validation
-    const isDisabled = await btn.isDisabled();
-    if (!isDisabled) {
-      await btn.click();
+    test('1.2 login with wrong password shows error', async ({ page }) => {
+      await page.goto('/login');
+      await page.locator('#email').fill(uniqueEmail('wrong-login'));
+      await page.locator('#password').fill('wrongpassword');
+      await page.getByRole('button', { name: /sign in/i }).click();
+      // Should stay on login page and show an error
       await expect(page).toHaveURL('/login');
-    }
+      await expect(page.locator('body')).toContainText(/invalid|incorrect|wrong|failed/i, { timeout: 6_000 });
+    });
+
+    test('1.3 login with empty fields keeps submit disabled or shows validation', async ({ page }) => {
+      await page.goto('/login');
+      // Clear pre-filled fields
+      await page.locator('#email').fill('');
+      await page.locator('#password').fill('');
+      const btn = page.getByRole('button', { name: /sign in/i });
+      // Either button is disabled or form shows validation
+      const isDisabled = await btn.isDisabled();
+      if (!isDisabled) {
+        await btn.click();
+        await expect(page).toHaveURL('/login');
+      }
+    });
   });
 
   test('1.4 logout redirects to login page', async ({ page }) => {
@@ -57,19 +61,23 @@ test.describe('Authentication', () => {
     await expect(page).toHaveURL('/login');
   });
 
-  test('1.5 protected route redirects unauthenticated user to login', async ({ page }) => {
-    await page.goto('/transactions');
-    await expect(page).toHaveURL('/login', { timeout: 8_000 });
-  });
+  test.describe('unauthenticated protected routes', () => {
+    test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('1.6 protected route /accounts redirects unauthenticated', async ({ page }) => {
-    await page.goto('/accounts');
-    await expect(page).toHaveURL('/login', { timeout: 8_000 });
-  });
+    test('1.5 protected route redirects unauthenticated user to login', async ({ page }) => {
+      await page.goto('/transactions');
+      await expect(page).toHaveURL('/login', { timeout: 8_000 });
+    });
 
-  test('1.7 protected route /settings redirects unauthenticated', async ({ page }) => {
-    await page.goto('/settings');
-    await expect(page).toHaveURL('/login', { timeout: 8_000 });
+    test('1.6 protected route /accounts redirects unauthenticated', async ({ page }) => {
+      await page.goto('/accounts');
+      await expect(page).toHaveURL('/login', { timeout: 8_000 });
+    });
+
+    test('1.7 protected route /settings redirects unauthenticated', async ({ page }) => {
+      await page.goto('/settings');
+      await expect(page).toHaveURL('/login', { timeout: 8_000 });
+    });
   });
 
   test('1.8 after login, navigating to /login shows dashboard or redirects', async ({ page }) => {
@@ -88,6 +96,10 @@ test.describe('Authentication', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Registration', () => {
+  // Registration tests need a clean (unauthenticated) browser context so the
+  // signup form is actually reachable (storageState would redirect to dashboard).
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test('1.9 signup with valid data creates account and lands on dashboard', async ({ page }) => {
     const email = uniqueEmail('signup');
     await page.goto('/signup');
