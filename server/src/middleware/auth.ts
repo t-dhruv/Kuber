@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { prisma } from '../lib/prisma';
+import { prisma } from '../lib/prisma.js';
 
 export interface AuthRequest extends Request {
   userId?: string;
@@ -19,6 +19,10 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string; householdId: string };
     req.userId = decoded.userId;
     req.householdId = decoded.householdId;
+    // Bind householdId to the request logger so all route logs carry it automatically
+    if (req.log) {
+      req.log = req.log.child({ householdId: decoded.householdId });
+    }
     return next();
   } catch {
     // JWT failed — fall through to API token check
@@ -39,6 +43,9 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
 
     req.userId = apiToken.userId;
     req.householdId = apiToken.householdId;
+    if (req.log) {
+      req.log = req.log.child({ householdId: apiToken.householdId });
+    }
     return next();
   } catch {
     return res.status(401).json({ error: 'Invalid token' });
