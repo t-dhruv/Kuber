@@ -48,18 +48,22 @@ import { sendDigestEmail } from './lib/digestEmail';
 import { runProactiveChecks } from './lib/proactiveAi';
 import { runImapCheckForAllHouseholds } from './lib/imapWatcher';
 import { prisma } from './lib/prisma';
+import pinoHttp from 'pino-http';
+import { randomUUID } from 'crypto';
+import { logger } from './lib/logger.js';
+import { metricsHandler, httpRequestsTotal, httpRequestDurationSeconds } from './lib/metrics.js';
 
 // ── Startup env validation ────────────────────────────────────────────────────
 const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'DATABASE_URL'] as const;
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
-    console.error(`[startup] Missing required environment variable: ${key}`);
+    logger.fatal({ key }, 'Missing required environment variable');
     process.exit(1);
   }
 }
 
 if (process.env.NODE_ENV === 'production' && !process.env.CLIENT_URL) {
-  console.error('[startup] CLIENT_URL must be set in production');
+  logger.fatal('CLIENT_URL must be set in production');
   process.exit(1);
 }
 
@@ -119,12 +123,40 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
+// ── Request logging (pino-http) ───────────────────────────────────────────────
+app.use(pinoHttp({
+  logger,
+  genReqId: () => randomUUID(),
+  customReceivedMessage: (req) => `→ ${req.method} ${req.url}`,
+  customSuccessMessage: (req, res) => `← ${req.method} ${req.url} ${res.statusCode}`,
+  customErrorMessage: (req, res, err) => `← ${req.method} ${req.url} ${res.statusCode} ${err.message}`,
+  // Don't log health checks — too noisy
+  autoLogging: {
+    ignore: (req) => req.url === '/health',
+  },
+}));
+
+// ── HTTP metrics middleware ───────────────────────────────────────────────────
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const route = (req.route?.path as string) ?? req.path;
+    const labels = { method: req.method, route, status_code: String(res.statusCode) };
+    httpRequestsTotal.inc(labels);
+    httpRequestDurationSeconds.observe(labels, (Date.now() - start) / 1000);
+  });
+  next();
+});
+
 // Apply rate limiters
 app.use('/api/v1/auth', authLimiter);
 app.use('/api/', apiLimiter);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', name: 'Kuber API' }));
+
+// Prometheus metrics — internal only (Nginx blocks external access)
+app.get('/metrics', metricsHandler);
 
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', requireAuth, usersRouter);
@@ -227,7 +259,7 @@ setInterval(async () => {
 }, 60 * 60 * 1000);
 
 const server = app.listen(PORT, () => {
-  console.log(`Kuber server running on :${PORT}`);
+  logger.info({ port: PORT }, 'Kuber server started');
   takeNetWorthSnapshot().catch((err) =>
     console.error('[networth-job] startup snapshot failed:', err),
   );
@@ -238,19 +270,19 @@ const server = app.listen(PORT, () => {
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
 async function shutdown(signal: string) {
-  console.log(`[shutdown] ${signal} received — shutting down gracefully`);
+  logger.info({ signal }, 'Shutdown signal received');
   server.close(async () => {
     try {
       await prisma.$disconnect();
-      console.log('[shutdown] Database disconnected. Bye.');
+      logger.info('Database disconnected');
     } catch (err) {
-      console.error('[shutdown] Error disconnecting database:', err);
+      logger.error({ err }, 'Error disconnecting database');
     }
     process.exit(0);
   });
   // Force exit after 10s if connections don't drain
   setTimeout(() => {
-    console.error('[shutdown] Forced exit after timeout');
+    logger.error('Forced exit after timeout');
     process.exit(1);
   }, 10_000).unref();
 }
