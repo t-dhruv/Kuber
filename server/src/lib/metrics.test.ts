@@ -1,6 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+
+// Reset modules + clear registry before each test so prom-client's singleton
+// registry doesn't throw "already registered" if other tests also touch prom-client
+beforeEach(async () => {
+  vi.resetModules();
+  const { register } = await import('prom-client');
+  register.clear();
+});
 
 describe('metrics', () => {
   it('exports all required metric objects', async () => {
