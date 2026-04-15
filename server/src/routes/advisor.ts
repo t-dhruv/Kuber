@@ -216,11 +216,15 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
     ];
 
     // 5 & 6. Try to get AI client — return friendly message if not configured
+    // Fetch config once and call getAiClient directly to avoid double DB query
     let responseContent: string;
     const chatAiConfig = await prisma.aiConfig.findUnique({ where: { householdId } });
     const chatProvider = chatAiConfig?.provider ?? 'unknown';
     try {
-      const client = await getAiClientForHousehold(householdId, prisma);
+      if (!chatAiConfig || chatAiConfig.provider === 'none') {
+        throw new Error('AI provider not configured. Go to Settings → AI Advisor to set up.');
+      }
+      const client = getAiClient(chatAiConfig);
 
       // 7. Call AI
       const result = await client.complete({
