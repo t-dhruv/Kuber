@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { login } from './helpers/auth';
+import { uniqueEmail } from './helpers/setup';
 
 test.describe('Authentication', () => {
   test('redirects to login when not authenticated', async ({ page }) => {
@@ -9,7 +10,7 @@ test.describe('Authentication', () => {
 
   test('shows error on invalid credentials', async ({ page }) => {
     await page.goto('/login');
-    await page.locator('#email').fill('demo@kuber.app');
+    await page.locator('#email').fill(uniqueEmail('invalid'));
     await page.locator('#password').fill('wrong-password-xyz');
     await page.getByRole('button', { name: /sign in/i }).click();
 

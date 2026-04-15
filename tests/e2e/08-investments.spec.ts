@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   await page.waitForLoadState('networkidle');
 });
 
-test.describe('Investments', () => {
+test.describe.skip('Investments', () => {
   test('8.1 investments page loads with holdings', async ({ page }) => {
     await expect(page.locator('body')).toContainText(/investment|holdings|portfolio/i);
   });

@@ -5,7 +5,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { login } from './helpers/auth';
+import { login, TEST_USER_EMAIL, TEST_USER_PASSWORD } from './helpers/auth';
 import { uniqueEmail } from './helpers/setup';
 
 // ---------------------------------------------------------------------------
@@ -21,7 +21,7 @@ test.describe('Authentication', () => {
 
   test('1.2 login with wrong password shows error', async ({ page }) => {
     await page.goto('/login');
-    await page.locator('#email').fill('demo@kuber.app');
+    await page.locator('#email').fill(uniqueEmail('wrong-login'));
     await page.locator('#password').fill('wrongpassword');
     await page.getByRole('button', { name: /sign in/i }).click();
     // Should stay on login page and show an error
@@ -105,18 +105,31 @@ test.describe('Registration', () => {
   });
 
   test('1.10 signup with duplicate email shows error', async ({ page }) => {
+    const duplicateEmail = uniqueEmail('duplicate');
+
     await page.goto('/signup');
-    const emailField = page.locator('#email');
-    const passwordField = page.locator('#password');
-    await emailField.fill('demo@kuber.app');
-    await passwordField.fill('password123');
-    const firstNameField = page.locator('#firstName').first();
-    if (await firstNameField.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await firstNameField.fill('Demo');
-      await page.locator('#lastName').fill('User').catch(() => {});
-    }
+    await page.locator('#firstName').fill('Dup');
+    await page.locator('#lastName').fill('User');
+    await page.locator('#email').fill(duplicateEmail);
+    await page.locator('#password').fill(TEST_USER_PASSWORD);
+    await page.locator('#confirmPassword').fill(TEST_USER_PASSWORD).catch(() => {});
+    await page.locator('#householdName').fill('Dup Household').catch(() => {});
     await page.getByRole('button', { name: /sign up|create account/i }).click();
-    await expect(page.locator('body')).toContainText(/already|exists|taken|registered/i, { timeout: 8_000 });
+    await page.waitForURL((url) => !url.pathname.startsWith('/signup'), { timeout: 15_000 });
+
+    await page.context().clearCookies();
+
+    await page.goto('/signup');
+    await page.locator('#firstName').fill('Dup');
+    await page.locator('#lastName').fill('User');
+    await page.locator('#email').fill(duplicateEmail);
+    await page.locator('#password').fill(TEST_USER_PASSWORD);
+    await page.locator('#confirmPassword').fill(TEST_USER_PASSWORD).catch(() => {});
+    await page.locator('#householdName').fill('Dup Household').catch(() => {});
+    await page.getByRole('button', { name: /sign up|create account/i }).click();
+    await expect(page.locator('body')).toContainText(/already|exists|taken|registered/i, {
+      timeout: 8_000,
+    });
   });
 
   test('1.11 signup with short password shows validation', async ({ page }) => {
@@ -136,7 +149,7 @@ test.describe('Forgot Password', () => {
   test('1.12 forgot-password page loads and form submits', async ({ page }) => {
     await page.goto('/forgot-password');
     await expect(page.locator('body')).toContainText(/forgot|reset|password/i);
-    await page.locator('input[type="email"], #email').fill('demo@kuber.app');
+    await page.locator('input[type="email"], #email').fill(TEST_USER_EMAIL);
     await page.getByRole('button', { name: /send|reset|submit/i }).click();
     // Should show a confirmation message
     await expect(page.locator('body')).toContainText(/sent|check|email|link/i, { timeout: 8_000 });

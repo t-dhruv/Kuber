@@ -117,4 +117,97 @@ test.describe('Wealth Page — Deep Tests', () => {
       await expect(page.locator('body')).toContainText(/\$[\d,]+/);
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Wealth Page — Income Edit, Ladder, Alerts, Savings Capacity
+  // ---------------------------------------------------------------------------
+
+  test.describe('Wealth Page — Income Edit, Ladder, Alerts', () => {
+    test('19.11 income edit modal saves correctly and shows updated amounts', async ({ page }) => {
+      const editBtn = page.getByRole('button', { name: /edit.*income|set.*income|update.*income|change.*income/i })
+        .or(page.locator('[data-testid="edit-income"], [aria-label*="edit income" i]').first());
+      if (!await editBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        test.skip();
+        return;
+      }
+      await editBtn.click();
+      const dialog = page.getByRole('dialog');
+      await dialog.waitFor({ timeout: 5_000 });
+
+      // Find income amount input and change it
+      const incomeInput = dialog.locator('input[type="number"], input[name*="income"], input[name*="salary"]').first();
+      if (await incomeInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await incomeInput.clear();
+        await incomeInput.fill('75000');
+        const saveBtn = dialog.getByRole('button', { name: /save|update|apply/i }).last();
+        if (await saveBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
+          await saveBtn.click();
+          await page.waitForTimeout(1_000);
+          // Should show updated income amounts
+          await expect(page.locator('body')).toContainText(/75,?000|updated|income/i, { timeout: 8_000 });
+        }
+      }
+    });
+
+    test('19.12 investment ladder step expands to show details', async ({ page }) => {
+      // Look for investment ladder section
+      const ladderSection = page.locator(
+        'text=/investment.*ladder|ladder|step.*\d|emergency.*fund|TFSA.*RRSP/i'
+      ).first();
+      const hasLadder = await ladderSection.isVisible({ timeout: 3_000 }).catch(() => false);
+      if (!hasLadder) {
+        test.skip();
+        return;
+      }
+
+      // Find expandable ladder steps
+      const steps = page.locator('[class*="step"], [class*="ladder-step"], button:has-text("Step")').all();
+      const stepCount = await steps.count();
+      if (stepCount > 0) {
+        await steps.first().click();
+        await page.waitForTimeout(500);
+        // Expanded content should show details about this step
+        await expect(page.locator('body')).toContainText(/step|detail|fund|invest/i, { timeout: 5_000 });
+      } else {
+        test.skip();
+      }
+    });
+
+    test('19.13 alert severity icons are visible for warnings', async ({ page }) => {
+      // Look for alert/danger/warning indicators
+      const alertIcons = page.locator(
+        '[class*="alert"], [class*="danger"], [class*="warning"], [class*="severity"], ' +
+        'svg[class*="alert"], svg[class*="warning"]'
+      ).all();
+      const count = await alertIcons.count();
+      if (count > 0) {
+        await expect(alertIcons.first()).toBeVisible();
+      } else {
+        // May have text-based alerts
+        const bodyText = await page.locator('body').textContent() ?? '';
+        const hasAlerts = /warning|alert|danger|over.*budget|over.*limit/i.test(bodyText);
+        if (hasAlerts) {
+          await expect(page.locator('body')).toContainText(/warning|alert|danger/i);
+        } else {
+          test.skip();
+        }
+      }
+    });
+
+    test('19.14 savings capacity value is shown', async ({ page }) => {
+      const bodyText = await page.locator('body').textContent() ?? '';
+      const hasSavingsCap = /savings.*capacity|savings.*potential|savings.*room|can.*save/i.test(bodyText);
+      if (hasSavingsCap) {
+        await expect(page.locator('body')).toContainText(/savings.*capacity|savings.*potential|savings.*room|can.*save/i);
+      } else {
+        // May show a dollar amount related to savings capacity
+        const hasDollar = /\$[\d,]+/.test(bodyText);
+        if (hasDollar) {
+          await expect(page.locator('body')).toContainText(/\$[\d,]+/);
+        } else {
+          test.skip();
+        }
+      }
+    });
+  });
 });

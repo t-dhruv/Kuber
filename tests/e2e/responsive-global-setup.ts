@@ -8,6 +8,7 @@
 import { chromium } from '@playwright/test';
 import * as path from 'path';
 import * as os from 'os';
+import { login } from './helpers/auth';
 
 export const AUTH_STATE_PATH = path.join(os.tmpdir(), 'kuber-e2e-auth-state.json');
 
@@ -16,11 +17,7 @@ async function globalSetup() {
   const context = await browser.newContext({ baseURL: 'http://localhost:9001' });
   const page = await context.newPage();
 
-  await page.goto('/login');
-  await page.locator('#email').fill('demo@kuber.app');
-  await page.locator('#password').fill('password123');
-  await page.getByRole('button', { name: /sign in/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
+  await login(page);
 
   await context.storageState({ path: AUTH_STATE_PATH });
   await browser.close();

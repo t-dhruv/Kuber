@@ -12,51 +12,42 @@ test.beforeEach(async ({ page }) => {
   await page.waitForLoadState('networkidle');
 });
 
+async function createRecurringItem(page: import('@playwright/test').Page, name: string) {
+  await page.getByRole('button', { name: /^add recurring$/i }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor({ timeout: 5_000 });
+  await dialog.getByRole('textbox', { name: /^name$/i }).fill(name);
+  await dialog.getByRole('spinbutton', { name: /amount/i }).fill('29.99');
+  await dialog.locator('input[type="date"]').first().fill('2026-04-01');
+
+  const accountSelect = dialog.locator('select#account');
+  if (await accountSelect.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    const opts = await accountSelect.locator('option:not([disabled])').all();
+    if (opts.length > 0) {
+      const val = await opts[0].getAttribute('value');
+      if (val) await accountSelect.selectOption(val);
+    }
+  }
+
+  await dialog.getByRole('button', { name: /^add$/i }).click();
+  await page.getByRole('button', { name: /all recurring/i }).click();
+  await expect(page.locator('body')).toContainText(name, { timeout: 8_000 });
+}
+
 test.describe('Recurring', () => {
   test('7.1 recurring page loads', async ({ page }) => {
     await expect(page.locator('body')).toContainText(/recurring|bills|subscriptions/i);
   });
 
-  test('7.2 existing recurring items are listed', async ({ page }) => {
-    // Seeded data has Netflix, Spotify, etc.
-    await expect(page.locator('body')).toContainText(/Netflix|Spotify|Rogers|Rent/i);
+  test('7.2 recurring items listed are created through real flow', async ({ page }) => {
+    const name = `E2E Recurring ${Date.now()}`;
+    await createRecurringItem(page, name);
+    await expect(page.locator('body')).toContainText(name, { timeout: 8_000 });
   });
 
   test('7.3 create a new recurring item', async ({ page }) => {
     const name = `E2E Bill ${Date.now()}`;
-    await page.getByRole('button', { name: /^add recurring$/i }).click();
-    const dialog = page.getByRole('dialog');
-    await dialog.waitFor({ timeout: 5_000 });
-
-    // Name field (id="name" from label="Name")
-    await dialog.getByRole('textbox', { name: /^name$/i }).fill(name);
-    // Amount spinbutton
-    await dialog.getByRole('spinbutton', { name: /amount/i }).fill('29.99');
-
-    // Frequency combobox — select Monthly
-    const freqSelect = dialog.getByRole('combobox', { name: /frequency/i });
-    if (await freqSelect.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await freqSelect.selectOption({ label: 'Monthly' }).catch(() => {});
-    }
-
-    // Next due date — input[type="date"] is not role="textbox", use locator
-    const dateInput = dialog.locator('input[type="date"]').first();
-    await dateInput.fill('2026-04-01');
-
-    // Account — required by API; use Playwright selectOption (fires React synthetic events)
-    const accountSelect = dialog.locator('select#account');
-    if (await accountSelect.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      const opts = await accountSelect.locator('option:not([disabled])').all();
-      if (opts.length > 0) {
-        const val = await opts[0].getAttribute('value');
-        if (val) await accountSelect.selectOption(val);
-      }
-    }
-
-    await dialog.getByRole('button', { name: /^add$/i }).click();
-    // Switch to "All recurring" view to see the new item (monthly view filters by current month)
-    await page.getByRole('button', { name: /all recurring/i }).click();
-    await expect(page.locator('body')).toContainText(name, { timeout: 8_000 });
+    await createRecurringItem(page, name);
   });
 
   test('7.4 edit a recurring item amount', async ({ page }) => {
@@ -77,25 +68,7 @@ test.describe('Recurring', () => {
 
   test('7.5 delete a recurring item', async ({ page }) => {
     const name = `Delete Bill ${Date.now()}`;
-    await page.getByRole('button', { name: /^add recurring$/i }).click();
-    const dialog = page.getByRole('dialog');
-    await dialog.waitFor({ timeout: 5_000 });
-    await dialog.getByRole('textbox', { name: /^name$/i }).fill(name);
-    await dialog.getByRole('spinbutton', { name: /amount/i }).fill('9.99');
-    await dialog.locator('input[type="date"]').first().fill('2026-04-01');
-    // Select first real account (required)
-    const accountSel = dialog.locator('select#account');
-    if (await accountSel.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      const opts = await accountSel.locator('option:not([disabled])').all();
-      if (opts.length > 0) {
-        const val = await opts[0].getAttribute('value');
-        if (val) await accountSel.selectOption(val);
-      }
-    }
-    await dialog.getByRole('button', { name: /^add$/i }).click();
-    // Switch to "All recurring" view to see newly created item
-    await page.getByRole('button', { name: /all recurring/i }).click();
-    await expect(page.locator('body')).toContainText(name, { timeout: 8_000 });
+    await createRecurringItem(page, name);
 
     const itemRow = page.locator('body').getByText(name).first();
     await itemRow.hover();
@@ -116,9 +89,11 @@ test.describe('Recurring', () => {
   });
 
   test('7.7 upcoming bills appear on dashboard', async ({ page }) => {
+    const name = `Upcoming Bill ${Date.now()}`;
+    await createRecurringItem(page, name);
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await expect(page.locator('body')).toContainText(/upcoming|bills/i);
-    await expect(page.locator('body')).toContainText(/Netflix|Rogers|Rent/i);
+    await expect(page.locator('body')).toContainText(new RegExp(name, 'i'));
   });
 });
