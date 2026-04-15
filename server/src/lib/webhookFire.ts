@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import { prisma } from './prisma';
+import { createModuleLogger } from './logger.js';
+const log = createModuleLogger('webhook');
 
 export type WebhookEvent =
   | 'transaction.created'
@@ -47,12 +49,12 @@ export async function fireWebhooks(
         });
 
         if (!response.ok) {
-          console.warn(`[webhook] ${hook.id} → ${hook.url} returned ${response.status}`);
+          log.warn({ hookId: hook.id, url: hook.url, status: response.status }, 'Webhook delivery failed');
         }
       }),
     );
   } catch (err) {
     // Never let webhook errors bubble up to the caller
-    console.error('[webhookFire] error:', err);
+    log.error({ err }, 'Webhook fire error');
   }
 }

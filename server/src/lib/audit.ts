@@ -1,4 +1,6 @@
 import { prisma } from './prisma';
+import { createModuleLogger } from './logger.js';
+const log = createModuleLogger('audit');
 
 export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE';
 export type AuditEntity = 'TRANSACTION' | 'ACCOUNT' | 'BUDGET' | 'GOAL' | 'RULE' | 'RECURRING';
@@ -28,5 +30,5 @@ export function logAudit(params: AuditParams): void {
           : undefined,
       },
     })
-    .catch((err) => console.error('[audit] Failed to write log:', err));
+    .catch((err) => log.error({ err }, 'Failed to write audit log'));
 }

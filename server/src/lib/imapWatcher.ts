@@ -5,6 +5,8 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { parseReceiptEmail } from './emailParser.js';
+import { createModuleLogger } from './logger.js';
+const log = createModuleLogger('imap');
 
 export interface ImapConfig {
   host: string;
@@ -135,7 +137,7 @@ export async function runImapCheckForAllHouseholds(prisma: PrismaClient): Promis
         });
       }
     } catch (err) {
-      console.error('[imapWatcher] household check failed:', err);
+      log.error({ err }, 'Household IMAP check failed');
     }
   }
 }
