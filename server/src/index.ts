@@ -51,7 +51,10 @@ import { prisma } from './lib/prisma';
 import pinoHttp from 'pino-http';
 import { randomUUID } from 'crypto';
 import { logger } from './lib/logger.js';
-import { metricsHandler, httpRequestsTotal, httpRequestDurationSeconds } from './lib/metrics.js';
+import { metricsHandler, httpRequestsTotal, httpRequestDurationSeconds,
+         jobRunsTotal, jobDurationSeconds, jobLastRunTimestamp } from './lib/metrics.js';
+
+const jobLog = logger.child({ module: 'jobs' });
 
 // ── Startup env validation ────────────────────────────────────────────────────
 const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'DATABASE_URL'] as const;
@@ -226,13 +229,14 @@ function checkIfDigestDue(schedule: { frequency: string; lastSentAt: Date | null
 }
 
 setInterval(async () => {
+  const end = jobDurationSeconds.startTimer({ job: 'digest-email' });
   try {
     const now = new Date();
     const schedules = await prisma.reportSchedule.findMany({ where: { enabled: true } });
     for (const schedule of schedules) {
       const isDue = checkIfDigestDue(schedule, now);
       if (isDue) {
-        console.log(`[digest-job] Sending digest for household ${schedule.householdId}`);
+        jobLog.info({ householdId: schedule.householdId }, 'Sending digest email');
         await sendDigestEmail(schedule.householdId);
         await prisma.reportSchedule.update({
           where: { id: schedule.id },
@@ -240,38 +244,77 @@ setInterval(async () => {
         });
       }
     }
+    jobRunsTotal.inc({ job: 'digest-email', status: 'success' });
+    jobLastRunTimestamp.set({ job: 'digest-email' }, Date.now() / 1000);
   } catch (err) {
-    console.error('[digest-job] Error running digest check:', err);
+    jobRunsTotal.inc({ job: 'digest-email', status: 'failure' });
+    jobLog.error({ err }, 'Digest email job failed');
+  } finally {
+    end();
   }
-}, 60 * 60 * 1000); // every hour
+}, 60 * 60 * 1000);
 
 // Daily proactive AI checks (runs every 24h, simulating a 7am daily job)
 setInterval(async () => {
+  const end = jobDurationSeconds.startTimer({ job: 'proactive-ai' });
   try {
     const households = await prisma.household.findMany({ select: { id: true } });
     for (const h of households) {
-      await runProactiveChecks(prisma, h.id).catch((err) =>
-        console.error(`[proactive-ai] checks failed for household ${h.id}:`, err)
-      );
+      await runProactiveChecks(prisma, h.id).catch((err) => {
+        jobLog.error({ err, householdId: h.id }, 'Proactive AI check failed for household');
+      });
     }
+    jobRunsTotal.inc({ job: 'proactive-ai', status: 'success' });
+    jobLastRunTimestamp.set({ job: 'proactive-ai' }, Date.now() / 1000);
   } catch (err) {
-    console.error('[proactive-ai] Error running proactive checks:', err);
+    jobRunsTotal.inc({ job: 'proactive-ai', status: 'failure' });
+    jobLog.error({ err }, 'Proactive AI job failed');
+  } finally {
+    end();
   }
-}, 24 * 60 * 60 * 1000); // every 24 hours
+}, 24 * 60 * 60 * 1000);
 
 // Hourly email connector sync
 setInterval(async () => {
-  await runImapCheckForAllHouseholds(prisma).catch(console.error);
+  const end = jobDurationSeconds.startTimer({ job: 'imap-watcher' });
+  try {
+    await runImapCheckForAllHouseholds(prisma);
+    jobRunsTotal.inc({ job: 'imap-watcher', status: 'success' });
+    jobLastRunTimestamp.set({ job: 'imap-watcher' }, Date.now() / 1000);
+  } catch (err) {
+    jobRunsTotal.inc({ job: 'imap-watcher', status: 'failure' });
+    jobLog.error({ err }, 'IMAP watcher job failed');
+  } finally {
+    end();
+  }
 }, 60 * 60 * 1000);
 
 const server = app.listen(PORT, () => {
   logger.info({ port: PORT }, 'Kuber server started');
-  takeNetWorthSnapshot().catch((err) =>
-    console.error('[networth-job] startup snapshot failed:', err),
-  );
-  runAccountBalanceSnapshot().catch((err) =>
-    console.error('[account-balance-job] startup snapshot failed:', err),
-  );
+
+  const netWorthEnd = jobDurationSeconds.startTimer({ job: 'networth' });
+  takeNetWorthSnapshot()
+    .then(() => {
+      jobRunsTotal.inc({ job: 'networth', status: 'success' });
+      jobLastRunTimestamp.set({ job: 'networth' }, Date.now() / 1000);
+    })
+    .catch((err) => {
+      jobRunsTotal.inc({ job: 'networth', status: 'failure' });
+      jobLog.error({ err }, 'Startup net worth snapshot failed');
+    })
+    .finally(() => netWorthEnd());
+
+  const balanceEnd = jobDurationSeconds.startTimer({ job: 'account-balance' });
+  runAccountBalanceSnapshot()
+    .then(() => {
+      jobRunsTotal.inc({ job: 'account-balance', status: 'success' });
+      jobLastRunTimestamp.set({ job: 'account-balance' }, Date.now() / 1000);
+    })
+    .catch((err) => {
+      jobRunsTotal.inc({ job: 'account-balance', status: 'failure' });
+      jobLog.error({ err }, 'Startup account balance snapshot failed');
+    })
+    .finally(() => balanceEnd());
 });
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
