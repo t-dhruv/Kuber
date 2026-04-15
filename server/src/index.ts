@@ -136,6 +136,12 @@ app.use(pinoHttp({
   },
 }));
 
+// Expose request ID to clients for support/debugging (pino-http sets req.id)
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+  res.setHeader('X-Request-Id', (req as any).id ?? '');
+  next();
+});
+
 // ── HTTP metrics middleware ───────────────────────────────────────────────────
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
   const start = Date.now();
