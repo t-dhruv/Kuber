@@ -19,6 +19,14 @@ export async function register(
   await page.locator('#lastName').fill(lastName);
   await page.locator('#email').fill(email);
   await page.locator('#password').fill(password);
+  const confirmPassword = page.locator('#confirmPassword');
+  if (await confirmPassword.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await confirmPassword.fill(password);
+  }
+  const household = page.locator('#householdName');
+  if (await household.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await household.fill(`${firstName} Household`);
+  }
   await page.getByRole('button', { name: /sign up|create account/i }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/signup'), { timeout: 15_000 });
 }
@@ -48,5 +56,5 @@ export async function getFirstAccountName(page: Page): Promise<string> {
   // Navigate to accounts and grab the first account name from the page
   await goTo(page, '/accounts');
   const firstAccount = page.locator('[data-testid="account-name"], h3, h4').first();
-  return (await firstAccount.textContent()) ?? 'TD Everyday Chequing';
+  return (await firstAccount.textContent()) ?? 'E2E Primary Account';
 }

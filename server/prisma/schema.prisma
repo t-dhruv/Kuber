@@ -69,6 +69,8 @@ model Household {
   investmentIntel         InvestmentIntel[]
   pushSubscriptions       PushSubscription[]
   webhooks                Webhook[]
+  providerConnections     ProviderConnection[]
+  transferGroups          TransferGroup[]
 
   @@map("households")
 }
@@ -162,21 +164,25 @@ model Account {
   institution         String?
   institutionLogo     String?
   lastFour            String?
-  balance             Float                    @default(0)
-  currency            String                   @default("USD")
-  creditLimit         Float?
-  isHidden            Boolean                  @default(false)
-  excludeFromNetWorth Boolean                  @default(false)
-  lastSynced          DateTime?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  household           Household                @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  transactions        Transaction[]
-  recurringItems      RecurringItem[]
-  goals               Goal[]
-  investmentHoldings  InvestmentHolding[]
-  balanceSnapshots    AccountBalanceSnapshot[]
-  taxAccounts         TaxAccount[]
+  balance               Float                    @default(0)
+  balanceDecimal        Decimal?                 @db.Decimal(19, 4)
+  currency              String                   @default("USD")
+  creditLimit           Float?
+  creditLimitDecimal    Decimal?                 @db.Decimal(19, 4)
+  providerConnectionId  String?
+  isHidden              Boolean                  @default(false)
+  excludeFromNetWorth   Boolean                  @default(false)
+  lastSynced            DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  household             Household                @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  providerConnection    ProviderConnection?      @relation(fields: [providerConnectionId], references: [id], onDelete: SetNull)
+  transactions          Transaction[]
+  recurringItems        RecurringItem[]
+  goals                 Goal[]
+  investmentHoldings    InvestmentHolding[]
+  balanceSnapshots      AccountBalanceSnapshot[]
+  taxAccounts           TaxAccount[]
 
   @@map("accounts")
 }
@@ -189,7 +195,9 @@ model Transaction {
   description         String
   originalDescription String
   amount              Float
+  amountDecimal       Decimal?         @db.Decimal(19, 4)
   currency            String           @default("USD")
+  exchangeRate        Decimal?         @db.Decimal(19, 6)
   categoryId          String?
   merchantId          String?
   notes               String?
@@ -201,17 +209,21 @@ model Transaction {
   splitDetails        Json?
   isTransfer          Boolean          @default(false)
   transferId          String?
+  transferGroupId     String?
   isRefund            Boolean          @default(false)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   account             Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
   category            Category?        @relation(fields: [categoryId], references: [id])
   merchant            Merchant?        @relation(fields: [merchantId], references: [id])
+  transferGroup       TransferGroup?   @relation(fields: [transferGroupId], references: [id], onDelete: SetNull)
   tags                TransactionTag[]
   goalAllocations     GoalAllocation[]
+  splits              TransactionSplit[]
 
   @@index([householdId, date])
   @@index([householdId, date, amount])
+  @@index([householdId, categoryId, date])
   @@index([accountId])
   @@index([categoryId])
   @@map("transactions")
@@ -232,9 +244,10 @@ model Category {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  transactions   Transaction[]
-  budgets        Budget[]
-  recurringItems RecurringItem[]
+  transactions        Transaction[]
+  budgets             Budget[]
+  recurringItems      RecurringItem[]
+  transactionSplits   TransactionSplit[]
 
   @@map("categories")
 }
@@ -255,8 +268,9 @@ model Budget {
   householdId String
   categoryId  String?
   name        String?   // label for catch-all/uncategorized budgets
-  amount      Float
-  period      String    @default("monthly")
+  amount         Float
+  amountDecimal  Decimal?  @db.Decimal(19, 4)
+  period         String    @default("monthly")
   rollover    Boolean   @default(false)
   startDate   DateTime  @default(now())
   budgetType  String    @default("FLEXIBLE") // FIXED | FLEXIBLE | NON_MONTHLY
@@ -268,11 +282,12 @@ model Budget {
 }
 
 model RecurringItem {
-  id          String    @id @default(cuid())
-  householdId String
-  name        String
-  amount      Float
-  frequency   String
+  id             String    @id @default(cuid())
+  householdId    String
+  name           String
+  amount         Float
+  amountDecimal  Decimal?  @db.Decimal(19, 4)
+  frequency      String
   nextDate    DateTime
   accountId   String
   categoryId  String?
@@ -292,10 +307,13 @@ model Goal {
   householdId         String
   name                String
   type                String
-  targetAmount        Float
-  currentAmount       Float            @default(0)
-  targetDate          DateTime?
-  monthlyContribution Float            @default(0)
+  targetAmount               Float
+  targetAmountDecimal        Decimal?         @db.Decimal(19, 4)
+  currentAmount              Float            @default(0)
+  currentAmountDecimal       Decimal?         @db.Decimal(19, 4)
+  targetDate                 DateTime?
+  monthlyContribution        Float            @default(0)
+  monthlyContributionDecimal Decimal?         @db.Decimal(19, 4)
   accountId           String?
   icon                String?
   imageUrl            String?
@@ -313,6 +331,7 @@ model GoalAllocation {
   goalId        String
   transactionId String
   amount        Float
+  amountDecimal Decimal?    @db.Decimal(19, 4)
   goal          Goal        @relation(fields: [goalId], references: [id], onDelete: Cascade)
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
@@ -325,8 +344,11 @@ model InvestmentHolding {
   symbol               String
   name                 String
   shares               Float
+  sharesDecimal        Decimal?              @db.Decimal(19, 4)
   costBasis            Float
+  costBasisDecimal     Decimal?              @db.Decimal(19, 4)
   currentPrice         Float
+  currentPriceDecimal  Decimal?              @db.Decimal(19, 4)
   assetClass           String                @default("us_stock")
   priceHistory         Json?
   createdAt            DateTime              @default(now())
@@ -342,8 +364,10 @@ model HoldingLot {
   id            String            @id @default(cuid())
   holdingId     String
   date          DateTime          @default(now())
-  shares        Float
-  pricePerShare Float
+  shares               Float
+  sharesDecimal        Decimal?          @db.Decimal(19, 4)
+  pricePerShare        Float
+  pricePerShareDecimal Decimal?          @db.Decimal(19, 4)
   note          String?
   status        String            @default("confirmed") // "confirmed" | "pending"
   createdAt     DateTime          @default(now())
@@ -353,9 +377,10 @@ model HoldingLot {
 }
 
 model RecurringInvestment {
-  id         String            @id @default(cuid())
-  holdingId  String
-  amount     Float
+  id            String            @id @default(cuid())
+  holdingId     String
+  amount        Float
+  amountDecimal Decimal?          @db.Decimal(19, 4)
   frequency  String // "weekly" | "biweekly" | "monthly" | "quarterly"
   dayOfMonth Int               @default(1)
   status     String            @default("active") // "active" | "paused"
@@ -373,8 +398,10 @@ model ManualAsset {
   householdId   String
   name          String
   type          String               @default("other") // real_estate | vehicle | crypto | collectible | other
-  currentValue  Float
-  purchaseValue Float?
+  currentValue         Float
+  currentValueDecimal  Decimal?             @db.Decimal(19, 4)
+  purchaseValue        Float?
+  purchaseValueDecimal Decimal?             @db.Decimal(19, 4)
   purchaseDate  DateTime?
   notes         String?
   currency      String               @default("USD")
@@ -392,10 +419,14 @@ model ManualLiability {
   householdId     String
   name            String
   type            String    @default("other") // mortgage | auto_loan | student_loan | credit_card | other
-  originalAmount  Float
-  currentBalance  Float
-  interestRate    Float?
-  monthlyPayment  Float?
+  originalAmount         Float
+  originalAmountDecimal  Decimal?  @db.Decimal(19, 4)
+  currentBalance         Float
+  currentBalanceDecimal  Decimal?  @db.Decimal(19, 4)
+  interestRate           Float?
+  interestRateDecimal    Decimal?  @db.Decimal(19, 4)
+  monthlyPayment         Float?
+  monthlyPaymentDecimal  Decimal?  @db.Decimal(19, 4)
   maturityDate    DateTime?
   notes           String?
   currency        String    @default("USD")
@@ -426,10 +457,14 @@ model TaxAccount {
   linkedAccountId  String?         // FK to Account (optional)
   memberName       String?         // household member name for display
   birthYear        Int?            // for TFSA age-gating (must be 18+)
-  annualRoomCad    Float           @default(0)  // CRA-set room for current year
-  totalRoomEver    Float           @default(0)  // cumulative room since account type inception
-  contributionsYtd Float           @default(0)  // contributions this calendar year
-  withdrawalsYtd   Float           @default(0)  // withdrawals (TFSA room restored next Jan 1)
+  annualRoomCad            Float           @default(0)  // CRA-set room for current year
+  annualRoomCadDecimal     Decimal?        @db.Decimal(19, 4)
+  totalRoomEver            Float           @default(0)  // cumulative room since account type inception
+  totalRoomEverDecimal     Decimal?        @db.Decimal(19, 4)
+  contributionsYtd         Float           @default(0)  // contributions this calendar year
+  contributionsYtdDecimal  Decimal?        @db.Decimal(19, 4)
+  withdrawalsYtd           Float           @default(0)  // withdrawals (TFSA room restored next Jan 1)
+  withdrawalsYtdDecimal    Decimal?        @db.Decimal(19, 4)
   notes            String?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -441,9 +476,10 @@ model TaxAccount {
 }
 
 model ManualAssetSnapshot {
-  id        String      @id @default(cuid())
-  assetId   String
-  value     Float
+  id           String      @id @default(cuid())
+  assetId      String
+  value        Float
+  valueDecimal Decimal?    @db.Decimal(19, 4)
   date      DateTime    @default(now())
   asset     ManualAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
@@ -532,9 +568,12 @@ model NetWorthSnapshot {
   id          String    @id @default(cuid())
   householdId String
   date        DateTime  @db.Date
-  assets      Float
-  liabilities Float
-  netWorth    Float
+  assets              Float
+  assetsDecimal       Decimal?  @db.Decimal(19, 4)
+  liabilities         Float
+  liabilitiesDecimal  Decimal?  @db.Decimal(19, 4)
+  netWorth            Float
+  netWorthDecimal     Decimal?  @db.Decimal(19, 4)
   createdAt   DateTime  @default(now())
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
@@ -633,11 +672,12 @@ model DuplicateDismissal {
 }
 
 model AccountBalanceSnapshot {
-  id          String    @id @default(cuid())
-  accountId   String
-  householdId String
-  date        DateTime  @db.Date
-  balance     Float
+  id             String    @id @default(cuid())
+  accountId      String
+  householdId    String
+  date           DateTime  @db.Date
+  balance        Float
+  balanceDecimal Decimal?  @db.Decimal(19, 4)
   createdAt   DateTime  @default(now())
   account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
@@ -755,4 +795,47 @@ model Webhook {
 
   @@index([householdId])
   @@map("webhooks")
+}
+
+model TransactionSplit {
+  id            String      @id @default(cuid())
+  transactionId String
+  amountDecimal Decimal     @db.Decimal(19, 4)
+  categoryId    String?
+  notes         String?
+  createdAt     DateTime    @default(now())
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  category      Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([transactionId])
+  @@index([categoryId])
+  @@map("transaction_splits")
+}
+
+model ProviderConnection {
+  id            String    @id @default(cuid())
+  householdId   String
+  provider      String
+  institutionId String
+  itemId        String    @unique
+  status        String    @default("good")
+  lastSyncAt    DateTime?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  household     Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  accounts      Account[]
+
+  @@map("provider_connections")
+}
+
+model TransferGroup {
+  id           String        @id @default(cuid())
+  householdId  String
+  status       String        @default("matched")
+  createdAt    DateTime      @default(now())
+  household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("transfer_groups")
 }

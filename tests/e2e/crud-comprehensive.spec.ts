@@ -4,20 +4,14 @@
  */
 
 import { test, expect, Page } from '@playwright/test';
+import { login as loginNoSeed } from './helpers/auth';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 async function login(page: Page) {
-  await page.goto('/login');
-  // The form pre-fills demo@kuber.app / password123 — just clear and re-fill
-  await page.locator('#email').fill('demo@kuber.app');
-  await page.locator('#password').fill('password123');
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), {
-    timeout: 15_000,
-  });
+  await loginNoSeed(page);
 }
 
 async function ss(page: Page, name: string) {

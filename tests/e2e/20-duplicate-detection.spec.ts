@@ -4,7 +4,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { login } from './helpers/auth';
+import { login, TEST_USER_EMAIL, TEST_USER_PASSWORD } from './helpers/auth';
 
 test.beforeEach(async ({ page }) => {
   await login(page);
@@ -71,7 +71,7 @@ test.describe('Duplicate Detection', () => {
   test('20.6 API GET /transactions/duplicates returns correctly', async ({ page }) => {
     // Test the API directly through page.request
     const loginResponse = await page.request.post('http://localhost:9002/api/v1/auth/login', {
-      data: { email: 'demo@kuber.app', password: 'password123' },
+      data: { email: TEST_USER_EMAIL, password: TEST_USER_PASSWORD },
     });
     const { accessToken } = await loginResponse.json();
 

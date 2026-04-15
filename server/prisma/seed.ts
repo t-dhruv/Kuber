@@ -210,7 +210,12 @@ async function main() {
   // Category Groups + Categories
   // -------------------------------------------------------------------------
 
-  type CategoryDef = { name: string; icon: string };
+  type CategoryDef = {
+    name: string;
+    icon: string;
+    bucketType: "needs" | "wants" | "savings" | "uncategorized";
+    isTaxDeductible?: boolean;
+  };
   type GroupDef = { name: string; type: string; categories: CategoryDef[] };
 
   const groupDefs: GroupDef[] = [
@@ -218,110 +223,203 @@ async function main() {
       name: "Income",
       type: "income",
       categories: [
-        { name: "Paycheques", icon: "💼" },
-        { name: "Freelance", icon: "💻" },
-        { name: "Dividends", icon: "📈" },
-        { name: "Investment Gains", icon: "📊" },
-        { name: "Other Income", icon: "➕" },
+        { name: "Salary & Wages", icon: "💼", bucketType: "uncategorized" },
+        {
+          name: "Freelance & Consulting",
+          icon: "💻",
+          bucketType: "uncategorized",
+        },
+        {
+          name: "Investment Dividends",
+          icon: "📈",
+          bucketType: "uncategorized",
+        },
+        { name: "Gifts & Bonuses", icon: "🎁", bucketType: "uncategorized" },
+        { name: "Tax Refund", icon: "🏦", bucketType: "uncategorized" },
+        { name: "Reimbursements", icon: "💸", bucketType: "uncategorized" },
+        { name: "Other Income", icon: "➕", bucketType: "uncategorized" },
+      ],
+    },
+    {
+      name: "Housing & Utilities",
+      type: "expense",
+      categories: [
+        { name: "Rent & Mortgage", icon: "🏠", bucketType: "needs" },
+        {
+          name: "Property Taxes",
+          icon: "🏛️",
+          bucketType: "needs",
+          isTaxDeductible: true,
+        },
+        { name: "Home Maintenance", icon: "🛠️", bucketType: "needs" },
+        { name: "Electricity / Hydro", icon: "⚡", bucketType: "needs" },
+        { name: "Water & Sewage", icon: "💧", bucketType: "needs" },
+        { name: "Heating & Gas", icon: "🔥", bucketType: "needs" },
+        { name: "Internet", icon: "📶", bucketType: "needs" },
+        { name: "Phone Plan", icon: "📱", bucketType: "needs" },
+        { name: "Home Insurance", icon: "🛡️", bucketType: "needs" },
       ],
     },
     {
       name: "Food & Dining",
       type: "expense",
       categories: [
-        { name: "Groceries", icon: "🛒" },
-        { name: "Restaurants", icon: "🍽️" },
-        { name: "Coffee Shops", icon: "☕" },
-        { name: "Takeout & Delivery", icon: "🥡" },
-        { name: "Alcohol & Bars", icon: "🍷" },
-      ],
-    },
-    {
-      name: "Shopping",
-      type: "expense",
-      categories: [
-        { name: "Clothing", icon: "👕" },
-        { name: "Electronics", icon: "🖥️" },
-        { name: "Amazon", icon: "📦" },
-        { name: "Online Shopping", icon: "🌐" },
-        { name: "Home & Garden", icon: "🏡" },
-      ],
-    },
-    {
-      name: "Bills & Utilities",
-      type: "expense",
-      categories: [
-        { name: "Rent/Mortgage", icon: "🏠" },
-        { name: "Hydro", icon: "⚡" },
-        { name: "Internet", icon: "📶" },
-        { name: "Phone", icon: "📱" },
-        { name: "Subscriptions", icon: "🔄" },
-        { name: "Insurance", icon: "🛡️" },
+        { name: "Groceries", icon: "🛒", bucketType: "needs" },
+        { name: "Restaurants", icon: "🍽️", bucketType: "wants" },
+        { name: "Coffee Shops", icon: "☕", bucketType: "wants" },
+        { name: "Takeout & Delivery", icon: "🥡", bucketType: "wants" },
+        { name: "Alcohol & Bars", icon: "🍷", bucketType: "wants" },
       ],
     },
     {
       name: "Transportation",
       type: "expense",
       categories: [
-        { name: "Gas", icon: "⛽" },
-        { name: "Parking", icon: "🅿️" },
-        { name: "TTC / Transit", icon: "🚆" },
-        { name: "Rideshare", icon: "🚗" },
-        { name: "Car Maintenance", icon: "🔧" },
+        { name: "Fuel & Gas", icon: "⛽", bucketType: "needs" },
+        { name: "Public Transit", icon: "🚆", bucketType: "needs" },
+        { name: "Rideshare", icon: "🚗", bucketType: "wants" },
+        { name: "Auto Insurance", icon: "🚘", bucketType: "needs" },
+        { name: "Car Maintenance & Repairs", icon: "🔧", bucketType: "needs" },
+        { name: "Parking & Tolls", icon: "🅿️", bucketType: "wants" },
+        { name: "Registration & Licensing", icon: "🆔", bucketType: "needs" },
       ],
     },
     {
-      name: "Health & Wellness",
+      name: "Health & Personal Care",
       type: "expense",
       categories: [
-        { name: "Gym", icon: "🏋️" },
-        { name: "Doctor / Dental", icon: "🩺" },
-        { name: "Pharmacy", icon: "💊" },
-        { name: "Mental Health", icon: "🧘" },
+        {
+          name: "Doctor & Specialists",
+          icon: "🩺",
+          bucketType: "needs",
+          isTaxDeductible: true,
+        },
+        {
+          name: "Pharmacy & Medications",
+          icon: "💊",
+          bucketType: "needs",
+          isTaxDeductible: true,
+        },
+        {
+          name: "Dental",
+          icon: "🦷",
+          bucketType: "needs",
+          isTaxDeductible: true,
+        },
+        {
+          name: "Mental Health & Therapy",
+          icon: "🧘",
+          bucketType: "needs",
+          isTaxDeductible: true,
+        },
+        { name: "Gym & Fitness", icon: "🏋️", bucketType: "wants" },
+        { name: "Hair & Beauty", icon: "✂️", bucketType: "wants" },
+        { name: "Toiletries", icon: "🧴", bucketType: "needs" },
+      ],
+    },
+    {
+      name: "Family & Pets",
+      type: "expense",
+      categories: [
+        { name: "Childcare/Daycare", icon: "👶", bucketType: "needs" },
+        { name: "School Fees/Supplies", icon: "🎒", bucketType: "needs" },
+        { name: "Toys & Activities", icon: "🧩", bucketType: "wants" },
+        { name: "Pet Food", icon: "🦴", bucketType: "needs" },
+        { name: "Vet & Pet Meds", icon: "🐕", bucketType: "needs" },
+        { name: "Pet Grooming", icon: "🎾", bucketType: "wants" },
+      ],
+    },
+    {
+      name: "Shopping & Lifestyle",
+      type: "expense",
+      categories: [
+        { name: "Clothing & Apparel", icon: "👕", bucketType: "wants" },
+        { name: "Electronics & Gadgets", icon: "🖥️", bucketType: "wants" },
+        { name: "Online Shopping", icon: "🛍️", bucketType: "wants" },
+        { name: "Home & Garden", icon: "🏡", bucketType: "wants" },
+        { name: "Subscriptions", icon: "🔄", bucketType: "wants" },
+        { name: "Hobbies", icon: "🎨", bucketType: "wants" },
       ],
     },
     {
       name: "Entertainment",
       type: "expense",
       categories: [
-        { name: "Movies & TV", icon: "🎬" },
-        { name: "Music", icon: "🎵" },
-        { name: "Games", icon: "🎮" },
-        { name: "Events & Concerts", icon: "🎟️" },
-        { name: "Sports", icon: "⚽" },
+        { name: "Movies & Streaming", icon: "🎬", bucketType: "wants" },
+        { name: "Music", icon: "🎵", bucketType: "wants" },
+        { name: "Games", icon: "🎮", bucketType: "wants" },
+        { name: "Events & Concerts", icon: "🎟️", bucketType: "wants" },
+        { name: "Sports", icon: "⚽", bucketType: "wants" },
+        { name: "Gambling & Lottery", icon: "🎲", bucketType: "wants" },
       ],
     },
     {
       name: "Travel",
       type: "expense",
       categories: [
-        { name: "Flights", icon: "✈️" },
-        { name: "Hotels", icon: "🛏️" },
-        { name: "Vacation", icon: "🌴" },
-        { name: "Travel Insurance", icon: "🌍" },
+        { name: "Flights", icon: "✈️", bucketType: "wants" },
+        { name: "Hotels & Lodging", icon: "🛏️", bucketType: "wants" },
+        { name: "Vacation Activities", icon: "🌴", bucketType: "wants" },
+        { name: "Travel Insurance", icon: "🌍", bucketType: "wants" },
       ],
     },
     {
-      name: "Education",
+      name: "Education & Career",
       type: "expense",
       categories: [
-        { name: "Books & Courses", icon: "📚" },
-        { name: "Professional Development", icon: "🎓" },
+        {
+          name: "Tuition",
+          icon: "🎓",
+          bucketType: "needs",
+          isTaxDeductible: true,
+        },
+        { name: "Books & Learning Materials", icon: "📚", bucketType: "needs" },
+        { name: "Professional Development", icon: "📈", bucketType: "wants" },
+        {
+          name: "Work Expenses",
+          icon: "💼",
+          bucketType: "needs",
+          isTaxDeductible: true,
+        },
       ],
     },
     {
-      name: "Savings & Investments",
+      name: "Financial & Savings",
       type: "expense",
       categories: [
-        { name: "TFSA Contribution", icon: "🏦" },
-        { name: "RRSP Contribution", icon: "💰" },
-        { name: "Investment Purchase", icon: "📉" },
+        { name: "Emergency Fund", icon: "🚨", bucketType: "savings" },
+        {
+          name: "RRSP Contribution",
+          icon: "💰",
+          bucketType: "savings",
+          isTaxDeductible: true,
+        },
+        { name: "TFSA Contribution", icon: "🏦", bucketType: "savings" },
+        { name: "Investment Purchase", icon: "📉", bucketType: "savings" },
+        { name: "Loan/Debt Repayment", icon: "💸", bucketType: "needs" },
+        { name: "Bank Fees & Interest", icon: "💳", bucketType: "needs" },
+      ],
+    },
+    {
+      name: "Gifts & Donations",
+      type: "expense",
+      categories: [
+        {
+          name: "Charity & Donations",
+          icon: "🎗️",
+          bucketType: "wants",
+          isTaxDeductible: true,
+        },
+        { name: "Gifts", icon: "🎁", bucketType: "wants" },
       ],
     },
     {
       name: "Transfer",
       type: "transfer",
-      categories: [{ name: "Transfer", icon: "↔️" }],
+      categories: [
+        { name: "Internal Transfer", icon: "↔️", bucketType: "uncategorized" },
+        { name: "Balance Adjustment", icon: "⚖️", bucketType: "uncategorized" },
+      ],
     },
   ];
 
@@ -529,14 +627,14 @@ async function main() {
       date: dayOf(1),
       description: "Direct Deposit - Synapse Technologies",
       amount: 4_820.0,
-      categoryId: catId("Paycheques"),
+      categoryId: catId("Salary & Wages"),
     });
     txInputs.push({
       accountId: tdChecking.id,
       date: dayOf(15),
       description: "Direct Deposit - Synapse Technologies",
       amount: 4_820.0,
-      categoryId: catId("Paycheques"),
+      categoryId: catId("Salary & Wages"),
     });
 
     // Occasional freelance (every 2-3 months)
@@ -546,7 +644,7 @@ async function main() {
         date: randDay(),
         description: "Freelance - Web Consulting",
         amount: randomBetween(800, 2_400),
-        categoryId: catId("Freelance"),
+        categoryId: catId("Freelance & Consulting"),
       });
     }
 
@@ -557,21 +655,21 @@ async function main() {
         date: dayOf(15),
         description: "VCN.TO Dividend",
         amount: randomBetween(60, 110),
-        categoryId: catId("Dividends"),
+        categoryId: catId("Investment Dividends"),
       });
       txInputs.push({
         accountId: rbcSavings.id,
         date: dayOf(16),
         description: "XIC.TO Dividend",
         amount: randomBetween(45, 90),
-        categoryId: catId("Dividends"),
+        categoryId: catId("Investment Dividends"),
       });
       txInputs.push({
         accountId: rbcSavings.id,
         date: dayOf(17),
         description: "ZAG.TO Dividend",
         amount: randomBetween(30, 55),
-        categoryId: catId("Dividends"),
+        categoryId: catId("Investment Dividends"),
       });
     }
 
@@ -581,7 +679,7 @@ async function main() {
       date: dayOf(1),
       description: "Rent - 340 King St W",
       amount: -2_250.0,
-      categoryId: catId("Rent/Mortgage"),
+      categoryId: catId("Rent & Mortgage"),
     });
 
     // ── Hydro / Utilities ──────────────────────────────────────────────────
@@ -590,7 +688,7 @@ async function main() {
       date: dayOf(randomInt(5, 10)),
       description: "Toronto Hydro",
       amount: -randomBetween(75, 160),
-      categoryId: catId("Hydro"),
+      categoryId: catId("Electricity / Hydro"),
     });
 
     // ── Internet ───────────────────────────────────────────────────────────
@@ -608,7 +706,7 @@ async function main() {
       date: dayOf(12),
       description: "Rogers Wireless",
       amount: -65.0,
-      categoryId: catId("Phone"),
+      categoryId: catId("Phone Plan"),
     });
 
     // ── Insurance ─────────────────────────────────────────────────────────
@@ -617,7 +715,7 @@ async function main() {
       date: dayOf(1),
       description: pick(insuranceMerchants),
       amount: -randomBetween(95, 130),
-      categoryId: catId("Insurance"),
+      categoryId: catId("Home Insurance"),
     });
 
     // ── Subscriptions ─────────────────────────────────────────────────────
@@ -674,7 +772,7 @@ async function main() {
       date: dayOf(3),
       description: "GoodLife Fitness",
       amount: -44.99,
-      categoryId: catId("Gym"),
+      categoryId: catId("Gym & Fitness"),
     });
 
     // ── Groceries (4-6 trips) ──────────────────────────────────────────────
@@ -734,7 +832,7 @@ async function main() {
         date: dayOf(randomInt(1, 5)),
         description: pick(transitMerchants),
         amount: -randomBetween(120, 160),
-        categoryId: catId("TTC / Transit"),
+        categoryId: catId("Public Transit"),
       });
     }
 
@@ -746,7 +844,7 @@ async function main() {
         date: randDay(),
         description: pick(gasMerchants),
         amount: -randomBetween(55, 110),
-        categoryId: catId("Gas"),
+        categoryId: catId("Fuel & Gas"),
       });
     }
 
@@ -758,13 +856,13 @@ async function main() {
       let cat: string;
       if (r < 0.4) {
         desc = "Amazon.ca";
-        cat = "Amazon";
+        cat = "Online Shopping";
       } else if (r < 0.55) {
         desc = pick(onlineMerchants);
         cat = "Online Shopping";
       } else if (r < 0.7) {
         desc = pick(clothingMerchants);
-        cat = "Clothing";
+        cat = "Clothing & Apparel";
       } else if (r < 0.85) {
         desc = pick(usShopping);
         cat = "Online Shopping";
@@ -790,7 +888,7 @@ async function main() {
         date: randDay(),
         description: isCA ? pick(entertainMerchants) : pick(usEntertain),
         amount: -randomBetween(18, 120) * seasonal,
-        categoryId: catId("Movies & TV"),
+        categoryId: catId("Movies & Streaming"),
       });
     }
 
@@ -801,7 +899,7 @@ async function main() {
         date: randDay(),
         description: pick(pharmacyMerchants),
         amount: -randomBetween(12, 80),
-        categoryId: catId("Pharmacy"),
+        categoryId: catId("Pharmacy & Medications"),
       });
     }
 
@@ -812,7 +910,7 @@ async function main() {
         date: randDay(),
         description: "Toronto Dental Clinic",
         amount: -randomBetween(150, 400),
-        categoryId: catId("Doctor / Dental"),
+        categoryId: catId("Doctor & Specialists"),
       });
     }
 
@@ -831,7 +929,7 @@ async function main() {
         date: dayOf(6),
         description: "Premier Inn London",
         amount: -890.0,
-        categoryId: catId("Hotels"),
+        categoryId: catId("Hotels & Lodging"),
       });
       txInputs.push({
         accountId: scotiaVisa.id,
@@ -845,7 +943,7 @@ async function main() {
         date: dayOf(8),
         description: "Hotel De Paris",
         amount: -760.0,
-        categoryId: catId("Hotels"),
+        categoryId: catId("Hotels & Lodging"),
       });
       txInputs.push({
         accountId: scotiaVisa.id,
@@ -869,7 +967,7 @@ async function main() {
         date: dayOf(9),
         description: "Barcelo Maya Grand",
         amount: -2_100.0,
-        categoryId: catId("Hotels"),
+        categoryId: catId("Hotels & Lodging"),
       });
     }
     // Weekend trip to Montreal (September 2025)
@@ -886,7 +984,7 @@ async function main() {
         date: dayOf(12),
         description: "Le Germain Montreal",
         amount: -380.0,
-        categoryId: catId("Hotels"),
+        categoryId: catId("Hotels & Lodging"),
       });
     }
 
@@ -897,7 +995,7 @@ async function main() {
         date: randDay(),
         description: "Udemy Course",
         amount: -randomBetween(15, 45),
-        categoryId: catId("Books & Courses"),
+        categoryId: catId("Books & Learning Materials"),
       });
     }
     if (maybe(0.1)) {
@@ -945,7 +1043,7 @@ async function main() {
         date: randDay(),
         description: pick(["Mr. Lube", "Active Green+Ross", "Kal Tire"]),
         amount: -randomBetween(80, 300),
-        categoryId: catId("Car Maintenance"),
+        categoryId: catId("Car Maintenance & Repairs"),
       });
     }
   }
@@ -967,7 +1065,7 @@ async function main() {
     date: new Date("2025-02-14"),
     description: "Apple Store - MacBook Pro",
     amount: -2_899.0,
-    categoryId: catId("Electronics"),
+    categoryId: catId("Electronics & Gadgets"),
   });
 
   // Home office setup (Jan 2025)
@@ -983,7 +1081,7 @@ async function main() {
     date: new Date("2025-01-19"),
     description: "Best Buy Canada - Monitor",
     amount: -649.0,
-    categoryId: catId("Electronics"),
+    categoryId: catId("Electronics & Gadgets"),
   });
 
   // Sports event (Jan 2025)
@@ -1010,7 +1108,7 @@ async function main() {
     date: new Date("2025-03-08"),
     description: "Lululemon",
     amount: -328.0,
-    categoryId: catId("Clothing"),
+    categoryId: catId("Clothing & Apparel"),
   });
 
   // Boxing Day deals (Dec 2025)
@@ -1019,14 +1117,14 @@ async function main() {
     date: new Date("2025-12-26"),
     description: "Best Buy Canada - TV",
     amount: -1_199.0,
-    categoryId: catId("Electronics"),
+    categoryId: catId("Electronics & Gadgets"),
   });
   txInputs.push({
     accountId: scotiaVisa.id,
     date: new Date("2025-12-27"),
     description: "Sport Chek",
     amount: -240.0,
-    categoryId: catId("Clothing"),
+    categoryId: catId("Clothing & Apparel"),
   });
 
   // Mental health (occasional)
@@ -1035,28 +1133,28 @@ async function main() {
     date: new Date("2025-03-20"),
     description: "Therapy Session",
     amount: -150.0,
-    categoryId: catId("Mental Health"),
+    categoryId: catId("Mental Health & Therapy"),
   });
   txInputs.push({
     accountId: tdChecking.id,
     date: new Date("2025-06-20"),
     description: "Therapy Session",
     amount: -150.0,
-    categoryId: catId("Mental Health"),
+    categoryId: catId("Mental Health & Therapy"),
   });
   txInputs.push({
     accountId: tdChecking.id,
     date: new Date("2025-09-20"),
     description: "Therapy Session",
     amount: -150.0,
-    categoryId: catId("Mental Health"),
+    categoryId: catId("Mental Health & Therapy"),
   });
   txInputs.push({
     accountId: tdChecking.id,
     date: new Date("2025-12-10"),
     description: "Therapy Session",
     amount: -150.0,
-    categoryId: catId("Mental Health"),
+    categoryId: catId("Mental Health & Therapy"),
   });
 
   console.log(`Creating ${txInputs.length} transactions…`);
@@ -1616,20 +1714,19 @@ async function main() {
     { category: "Restaurants", amount: 500 },
     { category: "Coffee Shops", amount: 80 },
     { category: "Takeout & Delivery", amount: 200 },
-    { category: "Rent/Mortgage", amount: 2250 },
-    { category: "Hydro", amount: 150 },
+    { category: "Rent & Mortgage", amount: 2250 },
+    { category: "Electricity / Hydro", amount: 150 },
     { category: "Internet", amount: 90 },
-    { category: "Phone", amount: 65 },
+    { category: "Phone Plan", amount: 65 },
     { category: "Subscriptions", amount: 100 },
-    { category: "Insurance", amount: 130 },
-    { category: "Gym", amount: 50 },
-    { category: "Amazon", amount: 150 },
-    { category: "Online Shopping", amount: 200 },
-    { category: "Clothing", amount: 200 },
-    { category: "Gas", amount: 120 },
-    { category: "TTC / Transit", amount: 160 },
-    { category: "Movies & TV", amount: 100 },
-    { category: "Pharmacy", amount: 50 },
+    { category: "Home Insurance", amount: 130 },
+    { category: "Gym & Fitness", amount: 50 },
+    { category: "Online Shopping", amount: 350 },
+    { category: "Clothing & Apparel", amount: 200 },
+    { category: "Fuel & Gas", amount: 120 },
+    { category: "Public Transit", amount: 160 },
+    { category: "Movies & Streaming", amount: 100 },
+    { category: "Pharmacy & Medications", amount: 50 },
     { category: "TFSA Contribution", amount: 500 },
     { category: "RRSP Contribution", amount: 500 },
   ];
@@ -1716,7 +1813,7 @@ async function main() {
         frequency: "monthly",
         nextDate: nextMonth1st,
         accountId: tdChecking.id,
-        categoryId: catId("Gym"),
+        categoryId: catId("Gym & Fitness"),
         isAutopay: true,
         isActive: true,
       },
@@ -1738,7 +1835,7 @@ async function main() {
         frequency: "monthly",
         nextDate: nextMonth12,
         accountId: tdChecking.id,
-        categoryId: catId("Phone"),
+        categoryId: catId("Phone Plan"),
         isAutopay: false,
         isActive: true,
       },
@@ -1749,7 +1846,7 @@ async function main() {
         frequency: "monthly",
         nextDate: nextMonth1st,
         accountId: tdChecking.id,
-        categoryId: catId("Rent/Mortgage"),
+        categoryId: catId("Rent & Mortgage"),
         isAutopay: false,
         isActive: true,
       },
@@ -1837,7 +1934,7 @@ async function main() {
         conditions: [
           { field: "merchant", operator: "contains", value: "Amazon" },
         ],
-        actions: [{ type: "set_category", categoryId: catId("Amazon") }],
+        actions: [{ type: "set_category", categoryId: catId("Online Shopping") }],
         sortOrder: 1,
         isActive: true,
       },
@@ -1855,7 +1952,7 @@ async function main() {
         conditions: [
           { field: "merchant", operator: "contains", value: "Petro-Canada" },
         ],
-        actions: [{ type: "set_category", categoryId: catId("Gas") }],
+        actions: [{ type: "set_category", categoryId: catId("Fuel & Gas") }],
         sortOrder: 3,
         isActive: true,
       },
@@ -1864,7 +1961,7 @@ async function main() {
         conditions: [
           { field: "merchant", operator: "contains", value: "Shoppers" },
         ],
-        actions: [{ type: "set_category", categoryId: catId("Pharmacy") }],
+        actions: [{ type: "set_category", categoryId: catId("Pharmacy & Medications") }],
         sortOrder: 4,
         isActive: true,
       },
@@ -1878,6 +1975,392 @@ async function main() {
         isActive: true,
       },
     ],
+  });
+
+  // -------------------------------------------------------------------------
+  // Merchants (canonical records — linked to transactions by name lookup)
+  // -------------------------------------------------------------------------
+
+  await prisma.merchant.createMany({
+    data: [
+      { householdId: household.id, name: "Tim Hortons", displayName: "Tim Hortons" },
+      { householdId: household.id, name: "Starbucks", displayName: "Starbucks" },
+      { householdId: household.id, name: "Loblaws", displayName: "Loblaws" },
+      { householdId: household.id, name: "No Frills", displayName: "No Frills" },
+      { householdId: household.id, name: "Sobeys", displayName: "Sobeys" },
+      { householdId: household.id, name: "Metro", displayName: "Metro" },
+      { householdId: household.id, name: "Costco", displayName: "Costco" },
+      { householdId: household.id, name: "Amazon", displayName: "Amazon.ca" },
+      { householdId: household.id, name: "Petro-Canada", displayName: "Petro-Canada" },
+      { householdId: household.id, name: "Esso", displayName: "Esso" },
+      { householdId: household.id, name: "Shoppers Drug Mart", displayName: "Shoppers Drug Mart" },
+      { householdId: household.id, name: "LCBO", displayName: "LCBO" },
+      { householdId: household.id, name: "Canadian Tire", displayName: "Canadian Tire" },
+      { householdId: household.id, name: "IKEA", displayName: "IKEA" },
+      { householdId: household.id, name: "Netflix", displayName: "Netflix Canada" },
+      { householdId: household.id, name: "Spotify", displayName: "Spotify Canada" },
+      { householdId: household.id, name: "Apple", displayName: "Apple" },
+      { householdId: household.id, name: "Google", displayName: "Google" },
+      { householdId: household.id, name: "GoodLife Fitness", displayName: "GoodLife Fitness" },
+      { householdId: household.id, name: "Cineplex", displayName: "Cineplex" },
+      { householdId: household.id, name: "Air Canada", displayName: "Air Canada" },
+      { householdId: household.id, name: "Via Rail", displayName: "Via Rail" },
+      { householdId: household.id, name: "TTC", displayName: "Toronto Transit Commission" },
+      { householdId: household.id, name: "Uber", displayName: "Uber" },
+      { householdId: household.id, name: "DoorDash", displayName: "DoorDash" },
+      { householdId: household.id, name: "SkipTheDishes", displayName: "SkipTheDishes" },
+      { householdId: household.id, name: "Freshii", displayName: "Freshii" },
+      { householdId: household.id, name: "Swiss Chalet", displayName: "Swiss Chalet" },
+      { householdId: household.id, name: "St. Lawrence Market", displayName: "St. Lawrence Market" },
+      { householdId: household.id, name: "LCBO", displayName: "LCBO" },
+    ],
+    skipDuplicates: true,
+  });
+
+  // -------------------------------------------------------------------------
+  // Manual Assets (real estate, vehicle, crypto)
+  // -------------------------------------------------------------------------
+
+  await prisma.manualAsset.createMany({
+    data: [
+      {
+        householdId: household.id,
+        name: "Toronto Condo — 340 King St W Unit 1502",
+        type: "real_estate",
+        currentValue: 720_000,
+        purchaseValue: 590_000,
+        purchaseDate: new Date("2019-06-15"),
+        notes: "2BR/1BA pre-construction condo. Estimated market value per Q1 2026 appraisal.",
+        currency: "CAD",
+      },
+      {
+        householdId: household.id,
+        name: "2021 Honda Civic",
+        type: "vehicle",
+        currentValue: 18_500,
+        purchaseValue: 26_800,
+        purchaseDate: new Date("2021-03-01"),
+        notes: "Current value per CarFax estimate, 48,000 km.",
+        currency: "CAD",
+      },
+      {
+        householdId: household.id,
+        name: "Bitcoin (BTC)",
+        type: "crypto",
+        currentValue: 8_400,
+        purchaseValue: 6_100,
+        purchaseDate: new Date("2023-01-10"),
+        notes: "0.08 BTC held in Ledger cold wallet.",
+        currency: "CAD",
+      },
+      {
+        householdId: household.id,
+        name: "Ethereum (ETH)",
+        type: "crypto",
+        currentValue: 3_200,
+        purchaseValue: 4_800,
+        purchaseDate: new Date("2022-11-01"),
+        notes: "1.2 ETH held in Ledger cold wallet.",
+        currency: "CAD",
+      },
+      {
+        householdId: household.id,
+        name: "Watch Collection",
+        type: "collectible",
+        currentValue: 6_500,
+        purchaseValue: 4_200,
+        purchaseDate: new Date("2020-08-20"),
+        notes: "Seiko Presage, Tissot PRX, Orient Bambino.",
+        currency: "CAD",
+      },
+    ],
+  });
+
+  // -------------------------------------------------------------------------
+  // Manual Liabilities (mortgage, car loan)
+  // -------------------------------------------------------------------------
+
+  await prisma.manualLiability.createMany({
+    data: [
+      {
+        householdId: household.id,
+        name: "Condo Mortgage — TD Bank",
+        type: "mortgage",
+        originalAmount: 472_000,
+        currentBalance: 391_240,
+        interestRate: 5.24,
+        monthlyPayment: 2_890,
+        maturityDate: new Date("2028-06-01"),
+        notes: "5-year fixed term renewed June 2023. Amortization 25 years remaining.",
+        currency: "CAD",
+        region: "CA",
+        rateType: "fixed",
+        termStartDate: new Date("2023-06-01"),
+        termEndDate: new Date("2028-06-01"),
+        amortizationYears: 25,
+        paymentFrequency: "monthly",
+      },
+      {
+        householdId: household.id,
+        name: "Honda Civic Auto Loan — TD Auto Finance",
+        type: "auto_loan",
+        originalAmount: 22_000,
+        currentBalance: 7_840,
+        interestRate: 4.99,
+        monthlyPayment: 420,
+        maturityDate: new Date("2026-03-01"),
+        notes: "60-month loan, final payment March 2026.",
+        currency: "CAD",
+        region: "CA",
+        rateType: "fixed",
+        termStartDate: new Date("2021-03-01"),
+        termEndDate: new Date("2026-03-01"),
+        amortizationYears: 5,
+        paymentFrequency: "monthly",
+      },
+      {
+        householdId: household.id,
+        name: "OSAP Student Loan",
+        type: "student_loan",
+        originalAmount: 38_000,
+        currentBalance: 11_200,
+        interestRate: 6.45,
+        monthlyPayment: 310,
+        maturityDate: new Date("2028-09-01"),
+        notes: "Ontario student loan, interest-free period ended. Repayment Assistance Plan applied.",
+        currency: "CAD",
+        region: "CA",
+        rateType: "fixed",
+        termStartDate: new Date("2020-09-01"),
+        termEndDate: new Date("2028-09-01"),
+        amortizationYears: 10,
+        paymentFrequency: "monthly",
+      },
+    ],
+  });
+
+  // -------------------------------------------------------------------------
+  // Tax Accounts (TFSA + RRSP + FHSA linked to investment accounts)
+  // -------------------------------------------------------------------------
+
+  await prisma.taxAccount.createMany({
+    data: [
+      {
+        householdId: household.id,
+        name: "Dhruv TFSA — Questrade",
+        type: "TFSA",
+        linkedAccountId: tfsaAccount.id,
+        memberName: "Dhruv Trivedi",
+        birthYear: 1992,
+        annualRoomCad: 7_000,
+        totalRoomEver: 95_000,
+        contributionsYtd: 7_000,
+        withdrawalsYtd: 0,
+        notes: "Maxed out for 2026. All prior years fully contributed.",
+      },
+      {
+        householdId: household.id,
+        name: "Dhruv RRSP — Wealthsimple",
+        type: "RRSP",
+        linkedAccountId: rrspAccount.id,
+        memberName: "Dhruv Trivedi",
+        birthYear: 1992,
+        annualRoomCad: 31_560,
+        totalRoomEver: 87_000,
+        contributionsYtd: 12_000,
+        withdrawalsYtd: 0,
+        notes: "18% of prior year earned income. $19,560 room remaining for 2026.",
+      },
+    ],
+  });
+
+  // -------------------------------------------------------------------------
+  // Notifications (mix of unread alerts + read history)
+  // -------------------------------------------------------------------------
+
+  const sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(today.getDate() - 7);
+  const threeDaysAgo = new Date(today); threeDaysAgo.setDate(today.getDate() - 3);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+
+  await prisma.notification.createMany({
+    data: [
+      {
+        householdId: household.id,
+        userId: user.id,
+        type: "over_budget",
+        severity: "warning",
+        title: "Dining budget exceeded",
+        body: "You've spent $547 on Restaurants & Delivery this month — $47 over your $500 budget.",
+        read: false,
+        linkedEntityType: "budget",
+        createdAt: yesterday,
+      },
+      {
+        householdId: household.id,
+        userId: user.id,
+        type: "anomaly",
+        severity: "alert",
+        title: "Unusual transaction detected",
+        body: "A $412 charge at 'AMZN*MKTPLACE' was 3× your typical Amazon spend. Tap to review.",
+        read: false,
+        linkedEntityType: "transaction",
+        createdAt: yesterday,
+      },
+      {
+        householdId: household.id,
+        userId: user.id,
+        type: "subscription",
+        severity: "info",
+        title: "Upcoming subscription renewal",
+        body: "Netflix Canada ($20.99) renews in 3 days on April 17.",
+        read: false,
+        linkedEntityType: "recurringItem",
+        createdAt: threeDaysAgo,
+      },
+      {
+        householdId: household.id,
+        userId: user.id,
+        type: "info",
+        severity: "info",
+        title: "TFSA contribution room available",
+        body: "You have $0 TFSA room remaining for 2026. Consider booking a contribution for 2027.",
+        read: false,
+        linkedEntityType: "taxAccount",
+        createdAt: threeDaysAgo,
+      },
+      {
+        householdId: household.id,
+        userId: user.id,
+        type: "over_budget",
+        severity: "warning",
+        title: "Coffee budget at 95%",
+        body: "You've spent $76.40 on Coffee Shops — 95% of your $80 monthly budget.",
+        read: true,
+        linkedEntityType: "budget",
+        createdAt: sevenDaysAgo,
+      },
+      {
+        householdId: household.id,
+        userId: user.id,
+        type: "info",
+        severity: "info",
+        title: "Emergency fund goal on track",
+        body: "Your Emergency Fund is 49.6% funded ($14,880 of $30,000). At current rate, goal reached in 9 months.",
+        read: true,
+        linkedEntityType: "goal",
+        createdAt: sevenDaysAgo,
+      },
+      {
+        householdId: household.id,
+        userId: user.id,
+        type: "missed_payment",
+        severity: "alert",
+        title: "Recurring payment may be missed",
+        body: "Rogers Wireless ($65.00) is due in 2 days and no matching debit has posted to TD Chequing.",
+        read: true,
+        linkedEntityType: "recurringItem",
+        createdAt: sevenDaysAgo,
+      },
+    ],
+  });
+
+  // -------------------------------------------------------------------------
+  // Net Worth Snapshots (14 months of history for charts)
+  // -------------------------------------------------------------------------
+
+  const nwSnapshots = [
+    // [months ago, assets, liabilities]
+    [13, 695_000, 432_000],
+    [12, 706_000, 428_500],
+    [11, 718_000, 424_800],
+    [10, 724_000, 421_000],
+    [9,  731_000, 417_200],
+    [8,  739_000, 413_400],
+    [7,  748_000, 409_600],
+    [6,  755_000, 405_700],
+    [5,  762_000, 401_800],
+    [4,  770_000, 397_900],
+    [3,  778_000, 393_900],
+    [2,  788_000, 395_200], // slight dip (market correction)
+    [1,  796_000, 391_800],
+    [0,  842_980, 410_280], // current: assets = accounts + manual assets
+  ] as const;
+
+  for (const [monthsAgo, assets, liabilities] of nwSnapshots) {
+    const snapDate = new Date(today.getFullYear(), today.getMonth() - monthsAgo, 1);
+    await prisma.netWorthSnapshot.upsert({
+      where: { householdId_date: { householdId: household.id, date: snapDate } },
+      create: {
+        householdId: household.id,
+        date: snapDate,
+        assets,
+        liabilities,
+        netWorth: assets - liabilities,
+      },
+      update: {},
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Operation Checkpoints (demo history for the checkpoints page)
+  // -------------------------------------------------------------------------
+
+  const expiresIn7Days = new Date(today);
+  expiresIn7Days.setDate(today.getDate() + 7);
+
+  const checkpoint1Date = new Date(today); checkpoint1Date.setDate(today.getDate() - 14);
+  const checkpoint2Date = new Date(today); checkpoint2Date.setDate(today.getDate() - 5);
+  const checkpoint3Date = new Date(today); checkpoint3Date.setDate(today.getDate() - 1);
+
+  await prisma.operationCheckpoint.createMany({
+    data: [
+      {
+        householdId: household.id,
+        type: "bulk-import",
+        label: "Imported 63 rows from td-chequing-march-2026.csv",
+        snapshot: [],
+        txnCount: 63,
+        rolledBack: false,
+        expiresAt: new Date(checkpoint1Date.getTime() + 7 * 24 * 60 * 60 * 1000),
+        createdAt: checkpoint1Date,
+      },
+      {
+        householdId: household.id,
+        type: "rule-apply-all",
+        label: "Applied 6 rules to 142 uncategorized transactions",
+        snapshot: [],
+        txnCount: 142,
+        rolledBack: false,
+        expiresAt: new Date(checkpoint2Date.getTime() + 7 * 24 * 60 * 60 * 1000),
+        createdAt: checkpoint2Date,
+      },
+      {
+        householdId: household.id,
+        type: "bulk-categorize",
+        label: "Bulk categorized 28 transactions as Groceries",
+        snapshot: [],
+        txnCount: 28,
+        rolledBack: false,
+        expiresAt: expiresIn7Days,
+        createdAt: checkpoint3Date,
+      },
+    ],
+  });
+
+  // -------------------------------------------------------------------------
+  // User Preferences
+  // -------------------------------------------------------------------------
+
+  await prisma.userPreference.createMany({
+    data: [
+      { userId: user.id, key: "baseCurrency", value: "CAD" },
+      { userId: user.id, key: "theme", value: "system" },
+      { userId: user.id, key: "dashboardLayout", value: JSON.stringify(["netWorth", "recentTransactions", "budgets", "goals", "cashFlow", "investments"]) },
+      { userId: user.id, key: "emailDigest", value: "weekly" },
+      { userId: user.id, key: "inAppNotifications", value: "true" },
+      { userId: user.id, key: "defaultAccountId", value: tdChecking.id },
+    ],
+    skipDuplicates: true,
   });
 
   // -------------------------------------------------------------------------
@@ -1905,6 +2388,13 @@ async function main() {
   console.log(`  Holdings:        ${holdingCount}  (${lotCount} lots)`);
   console.log(`  Budgets:         ${budgetDefs.length}`);
   console.log(`  Goals:           4`);
+  console.log(`  Manual Assets:   5  (condo · car · BTC · ETH · watches)`);
+  console.log(`  Liabilities:     3  (mortgage · auto loan · OSAP)`);
+  console.log(`  Tax Accounts:    2  (TFSA · RRSP)`);
+  console.log(`  Merchants:       30`);
+  console.log(`  Notifications:   7  (4 unread)`);
+  console.log(`  NW Snapshots:    14  (14-month history)`);
+  console.log(`  Checkpoints:     3`);
 }
 
 // ---------------------------------------------------------------------------
