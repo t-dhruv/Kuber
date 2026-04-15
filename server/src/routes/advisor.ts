@@ -6,6 +6,7 @@ import { getAiClient, getAiClientForHousehold } from '../lib/ai';
 import { getChatContext } from '../lib/ai/context';
 import { chatSystemPrompt } from '../lib/ai/prompts';
 import type { AiMessage } from '../lib/ai/types';
+import { aiAdvisorRequestsTotal } from '../lib/metrics';
 
 const router = Router();
 
@@ -49,6 +50,7 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
 
   const cleanup = () => clearInterval(keepalive);
 
+  let streamProvider = 'unknown';
   try {
     // 1. Check AI config first — fail fast before building context
     const aiConfig = await prisma.aiConfig.findUnique({ where: { householdId } });
@@ -58,6 +60,7 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
       res.end();
       return;
     }
+    streamProvider = aiConfig.provider;
     const client = getAiClient(aiConfig);
 
     // 2. Get or create conversation
@@ -113,6 +116,8 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
 
     if (aborted) { cleanup(); return; }
 
+    aiAdvisorRequestsTotal.inc({ provider: streamProvider, status: 'success' });
+
     // 6. Save messages to DB — wrapped so a DB error doesn't crash the SSE response
     try {
       await prisma.conversationMessage.createMany({
@@ -135,7 +140,7 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
         });
       }
     } catch (dbErr) {
-      console.error('[advisor/chat/stream] DB save error:', dbErr);
+      req.log.error({ dbErr }, 'DB save error');
     }
 
     // 7. Get the saved assistant message id for the client
@@ -148,7 +153,8 @@ router.post('/chat/stream', async (req: AuthRequest, res: Response) => {
     cleanup();
     res.end();
   } catch (err) {
-    console.error('[advisor/chat/stream]', err);
+    aiAdvisorRequestsTotal.inc({ provider: streamProvider, status: 'failure' });
+    req.log.error({ err }, 'advisor/chat/stream');
     cleanup();
     if (!aborted) {
       res.write(`data: ${JSON.stringify({ error: 'Internal server error' })}\n\n`);
@@ -211,6 +217,8 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
 
     // 5 & 6. Try to get AI client — return friendly message if not configured
     let responseContent: string;
+    const chatAiConfig = await prisma.aiConfig.findUnique({ where: { householdId } });
+    const chatProvider = chatAiConfig?.provider ?? 'unknown';
     try {
       const client = await getAiClientForHousehold(householdId, prisma);
 
@@ -222,6 +230,7 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
         temperature: 0.7,
       });
       responseContent = result.content;
+      aiAdvisorRequestsTotal.inc({ provider: chatProvider, status: 'success' });
     } catch (aiErr: unknown) {
       const errMsg = aiErr instanceof Error ? aiErr.message : String(aiErr);
       const isNotConfigured =
@@ -231,7 +240,8 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
         responseContent =
           "I'm not configured yet. Go to Settings → AI Advisor to choose your AI provider (Claude, OpenAI, Gemini, Ollama, or OpenRouter) and add your API key.";
       } else {
-        console.error('[advisor/chat] AI error:', errMsg);
+        aiAdvisorRequestsTotal.inc({ provider: chatProvider, status: 'failure' });
+        req.log.error({ errMsg }, 'AI error');
         responseContent = 'I encountered an error processing your request. Please try again.';
       }
     }
@@ -263,7 +273,7 @@ router.post('/chat', async (req: AuthRequest, res: Response) => {
       message: responseContent,
     });
   } catch (err) {
-    console.error('[advisor/chat]', err);
+    req.log.error({ err }, 'advisor/chat');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -296,7 +306,7 @@ router.get('/conversations', async (req: AuthRequest, res: Response) => {
 
     return res.json(result);
   } catch (err) {
-    console.error('[advisor/conversations]', err);
+    req.log.error({ err }, 'advisor/conversations');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -331,7 +341,7 @@ router.get('/conversations/:id/messages', async (req: AuthRequest, res: Response
       }))
     );
   } catch (err) {
-    console.error('[advisor/conversations/:id/messages]', err);
+    req.log.error({ err }, 'advisor/conversations/:id/messages');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -441,7 +451,7 @@ router.post('/budget-coach/stream', async (req: AuthRequest, res: Response) => {
     }
     res.end();
   } catch (err) {
-    console.error('[advisor/budget-coach/stream]', err);
+    req.log.error({ err }, 'advisor/budget-coach/stream');
     if (!aborted) {
       res.write(`data: ${JSON.stringify({ error: 'AI request failed. Please try again.' })}\n\n`);
       res.end();
@@ -466,7 +476,7 @@ router.delete('/conversations/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ message: 'Deleted' });
   } catch (err) {
-    console.error('[advisor/conversations/:id delete]', err);
+    req.log.error({ err }, 'advisor/conversations/:id delete');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

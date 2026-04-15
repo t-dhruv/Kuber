@@ -92,7 +92,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       averageMonthlyExpenses,
     });
   } catch (err) {
-    console.error('[cashflow/GET]', err);
+    req.log.error({ err }, 'cashflow/GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -335,7 +335,7 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
       dailyFlow,
     });
   } catch (err) {
-    console.error('[cashflow/month]', err);
+    req.log.error({ err }, 'cashflow/month');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -485,7 +485,7 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
       buckets,
     });
   } catch (err) {
-    console.error('[cashflow/sankey]', err);
+    req.log.error({ err }, 'cashflow/sankey');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -590,7 +590,7 @@ router.get('/forecast', async (req: AuthRequest, res: Response) => {
       },
     });
   } catch (err) {
-    console.error('[cashflow/forecast]', err);
+    req.log.error({ err }, 'cashflow/forecast');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

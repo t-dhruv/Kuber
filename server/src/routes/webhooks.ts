@@ -29,7 +29,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
     return res.json(webhooks);
   } catch (err) {
-    console.error('[webhooks/GET /]', err);
+    req.log.error({ err }, 'webhooks/GET /');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -53,7 +53,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     });
     return res.status(201).json(webhook);
   } catch (err) {
-    console.error('[webhooks/POST /]', err);
+    req.log.error({ err }, 'webhooks/POST /');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -76,7 +76,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     });
     return res.json(webhook);
   } catch (err) {
-    console.error('[webhooks/PUT /:id]', err);
+    req.log.error({ err }, 'webhooks/PUT /:id');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -92,7 +92,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     await prisma.webhook.delete({ where: { id: req.params.id } });
     return res.json({ message: 'Deleted' });
   } catch (err) {
-    console.error('[webhooks/DELETE /:id]', err);
+    req.log.error({ err }, 'webhooks/DELETE /:id');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

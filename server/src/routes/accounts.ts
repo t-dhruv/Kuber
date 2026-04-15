@@ -151,7 +151,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       },
     });
   } catch (err) {
-    console.error('[accounts/GET /]', err);
+    req.log.error({ err }, 'accounts/GET /');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -192,7 +192,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
     setCsvHeaders(res, filename);
     return res.send(toCSV(rows, columns));
   } catch (err) {
-    console.error('[accounts/export/csv]', err);
+    req.log.error({ err }, 'accounts/export/csv');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -239,7 +239,7 @@ router.get('/:id/history', async (req: AuthRequest, res: Response) => {
       })),
     );
   } catch (err) {
-    console.error('[accounts/GET /:id/history]', err);
+    req.log.error({ err }, 'accounts/GET /:id/history');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -316,7 +316,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       recentTransactions,
     });
   } catch (err) {
-    console.error('[accounts/GET /:id]', err);
+    req.log.error({ err }, 'accounts/GET /:id');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -356,7 +356,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'ACCOUNT', entityId: account.id, after: { name: account.name, type: account.type } });
     return res.status(201).json({ account: formatAccount(account) });
   } catch (err) {
-    console.error('[accounts/POST /]', err);
+    req.log.error({ err }, 'accounts/POST /');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -403,7 +403,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ account: formatAccount(account) });
   } catch (err) {
-    console.error('[accounts/PUT /:id]', err);
+    req.log.error({ err }, 'accounts/PUT /:id');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -424,7 +424,7 @@ router.post('/:id/close', async (req: AuthRequest, res: Response) => {
 
     return res.json({ success: true });
   } catch (err) {
-    console.error('[accounts/POST /:id/close]', err);
+    req.log.error({ err }, 'accounts/POST /:id/close');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -449,7 +449,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ success: true });
   } catch (err) {
-    console.error('[accounts/DELETE /:id]', err);
+    req.log.error({ err }, 'accounts/DELETE /:id');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -519,7 +519,7 @@ router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
       totalPages: Math.ceil(total / limit),
     });
   } catch (err) {
-    console.error('[accounts/GET /:id/transactions]', err);
+    req.log.error({ err }, 'accounts/GET /:id/transactions');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -631,7 +631,7 @@ router.post('/bulk-import/preview', csvUpload.single('file'), async (req: AuthRe
 
     return res.json({ summary, rows: results });
   } catch (err) {
-    console.error('[accounts/bulk-import/preview]', err);
+    req.log.error({ err }, 'accounts/bulk-import/preview');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -701,7 +701,7 @@ router.post('/bulk-import/confirm', async (req: AuthRequest, res: Response) => {
           updated.push(formatAccount(account));
         }
       } catch (rowErr) {
-        console.error('[bulk-import/confirm] row error', rowErr);
+        req.log.error({ rowErr }, 'row error');
         failed.push({ error: `Failed to ${row.action} account "${d.name}": ${(rowErr as Error).message}` });
       }
     }
@@ -714,7 +714,7 @@ router.post('/bulk-import/confirm', async (req: AuthRequest, res: Response) => {
       accounts: [...created, ...updated],
     });
   } catch (err) {
-    console.error('[accounts/bulk-import/confirm]', err);
+    req.log.error({ err }, 'accounts/bulk-import/confirm');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

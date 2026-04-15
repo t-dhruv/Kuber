@@ -149,7 +149,7 @@ router.get('/accounts-for-debt', async (req: AuthRequest, res: Response) => {
     });
     return res.json(accounts);
   } catch (err) {
-    console.error('[goals/accounts-for-debt]', err);
+    req.log.error({ err }, 'goals/accounts-for-debt');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -185,7 +185,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       }),
     );
   } catch (err) {
-    console.error('[goals/GET]', err);
+    req.log.error({ err }, 'goals/GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -225,7 +225,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'GOAL', entityId: goal.id, after: { name: goal.name, targetAmount: goal.targetAmount } });
     return res.status(201).json(formatGoal(goal, linkedAccount));
   } catch (err) {
-    console.error('[goals/POST]', err);
+    req.log.error({ err }, 'goals/POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -278,7 +278,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     logAudit({ householdId, userId: req.userId!, action: 'UPDATE', entity: 'GOAL', entityId: id, before: { name: existing.name }, after: { name: updated.name } });
     return res.json(formatGoal(updated, linkedAccount));
   } catch (err) {
-    console.error('[goals/PUT]', err);
+    req.log.error({ err }, 'goals/PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -298,7 +298,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ success: true });
   } catch (err) {
-    console.error('[goals/DELETE]', err);
+    req.log.error({ err }, 'goals/DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -334,7 +334,7 @@ router.post('/:id/contribute', async (req: AuthRequest, res: Response) => {
 
     return res.json(formatGoal(updated, linkedAccount));
   } catch (err) {
-    console.error('[goals/contribute]', err);
+    req.log.error({ err }, 'goals/contribute');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

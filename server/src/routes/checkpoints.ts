@@ -20,7 +20,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
     return res.json(items);
   } catch (err) {
-    console.error('[checkpoints GET]', err);
+    req.log.error({ err }, 'checkpoints GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

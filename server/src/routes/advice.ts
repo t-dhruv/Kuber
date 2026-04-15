@@ -49,7 +49,7 @@ router.get('/topics', async (req: AuthRequest, res: Response) => {
 
     res.json(result);
   } catch (err) {
-    console.error('[advice] GET /topics error:', err);
+    req.log.error({ err }, 'GET /topics error');
     res.status(500).json({ error: 'Failed to load advice topics' });
   }
 });
@@ -87,7 +87,7 @@ router.put('/topics/:topicId/tasks/:taskId', async (req: AuthRequest, res: Respo
       return res.json({ completed: true, completedAt: progress.completedAt.toISOString() });
     }
   } catch (err) {
-    console.error('[advice] PUT /topics/:topicId/tasks/:taskId error:', err);
+    req.log.error({ err }, 'PUT /topics/:topicId/tasks/:taskId error');
     res.status(500).json({ error: 'Failed to toggle task' });
   }
 });

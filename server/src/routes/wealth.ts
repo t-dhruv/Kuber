@@ -95,7 +95,7 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
       autoDetected: detected !== null,
     });
   } catch (err) {
-    console.error('[wealth/income GET]', err);
+    req.log.error({ err }, 'wealth/income GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -133,7 +133,7 @@ router.put('/income', async (req: AuthRequest, res: Response) => {
 
     return res.json({ monthlyNetIncome, updatedAt: now });
   } catch (err) {
-    console.error('[wealth/income PUT]', err);
+    req.log.error({ err }, 'wealth/income PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -150,7 +150,7 @@ router.get('/category-buckets', async (req: AuthRequest, res: Response) => {
     });
     return res.json(categories);
   } catch (err) {
-    console.error('[wealth] category-buckets GET error', err);
+    req.log.error({ err }, 'category-buckets GET error');
     return res.status(500).json({ error: 'Failed to fetch category buckets' });
   }
 });
@@ -182,7 +182,7 @@ router.put('/category-buckets', async (req: AuthRequest, res: Response) => {
     });
     return res.json(updated);
   } catch (err) {
-    console.error('[wealth] category-buckets PUT error', err);
+    req.log.error({ err }, 'category-buckets PUT error');
     return res.status(500).json({ error: 'Failed to update bucket' });
   }
 });
@@ -219,7 +219,7 @@ router.post('/category-buckets/reset', async (req: AuthRequest, res: Response) =
 
     return res.json({ message: 'Buckets reset to defaults' });
   } catch (err) {
-    console.error('[wealth] category-buckets reset error', err);
+    req.log.error({ err }, 'category-buckets reset error');
     return res.status(500).json({ error: 'Failed to reset buckets' });
   }
 });
@@ -366,7 +366,7 @@ router.get('/analysis', async (req: AuthRequest, res: Response) => {
       investmentLadder,
     });
   } catch (err) {
-    console.error('[wealth] analysis GET error', err);
+    req.log.error({ err }, 'analysis GET error');
     return res.status(500).json({ error: 'Failed to fetch wealth analysis' });
   }
 });
@@ -511,7 +511,7 @@ Keep response under 400 words. Use plain text, no markdown headers.`;
       cached: false,
     });
   } catch (err) {
-    console.error('[wealth] ai-analysis error', err);
+    req.log.error({ err }, 'ai-analysis error');
     return res.status(500).json({ error: 'Failed to generate AI analysis' });
   }
 });

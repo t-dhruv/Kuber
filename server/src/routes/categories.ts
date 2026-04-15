@@ -37,7 +37,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     return res.json(data);
   } catch (err) {
-    console.error('[categories/GET]', err);
+    req.log.error({ err }, 'categories/GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -73,7 +73,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       groupName: category.group?.name ?? null,
     });
   } catch (err) {
-    console.error('[categories/POST]', err);
+    req.log.error({ err }, 'categories/POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -91,7 +91,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     await prisma.category.delete({ where: { id: req.params.id } });
     return res.json({ message: 'Deleted' });
   } catch (err) {
-    console.error('[categories/DELETE]', err);
+    req.log.error({ err }, 'categories/DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

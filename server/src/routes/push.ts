@@ -42,7 +42,7 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
     });
     return res.status(201).json({ id: sub.id });
   } catch (err) {
-    console.error('[push/subscribe]', err);
+    req.log.error({ err }, 'push/subscribe');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -57,7 +57,7 @@ router.delete('/unsubscribe', async (req: AuthRequest, res: Response) => {
     });
     return res.json({ message: 'Unsubscribed' });
   } catch (err) {
-    console.error('[push/unsubscribe]', err);
+    req.log.error({ err }, 'push/unsubscribe');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -34,7 +34,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     if (isPrismaUniqueViolation) {
       return res.status(409).json({ error: 'An API token with this name already exists' });
     }
-    console.error('[apiTokens/POST]', err);
+    req.log.error({ err }, 'apiTokens/POST');
     return res.status(500).json({ error: 'Failed to create API token' });
   }
 });

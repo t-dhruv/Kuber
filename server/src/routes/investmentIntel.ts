@@ -50,7 +50,7 @@ router.get('/news', async (req: AuthRequest, res: Response) => {
 
     return res.json({ ticker, items });
   } catch (err) {
-    console.error('[investment-intel/news]', err);
+    req.log.error({ err }, 'investment-intel/news');
     return res.status(502).json({ error: 'Could not fetch news' });
   }
 });
@@ -144,7 +144,7 @@ router.get('/projections', async (req: AuthRequest, res: Response) => {
       horizons,
     });
   } catch (err) {
-    console.error('[investment-intel/projections]', err);
+    req.log.error({ err }, 'investment-intel/projections');
     return res.status(500).json({ error: 'Projection failed' });
   }
 });

@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { suggestCategory, batchAutoCategorize } from '../lib/autoCategorize.js';
 import { getAiClientForHousehold } from '../lib/ai/index.js';
+import { rulesAppliedTotal } from '../lib/metrics.js';
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.post('/suggest', async (req: AuthRequest, res: Response) => {
     const suggestion = await suggestCategory(prisma, req.householdId!, parse.data.description, parse.data.amount);
     return res.json({ suggestion, notConfigured: false });
   } catch (err) {
-    console.error('[auto-categorize/suggest]', err);
+    req.log.error({ err }, 'auto-categorize/suggest');
     return res.status(500).json({ error: 'Categorization failed' });
   }
 });
@@ -47,9 +48,13 @@ router.post('/batch', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    if (result.updated > 0) {
+      rulesAppliedTotal.inc({ household_id: req.householdId! });
+    }
+
     return res.json({ ...result, notConfigured: false });
   } catch (err) {
-    console.error('[auto-categorize/batch]', err);
+    req.log.error({ err }, 'auto-categorize/batch');
     return res.status(500).json({ error: 'Batch categorization failed' });
   }
 });

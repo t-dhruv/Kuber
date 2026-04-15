@@ -20,6 +20,7 @@ import { parsePdfStatement } from '../lib/pdfParser.js';
 import { parseDate } from '../lib/dateUtils.js';
 import { detectColumnMapping } from '../lib/csvColumnDetector.js';
 import { detectLocaleFormat, parseAmount, mergeDebitCredit } from '../lib/amountParser.js';
+import { transactionsImportedTotal } from '../lib/metrics.js';
 
 const router = Router();
 
@@ -283,7 +284,7 @@ router.post('/detect-mapping', upload.single('file'), async (req: AuthRequest, r
       preview,
     });
   } catch (err) {
-    console.error('[import/detect-mapping]', err);
+    req.log.error({ err }, 'import/detect-mapping');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -380,7 +381,7 @@ router.post('/parse-with-mapping', upload.single('file'), async (req: AuthReques
       rows: parsedRows.slice(0, 200),
     });
   } catch (err) {
-    console.error('[import/parse-with-mapping]', err);
+    req.log.error({ err }, 'import/parse-with-mapping');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -424,7 +425,7 @@ router.post('/parse', upload.single('file'), async (req: AuthRequest, res) => {
       rows: rows.slice(0, 200), // cap preview at 200 rows
     });
   } catch (err) {
-    console.error('Import parse error:', err);
+    req.log.error({ err }, 'Import parse error');
     const msg = err instanceof Error ? err.message : 'Parse failed';
     // Pass through user-facing messages; suppress internal details like file paths or stack traces
     const safeMsg = /^(PDF|Only|Cannot parse|Failed to|No rows|Unsupported)/i.test(msg)
@@ -646,9 +647,13 @@ router.post('/confirm', async (req: AuthRequest, res) => {
       },
     });
 
+    if (imported > 0) {
+      transactionsImportedTotal.inc({ household_id: req.householdId!, source: bankSource ?? 'generic' });
+    }
+
     return res.json({ imported, skipped, errors });
   } catch (err) {
-    console.error('Import confirm error:', err);
+    req.log.error({ err }, 'Import confirm error');
     return res.status(500).json({ error: 'Import failed' });
   }
 });
@@ -674,7 +679,7 @@ router.get('/history', async (req: AuthRequest, res) => {
 
     return res.json({ items, total, page, limit });
   } catch (err) {
-    console.error('Import history error:', err);
+    req.log.error({ err }, 'Import history error');
     return res.status(500).json({ error: 'Failed to fetch import history' });
   }
 });
@@ -764,7 +769,7 @@ router.post('/webhook', async (req: AuthRequest, res) => {
 
     return res.json({ imported, skipped });
   } catch (err) {
-    console.error('Import webhook error:', err);
+    req.log.error({ err }, 'Import webhook error');
     return res.status(500).json({ error: 'Webhook import failed' });
   }
 });

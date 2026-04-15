@@ -27,7 +27,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
     res.json(assets);
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, 'error');
     res.status(500).json({ error: 'Failed to fetch assets' });
   }
 });
@@ -85,7 +85,7 @@ router.get('/net-worth-breakdown', async (req: AuthRequest, res: Response) => {
       total: bankAccountsTotal + investmentsTotal + manualAssetsTotal - manualLiabilitiesTotal,
     });
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, 'error');
     res.status(500).json({ error: 'Failed to fetch net worth breakdown' });
   }
 });
@@ -111,7 +111,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     });
     res.status(201).json(asset);
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, 'error');
     res.status(500).json({ error: 'Failed to create asset' });
   }
 });
@@ -145,7 +145,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     });
     res.json(asset);
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, 'error');
     res.status(500).json({ error: 'Failed to update asset' });
   }
 });
@@ -161,7 +161,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     await prisma.manualAsset.delete({ where: { id: req.params.id } });
     res.json({ message: 'Deleted' });
   } catch (err) {
-    console.error(err);
+    req.log.error({ err }, 'error');
     res.status(500).json({ error: 'Failed to delete asset' });
   }
 });

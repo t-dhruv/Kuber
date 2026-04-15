@@ -20,7 +20,7 @@ router.get('/report-schedule', async (req: AuthRequest, res: Response) => {
     }
     return res.json(schedule);
   } catch (err) {
-    console.error('[schedules/report-schedule GET]', err);
+    req.log.error({ err }, 'schedules/report-schedule GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -46,7 +46,7 @@ router.put('/report-schedule', async (req: AuthRequest, res: Response) => {
 
     return res.json(schedule);
   } catch (err) {
-    console.error('[schedules/report-schedule PUT]', err);
+    req.log.error({ err }, 'schedules/report-schedule PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

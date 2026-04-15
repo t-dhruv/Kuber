@@ -113,7 +113,7 @@ router.get('/duplicates', async (req: AuthRequest, res: Response) => {
 
     res.json({ count: formatted.length, groups: formatted });
   } catch (err) {
-    console.error('[duplicates] GET error:', err);
+    req.log.error({ err }, 'GET error');
     res.status(500).json({ error: 'Failed to fetch duplicates' });
   }
 });
@@ -159,7 +159,7 @@ router.post('/duplicates/dismiss', async (req: AuthRequest, res: Response) => {
 
     res.json({ message: 'Dismissed' });
   } catch (err) {
-    console.error('[duplicates] dismiss error:', err);
+    req.log.error({ err }, 'dismiss error');
     res.status(500).json({ error: 'Failed to dismiss duplicate' });
   }
 });
@@ -227,7 +227,7 @@ router.post('/duplicates/merge', async (req: AuthRequest, res: Response) => {
 
     res.json(kept);
   } catch (err) {
-    console.error('[duplicates] merge error:', err);
+    req.log.error({ err }, 'merge error');
     res.status(500).json({ error: 'Failed to merge transactions' });
   }
 });

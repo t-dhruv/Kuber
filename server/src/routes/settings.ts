@@ -56,7 +56,7 @@ router.get('/profile', async (req: AuthRequest, res: Response) => {
       currency: member?.household.currency ?? 'USD',
     });
   } catch (err) {
-    console.error('[settings/profile GET]', err);
+    req.log.error({ err }, 'settings/profile GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -100,7 +100,7 @@ router.put('/profile', async (req: AuthRequest, res: Response) => {
       currency: member?.household.currency ?? 'USD',
     });
   } catch (err) {
-    console.error('[settings/profile PUT]', err);
+    req.log.error({ err }, 'settings/profile PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -140,7 +140,7 @@ router.get('/household', async (req: AuthRequest, res: Response) => {
       members,
     });
   } catch (err) {
-    console.error('[settings/household GET]', err);
+    req.log.error({ err }, 'settings/household GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -194,7 +194,7 @@ router.put('/household', async (req: AuthRequest, res: Response) => {
       members,
     });
   } catch (err) {
-    console.error('[settings/household PUT]', err);
+    req.log.error({ err }, 'settings/household PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -234,7 +234,7 @@ router.post('/household/invite', async (req: AuthRequest, res: Response) => {
       message: 'Invitation sent (email not implemented in dev)',
     });
   } catch (err) {
-    console.error('[settings/household/invite POST]', err);
+    req.log.error({ err }, 'settings/household/invite POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -273,7 +273,7 @@ router.delete('/household/members/:id', async (req: AuthRequest, res: Response) 
 
     return res.json({ message: 'Member removed' });
   } catch (err) {
-    console.error('[settings/household/members DELETE]', err);
+    req.log.error({ err }, 'settings/household/members DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -291,7 +291,7 @@ router.get('/categories', async (req: AuthRequest, res: Response) => {
 
     return res.json(categories);
   } catch (err) {
-    console.error('[settings/categories GET]', err);
+    req.log.error({ err }, 'settings/categories GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -329,7 +329,7 @@ router.post('/categories', async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json(category);
   } catch (err) {
-    console.error('[settings/categories POST]', err);
+    req.log.error({ err }, 'settings/categories POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -374,7 +374,7 @@ router.put('/categories/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json(category);
   } catch (err) {
-    console.error('[settings/categories PUT]', err);
+    req.log.error({ err }, 'settings/categories PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -406,7 +406,7 @@ router.delete('/categories/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ success: true });
   } catch (err) {
-    console.error('[settings/categories DELETE]', err);
+    req.log.error({ err }, 'settings/categories DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -427,7 +427,7 @@ router.get('/tags', async (req: AuthRequest, res: Response) => {
       transactionCount: t._count.transactionTags,
     })));
   } catch (err) {
-    console.error('[settings/tags GET]', err);
+    req.log.error({ err }, 'settings/tags GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -452,7 +452,7 @@ router.post('/tags', async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json({ id: tag.id, name: tag.name, color: tag.color, transactionCount: 0 });
   } catch (err) {
-    console.error('[settings/tags POST]', err);
+    req.log.error({ err }, 'settings/tags POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -482,7 +482,7 @@ router.put('/tags/:id', async (req: AuthRequest, res: Response) => {
     const count = await prisma.transactionTag.count({ where: { tagId: id } });
     return res.json({ id: tag.id, name: tag.name, color: tag.color, transactionCount: count });
   } catch (err) {
-    console.error('[settings/tags PUT]', err);
+    req.log.error({ err }, 'settings/tags PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -501,7 +501,7 @@ router.delete('/tags/:id', async (req: AuthRequest, res: Response) => {
     await prisma.tag.delete({ where: { id } });
     return res.json({ message: 'Tag deleted' });
   } catch (err) {
-    console.error('[settings/tags DELETE]', err);
+    req.log.error({ err }, 'settings/tags DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -543,7 +543,7 @@ router.get('/merchants', async (req: AuthRequest, res: Response) => {
 
     return res.json(result);
   } catch (err) {
-    console.error('[settings/merchants GET]', err);
+    req.log.error({ err }, 'settings/merchants GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -573,7 +573,7 @@ router.put('/merchants/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ ...updated, logoUrl: updated.logoUrl ?? null });
   } catch (err) {
-    console.error('[settings/merchants PUT]', err);
+    req.log.error({ err }, 'settings/merchants PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -596,7 +596,7 @@ router.delete('/merchants/:id', async (req: AuthRequest, res: Response) => {
     await prisma.merchant.delete({ where: { id } });
     return res.json({ message: 'Merchant deleted' });
   } catch (err) {
-    console.error('[settings/merchants DELETE]', err);
+    req.log.error({ err }, 'settings/merchants DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -627,7 +627,7 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
     const lowBalanceThreshold = thresholdPref ? parseFloat(thresholdPref.value) : null;
     return res.json({ preferences, lowBalanceThreshold });
   } catch (err) {
-    console.error('[settings/notifications GET]', err);
+    req.log.error({ err }, 'settings/notifications GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -661,7 +661,7 @@ router.put('/notifications', async (req: AuthRequest, res: Response) => {
     }
     return res.json({ preferences, lowBalanceThreshold: lowBalanceThreshold ?? null });
   } catch (err) {
-    console.error('[settings/notifications PUT]', err);
+    req.log.error({ err }, 'settings/notifications PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -698,7 +698,7 @@ router.put('/password', async (req: AuthRequest, res: Response) => {
 
     return res.json({ success: true });
   } catch (err) {
-    console.error('[settings/password PUT]', err);
+    req.log.error({ err }, 'settings/password PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -724,7 +724,7 @@ router.get('/dashboard-layout', async (req: AuthRequest, res: Response) => {
       return res.json(null);
     }
   } catch (err) {
-    console.error('[settings/dashboard-layout GET]', err);
+    req.log.error({ err }, 'settings/dashboard-layout GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -758,7 +758,7 @@ router.put('/dashboard-layout', async (req: AuthRequest, res: Response) => {
 
     return res.json(layout);
   } catch (err) {
-    console.error('[settings/dashboard-layout PUT]', err);
+    req.log.error({ err }, 'settings/dashboard-layout PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -798,7 +798,7 @@ router.get('/ai-config', async (req: AuthRequest, res: Response) => {
     const config = await prisma.aiConfig.findUnique({ where: { householdId } });
     return res.json(formatAiConfigResponse(config));
   } catch (err) {
-    console.error('[settings/ai-config GET]', err);
+    req.log.error({ err }, 'settings/ai-config GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -843,7 +843,7 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
     invalidateAiCache(householdId);
     return res.json(formatAiConfigResponse(config));
   } catch (err) {
-    console.error('[settings/ai-config PUT]', err);
+    req.log.error({ err }, 'settings/ai-config PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -927,7 +927,7 @@ router.delete('/account', async (req: AuthRequest, res: Response) => {
     res.clearCookie('refreshToken');
     return res.json({ message: 'Account deleted successfully' });
   } catch (err) {
-    console.error('[settings/account DELETE]', err);
+    req.log.error({ err }, 'settings/account DELETE');
     return res.status(500).json({ error: 'Failed to delete account' });
   }
 });
@@ -1059,7 +1059,7 @@ router.get('/export', async (req: AuthRequest, res: Response) => {
     await workbook.xlsx.write(res);
     return res.end();
   } catch (err) {
-    console.error('[settings/export GET]', err);
+    req.log.error({ err }, 'settings/export GET');
     return res.status(500).json({ error: 'Failed to generate export' });
   }
 });
@@ -1073,7 +1073,7 @@ router.post('/email/test', async (req: AuthRequest, res: Response) => {
     await sendTestEmail(user.email);
     return res.json({ message: `Test email sent to ${user.email}` });
   } catch (err) {
-    console.error('[settings/email/test]', err);
+    req.log.error({ err }, 'settings/email/test');
     return res.status(500).json({ error: 'Failed to send test email. Check your SMTP configuration.' });
   }
 });
