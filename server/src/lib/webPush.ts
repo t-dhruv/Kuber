@@ -12,7 +12,7 @@ function init() {
   const subject    = process.env.VAPID_SUBJECT ?? 'mailto:admin@kuber.app';
 
   if (!publicKey || !privateKey) {
-    log.warn({}, 'VAPID keys not set — push notifications disabled');
+    log.warn('VAPID keys not set — push notifications disabled');
     return;
   }
 
