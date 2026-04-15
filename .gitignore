@@ -38,6 +38,7 @@ server/prisma/*.db-journal
 
 # Tooling / AI agents
 .omc/
+.omx/
 .claude/
 .windsurf/
 
