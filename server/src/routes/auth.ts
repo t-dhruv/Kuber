@@ -8,6 +8,7 @@ import { prisma } from '../lib/prisma';
 import { createRefreshToken, invalidateFamily, hashToken, DEFAULT_REFRESH_TTL_MS, REMEMBER_ME_REFRESH_TTL_MS } from '../lib/token';
 import { sendPasswordResetEmail, sendAccountLockoutEmail } from '../lib/email';
 import { requireAuth } from '../middleware/auth';
+import { seedDefaultCategories } from '../lib/default-categories';
 import type { AuthRequest } from '../middleware/auth';
 import type { UserDto } from '@kuber/shared';
 
@@ -89,6 +90,8 @@ router.post('/signup', async (req: Request, res: Response) => {
       await tx.householdMember.create({
         data: { userId: newUser.id, householdId: household.id, role: 'owner' },
       });
+      // Seed default categories so the household is usable immediately
+      await seedDefaultCategories(tx, household.id);
       return { user: newUser, householdId: household.id };
     });
 
