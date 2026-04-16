@@ -209,6 +209,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
   const [form, setForm] = useState<Partial<Transaction> & { tagInput?: string }>({});
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [txType, setTxType] = useState<TxType>('expense');
 
   // Sync form when transaction changes
   useEffect(() => {
@@ -216,6 +217,13 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
       setForm({ ...transaction });
       setShowCategoryPicker(false);
       setTagInput('');
+      if (transaction.isTransfer) {
+        setTxType('transfer');
+      } else if (transaction.amount >= 0) {
+        setTxType('income');
+      } else {
+        setTxType('expense');
+      }
     }
   }, [transaction?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -225,7 +233,11 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
       await api.put(`/transactions/${transaction!.id}`, {
         merchantName: form.merchantName,
         date: form.date,
-        amount: form.amount,
+        amount: form.isTransfer
+          ? form.amount
+          : txType === 'expense'
+            ? -Math.abs(form.amount as number)
+            : Math.abs(form.amount as number),
         categoryId: form.categoryId,
         notes: form.notes,
         needsReview: form.needsReview,
@@ -339,14 +351,35 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
             />
 
-            {/* Amount */}
-            <Input
-              label="Amount"
-              type="number"
-              step="0.01"
-              value={form.amount ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}
-            />
+            {/* Type + Amount */}
+            <div className="flex flex-col gap-2">
+              <TypeToggle
+                value={txType}
+                onChange={(type) => setTxType(type)}
+                disabled={!!form.isTransfer}
+              />
+              <div>
+                <Input
+                  label="Amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.amount !== undefined ? Math.abs(form.amount as number) : ''}
+                  onChange={(e) => {
+                    const abs = parseFloat(e.target.value) || 0;
+                    setForm((f) => ({
+                      ...f,
+                      amount: txType === 'expense' ? -Math.abs(abs) : Math.abs(abs),
+                    }));
+                  }}
+                />
+                {!form.isTransfer && (
+                  <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
+                    {txType === 'expense' ? 'Will be recorded as an expense' : 'Will be recorded as income'}
+                  </p>
+                )}
+              </div>
+            </div>
 
             {/* Category */}
             <div>
