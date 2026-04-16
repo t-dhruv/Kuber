@@ -38,3 +38,12 @@ test-e2e:
 
 clean:
 	rm -rf client/dist server/dist node_modules client/node_modules server/node_modules shared/node_modules .turbo
+
+prod-up:
+	docker compose -f docker-compose.prod.yml --profile observability --profile automation up -d
+
+prod-down:
+	docker compose -f docker-compose.prod.yml --profile observability --profile automation down
+
+prod-logs:
+	docker compose -f docker-compose.prod.yml --profile observability --profile automation logs -f

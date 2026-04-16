@@ -1,16 +1,15 @@
-# Kuber monorepo — single Containerfile for both server and client
-# Use: podman build --target server-runner .
-#      podman build --target client-runner .
+# Kuber monorepo — single Dockerfile for server and client
+# Targets: server-runner, client-runner
 
 # ─── Shared base ──────────────────────────────────────────────────────────────
 FROM node:25-alpine AS base
+RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY shared ./shared
 
 # ─── Server: install + build ──────────────────────────────────────────────────
 FROM base AS server-builder
-RUN apk add --no-cache openssl
 COPY server/package.json ./server/
 RUN npm ci --workspace=server
 COPY server/prisma ./server/prisma
@@ -28,7 +27,6 @@ COPY server/package.json ./server/
 RUN npm ci --workspace=server --omit=dev
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/prisma ./server/prisma
-# Prisma client is hoisted to root node_modules by npm workspaces
 COPY --from=server-builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=server-builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 WORKDIR /app/server
@@ -54,6 +52,29 @@ RUN printf 'server {\n\
     server_name _;\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
+    location /api/ {\n\
+        proxy_pass         http://server:9002/api/;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header   Host              $host;\n\
+        proxy_set_header   X-Real-IP         $remote_addr;\n\
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;\n\
+        proxy_set_header   Connection        "";\n\
+        proxy_read_timeout 120s;\n\
+        proxy_send_timeout 120s;\n\
+    }\n\
+    location ~* ^/api/v1/.*/stream$ {\n\
+        proxy_pass         http://server:9002;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header   Host              $host;\n\
+        proxy_set_header   X-Real-IP         $remote_addr;\n\
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;\n\
+        proxy_set_header   Connection        "";\n\
+        proxy_buffering    off;\n\
+        proxy_cache        off;\n\
+        add_header         X-Accel-Buffering no;\n\
+        proxy_read_timeout 180s;\n\
+        proxy_send_timeout 180s;\n\
+    }\n\
     location / { try_files $uri $uri/ /index.html; }\n\
     location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {\n\
         expires 1y;\n\

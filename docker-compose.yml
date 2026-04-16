@@ -17,11 +17,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - kuber_net
+      - kuber_network
 
   server:
     build:
       context: .
+      dockerfile: Dockerfile
       target: server-runner
     container_name: kuber_server
     restart: unless-stopped
@@ -30,18 +31,21 @@ services:
       JWT_SECRET: dev_jwt_secret_change_in_prod
       JWT_REFRESH_SECRET: dev_refresh_secret_change_in_prod
       NODE_ENV: production
+      CLIENT_URL: http://localhost:9001
       PORT: 9002
+      LOKI_URL: http://loki:3100
     ports:
       - "9002:9002"
     depends_on:
       postgres:
         condition: service_healthy
     networks:
-      - kuber_net
+      - kuber_network
 
   client:
     build:
       context: .
+      dockerfile: Dockerfile
       target: client-runner
     container_name: kuber_client
     restart: unless-stopped
@@ -49,6 +53,8 @@ services:
       - "9001:80"
     depends_on:
       - server
+    networks:
+      - kuber_network
 
   prometheus:
     image: prom/prometheus:latest
@@ -64,7 +70,7 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=15d"
     networks:
-      - kuber_net
+      - kuber_network
 
   loki:
     image: grafana/loki:latest
@@ -78,7 +84,7 @@ services:
       - kuber_loki_data:/loki
     command: -config.file=/etc/loki/local-config.yaml
     networks:
-      - kuber_net
+      - kuber_network
 
   promtail:
     image: grafana/promtail:latest
@@ -87,12 +93,12 @@ services:
     restart: unless-stopped
     volumes:
       - ./observability/promtail/promtail.yml:/etc/promtail/config.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/docker.sock:/var/run/docker.sock:ro
     command: -config.file=/etc/promtail/config.yml
     depends_on:
       - loki
     networks:
-      - kuber_net
+      - kuber_network
 
   grafana:
     image: grafana/grafana:latest
@@ -112,7 +118,7 @@ services:
       - prometheus
       - loki
     networks:
-      - kuber_net
+      - kuber_network
 
   n8n:
     image: n8nio/n8n:latest
@@ -137,7 +143,7 @@ services:
       - n8n_data:/home/node/.n8n
       - ./n8n-workflows:/home/node/workflows:ro
     networks:
-      - kuber_net
+      - kuber_network
 
 volumes:
   kuber_pgdata:
@@ -147,4 +153,4 @@ volumes:
   kuber_grafana_data:
 
 networks:
-  kuber_net:
+  kuber_network:

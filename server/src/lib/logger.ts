@@ -2,25 +2,52 @@ import pino from 'pino';
 
 const isDev = process.env.NODE_ENV !== 'production';
 const globalLevel = process.env.LOG_LEVEL ?? (isDev ? 'debug' : 'info');
+const lokiUrl = process.env.LOKI_URL;
 
-export const logger = pino({
+const pinoOpts: pino.LoggerOptions = {
   level: globalLevel,
-  ...(isDev && {
-    transport: {
+  serializers: {
+    err: pino.stdSerializers.err,
+    req: pino.stdSerializers.req,
+    res: pino.stdSerializers.res,
+  },
+};
+
+function buildStream(): pino.DestinationStream | undefined {
+  if (isDev) {
+    return pino.transport({
       target: 'pino-pretty',
       options: {
         colorize: true,
         translateTime: 'SYS:HH:MM:ss',
         ignore: 'pid,hostname',
       },
-    },
-  }),
-  serializers: {
-    err: pino.stdSerializers.err,
-    req: pino.stdSerializers.req,
-    res: pino.stdSerializers.res,
-  },
-});
+    });
+  }
+  if (lokiUrl) {
+    return pino.transport({
+      targets: [
+        { target: 'pino/file', level: globalLevel, options: { destination: 1 } },
+        {
+          target: 'pino-loki',
+          level: globalLevel,
+          options: {
+            host: lokiUrl,
+            labels: { container_name: 'kuber_server', app: 'kuber' },
+            interval: 5,
+            timeout: 5000,
+            silenceErrors: true,
+            replaceTimestamp: false,
+          },
+        },
+      ],
+    });
+  }
+  return undefined;
+}
+
+const stream = buildStream();
+export const logger = stream ? pino(pinoOpts, stream) : pino(pinoOpts);
 
 /**
  * Creates a module-scoped child logger.

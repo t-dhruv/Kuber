@@ -114,7 +114,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./server/Dockerfile
+          file: ./Dockerfile
+          target: server-runner
           push: true
           tags: ${{ steps.meta-server.outputs.tags }}
           labels: ${{ steps.meta-server.outputs.labels }}
@@ -125,7 +126,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./client/Dockerfile
+          file: ./Dockerfile
+          target: client-runner
           push: true
           tags: ${{ steps.meta-client.outputs.tags }}
           labels: ${{ steps.meta-client.outputs.labels }}
