@@ -230,14 +230,15 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
   const saveMutation = useMutation({
     mutationFn: async () => {
       // 1. Save core fields
+      const rawAmount = form.amount ?? 0;
       await api.put(`/transactions/${transaction!.id}`, {
         merchantName: form.merchantName,
         date: form.date,
         amount: form.isTransfer
           ? form.amount
           : txType === 'expense'
-            ? -Math.abs(form.amount as number)
-            : Math.abs(form.amount as number),
+            ? -Math.abs(rawAmount)
+            : Math.abs(rawAmount),
         categoryId: form.categoryId,
         notes: form.notes,
         needsReview: form.needsReview,
