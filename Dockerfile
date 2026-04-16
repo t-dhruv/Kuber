@@ -52,6 +52,29 @@ RUN printf 'server {\n\
     server_name _;\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
+    location /api/ {\n\
+        proxy_pass         http://server:9002/api/;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header   Host              $host;\n\
+        proxy_set_header   X-Real-IP         $remote_addr;\n\
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;\n\
+        proxy_set_header   Connection        "";\n\
+        proxy_read_timeout 120s;\n\
+        proxy_send_timeout 120s;\n\
+    }\n\
+    location ~* ^/api/v1/.*/stream$ {\n\
+        proxy_pass         http://server:9002;\n\
+        proxy_http_version 1.1;\n\
+        proxy_set_header   Host              $host;\n\
+        proxy_set_header   X-Real-IP         $remote_addr;\n\
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;\n\
+        proxy_set_header   Connection        "";\n\
+        proxy_buffering    off;\n\
+        proxy_cache        off;\n\
+        add_header         X-Accel-Buffering no;\n\
+        proxy_read_timeout 180s;\n\
+        proxy_send_timeout 180s;\n\
+    }\n\
     location / { try_files $uri $uri/ /index.html; }\n\
     location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {\n\
         expires 1y;\n\

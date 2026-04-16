@@ -30,8 +30,10 @@ services:
       DATABASE_URL: postgresql://kuber:kuber_dev@postgres:5432/kuber_db
       JWT_SECRET: dev_jwt_secret_change_in_prod
       JWT_REFRESH_SECRET: dev_refresh_secret_change_in_prod
-      NODE_ENV: development
+      NODE_ENV: production
+      CLIENT_URL: http://localhost:9001
       PORT: 9002
+      LOKI_URL: http://loki:3100
     ports:
       - "9002:9002"
     depends_on:
@@ -91,7 +93,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./observability/promtail/promtail.yml:/etc/promtail/config.yml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/docker.sock:/var/run/docker.sock:ro
     command: -config.file=/etc/promtail/config.yml
     depends_on:
       - loki

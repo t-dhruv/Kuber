@@ -33,6 +33,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://kuber:${POSTGRES_PASSWORD:-CHANGE_ME}@postgres:5432/kuber_db
+      LOKI_URL: http://loki:3100
     depends_on:
       postgres:
         condition: service_healthy
