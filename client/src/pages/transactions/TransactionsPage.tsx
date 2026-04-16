@@ -537,6 +537,7 @@ function TypeToggle({ value, onChange, disabled }: TypeToggleProps) {
 
 function AddTransactionModal({ open, onClose, accounts, categories }: AddModalProps) {
   const queryClient = useQueryClient();
+  const [txType, setTxType] = useState<TxType>('expense');
   const [form, setForm] = useState({
     date: fmtInputDate(new Date().toISOString()),
     description: '',
@@ -544,17 +545,50 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
     accountId: '',
     categoryId: '',
     notes: '',
+    fromAccountId: '',
+    toAccountId: '',
   });
 
+  const reset = () => {
+    setTxType('expense');
+    setForm({
+      date: fmtInputDate(new Date().toISOString()),
+      description: '',
+      amount: '',
+      accountId: '',
+      categoryId: '',
+      notes: '',
+      fromAccountId: '',
+      toAccountId: '',
+    });
+  };
+
   const mutation = useMutation({
-    mutationFn: () => api.post('/transactions', {
-      ...form,
-      amount: parseFloat(form.amount) || 0,
-    }),
+    mutationFn: () => {
+      const amt = parseFloat(form.amount) || 0;
+      if (txType === 'transfer') {
+        return api.post('/transactions/transfer', {
+          fromAccountId: form.fromAccountId,
+          toAccountId: form.toAccountId,
+          amount: Math.abs(amt),
+          date: form.date,
+          notes: form.notes || undefined,
+        });
+      }
+      return api.post('/transactions', {
+        date: form.date,
+        description: form.description,
+        amount: txType === 'expense' ? -Math.abs(amt) : Math.abs(amt),
+        accountId: form.accountId,
+        categoryId: form.categoryId || undefined,
+        notes: form.notes || undefined,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
       onClose();
-      setForm({ date: fmtInputDate(new Date().toISOString()), description: '', amount: '', accountId: '', categoryId: '', notes: '' });
+      reset();
     },
     onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to add transaction'),
   });
@@ -569,9 +603,17 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
     label: `${c.emoji ?? ''} ${c.name}`.trim(),
   }));
 
+  const isTransfer = txType === 'transfer';
+
+  const isDisabled =
+    !form.amount ||
+    (isTransfer ? !form.fromAccountId || !form.toAccountId : !form.description || !form.accountId);
+
   return (
     <Modal open={open} onClose={onClose} title="Add Transaction" size="md">
       <div className="flex flex-col gap-4">
+        <TypeToggle value={txType} onChange={setTxType} />
+
         <div className="grid grid-cols-2 gap-3">
           <Input
             label="Date"
@@ -583,36 +625,62 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
             <Input
               label="Amount"
               type="number"
+              min="0"
               step="0.01"
-              placeholder="-45.00"
+              placeholder="0.00"
               value={form.amount}
               onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
             />
-            <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
-              Negative = expense, positive = income
-            </p>
+            {!isTransfer && (
+              <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
+                {txType === 'expense' ? 'Will be recorded as an expense' : 'Will be recorded as income'}
+              </p>
+            )}
           </div>
         </div>
-        <Input
-          label="Merchant / Description"
-          placeholder="e.g. Whole Foods Market"
-          value={form.description}
-          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-        />
-        <Select
-          label="Account"
-          options={accountOptions}
-          placeholder="Select account..."
-          value={form.accountId}
-          onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
-        />
-        <Select
-          label="Category"
-          options={categoryOptions}
-          placeholder="Select category..."
-          value={form.categoryId}
-          onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-        />
+
+        {isTransfer ? (
+          <>
+            <Select
+              label="From Account"
+              options={accountOptions}
+              placeholder="Select account…"
+              value={form.fromAccountId}
+              onChange={(e) => setForm((f) => ({ ...f, fromAccountId: e.target.value }))}
+            />
+            <Select
+              label="To Account"
+              options={accountOptions}
+              placeholder="Select account…"
+              value={form.toAccountId}
+              onChange={(e) => setForm((f) => ({ ...f, toAccountId: e.target.value }))}
+            />
+          </>
+        ) : (
+          <>
+            <Input
+              label="Merchant / Description"
+              placeholder="e.g. Whole Foods Market"
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            />
+            <Select
+              label="Account"
+              options={accountOptions}
+              placeholder="Select account..."
+              value={form.accountId}
+              onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
+            />
+            <Select
+              label="Category"
+              options={categoryOptions}
+              placeholder="Select category..."
+              value={form.categoryId}
+              onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
+            />
+          </>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
             Notes
@@ -632,9 +700,9 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
           variant="primary"
           loading={mutation.isPending}
           onClick={() => mutation.mutate()}
-          disabled={!form.description || !form.amount || !form.accountId}
+          disabled={isDisabled}
         >
-          Add Transaction
+          {isTransfer ? 'Record Transfer' : txType === 'expense' ? 'Add Expense' : 'Add Income'}
         </Button>
       </ModalFooter>
     </Modal>
