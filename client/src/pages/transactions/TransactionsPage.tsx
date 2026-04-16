@@ -563,6 +563,10 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
     });
   };
 
+  useEffect(() => {
+    if (open) reset();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const mutation = useMutation({
     mutationFn: () => {
       const amt = parseFloat(form.amount) || 0;
@@ -607,7 +611,10 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
 
   const isDisabled =
     !form.amount ||
-    (isTransfer ? !form.fromAccountId || !form.toAccountId : !form.description || !form.accountId);
+    parseFloat(form.amount) <= 0 ||
+    (isTransfer
+      ? !form.fromAccountId || !form.toAccountId || form.fromAccountId === form.toAccountId
+      : !form.description || !form.accountId);
 
   return (
     <Modal open={open} onClose={onClose} title="Add Transaction" size="md">
