@@ -495,6 +495,40 @@ interface AddModalProps {
   categories: Category[];
 }
 
+// ─── Type Toggle ──────────────────────────────────────────────────────────────
+
+type TxType = 'expense' | 'income' | 'transfer';
+
+const TYPE_OPTIONS: { value: TxType; label: string }[] = [
+  { value: 'expense',  label: 'Expense'  },
+  { value: 'income',   label: 'Income'   },
+  { value: 'transfer', label: 'Transfer' },
+];
+
+function TypeToggle({ value, onChange, disabled }: { value: TxType; onChange: (v: TxType) => void; disabled?: boolean }) {
+  return (
+    <div className="flex rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
+      {TYPE_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(opt.value)}
+          className={[
+            'flex-1 py-1.5 text-sm font-medium transition-colors',
+            value === opt.value
+              ? 'bg-[var(--color-accent)] text-white'
+              : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)]',
+            disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+          ].join(' ')}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AddTransactionModal({ open, onClose, accounts, categories }: AddModalProps) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
