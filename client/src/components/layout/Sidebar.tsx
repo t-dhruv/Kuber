@@ -64,6 +64,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     queryKey: ['auto-categorize-status'],
     queryFn: () => api.get('/auto-categorize/status').then((r) => r.data),
     refetchInterval: 60_000,
+    staleTime: 60_000,
+    retry: false,
   });
   const reviewCount: number = autoCatStatus?.reviewCount ?? 0;
 
