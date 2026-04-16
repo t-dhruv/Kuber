@@ -122,7 +122,7 @@ router.get('/spending/compare', async (req: AuthRequest, res: Response) => {
 
     return res.json({ items, currentTotal, priorTotal, totalDelta });
   } catch (err) {
-    console.error('[reports/spending/compare]', err);
+    req.log.error({ err }, 'reports/spending/compare');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -170,7 +170,7 @@ router.get('/income/compare', async (req: AuthRequest, res: Response) => {
 
     return res.json({ items, currentTotal, priorTotal, totalDelta });
   } catch (err) {
-    console.error('[reports/income/compare]', err);
+    req.log.error({ err }, 'reports/income/compare');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -263,7 +263,7 @@ router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
 
     return res.json({ months, series });
   } catch (err) {
-    console.error('[reports/spending/monthly]', err);
+    req.log.error({ err }, 'reports/spending/monthly');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -353,7 +353,7 @@ router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
 
     return res.json({ months, series });
   } catch (err) {
-    console.error('[reports/income/monthly]', err);
+    req.log.error({ err }, 'reports/income/monthly');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -508,7 +508,7 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
       lastDate,
     });
   } catch (err) {
-    console.error('[reports/spending]', err);
+    req.log.error({ err }, 'reports/spending');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -654,7 +654,7 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
       lastDate,
     });
   } catch (err) {
-    console.error('[reports/income]', err);
+    req.log.error({ err }, 'reports/income');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -755,7 +755,7 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
       monthly,
     });
   } catch (err) {
-    console.error('[reports/cashflow]', err);
+    req.log.error({ err }, 'reports/cashflow');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -831,7 +831,7 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
 
     return res.json({ months: result });
   } catch (err) {
-    console.error('[reports/trends]', err);
+    req.log.error({ err }, 'reports/trends');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -944,7 +944,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
 
     return res.send(toCSV(rows, columns));
   } catch (err) {
-    console.error('[reports/export/csv]', err);
+    req.log.error({ err }, 'reports/export/csv');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -971,7 +971,7 @@ router.get('/saved', async (req: AuthRequest, res: Response) => {
     });
     return res.json(saved);
   } catch (err) {
-    console.error('[reports/saved GET]', err);
+    req.log.error({ err }, 'reports/saved GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -990,7 +990,7 @@ router.post('/saved', async (req: AuthRequest, res: Response) => {
     });
     return res.status(201).json(saved);
   } catch (err) {
-    console.error('[reports/saved POST]', err);
+    req.log.error({ err }, 'reports/saved POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1005,7 +1005,7 @@ router.delete('/saved/:id', async (req: AuthRequest, res: Response) => {
     await prisma.savedReport.delete({ where: { id } });
     return res.json({ message: 'Deleted' });
   } catch (err) {
-    console.error('[reports/saved DELETE]', err);
+    req.log.error({ err }, 'reports/saved DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1062,7 +1062,7 @@ router.get('/tax-summary', async (req: AuthRequest, res: Response) => {
 
     return res.json({ year, totalDeductible, categories });
   } catch (err) {
-    console.error('[reports/tax-summary GET]', err);
+    req.log.error({ err }, 'reports/tax-summary GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1143,7 +1143,7 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
 
     return res.json({ categories, totals });
   } catch (err) {
-    console.error('[reports/budget-variance]', err);
+    req.log.error({ err }, 'reports/budget-variance');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1244,7 +1244,7 @@ router.get('/benchmarks', async (req: AuthRequest, res: Response) => {
 
     return res.json({ startDate, endDate, months, categories: result });
   } catch (err) {
-    console.error('[reports/benchmarks]', err);
+    req.log.error({ err }, 'reports/benchmarks');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

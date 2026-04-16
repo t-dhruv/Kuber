@@ -22,7 +22,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const unreadCount = items.filter((n) => !n.read).length;
     return res.json({ items, unreadCount });
   } catch (err) {
-    console.error('[notifications GET]', err);
+    req.log.error({ err }, 'notifications GET');
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return res.status(500).json({ error: 'Internal server error', detail: msg });
   }
@@ -73,7 +73,7 @@ router.post('/run-checks', async (req: AuthRequest, res: Response) => {
     const count = await runProactiveChecks(prisma, req.householdId!);
     return res.json({ created: count });
   } catch (err) {
-    console.error('[notifications/run-checks]', err);
+    req.log.error({ err }, 'notifications/run-checks');
     return res.status(500).json({ error: 'Analysis failed' });
   }
 });

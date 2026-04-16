@@ -8,7 +8,7 @@ This folder contains ready-to-import n8n workflow templates for automating bank 
    ```bash
    docker compose --profile automation up -d
    ```
-2. Open n8n at `http://localhost:5678` and log in with the credentials from your `.env` file (`N8N_USER` / `N8N_PASSWORD`).
+2. Open n8n at `http://localhost:9006` and log in with the credentials from your `.env` file (`N8N_USER` / `N8N_PASSWORD`).
 
 ## Configuring the Kuber Webhook URL
 

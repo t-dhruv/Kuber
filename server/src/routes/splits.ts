@@ -89,7 +89,7 @@ router.post('/:id/split', async (req: AuthRequest, res: Response) => {
 
     return res.json(updated);
   } catch (err) {
-    console.error('[splits] POST split error:', err);
+    req.log.error({ err }, 'POST split error');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -121,7 +121,7 @@ router.delete('/:id/split', async (req: AuthRequest, res: Response) => {
 
     return res.json(updated);
   } catch (err) {
-    console.error('[splits] DELETE split error:', err);
+    req.log.error({ err }, 'DELETE split error');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -116,7 +116,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
     return res.json(rules);
   } catch (err) {
-    console.error('[rules/list]', err);
+    req.log.error({ err }, 'rules/list');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -146,7 +146,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'CREATE', entity: 'RULE', entityId: rule.id, after: rule as any });
     return res.status(201).json(rule);
   } catch (err) {
-    console.error('[rules/create]', err);
+    req.log.error({ err }, 'rules/create');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -176,7 +176,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'UPDATE', entity: 'RULE', entityId: rule.id, before: existing as any, after: rule as any });
     return res.json(rule);
   } catch (err) {
-    console.error('[rules/update]', err);
+    req.log.error({ err }, 'rules/update');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -194,7 +194,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'DELETE', entity: 'RULE', entityId: req.params.id, before: existing as any });
     return res.json({ message: 'Rule deleted' });
   } catch (err) {
-    console.error('[rules/delete]', err);
+    req.log.error({ err }, 'rules/delete');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -217,7 +217,7 @@ router.put('/reorder', async (req: AuthRequest, res: Response) => {
 
     return res.json({ message: 'Rules reordered' });
   } catch (err) {
-    console.error('[rules/reorder]', err);
+    req.log.error({ err }, 'rules/reorder');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -267,7 +267,7 @@ router.post('/:id/apply', async (req: AuthRequest, res: Response) => {
 
     return res.json({ matched, checkpointId, message: `Rule applied to ${matched} transaction(s)` });
   } catch (err) {
-    console.error('[rules/apply]', err);
+    req.log.error({ err }, 'rules/apply');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -324,7 +324,7 @@ router.post('/apply-all', async (req: AuthRequest, res: Response) => {
 
     return res.json({ matched: totalMatched, rulesRun: rules.length, checkpointId });
   } catch (err) {
-    console.error('[rules/apply-all]', err);
+    req.log.error({ err }, 'rules/apply-all');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

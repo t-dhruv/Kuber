@@ -281,12 +281,16 @@ nginx        # Reverse proxy, port 80/443
 
 ### Port Map
 
-| Service  | Internal | Exposed (dev) |
-| -------- | -------- | ------------- |
-| Postgres | 5432     | 5433          |
-| Server   | 4000     | 4000          |
-| Client   | 3000     | 3000          |
-| Nginx    | 80       | 80            |
+| Service    | Internal | Exposed (dev) |
+| ---------- | -------- | ------------- |
+| Postgres   | 5432     | 5433          |
+| Server     | 9002     | 9002          |
+| Client     | 80       | 9001          |
+| Nginx      | 80       | 80            |
+| Grafana    | 3000     | 9003          |
+| Prometheus | 9090     | 9004          |
+| Loki       | 3100     | 9005          |
+| n8n        | 5678     | 9006          |
 
 ---
 

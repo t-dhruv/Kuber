@@ -83,7 +83,7 @@ If you cannot read the receipt clearly, return your best guess. Use today's date
       notConfigured: false,
     }) as unknown as void;
   } catch (err) {
-    console.error('[receipts/ocr]', err);
+    req.log.error({ err }, 'receipts/ocr');
     return res.status(500).json({ error: 'OCR extraction failed' }) as unknown as void;
   }
 });

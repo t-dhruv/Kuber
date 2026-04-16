@@ -225,7 +225,7 @@ router.get('/pdf', async (req: AuthRequest, res: Response) => {
 
     doc.end();
   } catch (err) {
-    console.error('[exports/pdf GET]', err);
+    req.log.error({ err }, 'exports/pdf GET');
     if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -347,7 +347,7 @@ router.get('/excel', async (req: AuthRequest, res: Response) => {
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
-    console.error('[exports/excel GET]', err);
+    req.log.error({ err }, 'exports/excel GET');
     if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
   }
 });

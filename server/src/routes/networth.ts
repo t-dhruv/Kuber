@@ -88,7 +88,7 @@ router.get('/history', async (req: AuthRequest, res: Response) => {
       change,
     });
   } catch (err) {
-    console.error('[networth] GET /history error:', err);
+    req.log.error({ err }, 'GET /history error');
     res.status(500).json({ error: 'Failed to fetch net worth history' });
   }
 });
@@ -101,7 +101,7 @@ router.post('/snapshot', async (req: AuthRequest, res: Response) => {
     await takeNetWorthSnapshot(householdId);
     res.json({ message: 'Snapshot recorded' });
   } catch (err) {
-    console.error('[networth] POST /snapshot error:', err);
+    req.log.error({ err }, 'POST /snapshot error');
     res.status(500).json({ error: 'Failed to record snapshot' });
   }
 });

@@ -25,7 +25,7 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
     return res.json(toUserDto(user, req.householdId!));
   } catch (err) {
-    console.error('[users/me GET]', err);
+    req.log.error({ err }, 'users/me GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -54,7 +54,7 @@ router.put('/me', async (req: AuthRequest, res: Response) => {
 
     return res.json(toUserDto(updated, req.householdId!));
   } catch (err) {
-    console.error('[users/me PUT]', err);
+    req.log.error({ err }, 'users/me PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

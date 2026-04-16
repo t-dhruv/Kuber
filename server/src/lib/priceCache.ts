@@ -1,4 +1,6 @@
 import yahooFinanceModule from 'yahoo-finance2';
+import { createModuleLogger } from './logger.js';
+const log = createModuleLogger('priceCache');
 
 // yahoo-finance2 v3: default export is the class, must instantiate
 const YahooFinance = yahooFinanceModule as unknown as new (opts?: object) => {
@@ -62,7 +64,7 @@ export async function getQuote(symbol: string): Promise<CachedQuote | null> {
     return quote;
   } catch (err) {
     if (cached) return cached; // serve stale rather than nothing
-    console.warn(`[priceCache] Failed to fetch ${upper}:`, (err as Error).message);
+    log.warn({ err, ticker: upper }, 'Failed to fetch price');
     return null;
   }
 }
@@ -187,7 +189,7 @@ export async function getLiveBenchmarks(): Promise<Record<BenchmarkPeriod, Bench
     benchmarkCache = { data, fetchedAt: Date.now() };
     return data;
   } catch (err) {
-    console.warn('[priceCache] getLiveBenchmarks failed, using fallback:', (err as Error).message);
+    log.warn({ err }, 'getLiveBenchmarks failed, using fallback');
     // Return stale cache if available, otherwise hardcoded fallback
     return benchmarkCache?.data ?? BENCHMARK_FALLBACK;
   }

@@ -28,7 +28,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
     return res.json(accounts);
   } catch (err) {
-    console.error('[tax-accounts GET]', err);
+    req.log.error({ err }, 'tax-accounts GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -73,7 +73,7 @@ router.get('/household-summary', async (req: AuthRequest, res: Response) => {
 
     return res.json({ accounts: summary });
   } catch (err) {
-    console.error('[tax-accounts/household-summary]', err);
+    req.log.error({ err }, 'tax-accounts/household-summary');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -88,7 +88,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     });
     return res.status(201).json(acc);
   } catch (err) {
-    console.error('[tax-accounts POST]', err);
+    req.log.error({ err }, 'tax-accounts POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -103,7 +103,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const acc = await prisma.taxAccount.update({ where: { id: req.params.id }, data: parse.data });
     return res.json(acc);
   } catch (err) {
-    console.error('[tax-accounts PUT]', err);
+    req.log.error({ err }, 'tax-accounts PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -116,7 +116,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     await prisma.taxAccount.delete({ where: { id: req.params.id } });
     return res.json({ message: 'Deleted' });
   } catch (err) {
-    console.error('[tax-accounts DELETE]', err);
+    req.log.error({ err }, 'tax-accounts DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

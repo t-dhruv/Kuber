@@ -36,7 +36,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       user: `${l.user.firstName} ${l.user.lastName}`.trim(),
     })));
   } catch (err) {
-    console.error('[audit/list]', err);
+    req.log.error({ err }, 'audit/list');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

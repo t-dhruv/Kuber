@@ -277,7 +277,7 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
       holdings,
     });
   } catch (err) {
-    console.error('[investments/holdings GET]', err);
+    req.log.error({ err }, 'investments/holdings GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -313,7 +313,7 @@ router.get('/pending', async (req: AuthRequest, res: Response) => {
       })),
     );
   } catch (err) {
-    console.error('[investments/pending]', err);
+    req.log.error({ err }, 'investments/pending');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -382,7 +382,7 @@ router.get('/allocation', async (req: AuthRequest, res: Response) => {
       holdings: holdingsList,
     });
   } catch (err) {
-    console.error('[investments/allocation]', err);
+    req.log.error({ err }, 'investments/allocation');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -444,7 +444,7 @@ router.get('/performance', async (req: AuthRequest, res: Response) => {
       history,
     });
   } catch (err) {
-    console.error('[investments/performance]', err);
+    req.log.error({ err }, 'investments/performance');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -457,7 +457,7 @@ router.get('/quote/:symbol', async (req: AuthRequest, res: Response) => {
     if (!quote) return res.status(404).json({ error: 'Symbol not found or unavailable' });
     return res.json(quote);
   } catch (err) {
-    console.error('[investments/quote]', err);
+    req.log.error({ err }, 'investments/quote');
     return res.status(500).json({ error: 'Failed to fetch quote' });
   }
 });
@@ -516,7 +516,7 @@ router.post('/holdings', async (req: AuthRequest, res: Response) => {
     }
     return res.status(201).json(buildHoldingFallback(holdingWithAvg as unknown as RawHolding, avg));
   } catch (err) {
-    console.error('[investments/holdings POST]', err);
+    req.log.error({ err }, 'investments/holdings POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -559,7 +559,7 @@ router.put('/holdings/:id', async (req: AuthRequest, res: Response) => {
     }
     return res.json(buildHoldingFallback(updated as unknown as RawHolding, avg));
   } catch (err) {
-    console.error('[investments/holdings PUT]', err);
+    req.log.error({ err }, 'investments/holdings PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -656,7 +656,7 @@ router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
 
     return res.json({ created, updated, total: created + updated });
   } catch (err) {
-    console.error('[investments/holdings/import POST]', err);
+    req.log.error({ err }, 'investments/holdings/import POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -673,7 +673,7 @@ router.delete('/holdings/:id', async (req: AuthRequest, res: Response) => {
     await prisma.investmentHolding.delete({ where: { id } });
     return res.json({ success: true });
   } catch (err) {
-    console.error('[investments/holdings DELETE]', err);
+    req.log.error({ err }, 'investments/holdings DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -725,7 +725,7 @@ router.post('/holdings/:id/lots', async (req: AuthRequest, res: Response) => {
       status: lot.status,
     });
   } catch (err) {
-    console.error('[investments/holdings/:id/lots POST]', err);
+    req.log.error({ err }, 'investments/holdings/:id/lots POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -757,7 +757,7 @@ router.delete('/lots/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ message: 'Deleted' });
   } catch (err) {
-    console.error('[investments/lots DELETE]', err);
+    req.log.error({ err }, 'investments/lots DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -792,7 +792,7 @@ router.get('/holdings/:id/recurring', async (req: AuthRequest, res: Response) =>
       })),
     );
   } catch (err) {
-    console.error('[investments/holdings/:id/recurring GET]', err);
+    req.log.error({ err }, 'investments/holdings/:id/recurring GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -842,7 +842,7 @@ router.post('/holdings/:id/recurring', async (req: AuthRequest, res: Response) =
       createdAt: schedule.createdAt.toISOString(),
     });
   } catch (err) {
-    console.error('[investments/holdings/:id/recurring POST]', err);
+    req.log.error({ err }, 'investments/holdings/:id/recurring POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -884,7 +884,7 @@ router.put('/recurring/:id', async (req: AuthRequest, res: Response) => {
       createdAt: updated.createdAt.toISOString(),
     });
   } catch (err) {
-    console.error('[investments/recurring PUT]', err);
+    req.log.error({ err }, 'investments/recurring PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -903,7 +903,7 @@ router.delete('/recurring/:id', async (req: AuthRequest, res: Response) => {
     await prisma.recurringInvestment.delete({ where: { id } });
     return res.json({ message: 'Deleted' });
   } catch (err) {
-    console.error('[investments/recurring DELETE]', err);
+    req.log.error({ err }, 'investments/recurring DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -955,7 +955,7 @@ router.post('/lots/:id/confirm', async (req: AuthRequest, res: Response) => {
       status: updated.status,
     });
   } catch (err) {
-    console.error('[investments/lots/:id/confirm]', err);
+    req.log.error({ err }, 'investments/lots/:id/confirm');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -974,7 +974,7 @@ router.post('/lots/:id/skip', async (req: AuthRequest, res: Response) => {
     await prisma.holdingLot.delete({ where: { id } });
     return res.json({ message: 'Lot skipped' });
   } catch (err) {
-    console.error('[investments/lots/:id/skip]', err);
+    req.log.error({ err }, 'investments/lots/:id/skip');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

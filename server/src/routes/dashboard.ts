@@ -92,7 +92,7 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
       },
     });
   } catch (err) {
-    console.error('[dashboard/summary]', err);
+    req.log.error({ err }, 'dashboard/summary');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -143,7 +143,7 @@ router.get('/spending-chart', async (req: AuthRequest, res: Response) => {
       lastMonth: groupByDay(lastMonthTxns),
     });
   } catch (err) {
-    console.error('[dashboard/spending-chart]', err);
+    req.log.error({ err }, 'dashboard/spending-chart');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -213,7 +213,7 @@ router.get('/budget-summary', async (req: AuthRequest, res: Response) => {
 
     return res.json({ totalBudget, totalSpent, categories });
   } catch (err) {
-    console.error('[dashboard/budget-summary]', err);
+    req.log.error({ err }, 'dashboard/budget-summary');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -247,7 +247,7 @@ router.get('/recent-transactions', async (req: AuthRequest, res: Response) => {
 
     return res.json(data);
   } catch (err) {
-    console.error('[dashboard/recent-transactions]', err);
+    req.log.error({ err }, 'dashboard/recent-transactions');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -296,7 +296,7 @@ router.get('/recurring-summary', async (req: AuthRequest, res: Response) => {
 
     return res.json({ paid, upcoming, totalPaid, totalUpcoming, totalMonthly });
   } catch (err) {
-    console.error('[dashboard/recurring-summary]', err);
+    req.log.error({ err }, 'dashboard/recurring-summary');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -343,7 +343,7 @@ router.get('/net-worth-chart', async (req: AuthRequest, res: Response) => {
 
     return res.json(dataPoints);
   } catch (err) {
-    console.error('[dashboard/net-worth-chart]', err);
+    req.log.error({ err }, 'dashboard/net-worth-chart');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -407,7 +407,7 @@ router.get('/goals-summary', async (req: AuthRequest, res: Response) => {
 
     return res.json(data);
   } catch (err) {
-    console.error('[dashboard/goals-summary]', err);
+    req.log.error({ err }, 'dashboard/goals-summary');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -533,7 +533,7 @@ router.get('/weekly-recap', async (req: AuthRequest, res: Response) => {
       upcoming,
     });
   } catch (err) {
-    console.error('[dashboard/weekly-recap]', err);
+    req.log.error({ err }, 'dashboard/weekly-recap');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -604,7 +604,7 @@ router.get('/health-score', async (req: AuthRequest, res: Response) => {
       summary,
     });
   } catch (err) {
-    console.error('[dashboard/health-score]', err);
+    req.log.error({ err }, 'dashboard/health-score');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

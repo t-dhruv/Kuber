@@ -1,5 +1,8 @@
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
+import { createModuleLogger } from './logger.js';
+import { emailsSentTotal } from './metrics.js';
+const log = createModuleLogger('email');
 
 const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:3000';
 const DEFAULT_FROM = 'Kuber <noreply@kuber.app>';
@@ -42,19 +45,30 @@ export async function sendMail(opts: { to: string; subject: string; html: string
       html: opts.html,
       text: opts.text,
     });
-    if (error) throw new Error(`Resend error: ${error.message}`);
+    if (error) {
+      emailsSentTotal.inc({ type: 'transactional', status: 'failure' });
+      throw new Error(`Resend error: ${error.message}`);
+    }
+    emailsSentTotal.inc({ type: 'transactional', status: 'success' });
     return;
   }
 
   // Fall back to SMTP
   const smtp = getSmtpTransport();
   if (smtp) {
-    await smtp.transport.sendMail({ from: smtp.from, ...opts });
+    try {
+      await smtp.transport.sendMail({ from: smtp.from, ...opts });
+      emailsSentTotal.inc({ type: 'transactional', status: 'success' });
+    } catch (err) {
+      emailsSentTotal.inc({ type: 'transactional', status: 'failure' });
+      log.error({ err }, 'Failed to send email via SMTP');
+      throw err;
+    }
     return;
   }
 
   // Neither configured — log and continue
-  console.log(`[email] No email provider configured — would send "${opts.subject}" to ${opts.to}`);
+  log.warn({ subject: opts.subject, to: opts.to }, 'No email provider configured — skipping send');
 }
 
 // ─── Emails ───────────────────────────────────────────────────────────────────

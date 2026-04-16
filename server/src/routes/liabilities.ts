@@ -68,7 +68,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
     return res.json(liabilities);
   } catch (err) {
-    console.error('[liabilities/GET /]', err);
+    req.log.error({ err }, 'liabilities/GET /');
     return res.status(500).json({ error: 'Failed to fetch liabilities' });
   }
 });
@@ -92,7 +92,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     });
     return res.status(201).json(liability);
   } catch (err) {
-    console.error('[liabilities/POST /]', err);
+    req.log.error({ err }, 'liabilities/POST /');
     return res.status(500).json({ error: 'Failed to create liability' });
   }
 });
@@ -223,7 +223,7 @@ router.get('/debt-payoff', async (req: AuthRequest, res: Response) => {
       },
     });
   } catch (err) {
-    console.error('[liabilities/GET /debt-payoff]', err);
+    req.log.error({ err }, 'liabilities/GET /debt-payoff');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -252,7 +252,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     });
     return res.json(liability);
   } catch (err) {
-    console.error('[liabilities/PUT /:id]', err);
+    req.log.error({ err }, 'liabilities/PUT /:id');
     return res.status(500).json({ error: 'Failed to update liability' });
   }
 });
@@ -268,7 +268,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     await prisma.manualLiability.delete({ where: { id: req.params.id } });
     return res.json({ message: 'Deleted' });
   } catch (err) {
-    console.error('[liabilities/DELETE /:id]', err);
+    req.log.error({ err }, 'liabilities/DELETE /:id');
     return res.status(500).json({ error: 'Failed to delete liability' });
   }
 });
@@ -339,7 +339,7 @@ router.get('/:id/amortization', async (req: AuthRequest, res: Response) => {
       periods: summary.periods.slice(0, 60), // return first 5 years of schedule
     });
   } catch (err) {
-    console.error('[liabilities/GET /:id/amortization]', err);
+    req.log.error({ err }, 'liabilities/GET /:id/amortization');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -381,7 +381,7 @@ router.post('/:id/payoff-simulator', async (req: AuthRequest, res: Response) => 
 
     return res.json(result);
   } catch (err) {
-    console.error('[liabilities/POST /:id/payoff-simulator]', err);
+    req.log.error({ err }, 'liabilities/POST /:id/payoff-simulator');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

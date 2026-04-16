@@ -1,5 +1,7 @@
 import webpush from 'web-push';
 import { prisma } from './prisma';
+import { createModuleLogger } from './logger.js';
+const log = createModuleLogger('webPush');
 
 let initialized = false;
 
@@ -10,7 +12,7 @@ function init() {
   const subject    = process.env.VAPID_SUBJECT ?? 'mailto:admin@kuber.app';
 
   if (!publicKey || !privateKey) {
-    console.warn('[webPush] VAPID keys not set — push notifications disabled');
+    log.warn('VAPID keys not set — push notifications disabled');
     return;
   }
 
@@ -51,12 +53,12 @@ export async function sendPushToHousehold(
           if ((err as { statusCode?: number })?.statusCode === 410) {
             await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
           } else {
-            console.warn(`[webPush] failed for sub ${sub.id}:`, (err as Error)?.message);
+            log.warn({ err, subId: sub.id }, 'Push notification failed');
           }
         }
       }),
     );
   } catch (err) {
-    console.error('[webPush] sendPushToHousehold error:', err);
+    log.error({ err }, 'sendPushToHousehold error');
   }
 }

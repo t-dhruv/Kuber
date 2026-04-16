@@ -114,7 +114,7 @@ router.get('/categories', async (req: AuthRequest, res: Response) => {
 
     return res.json(result);
   } catch (err) {
-    console.error('[budgets/categories]', err);
+    req.log.error({ err }, 'budgets/categories');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -313,7 +313,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       savingsRate,
     });
   } catch (err) {
-    console.error('[budgets/GET]', err);
+    req.log.error({ err }, 'budgets/GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -362,7 +362,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'BUDGET', entityId: budget.id, after: { categoryId, name, amount, budgetType: resolvedBudgetType } });
     return res.json(budget);
   } catch (err) {
-    console.error('[budgets/POST]', err);
+    req.log.error({ err }, 'budgets/POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -409,7 +409,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     });
     return res.json(budget);
   } catch (err) {
-    console.error('[budgets/PUT]', err);
+    req.log.error({ err }, 'budgets/PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -433,7 +433,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ success: true });
   } catch (err) {
-    console.error('[budgets/DELETE]', err);
+    req.log.error({ err }, 'budgets/DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

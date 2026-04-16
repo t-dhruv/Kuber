@@ -93,7 +93,7 @@ router.post('/detect', async (req: AuthRequest, res: Response) => {
 
     return res.json(suggestions);
   } catch (err) {
-    console.error('[recurring/detect]', err);
+    req.log.error({ err }, 'recurring/detect');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -142,7 +142,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     return res.json(data);
   } catch (err) {
-    console.error('[recurring/GET]', err);
+    req.log.error({ err }, 'recurring/GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -229,7 +229,7 @@ router.get('/monthly-summary', async (req: AuthRequest, res: Response) => {
       totalMonthly: Math.round(totalMonthly * 100) / 100,
     });
   } catch (err) {
-    console.error('[recurring/monthly-summary]', err);
+    req.log.error({ err }, 'recurring/monthly-summary');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -279,7 +279,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       daysUntilNext: daysUntil(item.nextDate),
     });
   } catch (err) {
-    console.error('[recurring/POST]', err);
+    req.log.error({ err }, 'recurring/POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -336,7 +336,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       daysUntilNext: daysUntil(updated.nextDate),
     });
   } catch (err) {
-    console.error('[recurring/PUT]', err);
+    req.log.error({ err }, 'recurring/PUT');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -355,7 +355,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ success: true });
   } catch (err) {
-    console.error('[recurring/DELETE]', err);
+    req.log.error({ err }, 'recurring/DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -383,7 +383,7 @@ router.post('/:id/toggle', async (req: AuthRequest, res: Response) => {
 
     return res.json({ isActive: updated.isActive });
   } catch (err) {
-    console.error('[recurring/toggle]', err);
+    req.log.error({ err }, 'recurring/toggle');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

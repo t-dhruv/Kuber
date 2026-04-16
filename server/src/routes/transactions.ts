@@ -256,7 +256,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       nextCursor,
     });
   } catch (err) {
-    console.error('[transactions/list]', err);
+    req.log.error({ err }, 'transactions/list');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -311,7 +311,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
     setCsvHeaders(res, filename);
     return res.send(toCSV(rows, columns));
   } catch (err) {
-    console.error('[transactions/export/csv]', err);
+    req.log.error({ err }, 'transactions/export/csv');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -353,7 +353,7 @@ router.delete('/before', async (req: AuthRequest, res: Response) => {
 
     return res.json({ count: result.count });
   } catch (err) {
-    console.error('[transactions/before DELETE]', err);
+    req.log.error({ err }, 'transactions/before DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -593,7 +593,7 @@ router.post('/import/preview', upload.single('file'), async (req: AuthRequest, r
       totalDataRows: dataRows.length,
     });
   } catch (err) {
-    console.error('[transactions/import/preview]', err);
+    req.log.error({ err }, 'transactions/import/preview');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -729,7 +729,7 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
       errors,
     });
   } catch (err) {
-    console.error('[transactions/import]', err);
+    req.log.error({ err }, 'transactions/import');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -775,7 +775,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ ...base, splits, attachments: [] });
   } catch (err) {
-    console.error('[transactions/get]', err);
+    req.log.error({ err }, 'transactions/get');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -850,7 +850,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     fireWebhooks(householdId, 'transaction.created', formatTx(tx)).catch(() => {});
     return res.status(201).json(formatTx(tx));
   } catch (err) {
-    console.error('[transactions/create]', err);
+    req.log.error({ err }, 'transactions/create');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -885,7 +885,7 @@ router.put('/:id/confirm', async (req: AuthRequest, res: Response) => {
 
     return res.json(formatTx(updated));
   } catch (err) {
-    console.error('[transactions/confirm]', err);
+    req.log.error({ err }, 'transactions/confirm');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -964,7 +964,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     logAudit({ householdId, userId: req.userId!, action: 'UPDATE', entity: 'TRANSACTION', entityId: tx.id, before: { amount: existing.amount, description: existing.description }, after: { amount: tx.amount, description: tx.description } });
     return res.json(formatTx(tx));
   } catch (err) {
-    console.error('[transactions/update]', err);
+    req.log.error({ err }, 'transactions/update');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -992,7 +992,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({ success: true });
   } catch (err) {
-    console.error('[transactions/delete]', err);
+    req.log.error({ err }, 'transactions/delete');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1037,7 +1037,7 @@ router.post('/:id/tags', async (req: AuthRequest, res: Response) => {
 
     return res.json(updated.map(tt => ({ id: tt.tag.id, name: tt.tag.name, color: tt.tag.color })));
   } catch (err) {
-    console.error('[transactions/addTags]', err);
+    req.log.error({ err }, 'transactions/addTags');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1065,7 +1065,7 @@ router.delete('/:id/tags/:tagId', async (req: AuthRequest, res: Response) => {
 
     return res.json({ success: true });
   } catch (err) {
-    console.error('[transactions/removeTag]', err);
+    req.log.error({ err }, 'transactions/removeTag');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1094,7 +1094,7 @@ router.post('/:id/review', async (req: AuthRequest, res: Response) => {
 
     return res.json({ needsReview: updated.needsReview });
   } catch (err) {
-    console.error('[transactions/review]', err);
+    req.log.error({ err }, 'transactions/review');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1168,7 +1168,7 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
 
     return res.json({ updated: ids.length });
   } catch (err: any) {
-    console.error('[transactions/bulk]', err);
+    req.log.error({ err }, 'transactions/bulk');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1242,7 +1242,7 @@ router.post('/transfer', async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json({ debit: formatTx(debit), credit: formatTx(credit) });
   } catch (err: any) {
-    console.error('[transactions/transfer]', err);
+    req.log.error({ err }, 'transactions/transfer');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

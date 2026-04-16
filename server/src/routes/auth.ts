@@ -11,7 +11,9 @@ import { requireAuth } from '../middleware/auth';
 import { seedDefaultCategories } from '../lib/default-categories';
 import type { AuthRequest } from '../middleware/auth';
 import type { UserDto } from '@kuber/shared';
+import { createModuleLogger } from '../lib/logger';
 
+const log = createModuleLogger('auth');
 const router = Router();
 
 const ACCESS_TOKEN_TTL = '15m';
@@ -101,7 +103,7 @@ router.post('/signup', async (req: Request, res: Response) => {
 
     return res.status(201).json({ user: toUserDto(result.user, result.householdId), accessToken });
   } catch (err) {
-    console.error('[auth/signup]', err);
+    log.error({ err }, 'auth/signup');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -178,7 +180,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     return res.json({ user: toUserDto(user, householdId), accessToken });
   } catch (err) {
-    console.error('[auth/login]', err);
+    log.error({ err }, 'auth/login');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -221,7 +223,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
     const accessToken = signAccessToken(stored.userId, householdId, stored.user.email);
     return res.json({ accessToken });
   } catch (err) {
-    console.error('[auth/refresh]', err);
+    log.error({ err }, 'auth/refresh');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -242,7 +244,7 @@ router.post('/logout', async (req: Request, res: Response) => {
     res.clearCookie('refreshToken', { path: '/' });
     return res.json({ message: 'Logged out' });
   } catch (err) {
-    console.error('[auth/logout]', err);
+    log.error({ err }, 'auth/logout');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -272,7 +274,7 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
 
     return res.json({ message: 'If that email exists, a reset link has been sent.' });
   } catch (err) {
-    console.error('[auth/forgot-password]', err);
+    log.error({ err }, 'auth/forgot-password');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -308,7 +310,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
 
     return res.json({ message: 'Password updated successfully' });
   } catch (err) {
-    console.error('[auth/reset-password]', err);
+    log.error({ err }, 'auth/reset-password');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -337,7 +339,7 @@ router.post('/2fa/setup', async (req: Request, res: Response) => {
 
     return res.json({ secret, qrCodeDataUrl });
   } catch (err) {
-    console.error('[auth/2fa/setup]', err);
+    log.error({ err }, 'auth/2fa/setup');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -377,7 +379,7 @@ router.post('/2fa/enable', async (req: Request, res: Response) => {
 
     return res.json({ backupCodes: rawBackupCodes, message: 'Two-factor authentication enabled' });
   } catch (err) {
-    console.error('[auth/2fa/enable]', err);
+    log.error({ err }, 'auth/2fa/enable');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -406,7 +408,7 @@ router.post('/2fa/disable', async (req: Request, res: Response) => {
 
     return res.json({ message: 'Two-factor authentication disabled' });
   } catch (err) {
-    console.error('[auth/2fa/disable]', err);
+    log.error({ err }, 'auth/2fa/disable');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -449,7 +451,7 @@ router.post('/2fa/validate', async (req: Request, res: Response) => {
 
     return res.json({ user: toUserDto(user, householdId), accessToken });
   } catch (err) {
-    console.error('[auth/2fa/validate]', err);
+    log.error({ err }, 'auth/2fa/validate');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -499,7 +501,7 @@ router.post('/2fa/use-backup', async (req: Request, res: Response) => {
 
     return res.json({ user: toUserDto(user, householdId), accessToken, backupCodesRemaining: newCodes.length });
   } catch (err) {
-    console.error('[auth/2fa/use-backup]', err);
+    log.error({ err }, 'auth/2fa/use-backup');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -527,7 +529,7 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
     const dto = toUserDto(user, req.householdId!);
     return res.json(dto);
   } catch (err) {
-    console.error('[auth/me GET]', err);
+    log.error({ err }, 'auth/me GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
