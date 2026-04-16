@@ -203,6 +203,10 @@ model Transaction {
   notes               String?
   isRecurring         Boolean          @default(false)
   needsReview         Boolean          @default(false)
+  aiSuggestedCategoryId   String?
+  aiSuggestedCategoryName String?
+  aiSuggestionConfidence  Float?
+  aiSuggestedCategory     Category? @relation("AiSuggestedCategory", fields: [aiSuggestedCategoryId], references: [id], onDelete: SetNull)
   isHidden            Boolean          @default(false)
   isPending           Boolean          @default(false)
   isSplit             Boolean          @default(false)
@@ -248,6 +252,8 @@ model Category {
   budgets             Budget[]
   recurringItems      RecurringItem[]
   transactionSplits   TransactionSplit[]
+  aiSuggestedTransactions Transaction[] @relation("AiSuggestedCategory")
+  learningExamples        CategoryLearningExample[]
 
   @@map("categories")
 }
@@ -534,6 +540,18 @@ model Rule {
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@map("rules")
+}
+
+model CategoryLearningExample {
+  id                 String   @id @default(cuid())
+  householdId        String
+  descriptionPattern String
+  correctCategoryId  String
+  correctCategory    Category @relation(fields: [correctCategoryId], references: [id], onDelete: Cascade)
+  createdAt          DateTime @default(now())
+
+  @@index([householdId])
+  @@map("category_learning_examples")
 }
 
 model Notification {
