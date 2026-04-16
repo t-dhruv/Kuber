@@ -6,8 +6,7 @@ import { api } from '@/lib/api';
 import { Button, Skeleton, notify } from '@/components/ui';
 import { ReviewTransactionRow, ReviewTransaction } from './components/ReviewTransactionRow';
 import { RuleSuggestionBanner, RuleSuggestion } from './components/RuleSuggestionBanner';
-
-interface Category { id: string; name: string; emoji: string | null; }
+import type { ReviewCategory } from './types';
 
 interface ReviewQueueResponse {
   transactions: ReviewTransaction[];
@@ -19,6 +18,7 @@ export default function ReviewQueuePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [page] = useState(1);
+  const [pendingRulePattern, setPendingRulePattern] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<ReviewQueueResponse>({
     queryKey: ['auto-categorize-review', page],
@@ -26,7 +26,7 @@ export default function ReviewQueuePage() {
       api.get(`/auto-categorize/review-queue?page=${page}&limit=50`).then((r) => r.data),
   });
 
-  const { data: categories = [] } = useQuery<Category[]>({
+  const { data: categories = [] } = useQuery<ReviewCategory[]>({
     queryKey: ['categories'],
     queryFn: () => api.get('/categories').then((r) => r.data),
   });
@@ -68,11 +68,7 @@ export default function ReviewQueuePage() {
 
   const handleCreateRuleFromRow = (description: string) => {
     const firstToken = description.toLowerCase().split(/[\s_\-]/)[0].trim();
-    navigate(`/rules?prefill=${encodeURIComponent(JSON.stringify({
-      field: 'description',
-      operator: 'startsWith',
-      value: firstToken,
-    }))}`);
+    setPendingRulePattern(firstToken);
   };
 
   const handleCreateRule = (suggestion: RuleSuggestion) => {
@@ -119,6 +115,31 @@ export default function ReviewQueuePage() {
           suggestions={ruleSuggestions}
           onCreateRule={handleCreateRule}
         />
+      )}
+
+      {/* Pending rule prompt from row rejection */}
+      {pendingRulePattern && (
+        <div className="flex items-center justify-between p-3 mb-4 rounded-[var(--radius-md)] bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-sm">
+          <span>Create a rule for transactions matching <code className="px-1 rounded bg-white/30">"{pendingRulePattern}*"</code>?</span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                navigate(`/rules?prefill=${encodeURIComponent(JSON.stringify({
+                  field: 'description',
+                  operator: 'startsWith',
+                  value: pendingRulePattern,
+                }))}`);
+                setPendingRulePattern(null);
+              }}
+            >
+              Create Rule
+            </Button>
+            <button onClick={() => setPendingRulePattern(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
+              Dismiss
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Loading */}

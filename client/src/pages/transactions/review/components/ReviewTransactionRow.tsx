@@ -1,13 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Check, X, Plus } from 'lucide-react';
 import { Button, Select, notify } from '@/components/ui';
 import { CreateCategoryInline } from './CreateCategoryInline';
-
-interface Category {
-  id: string;
-  name: string;
-  emoji: string | null;
-}
+import type { ReviewCategory } from '../types';
 
 export interface ReviewTransaction {
   id: string;
@@ -23,7 +19,7 @@ export interface ReviewTransaction {
 
 interface Props {
   transaction: ReviewTransaction;
-  categories: Category[];
+  categories: ReviewCategory[];
   onConfirm: (
     transactionId: string,
     action: 'approve' | 'reject' | 'skip',
@@ -34,16 +30,16 @@ interface Props {
 }
 
 function confidenceColor(confidence: number | null): string {
-  if (!confidence) return 'bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]';
+  if (confidence == null) return 'bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]';
   if (confidence >= 0.8) return 'bg-green-100 text-green-700';
   if (confidence >= 0.6) return 'bg-yellow-100 text-yellow-700';
   return 'bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]';
 }
 
 export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, onCreateRule }: Props) {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<'idle' | 'rejecting' | 'creating'>('idle');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
-  const [showRulePrompt, setShowRulePrompt] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const isNoMatch = txn.aiSuggestedCategoryId === null;
@@ -76,7 +72,7 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, 
     try {
       await onConfirm(txn.id, 'reject', selectedCategoryId);
       if (selectedCategoryId !== txn.aiSuggestedCategoryId) {
-        setShowRulePrompt(true);
+        onCreateRule?.(txn.description);
       }
     } finally {
       setLoading(false);
@@ -190,28 +186,7 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, 
         />
       )}
 
-      {/* Rule prompt after correction */}
-      {showRulePrompt && (
-        <div className="mt-2 text-xs text-[var(--color-text-secondary)] flex items-center gap-2">
-          <span>Create a rule for transactions like this?</span>
-          <button
-            onClick={() => {
-              if (onCreateRule) {
-                onCreateRule(txn.description);
-              } else {
-                window.location.href = '/rules';
-              }
-              setShowRulePrompt(false);
-            }}
-            className="text-[var(--color-accent)] underline hover:no-underline"
-          >
-            Create Rule
-          </button>
-          <button onClick={() => setShowRulePrompt(false)} className="hover:text-[var(--color-text)]">
-            Dismiss
-          </button>
-        </div>
-      )}
+
     </div>
   );
 }

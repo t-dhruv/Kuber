@@ -5,7 +5,7 @@ import { Button, Input, Select, notify } from '@/components/ui';
 
 interface Props {
   suggestedName: string;
-  onCreated: (categoryId: string, categoryName: string) => void;
+  onCreated: (categoryId: string) => void;
   onCancel: () => void;
 }
 
@@ -26,7 +26,7 @@ export function CreateCategoryInline({ suggestedName, onCreated, onCancel }: Pro
     onSuccess: (cat) => {
       qc.invalidateQueries({ queryKey: ['categories'] });
       notify.success(`Category "${cat.name}" created`);
-      onCreated(cat.id, cat.name);
+      onCreated(cat.id);
     },
     onError: () => notify.error('Failed to create category'),
   });
