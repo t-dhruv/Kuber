@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Plus, ChevronRight, RotateCcw, X, Check,
-  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, ArrowLeftRight,
+  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
@@ -69,9 +69,23 @@ interface TransactionListResponse {
   totalPages: number;
 }
 
+type TxType = 'expense' | 'income' | 'transfer';
+
+interface TypeToggleProps {
+  value: TxType;
+  onChange: (type: TxType) => void;
+  disabled?: boolean;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 25;
+
+const TYPE_OPTIONS: { value: TxType; label: string }[] = [
+  { value: 'expense',  label: 'Expense'  },
+  { value: 'income',   label: 'Income'   },
+  { value: 'transfer', label: 'Transfer' },
+];
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -195,6 +209,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
   const [form, setForm] = useState<Partial<Transaction> & { tagInput?: string }>({});
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const [txType, setTxType] = useState<TxType>('expense');
 
   // Sync form when transaction changes
   useEffect(() => {
@@ -202,16 +217,28 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
       setForm({ ...transaction });
       setShowCategoryPicker(false);
       setTagInput('');
+      if (transaction.isTransfer) {
+        setTxType('transfer');
+      } else if (transaction.amount >= 0) {
+        setTxType('income');
+      } else {
+        setTxType('expense');
+      }
     }
   }, [transaction?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       // 1. Save core fields
+      const rawAmount = form.amount ?? 0;
       await api.put(`/transactions/${transaction!.id}`, {
         merchantName: form.merchantName,
         date: form.date,
-        amount: form.amount,
+        amount: form.isTransfer
+          ? form.amount
+          : txType === 'expense'
+            ? -Math.abs(rawAmount)
+            : Math.abs(rawAmount),
         categoryId: form.categoryId,
         notes: form.notes,
         needsReview: form.needsReview,
@@ -250,6 +277,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
       onSaved();
     },
     onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to save transaction'),
@@ -325,14 +353,35 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
             />
 
-            {/* Amount */}
-            <Input
-              label="Amount"
-              type="number"
-              step="0.01"
-              value={form.amount ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}
-            />
+            {/* Type + Amount */}
+            <div className="flex flex-col gap-2">
+              <TypeToggle
+                value={txType}
+                onChange={(type) => setTxType(type)}
+                disabled={!!form.isTransfer}
+              />
+              <div>
+                <Input
+                  label="Amount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.amount !== undefined ? Math.abs(form.amount as number) : ''}
+                  onChange={(e) => {
+                    const abs = parseFloat(e.target.value) || 0;
+                    setForm((f) => ({
+                      ...f,
+                      amount: txType === 'expense' ? -Math.abs(abs) : Math.abs(abs),
+                    }));
+                  }}
+                />
+                {!form.isTransfer && (
+                  <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
+                    {txType === 'expense' ? 'Will be recorded as an expense' : 'Will be recorded as income'}
+                  </p>
+                )}
+              </div>
+            </div>
 
             {/* Category */}
             <div>
@@ -495,8 +544,35 @@ interface AddModalProps {
   categories: Category[];
 }
 
+// ─── Type Toggle ──────────────────────────────────────────────────────────────
+
+function TypeToggle({ value, onChange, disabled }: TypeToggleProps) {
+  return (
+    <div className="flex rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
+      {TYPE_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(opt.value)}
+          className={[
+            'flex-1 py-1.5 text-sm font-medium transition-colors',
+            value === opt.value
+              ? 'bg-[var(--color-accent)] text-white'
+              : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)]',
+            disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+          ].join(' ')}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AddTransactionModal({ open, onClose, accounts, categories }: AddModalProps) {
   const queryClient = useQueryClient();
+  const [txType, setTxType] = useState<TxType>('expense');
   const [form, setForm] = useState({
     date: fmtInputDate(new Date().toISOString()),
     description: '',
@@ -504,17 +580,58 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
     accountId: '',
     categoryId: '',
     notes: '',
+    fromAccountId: '',
+    toAccountId: '',
   });
 
+  const reset = () => {
+    setTxType('expense');
+    setForm({
+      date: fmtInputDate(new Date().toISOString()),
+      description: '',
+      amount: '',
+      accountId: '',
+      categoryId: '',
+      notes: '',
+      fromAccountId: '',
+      toAccountId: '',
+    });
+  };
+
+  useEffect(() => {
+    if (open) reset();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const mutation = useMutation({
-    mutationFn: () => api.post('/transactions', {
-      ...form,
-      amount: parseFloat(form.amount) || 0,
-    }),
+    mutationFn: () => {
+      const amt = parseFloat(form.amount) || 0;
+      if (txType === 'transfer') {
+        return api.post('/transactions/transfer', {
+          fromAccountId: form.fromAccountId,
+          toAccountId: form.toAccountId,
+          amount: Math.abs(amt),
+          date: form.date,
+          notes: form.notes || undefined,
+        });
+      }
+      return api.post('/transactions', {
+        date: form.date,
+        description: form.description,
+        amount: txType === 'expense' ? -Math.abs(amt) : Math.abs(amt),
+        accountId: form.accountId,
+        categoryId: form.categoryId || undefined,
+        notes: form.notes || undefined,
+      });
+    },
     onSuccess: () => {
+      notify.success(
+        txType === 'transfer' ? 'Transfer recorded' :
+        txType === 'expense'  ? 'Expense added' : 'Income added'
+      );
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
       onClose();
-      setForm({ date: fmtInputDate(new Date().toISOString()), description: '', amount: '', accountId: '', categoryId: '', notes: '' });
+      reset();
     },
     onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to add transaction'),
   });
@@ -529,9 +646,20 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
     label: `${c.emoji ?? ''} ${c.name}`.trim(),
   }));
 
+  const isTransfer = txType === 'transfer';
+
+  const isDisabled =
+    !form.amount ||
+    parseFloat(form.amount) <= 0 ||
+    (isTransfer
+      ? !form.fromAccountId || !form.toAccountId || form.fromAccountId === form.toAccountId
+      : !form.description || !form.accountId);
+
   return (
     <Modal open={open} onClose={onClose} title="Add Transaction" size="md">
       <div className="flex flex-col gap-4">
+        <TypeToggle value={txType} onChange={setTxType} />
+
         <div className="grid grid-cols-2 gap-3">
           <Input
             label="Date"
@@ -543,36 +671,62 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
             <Input
               label="Amount"
               type="number"
+              min="0"
               step="0.01"
-              placeholder="-45.00"
+              placeholder="0.00"
               value={form.amount}
               onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
             />
-            <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
-              Negative = expense, positive = income
-            </p>
+            {!isTransfer && (
+              <p className="text-xs text-[color:var(--color-text-muted)] mt-1">
+                {txType === 'expense' ? 'Will be recorded as an expense' : 'Will be recorded as income'}
+              </p>
+            )}
           </div>
         </div>
-        <Input
-          label="Merchant / Description"
-          placeholder="e.g. Whole Foods Market"
-          value={form.description}
-          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-        />
-        <Select
-          label="Account"
-          options={accountOptions}
-          placeholder="Select account..."
-          value={form.accountId}
-          onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
-        />
-        <Select
-          label="Category"
-          options={categoryOptions}
-          placeholder="Select category..."
-          value={form.categoryId}
-          onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-        />
+
+        {isTransfer ? (
+          <>
+            <Select
+              label="From Account"
+              options={accountOptions}
+              placeholder="Select account…"
+              value={form.fromAccountId}
+              onChange={(e) => setForm((f) => ({ ...f, fromAccountId: e.target.value }))}
+            />
+            <Select
+              label="To Account"
+              options={accountOptions}
+              placeholder="Select account…"
+              value={form.toAccountId}
+              onChange={(e) => setForm((f) => ({ ...f, toAccountId: e.target.value }))}
+            />
+          </>
+        ) : (
+          <>
+            <Input
+              label="Merchant / Description"
+              placeholder="e.g. Whole Foods Market"
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            />
+            <Select
+              label="Account"
+              options={accountOptions}
+              placeholder="Select account..."
+              value={form.accountId}
+              onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
+            />
+            <Select
+              label="Category"
+              options={categoryOptions}
+              placeholder="Select category..."
+              value={form.categoryId}
+              onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
+            />
+          </>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
             Notes
@@ -592,9 +746,9 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
           variant="primary"
           loading={mutation.isPending}
           onClick={() => mutation.mutate()}
-          disabled={!form.description || !form.amount || !form.accountId}
+          disabled={isDisabled}
         >
-          Add Transaction
+          {isTransfer ? 'Record Transfer' : txType === 'expense' ? 'Add Expense' : 'Add Income'}
         </Button>
       </ModalFooter>
     </Modal>
@@ -1110,111 +1264,6 @@ function Pagination({ page, total, pageSize, onChange }: { page: number; total: 
   );
 }
 
-// ─── Transfer Modal ───────────────────────────────────────────────────────────
-
-interface TransferModalProps {
-  open: boolean;
-  onClose: () => void;
-  accounts: Account[];
-}
-
-function TransferModal({ open, onClose, accounts }: TransferModalProps) {
-  const queryClient = useQueryClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const [fromAccountId, setFromAccountId] = useState('');
-  const [toAccountId, setToAccountId] = useState('');
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(today);
-  const [notes, setNotes] = useState('');
-
-  const accountOptions = accounts.map((a) => ({ value: a.id, label: a.name }));
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      api.post('/transactions/transfer', {
-        fromAccountId,
-        toAccountId,
-        amount: parseFloat(amount),
-        date,
-        notes: notes || undefined,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      notify.success('Transfer recorded');
-      onClose();
-      setFromAccountId('');
-      setToAccountId('');
-      setAmount('');
-      setDate(today);
-      setNotes('');
-    },
-    onError: (err: any) => {
-      notify.error(err?.response?.data?.error ?? 'Transfer failed');
-    },
-  });
-
-  return (
-    <Modal open={open} onClose={onClose} title="Record Transfer" size="sm">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          mutation.mutate();
-        }}
-      >
-        <div className="flex flex-col gap-4 p-1">
-          <Select
-            label="From Account"
-            value={fromAccountId}
-            onChange={(e) => setFromAccountId(e.target.value)}
-            options={accountOptions}
-            placeholder="Select account…"
-          />
-          <Select
-            label="To Account"
-            value={toAccountId}
-            onChange={(e) => setToAccountId(e.target.value)}
-            options={accountOptions}
-            placeholder="Select account…"
-          />
-          <Input
-            label="Amount"
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0.00"
-          />
-          <Input
-            label="Date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-          <Input
-            label="Notes (optional)"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add a note…"
-          />
-        </div>
-        <ModalFooter>
-          <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
-          <Button
-            variant="primary"
-            type="submit"
-            loading={mutation.isPending}
-            disabled={!fromAccountId || !toAccountId || !amount || !date}
-          >
-            Record Transfer
-          </Button>
-        </ModalFooter>
-      </form>
-    </Modal>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TransactionsPage() {
@@ -1225,7 +1274,6 @@ export default function TransactionsPage() {
   const [drawerTxn, setDrawerTxn] = useState<Transaction | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showTransferModal, setShowTransferModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showAutoCatPanel, setShowAutoCatPanel] = useState(false);
@@ -1457,15 +1505,6 @@ export default function TransactionsPage() {
           Scan Receipt
         </Button>
 
-        {/* Transfer button */}
-        <Button
-          variant="secondary"
-          icon={<ArrowLeftRight size={14} />}
-          onClick={() => setShowTransferModal(true)}
-        >
-          Transfer
-        </Button>
-
         {/* Import CSV button */}
         <Button
           variant="secondary"
@@ -1690,13 +1729,6 @@ export default function TransactionsPage() {
         onClose={() => setShowAddModal(false)}
         accounts={accounts}
         categories={categories}
-      />
-
-      {/* Transfer modal */}
-      <TransferModal
-        open={showTransferModal}
-        onClose={() => setShowTransferModal(false)}
-        accounts={accounts}
       />
 
       {/* Import CSV modal */}
