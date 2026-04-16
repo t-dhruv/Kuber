@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Plus, ChevronRight, RotateCcw, X, Check,
-  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, ArrowLeftRight,
+  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
@@ -1259,111 +1259,6 @@ function Pagination({ page, total, pageSize, onChange }: { page: number; total: 
   );
 }
 
-// ─── Transfer Modal ───────────────────────────────────────────────────────────
-
-interface TransferModalProps {
-  open: boolean;
-  onClose: () => void;
-  accounts: Account[];
-}
-
-function TransferModal({ open, onClose, accounts }: TransferModalProps) {
-  const queryClient = useQueryClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const [fromAccountId, setFromAccountId] = useState('');
-  const [toAccountId, setToAccountId] = useState('');
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(today);
-  const [notes, setNotes] = useState('');
-
-  const accountOptions = accounts.map((a) => ({ value: a.id, label: a.name }));
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      api.post('/transactions/transfer', {
-        fromAccountId,
-        toAccountId,
-        amount: parseFloat(amount),
-        date,
-        notes: notes || undefined,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      notify.success('Transfer recorded');
-      onClose();
-      setFromAccountId('');
-      setToAccountId('');
-      setAmount('');
-      setDate(today);
-      setNotes('');
-    },
-    onError: (err: any) => {
-      notify.error(err?.response?.data?.error ?? 'Transfer failed');
-    },
-  });
-
-  return (
-    <Modal open={open} onClose={onClose} title="Record Transfer" size="sm">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          mutation.mutate();
-        }}
-      >
-        <div className="flex flex-col gap-4 p-1">
-          <Select
-            label="From Account"
-            value={fromAccountId}
-            onChange={(e) => setFromAccountId(e.target.value)}
-            options={accountOptions}
-            placeholder="Select account…"
-          />
-          <Select
-            label="To Account"
-            value={toAccountId}
-            onChange={(e) => setToAccountId(e.target.value)}
-            options={accountOptions}
-            placeholder="Select account…"
-          />
-          <Input
-            label="Amount"
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="0.00"
-          />
-          <Input
-            label="Date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-          <Input
-            label="Notes (optional)"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add a note…"
-          />
-        </div>
-        <ModalFooter>
-          <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
-          <Button
-            variant="primary"
-            type="submit"
-            loading={mutation.isPending}
-            disabled={!fromAccountId || !toAccountId || !amount || !date}
-          >
-            Record Transfer
-          </Button>
-        </ModalFooter>
-      </form>
-    </Modal>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TransactionsPage() {
@@ -1374,7 +1269,6 @@ export default function TransactionsPage() {
   const [drawerTxn, setDrawerTxn] = useState<Transaction | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showTransferModal, setShowTransferModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showAutoCatPanel, setShowAutoCatPanel] = useState(false);
@@ -1606,15 +1500,6 @@ export default function TransactionsPage() {
           Scan Receipt
         </Button>
 
-        {/* Transfer button */}
-        <Button
-          variant="secondary"
-          icon={<ArrowLeftRight size={14} />}
-          onClick={() => setShowTransferModal(true)}
-        >
-          Transfer
-        </Button>
-
         {/* Import CSV button */}
         <Button
           variant="secondary"
@@ -1839,13 +1724,6 @@ export default function TransactionsPage() {
         onClose={() => setShowAddModal(false)}
         accounts={accounts}
         categories={categories}
-      />
-
-      {/* Transfer modal */}
-      <TransferModal
-        open={showTransferModal}
-        onClose={() => setShowTransferModal(false)}
-        accounts={accounts}
       />
 
       {/* Import CSV modal */}
