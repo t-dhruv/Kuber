@@ -51,6 +51,8 @@ services:
       - "9001:80"
     depends_on:
       - server
+    networks:
+      - kuber_network
 
   prometheus:
     image: prom/prometheus:latest
