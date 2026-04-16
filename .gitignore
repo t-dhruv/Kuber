@@ -28,6 +28,12 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+NUL
+
+# Internal AI planning docs
+docs/superpowers/
+AUDIT-GAP-REPORT.md
+SPRINT-BACKLOG.md
 
 # Prisma
 server/prisma/*.db
