@@ -1322,11 +1322,25 @@ export default function TransactionsPage() {
   });
 
   const autoCatMutation = useMutation({
-    mutationFn: () => api.post('/auto-categorize/batch').then((r) => r.data as { updated: number }),
+    mutationFn: () =>
+      api
+        .post('/auto-categorize/batch')
+        .then((r) => r.data as { queued: number; skipped: number; notConfigured?: boolean; setupMessage?: string }),
     onSuccess: (data) => {
+      if (data.notConfigured) {
+        notify.error(data.setupMessage ?? 'AI not configured');
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       setShowAutoCatPanel(false);
-      notify.success(`Updated ${data.updated} transaction${data.updated !== 1 ? 's' : ''}`);
+      if (data.queued > 0) {
+        notify.success(
+          `${data.queued} transaction${data.queued !== 1 ? 's' : ''} queued for review`,
+        );
+        queryClient.invalidateQueries({ queryKey: ['auto-categorize-status'] });
+      } else {
+        notify.info('No new transactions to categorize');
+      }
     },
     onError: () => notify.error('Auto-categorize failed. Please try again.'),
   });
