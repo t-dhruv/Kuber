@@ -17,11 +17,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - kuber_net
+      - kuber_network
 
   server:
     build:
       context: .
+      dockerfile: Dockerfile
       target: server-runner
     container_name: kuber_server
     restart: unless-stopped
@@ -29,7 +30,7 @@ services:
       DATABASE_URL: postgresql://kuber:kuber_dev@postgres:5432/kuber_db
       JWT_SECRET: dev_jwt_secret_change_in_prod
       JWT_REFRESH_SECRET: dev_refresh_secret_change_in_prod
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 9002
     ports:
       - "9002:9002"
@@ -37,11 +38,12 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - kuber_net
+      - kuber_network
 
   client:
     build:
       context: .
+      dockerfile: Dockerfile
       target: client-runner
     container_name: kuber_client
     restart: unless-stopped
@@ -64,7 +66,7 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=15d"
     networks:
-      - kuber_net
+      - kuber_network
 
   loki:
     image: grafana/loki:latest
@@ -78,7 +80,7 @@ services:
       - kuber_loki_data:/loki
     command: -config.file=/etc/loki/local-config.yaml
     networks:
-      - kuber_net
+      - kuber_network
 
   promtail:
     image: grafana/promtail:latest
@@ -92,7 +94,7 @@ services:
     depends_on:
       - loki
     networks:
-      - kuber_net
+      - kuber_network
 
   grafana:
     image: grafana/grafana:latest
@@ -112,7 +114,7 @@ services:
       - prometheus
       - loki
     networks:
-      - kuber_net
+      - kuber_network
 
   n8n:
     image: n8nio/n8n:latest
@@ -137,7 +139,7 @@ services:
       - n8n_data:/home/node/.n8n
       - ./n8n-workflows:/home/node/workflows:ro
     networks:
-      - kuber_net
+      - kuber_network
 
 volumes:
   kuber_pgdata:
@@ -147,4 +149,4 @@ volumes:
   kuber_grafana_data:
 
 networks:
-  kuber_net:
+  kuber_network:
