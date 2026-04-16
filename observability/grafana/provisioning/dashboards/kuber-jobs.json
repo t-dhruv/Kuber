@@ -1,0 +1,68 @@
+{
+  "title": "Kuber — Background Jobs",
+  "uid": "kuber-jobs",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Job Success Rate (runs/s)",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(job_runs_total{status=\"success\"}[5m])) by (job)",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Job Failures (runs/s)",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(job_runs_total{status=\"failure\"}[5m])) by (job)",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Job p95 Duration (s)",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(job_duration_seconds_bucket[5m])) by (le, job))",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Last Run Timestamp",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": { "sortBy": [{ "displayName": "job" }] },
+      "targets": [
+        {
+          "expr": "job_last_run_timestamp",
+          "legendFormat": "{{job}}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": {} },
+        { "id": "convertFieldType", "options": { "conversions": [{ "targetField": "Value", "destinationType": "time" }] } }
+      ]
+    }
+  ]
+}
