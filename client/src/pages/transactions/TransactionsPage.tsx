@@ -69,9 +69,23 @@ interface TransactionListResponse {
   totalPages: number;
 }
 
+type TxType = 'expense' | 'income' | 'transfer';
+
+interface TypeToggleProps {
+  value: TxType;
+  onChange: (type: TxType) => void;
+  disabled?: boolean;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 25;
+
+const TYPE_OPTIONS: { value: TxType; label: string }[] = [
+  { value: 'expense',  label: 'Expense'  },
+  { value: 'income',   label: 'Income'   },
+  { value: 'transfer', label: 'Transfer' },
+];
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -497,15 +511,7 @@ interface AddModalProps {
 
 // ─── Type Toggle ──────────────────────────────────────────────────────────────
 
-type TxType = 'expense' | 'income' | 'transfer';
-
-const TYPE_OPTIONS: { value: TxType; label: string }[] = [
-  { value: 'expense',  label: 'Expense'  },
-  { value: 'income',   label: 'Income'   },
-  { value: 'transfer', label: 'Transfer' },
-];
-
-function TypeToggle({ value, onChange, disabled }: { value: TxType; onChange: (v: TxType) => void; disabled?: boolean }) {
+function TypeToggle({ value, onChange, disabled }: TypeToggleProps) {
   return (
     <div className="flex rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
       {TYPE_OPTIONS.map((opt) => (
