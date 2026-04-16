@@ -29,6 +29,7 @@ const RulesPage = lazy(() => import('@/pages/rules/RulesPage'));
 const WealthPage = lazy(() => import('@/pages/wealth/WealthPage'));
 const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
 const AccountBulkImportPage = lazy(() => import('@/pages/accounts/AccountBulkImportPage'));
+const ReviewQueuePage = lazy(() => import('./pages/transactions/review/ReviewQueuePage'));
 
 // ─── Loading fallback ─────────────────────────────────────────────────────────
 
@@ -156,6 +157,14 @@ export default function App() {
           element={
             <Suspense fallback={<PageLoader />}>
               <TransactionsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/transactions/review"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <ReviewQueuePage />
             </Suspense>
           }
         />
