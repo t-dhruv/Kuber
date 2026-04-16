@@ -91,7 +91,7 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
 
     const txn = await prisma.transaction.findFirst({
-      where: { id: transactionId, householdId },
+      where: { id: transactionId, householdId, needsReview: true },
       select: {
         id: true,
         description: true,
@@ -99,7 +99,7 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
         needsReview: true,
       },
     });
-    if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+    if (!txn) return res.status(404).json({ error: 'Transaction not found or already reviewed' });
 
     if (action === 'skip') {
       await prisma.transaction.update({
@@ -133,7 +133,7 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
     }
 
     // Save learning example when user corrects with a different category
-    if (action === 'reject' && finalCategoryId !== txn.aiSuggestedCategoryId) {
+    if (finalCategoryId !== txn.aiSuggestedCategoryId) {
       await prisma.categoryLearningExample.create({
         data: {
           householdId,
@@ -166,17 +166,18 @@ router.post('/confirm-bulk', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
 
-    // Find transactions with a matched AI category
+    const CAP = 500;
     const toApply = await prisma.transaction.findMany({
       where: {
         householdId,
         needsReview: true,
         aiSuggestedCategoryId: { not: null },
       },
+      take: CAP,
       select: { id: true, aiSuggestedCategoryId: true },
     });
 
-    await Promise.all(
+    await prisma.$transaction(
       toApply.map((t) =>
         prisma.transaction.update({
           where: { id: t.id },
@@ -195,7 +196,7 @@ router.post('/confirm-bulk', async (req: AuthRequest, res: Response) => {
       rulesAppliedTotal.inc({ household_id: householdId });
     }
 
-    return res.json({ approved: toApply.length });
+    return res.json({ approved: toApply.length, capped: toApply.length === CAP });
   } catch (err) {
     req.log.error({ err }, 'auto-categorize/confirm-bulk');
     return res.status(500).json({ error: 'Bulk approval failed' });
