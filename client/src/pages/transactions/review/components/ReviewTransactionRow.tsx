@@ -30,6 +30,7 @@ interface Props {
     categoryId?: string,
     createCategory?: { name: string; type: string; emoji?: string | null }
   ) => Promise<void>;
+  onCreateRule?: (pattern: string) => void;
 }
 
 function confidenceColor(confidence: number | null): string {
@@ -39,7 +40,7 @@ function confidenceColor(confidence: number | null): string {
   return 'bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]';
 }
 
-export function ReviewTransactionRow({ transaction: txn, categories, onConfirm }: Props) {
+export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, onCreateRule }: Props) {
   const [mode, setMode] = useState<'idle' | 'rejecting' | 'creating'>('idle');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [showRulePrompt, setShowRulePrompt] = useState(false);
@@ -193,9 +194,19 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm }
       {showRulePrompt && (
         <div className="mt-2 text-xs text-[var(--color-text-secondary)] flex items-center gap-2">
           <span>Create a rule for transactions like this?</span>
-          <a href="/rules" className="text-[var(--color-accent)] underline hover:no-underline">
-            Go to Rules
-          </a>
+          <button
+            onClick={() => {
+              if (onCreateRule) {
+                onCreateRule(txn.description);
+              } else {
+                window.location.href = '/rules';
+              }
+              setShowRulePrompt(false);
+            }}
+            className="text-[var(--color-accent)] underline hover:no-underline"
+          >
+            Create Rule
+          </button>
           <button onClick={() => setShowRulePrompt(false)} className="hover:text-[var(--color-text)]">
             Dismiss
           </button>

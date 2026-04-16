@@ -66,6 +66,15 @@ export default function ReviewQueuePage() {
     await confirmMutation.mutateAsync({ transactionId, action, categoryId, createCategory });
   };
 
+  const handleCreateRuleFromRow = (description: string) => {
+    const firstToken = description.toLowerCase().split(/[\s_\-]/)[0].trim();
+    navigate(`/rules?prefill=${encodeURIComponent(JSON.stringify({
+      field: 'description',
+      operator: 'startsWith',
+      value: firstToken,
+    }))}`);
+  };
+
   const handleCreateRule = (suggestion: RuleSuggestion) => {
     navigate(`/rules?prefill=${encodeURIComponent(JSON.stringify({
       field: 'description',
@@ -150,6 +159,7 @@ export default function ReviewQueuePage() {
                   transaction={txn}
                   categories={categories}
                   onConfirm={handleConfirm}
+                  onCreateRule={handleCreateRuleFromRow}
                 />
               ))}
           </div>
@@ -171,6 +181,7 @@ export default function ReviewQueuePage() {
                   transaction={txn}
                   categories={categories}
                   onConfirm={handleConfirm}
+                  onCreateRule={handleCreateRuleFromRow}
                 />
               ))}
           </div>
