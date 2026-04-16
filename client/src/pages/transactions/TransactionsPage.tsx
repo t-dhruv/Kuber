@@ -277,6 +277,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
       onSaved();
     },
     onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to save transaction'),
@@ -623,6 +624,10 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
       });
     },
     onSuccess: () => {
+      notify.success(
+        txType === 'transfer' ? 'Transfer recorded' :
+        txType === 'expense'  ? 'Expense added' : 'Income added'
+      );
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       onClose();
