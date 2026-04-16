@@ -42,13 +42,13 @@ router.post('/batch', async (req: AuthRequest, res: Response) => {
 
     if (result.notConfigured) {
       return res.status(200).json({
-        updated: 0, skipped: 0,
+        queued: 0, skipped: 0,
         notConfigured: true,
         setupMessage: NOT_CONFIGURED_MSG,
       });
     }
 
-    if (result.updated > 0) {
+    if (result.queued > 0) {
       rulesAppliedTotal.inc({ household_id: req.householdId! });
     }
 
