@@ -38,6 +38,9 @@ export default function ReviewQueuePage() {
       qc.invalidateQueries({ queryKey: ['auto-categorize-review'] });
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['auto-categorize-status'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['budget'] });
+      qc.invalidateQueries({ queryKey: ['reports'] });
     },
     onError: () => notify.error('Bulk approval failed'),
   });
@@ -53,6 +56,9 @@ export default function ReviewQueuePage() {
       qc.invalidateQueries({ queryKey: ['auto-categorize-review'] });
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['auto-categorize-status'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['budget'] });
+      qc.invalidateQueries({ queryKey: ['reports'] });
     },
     onError: () => notify.error('Failed to confirm categorization'),
   });
