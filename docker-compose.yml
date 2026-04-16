@@ -56,7 +56,7 @@ services:
     profiles: ["observability"]
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "9004:9090"
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - kuber_prometheus_data:/prometheus
@@ -72,7 +72,7 @@ services:
     profiles: ["observability"]
     restart: unless-stopped
     ports:
-      - "3100:3100"
+      - "9005:3100"
     volumes:
       - ./observability/loki/loki.yml:/etc/loki/local-config.yaml:ro
       - kuber_loki_data:/loki
@@ -100,7 +100,7 @@ services:
     profiles: ["observability"]
     restart: unless-stopped
     ports:
-      - "3001:3000"
+      - "9003:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
@@ -120,14 +120,14 @@ services:
     profiles: ["automation"]
     restart: unless-stopped
     ports:
-      - "5678:5678"
+      - "9006:5678"
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
-      - WEBHOOK_URL=http://localhost:5678/
+      - WEBHOOK_URL=http://localhost:9006/
       - GENERIC_TIMEZONE=America/Toronto
       - KUBER_WEBHOOK_URL=http://kuber_server:9002
       - KUBER_API_TOKEN=${KUBER_API_TOKEN:-}
