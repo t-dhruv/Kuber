@@ -278,6 +278,10 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['cashflow'] });
       onSaved();
     },
     onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to save transaction'),
@@ -289,6 +293,9 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
     mutationFn: () => api.delete(`/transactions/${transaction!.id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
       onClose();
     },
     onError: () => notify.error('Failed to delete transaction'),
@@ -630,6 +637,10 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
       );
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['cashflow'] });
       onClose();
       reset();
     },
@@ -1331,6 +1342,8 @@ export default function TransactionsPage() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
       setShowAutoCatPanel(false);
       if (data.queued > 0) {
         notify.success(
@@ -1391,25 +1404,49 @@ export default function TransactionsPage() {
   const bulkRecategorizeMutation = useMutation({
     mutationFn: (categoryId: string) =>
       api.post('/transactions/bulk', { action: 'recategorize', ids: Array.from(selectedIds), categoryId }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
   });
 
   const bulkMarkReviewedMutation = useMutation({
     mutationFn: () =>
       api.post('/transactions/bulk', { action: 'mark-reviewed', ids: Array.from(selectedIds) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
   });
 
   const bulkHideMutation = useMutation({
     mutationFn: () =>
       api.post('/transactions/bulk', { action: 'hide', ids: Array.from(selectedIds) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
   });
 
   const bulkDeleteMutation = useMutation({
     mutationFn: () =>
       api.post('/transactions/bulk', { action: 'delete', ids: Array.from(selectedIds) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
   });
 
   // ── Inline merchant edit ──
@@ -1417,7 +1454,11 @@ export default function TransactionsPage() {
   const merchantEditMutation = useMutation({
     mutationFn: ({ id, merchantName }: { id: string; merchantName: string }) =>
       api.put(`/transactions/${id}`, { description: merchantName }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to update merchant. Please try again.'),
   });
 
   const handleMerchantEdit = useCallback((id: string, merchantName: string) => {
@@ -1768,7 +1809,11 @@ export default function TransactionsPage() {
       <ImportModal
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
-        onImported={() => queryClient.invalidateQueries({ queryKey: ['transactions'] })}
+        onImported={() => {
+          queryClient.invalidateQueries({ queryKey: ['transactions'] });
+          queryClient.invalidateQueries({ queryKey: ['accounts'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        }}
       />
 
       {/* Receipt OCR modal */}
