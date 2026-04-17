@@ -1,9 +1,13 @@
 import { useState, FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function ForgotPasswordPage() {
+  const { isAuthenticated } = useAuthStore();
+  if (isAuthenticated) return <Navigate to="/" replace />;
+
   const [email, setEmail] = useState('');
 
   const mutation = useMutation({
