@@ -42,3 +42,6 @@ export { Textarea } from './Textarea';
 export { SegmentControl } from './SegmentControl';
 
 export { BottomSheet } from './BottomSheet';
+
+export { CategoryCombobox } from './CategoryCombobox';
+export type { CategoryOption } from './CategoryCombobox';

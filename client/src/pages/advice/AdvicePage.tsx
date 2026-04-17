@@ -229,7 +229,7 @@ function AiChatTab() {
 
   const { data: aiSettings } = useQuery<{ provider: string }>({
     queryKey: ['settings', 'ai'],
-    queryFn: () => api.get('/settings/ai').then((r) => r.data),
+    queryFn: () => api.get('/settings/ai-config').then((r) => r.data),
     retry: false,
   });
 
@@ -313,7 +313,7 @@ function AiChatTab() {
                   I have access to your real financial data. Ask me anything about your spending, budgets, goals, or investments.
                 </p>
               </div>
-              <SuggestionChips onSelect={handleSend} />
+              <SuggestionChips onSelect={handleSend} disabled={isNotConfigured} />
             </div>
           )}
 
@@ -347,7 +347,7 @@ function AiChatTab() {
         </div>
 
         {/* Input */}
-        <ChatInput onSend={handleSend} disabled={isStreaming} />
+        <ChatInput onSend={handleSend} disabled={isStreaming || isNotConfigured} />
       </div>
     </div>
   );

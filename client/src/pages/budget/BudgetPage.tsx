@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Settings, Pencil, Plus, ChevronDown, ChevronUp, AlertTriangle, X, Sparkles, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
-import { Button, Input, Select, Modal, ModalFooter, Skeleton, Card, toast } from '@/components/ui';
+import { Button, Input, Select, Modal, ModalFooter, Skeleton, Card, toast, CategoryCombobox } from '@/components/ui';
 import { useAiStream } from '@/hooks/useAiStream';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
@@ -293,15 +293,12 @@ function AddBudgetModal({
     >
       <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="flex flex-col gap-4">
         {!preselectedCategoryId && (
-          <Select
+          <CategoryCombobox
             label="Category"
+            categories={allCategories.map((c) => ({ id: c.id, name: c.name, emoji: c.icon }))}
             value={selectedCategoryId}
-            onChange={(e) => setSelectedCategoryId(e.target.value)}
+            onChange={setSelectedCategoryId}
             placeholder="Select a category..."
-            options={allCategories.map((c) => ({
-              value: c.id,
-              label: c.icon ? `${c.icon} ${c.name}` : c.name,
-            }))}
           />
         )}
 
@@ -400,15 +397,12 @@ function AddCategoryModal({
       size="sm"
     >
       <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="flex flex-col gap-4">
-        <Select
+        <CategoryCombobox
           label="Category"
+          categories={availableCategories.map((c) => ({ id: c.id, name: c.name, emoji: c.icon }))}
           value={selectedCategoryId}
-          onChange={(e) => setSelectedCategoryId(e.target.value)}
+          onChange={setSelectedCategoryId}
           placeholder="Select a category..."
-          options={availableCategories.map((c) => ({
-            value: c.id,
-            label: c.icon ? `${c.icon} ${c.name}` : c.name,
-          }))}
         />
 
         <Input
@@ -1345,7 +1339,7 @@ function BudgetCoach({ month }: { month: string }) {
         {!asked && !content && (
           <div className="text-center">
             <p className="text-sm text-[color:var(--color-text-secondary)] mb-3">
-              Get personalised tips for this month's budget.
+              Get personalized tips for this month's budget.
             </p>
             <Button variant="primary" onClick={handleAsk} className="w-full text-sm">
               <Sparkles size={14} className="mr-1.5" />

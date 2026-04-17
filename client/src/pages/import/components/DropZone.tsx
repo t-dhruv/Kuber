@@ -212,9 +212,9 @@ export default function DropZone({ accounts, onParsed, onSmartDetect }: Props) {
         className="w-full"
       >
         {loading ? (
-          <><Loader2 size={16} className="mr-2 animate-spin" />Analysing…</>
+          <><Loader2 size={16} className="mr-2 animate-spin" />Analyzing…</>
         ) : (
-          <><Upload size={16} className="mr-2" />Analyse File</>
+          <><Upload size={16} className="mr-2" />Analyze File</>
         )}
       </Button>
     </div>

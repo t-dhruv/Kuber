@@ -3,7 +3,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
 import { api } from '@/lib/api';
-import { Modal, ModalFooter, Button, Select, toast } from '@/components/ui';
+import { Modal, ModalFooter, Button, CategoryCombobox, toast } from '@/components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -113,10 +113,6 @@ export function SplitTransactionModal({ transaction, categories, isOpen, onClose
 
   // ── Category options ──
 
-  const categoryOptions = categories.map((c) => ({
-    value: c.id,
-    label: `${c.emoji ?? ''} ${c.name}`.trim(),
-  }));
 
   // ── Submit ──
 
@@ -159,11 +155,10 @@ export function SplitTransactionModal({ transaction, categories, isOpen, onClose
               <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
                 Category
               </label>
-              <Select
-                options={categoryOptions}
-                placeholder="Select..."
+              <CategoryCombobox
+                categories={categories}
                 value={row.categoryId}
-                onChange={(e) => updateRow(idx, 'categoryId', e.target.value)}
+                onChange={(id) => updateRow(idx, 'categoryId', id)}
               />
             </div>
 

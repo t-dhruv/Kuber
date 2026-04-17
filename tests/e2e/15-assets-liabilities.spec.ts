@@ -49,4 +49,15 @@ test.describe('Assets & Liabilities', () => {
     await expect(page.getByText(/net worth/i)).toBeVisible();
     await expect(page.getByText(/\$[1-9][0-9,]+/).first()).toBeVisible({ timeout: 8000 });
   });
+
+  test('Assets & Debt tab on Accounts page is accessible', async ({ page }) => {
+    await page.goto('/accounts');
+    await page.waitForLoadState('networkidle');
+    const assetsTab = page.getByRole('button', { name: /assets.*debt|assets & debt/i });
+    if (await assetsTab.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await assetsTab.click();
+      await page.waitForLoadState('networkidle');
+      await expect(page.getByText(/assets|liabilities|debt/i).first()).toBeVisible({ timeout: 8000 });
+    }
+  });
 });

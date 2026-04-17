@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Plus, ChevronRight, RotateCcw, X, Check,
-  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera,
+  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, CheckCheck,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card, notify, ConfirmDialog,
+  Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card, notify, ConfirmDialog, CategoryCombobox,
 } from '@/components/ui';
 import { ImportModal } from './components/ImportModal';
 import { SplitTransactionModal } from './components/SplitTransactionModal';
@@ -641,10 +641,6 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
     label: `${a.name}${a.lastFour ? ` ••${a.lastFour}` : ''}`,
   }));
 
-  const categoryOptions = categories.map((c) => ({
-    value: c.id,
-    label: `${c.emoji ?? ''} ${c.name}`.trim(),
-  }));
 
   const isTransfer = txType === 'transfer';
 
@@ -717,12 +713,11 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
               value={form.accountId}
               onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
             />
-            <Select
+            <CategoryCombobox
               label="Category"
-              options={categoryOptions}
-              placeholder="Select category..."
-              value={form.categoryId}
-              onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
+              categories={categories}
+              value={form.categoryId ?? ''}
+              onChange={(id) => setForm((f) => ({ ...f, categoryId: id }))}
             />
           </>
         )}
@@ -1311,22 +1306,40 @@ export default function TransactionsPage() {
 
   // ── Auto-categorize ──
 
+  const navigate = useNavigate();
+
   const { data: autoCatStatus, refetch: refetchAutoCatStatus, isFetching: autoCatStatusFetching } = useQuery<{
     configured: boolean;
     notConfigured?: boolean;
     uncategorizedCount: number;
+    reviewCount: number;
   }>({
     queryKey: ['auto-categorize-status'],
     queryFn: () => api.get('/auto-categorize/status').then((r) => r.data),
-    enabled: false,
+    staleTime: 60_000,
+    retry: false,
   });
 
   const autoCatMutation = useMutation({
-    mutationFn: () => api.post('/auto-categorize/batch').then((r) => r.data as { updated: number }),
+    mutationFn: () =>
+      api
+        .post('/auto-categorize/batch')
+        .then((r) => r.data as { queued: number; skipped: number; notConfigured?: boolean; setupMessage?: string }),
     onSuccess: (data) => {
+      if (data.notConfigured) {
+        notify.error(data.setupMessage ?? 'AI not configured');
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       setShowAutoCatPanel(false);
-      notify.success(`Updated ${data.updated} transaction${data.updated !== 1 ? 's' : ''}`);
+      if (data.queued > 0) {
+        notify.success(
+          `${data.queued} transaction${data.queued !== 1 ? 's' : ''} queued for review`,
+        );
+        queryClient.invalidateQueries({ queryKey: ['auto-categorize-status'] });
+      } else {
+        notify.info('No new transactions to categorize');
+      }
     },
     onError: () => notify.error('Auto-categorize failed. Please try again.'),
   });
@@ -1451,19 +1464,25 @@ export default function TransactionsPage() {
 
         {/* Date range — hidden on mobile, shown on sm+ */}
         <div className="hidden sm:flex items-center gap-1.5">
-          <input
-            type="date"
-            value={searchParams.get('startDate') ?? ''}
-            onChange={(e) => setParam('startDate', e.target.value)}
-            className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
-          />
+          <label className="flex flex-col gap-0.5 text-xs text-[var(--color-text-secondary)]">
+            From
+            <input
+              type="date"
+              value={searchParams.get('startDate') ?? ''}
+              onChange={(e) => setParam('startDate', e.target.value)}
+              className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
+            />
+          </label>
           <span className="text-[var(--color-text-muted)] text-[0.8125rem]">–</span>
-          <input
-            type="date"
-            value={searchParams.get('endDate') ?? ''}
-            onChange={(e) => setParam('endDate', e.target.value)}
-            className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
-          />
+          <label className="flex flex-col gap-0.5 text-xs text-[var(--color-text-secondary)]">
+            To
+            <input
+              type="date"
+              value={searchParams.get('endDate') ?? ''}
+              onChange={(e) => setParam('endDate', e.target.value)}
+              className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
+            />
+          </label>
         </div>
 
         {/* Filters button */}
@@ -1586,6 +1605,20 @@ export default function TransactionsPage() {
             <strong>{duplicateCount}</strong> potential duplicate transaction
             {duplicateCount !== 1 ? 's' : ''} found —{' '}
             <span className="underline">Review</span>
+          </span>
+        </button>
+      )}
+
+      {/* AI review queue banner */}
+      {(autoCatStatus?.reviewCount ?? 0) > 0 && (
+        <button
+          onClick={() => navigate('/transactions/review')}
+          className="flex items-center gap-2 w-full py-2.5 px-4 rounded-[var(--radius-md)] border border-[var(--color-accent)] bg-[var(--color-accent-light)] text-[var(--color-accent)] cursor-pointer text-sm font-medium text-left"
+        >
+          <CheckCheck size={16} className="flex-shrink-0" />
+          <span>
+            <strong>{autoCatStatus!.reviewCount}</strong> transaction{autoCatStatus!.reviewCount !== 1 ? 's' : ''} need AI category review —{' '}
+            <span className="underline">Review now</span>
           </span>
         </button>
       )}

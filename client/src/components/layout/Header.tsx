@@ -21,7 +21,10 @@ interface NotificationsResponse {
 const routeLabels: Record<string, string> = {
   '/': 'Dashboard',
   '/accounts': 'Accounts',
+  '/accounts/bulk-import': 'Bulk Import',
   '/transactions': 'Transactions',
+  '/transactions/review': 'AI Review',
+  '/import': 'Import',
   '/cash-flow': 'Cash Flow',
   '/reports': 'Reports',
   '/wealth': 'Wealth',
@@ -30,7 +33,7 @@ const routeLabels: Record<string, string> = {
   '/goals': 'Goals',
   '/investments': 'Investments',
   '/rules': 'Rules',
-  '/advice': 'AI Advice',
+  '/advice': 'AI Advisor',
   '/settings': 'Settings',
 };
 

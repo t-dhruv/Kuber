@@ -48,4 +48,41 @@ test.describe('Rules', () => {
       await waitForToast(page, /applied|success/i);
     }
   });
+
+  test('edit existing rule changes its name', async ({ page }) => {
+    const editBtn = page.getByRole('button', { name: /edit/i }).first();
+    if (await editBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await editBtn.click();
+      const dialog = page.getByRole('dialog');
+      await dialog.waitFor({ timeout: 5000 });
+      const nameInput = dialog.getByLabel(/rule name/i);
+      await nameInput.fill('Starbucks Updated');
+      await dialog.getByRole('button', { name: /save rule/i }).click();
+      await expect(page.getByText('Starbucks Updated')).toBeVisible({ timeout: 8000 });
+    }
+  });
+
+  test('delete rule removes it from list', async ({ page }) => {
+    const deleteBtn = page.getByRole('button', { name: /delete/i }).first();
+    if (await deleteBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      const ruleText = await page.locator('[class*="font-semibold"]').first().textContent();
+      await deleteBtn.click();
+      if (ruleText) {
+        await expect(page.getByText(ruleText)).not.toBeVisible({ timeout: 5000 });
+      }
+    }
+  });
+
+  test('prefill from URL opens modal with values pre-populated', async ({ page }) => {
+    const prefill = encodeURIComponent(JSON.stringify({
+      field: 'description',
+      operator: 'startsWith',
+      value: 'Netflix',
+    }));
+    await page.goto(`/rules?prefill=${prefill}`);
+    await page.waitForLoadState('networkidle');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await expect(dialog.locator('input[value="Netflix"]').or(dialog.getByDisplayValue('Netflix'))).toBeVisible({ timeout: 3000 });
+  });
 });

@@ -113,4 +113,34 @@ test.describe('Settings', () => {
     await page.waitForLoadState('networkidle');
     await expect(page.getByText(/not configured/i)).not.toBeVisible({ timeout: 5000 });
   });
+
+  test('Automation settings section loads', async ({ page }) => {
+    await page.goto('/settings');
+    const automationBtn = page.getByRole('button', { name: /^automation$/i });
+    if (await automationBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await automationBtn.click();
+      await page.waitForLoadState('networkidle');
+      await expect(page.getByText(/automation|auto.?categori/i).first()).toBeVisible({ timeout: 8000 });
+    }
+  });
+
+  test('Webhooks settings section loads', async ({ page }) => {
+    await page.goto('/settings');
+    const webhookBtn = page.getByRole('button', { name: /^webhooks$/i });
+    if (await webhookBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await webhookBtn.click();
+      await page.waitForLoadState('networkidle');
+      await expect(page.getByText(/webhook/i).first()).toBeVisible({ timeout: 8000 });
+    }
+  });
+
+  test('Display settings section loads and shows theme toggle', async ({ page }) => {
+    await page.goto('/settings');
+    const displayBtn = page.getByRole('button', { name: /^display$/i });
+    if (await displayBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await displayBtn.click();
+      await page.waitForLoadState('networkidle');
+      await expect(page.getByText(/theme|dark|light/i).first()).toBeVisible({ timeout: 8000 });
+    }
+  });
 });

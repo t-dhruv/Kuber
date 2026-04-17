@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -19,6 +21,7 @@ import {
   Layers,
   Upload,
   LogOut,
+  CheckCheck,
 } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
@@ -30,23 +33,9 @@ interface NavItem {
   to: string;
   icon: React.ReactNode;
   label: string;
+  badge?: number;
+  end?: boolean;
 }
-
-const navItems: NavItem[] = [
-  { to: '/', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
-  { to: '/accounts', icon: <CreditCard size={18} />, label: 'Accounts' },
-  { to: '/transactions', icon: <ArrowLeftRight size={18} />, label: 'Transactions' },
-  { to: '/import', icon: <Upload size={18} />, label: 'Import' },
-  { to: '/cash-flow', icon: <TrendingUp size={18} />, label: 'Cash Flow' },
-  { to: '/reports', icon: <BarChart2 size={18} />, label: 'Reports' },
-  { to: '/wealth', icon: <Layers size={18} />, label: 'Wealth' },
-  { to: '/budget', icon: <PiggyBank size={18} />, label: 'Budget' },
-  { to: '/recurring', icon: <RefreshCw size={18} />, label: 'Recurring' },
-  { to: '/goals', icon: <Target size={18} />, label: 'Goals' },
-  { to: '/investments', icon: <LineChart size={18} />, label: 'Investments' },
-  { to: '/rules', icon: <Zap size={18} />, label: 'Rules' },
-  { to: '/advice', icon: <Sparkles size={18} />, label: 'Advice' },
-];
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -72,6 +61,32 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       // ignore
     }
   }, [collapsed]);
+
+  const { data: autoCatStatus } = useQuery({
+    queryKey: ['auto-categorize-status'],
+    queryFn: () => api.get('/auto-categorize/status').then((r) => r.data),
+    refetchInterval: 60_000,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const reviewCount: number = autoCatStatus?.reviewCount ?? 0;
+
+  const navItems: NavItem[] = [
+    { to: '/', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
+    { to: '/accounts', icon: <CreditCard size={18} />, label: 'Accounts', end: true },
+    { to: '/transactions', icon: <ArrowLeftRight size={18} />, label: 'Transactions', end: true },
+    { to: '/transactions/review', icon: <CheckCheck size={18} />, label: 'AI Review', badge: reviewCount > 0 ? reviewCount : undefined },
+    { to: '/import', icon: <Upload size={18} />, label: 'Import' },
+    { to: '/cash-flow', icon: <TrendingUp size={18} />, label: 'Cash Flow' },
+    { to: '/reports', icon: <BarChart2 size={18} />, label: 'Reports' },
+    { to: '/wealth', icon: <Layers size={18} />, label: 'Wealth' },
+    { to: '/budget', icon: <PiggyBank size={18} />, label: 'Budget' },
+    { to: '/recurring', icon: <RefreshCw size={18} />, label: 'Recurring' },
+    { to: '/goals', icon: <Target size={18} />, label: 'Goals' },
+    { to: '/investments', icon: <LineChart size={18} />, label: 'Investments' },
+    { to: '/rules', icon: <Zap size={18} />, label: 'Rules' },
+    { to: '/advice', icon: <Sparkles size={18} />, label: 'AI Advisor' },
+  ];
 
   const handleLogout = () => {
     clearAuth();
@@ -121,10 +136,10 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           >
             <NavLink
               to={item.to}
-              end={item.to === '/'}
+              end={item.to === '/' || !!item.end}
               onClick={handleNavClick}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm font-medium transition-colors ${
+                `relative flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm font-medium transition-colors ${
                   collapsed ? 'justify-center' : ''
                 } ${
                   isActive
@@ -136,7 +151,19 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               title={item.label}
             >
               <span className="flex-shrink-0">{item.icon}</span>
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {!collapsed && (
+                <span className="flex-1 flex items-center justify-between truncate">
+                  <span className="truncate">{item.label}</span>
+                  {item.badge !== undefined && (
+                    <span className="ml-2 flex-shrink-0 text-xs font-bold bg-[var(--color-accent)] text-white rounded-full px-1.5 py-0.5 leading-none">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
+                </span>
+              )}
+              {collapsed && item.badge !== undefined && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--color-accent)]" />
+              )}
             </NavLink>
           </Tooltip>
         ))}

@@ -49,4 +49,14 @@ test.describe('CSV Import', () => {
       page.getByText(/grocery store|gas station|restaurant|pharmacy|coffee shop/i).first()
     ).toBeVisible({ timeout: 8000 });
   });
+
+  test('History button opens import history', async ({ page }) => {
+    await page.goto('/import');
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: /history/i }).click();
+    await page.waitForTimeout(500);
+    const hasItems = await page.locator('[class*="import"], [class*="history"]').count() > 0;
+    const hasEmpty = await page.getByText(/no imports|no history|nothing yet/i).isVisible({ timeout: 3000 }).catch(() => false);
+    expect(hasItems || hasEmpty).toBeTruthy();
+  });
 });

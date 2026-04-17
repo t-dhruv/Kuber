@@ -344,12 +344,12 @@ function PerformanceCards({ performanceData, period, isLoading }: {
 
 // ─── Performance Chart ────────────────────────────────────────────────────────
 
-function PerformanceChart({ data, isLoading }: { data?: HistoryPoint[]; isLoading: boolean }) {
+function PerformanceChart({ data, isLoading, hasHoldings }: { data?: HistoryPoint[]; isLoading: boolean; hasHoldings: boolean }) {
   return (
     <Card padding="lg">
       {isLoading ? (
         <Skeleton height={220} width="100%" />
-      ) : (
+      ) : hasHoldings ? (
         <>
           <div role="img" aria-label="Portfolio performance chart">
             <ResponsiveContainer width="100%" height={220}>
@@ -401,6 +401,10 @@ function PerformanceChart({ data, isLoading }: { data?: HistoryPoint[]; isLoadin
             SIMULATED PERFORMANCE
           </div>
         </>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3rem 0', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+          Add your first holding above to see performance.
+        </div>
       )}
     </Card>
   );
@@ -1983,6 +1987,7 @@ export default function InvestmentsPage() {
           <PerformanceChart
             data={performanceData?.history}
             isLoading={performanceLoading}
+            hasHoldings={(holdingsData?.holdings ?? []).length > 0}
           />
           <HoldingsTable data={holdingsData} isLoading={holdingsLoading} />
         </>
