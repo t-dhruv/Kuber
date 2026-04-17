@@ -1184,9 +1184,6 @@ export default function GoalsPage() {
 
         <div className="flex-1" />
 
-        <Button variant="ghost" size="sm" icon={<MessageSquare size={14} />}>
-          Share feedback
-        </Button>
         <Button variant="secondary" size="sm" icon={<Wallet size={14} />}>
           Goal accounts
         </Button>
