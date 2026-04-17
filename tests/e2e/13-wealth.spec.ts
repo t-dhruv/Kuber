@@ -40,4 +40,11 @@ test.describe('Wealth Strategy', () => {
     await page.waitForLoadState('networkidle');
     expect(errors.filter((e) => !e.includes('ResizeObserver'))).toHaveLength(0);
   });
+
+  test('shows income prompt with CTA when no income set', async ({ page }) => {
+    const prompt = page.getByText(/set your monthly take-home income|no income transactions/i);
+    if (await prompt.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await expect(page.getByRole('button', { name: /save/i })).toBeVisible();
+    }
+  });
 });

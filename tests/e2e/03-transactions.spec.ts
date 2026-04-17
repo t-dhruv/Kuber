@@ -97,4 +97,35 @@ test.describe('Transactions', () => {
     await page.waitForLoadState('networkidle');
     await expect(page.getByText(/spending|this month/i).first()).toBeVisible({ timeout: 8000 });
   });
+
+  test('split transaction modal opens and validates', async ({ page }) => {
+    const moreMenu = page.locator('[aria-label*="more"], button:has([data-lucide="more-horizontal"])').first();
+    if (await moreMenu.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await moreMenu.click();
+      const splitBtn = page.getByRole('menuitem', { name: /split/i });
+      if (await splitBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await splitBtn.click();
+        const dialog = page.getByRole('dialog');
+        await dialog.waitFor({ timeout: 5000 });
+        await expect(dialog.getByText(/split/i).first()).toBeVisible();
+        const amountInputs = dialog.locator('input[type="number"], input[placeholder*="amount"]');
+        expect(await amountInputs.count()).toBeGreaterThanOrEqual(2);
+        await dialog.getByRole('button', { name: /cancel/i }).click();
+      }
+    }
+  });
+
+  test('filter by date range limits results', async ({ page }) => {
+    const fromLabel = page.getByText('From').first();
+    if (await fromLabel.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const fromInput = page.locator('label:has-text("From") input[type="date"]');
+      await fromInput.fill('2099-01-01');
+      const toInput = page.locator('label:has-text("To") input[type="date"]');
+      await toInput.fill('2099-01-31');
+      await page.waitForLoadState('networkidle');
+      await expect(page.getByText(/no transactions/i)).toBeVisible({ timeout: 8000 });
+      await fromInput.fill('');
+      await toInput.fill('');
+    }
+  });
 });

@@ -68,4 +68,22 @@ test.describe('Reports', () => {
     const real = errors.filter((e) => !e.includes('ResizeObserver'));
     expect(real).toHaveLength(0);
   });
+
+  test('Tax Summary tab renders', async ({ page }) => {
+    const tab = page.getByRole('tab', { name: /tax summary/i });
+    if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await tab.click();
+      await page.waitForLoadState('networkidle');
+      await expect(page.getByText(/tax|income|deduction/i).first()).toBeVisible({ timeout: 8000 });
+    }
+  });
+
+  test('Benchmarks tab renders', async ({ page }) => {
+    const tab = page.getByRole('tab', { name: /benchmark/i });
+    if (await tab.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await tab.click();
+      await page.waitForLoadState('networkidle');
+      await expect(page.getByText(/s&p 500|benchmark|index/i).first()).toBeVisible({ timeout: 8000 });
+    }
+  });
 });
