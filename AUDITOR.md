@@ -1,7 +1,22 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-03-26 (6 new gaps logged; roadmap updated Sprints 14.1–18)
+> Last updated: 2026-04-17 — Production Stability Sweep (Sprint 17)
+
+---
+
+## Sprint 17 — Production Stability Sweep (2026-04-17)
+
+**Goal:** Every feature marked "done" actually works end-to-end. No stale data after mutations. No silent failures.
+
+**Completed:**
+- Static API audit confirmed all 87 registered routes exist and are reachable (QA report BUG-001 was stale server process, not missing code)
+- Fixed 13 frontend bugs: transaction/account/budget/goals/rules mutations missing `['dashboard']`/`['budget']`/`['reports']`/`['cashflow']` cache invalidations
+- Added `onError` handlers to all bulk transaction mutations, notification drawer mutations, dashboard saveLayout, and merchant edit (previously silent on failure)
+- Fixed investment lot mutations missing `['investments-allocation']` invalidation
+- Added error UI to CashFlow page (previously rendered zeros silently on fetch failure)
+- Import confirm now invalidates `['dashboard']` after successful import
+- E2E suite: pending — requires Docker stack running at `localhost:9001`
 
 ---
 
@@ -819,6 +834,13 @@ User pulls models: `ollama pull qwen2.5:0.5b && ollama pull moondream`
 | BUG-004 | ~~Pages go blank on crash — no error boundary~~ | ✅ Fixed | Sprint 2 |
 | BUG-005 | ~~Transaction filter uses hardcoded category IDs~~ | ✅ Fixed | Sprint 2 |
 | BUG-006 | ~~Sankey chart placeholders in CashFlow + Reports~~ | ✅ Fixed | Sprint 2 |
+| BUG-007 | ~~Transaction/Account/Budget/Goals mutations not invalidating dashboard~~ | ✅ Fixed | Sprint 17 — fix/production-stability-sweep |
+| BUG-008 | ~~Bulk transaction mutations had no error handlers (silent failure)~~ | ✅ Fixed | Sprint 17 |
+| BUG-009 | ~~Investment lot mutations not invalidating allocation chart~~ | ✅ Fixed | Sprint 17 |
+| BUG-010 | ~~CashFlow page no error UI on fetch failure~~ | ✅ Fixed | Sprint 17 |
+| BUG-011 | ~~Notification drawer markRead/markAllRead/clearRead had no error handlers~~ | ✅ Fixed | Sprint 17 |
+| BUG-012 | ~~Dashboard saveLayout had no error handler~~ | ✅ Fixed | Sprint 17 |
+| BUG-013 | ~~Import confirm not invalidating dashboard after import~~ | ✅ Fixed | Sprint 17 |
 
 ---
 
