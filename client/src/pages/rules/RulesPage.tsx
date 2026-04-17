@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Pencil, Play, PlayCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
-import { Button, Card, Input, Select, Modal, ModalFooter, notify } from '@/components/ui';
+import { Button, Card, Input, Select, Modal, ModalFooter, notify, CategoryCombobox } from '@/components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,8 +104,11 @@ function RuleBuilderModal({
   const [form, setForm] = useState<RuleFormState>(initial);
   const [error, setError] = useState('');
 
-  // Sync initial on open
-  useState(() => { setForm(initial); setError(''); });
+  // Sync when modal opens with new initial (e.g. prefill from URL)
+  useEffect(() => {
+    if (open) { setForm(initial); setError(''); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function updateCondition(i: number, patch: Partial<RuleCondition>) {
     setForm(f => {
@@ -137,7 +141,6 @@ function RuleBuilderModal({
     onSave(form);
   }
 
-  const categoryOptions = categories.map(c => ({ value: c.id, label: `${c.emoji ?? ''} ${c.name}`.trim() }));
 
   return (
     <Modal open={open} onClose={onClose} title={initial.name ? 'Edit Rule' : 'New Rule'} size="md">
@@ -219,11 +222,11 @@ function RuleBuilderModal({
                 </div>
                 {(action.type === 'setCategory') && (
                   <div className="flex-1">
-                    <Select
+                    <CategoryCombobox
                       label={i === 0 ? 'Category' : undefined}
+                      categories={categories}
                       value={action.value ?? ''}
-                      options={[{ value: '', label: 'Select…' }, ...categoryOptions]}
-                      onChange={e => updateAction(i, { value: e.target.value })}
+                      onChange={(id) => updateAction(i, { value: id })}
                     />
                   </div>
                 )}
@@ -285,9 +288,12 @@ function conditionLabel(c: RuleCondition): string {
   return `${field} ${op} "${c.value}"`;
 }
 
-function actionLabel(a: RuleAction): string {
+function actionLabel(a: RuleAction, categories: Category[]): string {
   switch (a.type) {
-    case 'setCategory': return `Set category → ${a.value}`;
+    case 'setCategory': {
+      const cat = categories.find((c) => c.id === a.value);
+      return `Set category → ${cat ? `${cat.emoji ?? ''} ${cat.name}`.trim() : a.value}`;
+    }
     case 'addTag': return `Add tag "${a.value}"`;
     case 'hide': return 'Hide transaction';
     case 'markReviewed': return 'Mark as reviewed';
@@ -298,7 +304,31 @@ function actionLabel(a: RuleAction): string {
 
 export default function RulesPage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; rule?: Rule } | null>(null);
+  const [prefillForm, setPrefillForm] = useState<RuleFormState | null>(null);
+
+  useEffect(() => {
+    const raw = searchParams.get('prefill');
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(decodeURIComponent(raw));
+      const form = defaultForm();
+      if (parsed.field) form.conditions[0].field = parsed.field;
+      if (parsed.operator) form.conditions[0].operator = parsed.operator;
+      if (parsed.value) form.conditions[0].value = parsed.value;
+      if (parsed.categoryId) {
+        form.actions[0].type = 'setCategory';
+        form.actions[0].value = parsed.categoryId;
+      }
+      setPrefillForm(form);
+      setModal({ mode: 'add' });
+      setSearchParams({}, { replace: true });
+    } catch {
+      // ignore malformed prefill
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [applyTarget, setApplyTarget] = useState<Rule | null>(null);
   const [applyAllConfirm, setApplyAllConfirm] = useState(false);
 
@@ -377,7 +407,7 @@ export default function RulesPage() {
 
   const initialForm: RuleFormState = modal?.mode === 'edit' && modal.rule
     ? { name: modal.rule.name, conditions: modal.rule.conditions, actions: modal.rule.actions }
-    : defaultForm();
+    : (prefillForm ?? defaultForm());
 
   return (
     <div className="max-w-[760px]">
@@ -474,7 +504,7 @@ export default function RulesPage() {
                   <div className="text-[0.8125rem] text-[var(--color-text-secondary)] mt-0.5">
                     <span className="font-medium">Then: </span>
                     {rule.actions.map((a, i) => (
-                      <span key={i}>{i > 0 ? ', ' : ''}{actionLabel(a)}</span>
+                      <span key={i}>{i > 0 ? ', ' : ''}{actionLabel(a, categories)}</span>
                     ))}
                   </div>
                 </div>
@@ -519,7 +549,7 @@ export default function RulesPage() {
       {modal && (
         <RuleBuilderModal
           open={!!modal}
-          onClose={() => setModal(null)}
+          onClose={() => { setModal(null); setPrefillForm(null); }}
           initial={initialForm}
           categories={categories}
           onSave={handleSave}
