@@ -87,7 +87,7 @@ export default function ReviewQueuePage() {
   };
 
   const handleCreateRuleFromRow = (description: string) => {
-    const firstToken = description.toLowerCase().split(/[\s_\-]/)[0].trim();
+    const firstToken = description.toLowerCase().split(/[\s_-]/)[0].trim();
     setPendingRulePattern(firstToken);
   };
 

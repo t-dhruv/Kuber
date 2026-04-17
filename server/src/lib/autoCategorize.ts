@@ -198,7 +198,7 @@ export async function detectRuleSuggestions(
   }>();
 
   for (const txn of reviewQueue) {
-    const firstToken = txn.description.toLowerCase().split(/[\s_\-]/)[0].trim();
+    const firstToken = txn.description.toLowerCase().split(/[\s_-]/)[0].trim();
     if (!firstToken || firstToken.length < 3) continue;
 
     const catId = txn.aiSuggestedCategoryId ?? null;

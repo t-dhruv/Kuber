@@ -6,13 +6,13 @@ import { useAuthStore } from '@/stores/authStore';
 
 export default function ForgotPasswordPage() {
   const { isAuthenticated } = useAuthStore();
-  if (isAuthenticated) return <Navigate to="/" replace />;
-
   const [email, setEmail] = useState('');
 
   const mutation = useMutation({
     mutationFn: (data: { email: string }) => api.post('/auth/forgot-password', data),
   });
+
+  if (isAuthenticated) return <Navigate to="/" replace />;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();

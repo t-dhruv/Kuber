@@ -5,8 +5,6 @@ import { useAuthStore } from '@/stores/authStore';
 
 export default function SignupPage() {
   const { isAuthenticated } = useAuthStore();
-  if (isAuthenticated) return <Navigate to="/" replace />;
-
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -15,6 +13,8 @@ export default function SignupPage() {
   const [householdName, setHouseholdName] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const signup = useSignup();
+
+  if (isAuthenticated) return <Navigate to="/" replace />;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
