@@ -274,6 +274,7 @@ function AddBudgetModal({
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets', year, month] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       onClose();
     },
     onError: () => toast.error('Failed to save budget'),
@@ -375,6 +376,7 @@ function AddCategoryModal({
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets', year, month] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       onSaved();
       onClose();
       setSelectedCategoryId('');
@@ -464,6 +466,7 @@ function BudgetRow({
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets', year, month] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: () => toast.error('Failed to save budget'),
   });
