@@ -21,6 +21,7 @@ import {
   Layers,
   Upload,
   LogOut,
+  CheckCheck,
 } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
@@ -33,6 +34,7 @@ interface NavItem {
   icon: React.ReactNode;
   label: string;
   badge?: number;
+  end?: boolean;
 }
 
 interface SidebarProps {
@@ -71,8 +73,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   const navItems: NavItem[] = [
     { to: '/', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
-    { to: '/accounts', icon: <CreditCard size={18} />, label: 'Accounts' },
-    { to: '/transactions', icon: <ArrowLeftRight size={18} />, label: 'Transactions', badge: reviewCount > 0 ? reviewCount : undefined },
+    { to: '/accounts', icon: <CreditCard size={18} />, label: 'Accounts', end: true },
+    { to: '/transactions', icon: <ArrowLeftRight size={18} />, label: 'Transactions', end: true },
+    { to: '/transactions/review', icon: <CheckCheck size={18} />, label: 'AI Review', badge: reviewCount > 0 ? reviewCount : undefined },
     { to: '/import', icon: <Upload size={18} />, label: 'Import' },
     { to: '/cash-flow', icon: <TrendingUp size={18} />, label: 'Cash Flow' },
     { to: '/reports', icon: <BarChart2 size={18} />, label: 'Reports' },
@@ -82,7 +85,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     { to: '/goals', icon: <Target size={18} />, label: 'Goals' },
     { to: '/investments', icon: <LineChart size={18} />, label: 'Investments' },
     { to: '/rules', icon: <Zap size={18} />, label: 'Rules' },
-    { to: '/advice', icon: <Sparkles size={18} />, label: 'Advice' },
+    { to: '/advice', icon: <Sparkles size={18} />, label: 'AI Advisor' },
   ];
 
   const handleLogout = () => {
@@ -133,7 +136,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           >
             <NavLink
               to={item.to}
-              end={item.to === '/'}
+              end={item.to === '/' || !!item.end}
               onClick={handleNavClick}
               className={({ isActive }) =>
                 `relative flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm font-medium transition-colors ${
