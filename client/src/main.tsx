@@ -7,7 +7,7 @@ import App from './App';
 import './app.css';
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 1000 * 60 * 5, retry: 1 } }
+  defaultOptions: { queries: { staleTime: 1000 * 30, retry: 1 } }
 });
 
 // Register service worker for PWA

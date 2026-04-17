@@ -145,6 +145,7 @@ const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
 
 function ProfileSection() {
   const { user, setAuth } = useAuthStore();
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery<ProfileData>({
     queryKey: ['settings', 'profile'],
     queryFn: () => api.get('/settings/profile').then((r) => r.data),
@@ -173,6 +174,7 @@ function ProfileSection() {
           useAuthStore.getState().accessToken!
         );
       }
+      queryClient.invalidateQueries({ queryKey: ['settings', 'profile'] });
       notify.success('Profile saved');
     },
     onError: () => notify.error('Failed to save profile'),
@@ -437,6 +439,7 @@ function PushSubscriptionButton() {
 }
 
 function NotificationsSection() {
+  const queryClient = useQueryClient();
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_NOTIF_PREFS);
   const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number | null>(null);
   const [lowBalanceInput, setLowBalanceInput] = useState('');
@@ -461,12 +464,14 @@ function NotificationsSection() {
   const saveMutation = useMutation({
     mutationFn: (updated: NotificationPrefs) =>
       api.put('/settings/notifications', { preferences: updated }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings', 'notifications'] }),
     onError: () => notify.error('Failed to save notification preferences'),
   });
 
   const saveLowBalanceMutation = useMutation({
     mutationFn: (threshold: number | null) =>
       api.put('/settings/notifications', { lowBalanceThreshold: threshold }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings', 'notifications'] }),
     onError: () => notify.error('Failed to save low balance threshold'),
   });
 
@@ -966,6 +971,7 @@ function SecuritySection() {
 // ─── Section: Household ───────────────────────────────────────────────────────
 
 function HouseholdSection() {
+  const queryClient = useQueryClient();
   const { data, isLoading, refetch } = useQuery<HouseholdData>({
     queryKey: ['settings', 'household'],
     queryFn: () => api.get('/settings/household').then((r) => r.data),
@@ -998,7 +1004,10 @@ function HouseholdSection() {
 
   const saveMutation = useMutation({
     mutationFn: () => api.put('/settings/household', { name: householdName, currency }),
-    onSuccess: () => notify.success('Household saved'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'household'] });
+      notify.success('Household saved');
+    },
     onError: () => notify.error('Failed to save household'),
   });
 
