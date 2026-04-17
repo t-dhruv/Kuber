@@ -69,6 +69,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
   const markRead = useMutation({
     mutationFn: (id: string) => api.put(`/notifications/${id}/read`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onError: () => notify.error('Failed to mark notification as read'),
   });
 
   const markAllRead = useMutation({
@@ -77,6 +78,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
       notify.success('All notifications marked as read');
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
+    onError: () => notify.error('Failed to mark all notifications as read'),
   });
 
   const clearRead = useMutation({
@@ -85,6 +87,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
       notify.success('Read notifications cleared');
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
+    onError: () => notify.error('Failed to clear notifications'),
   });
 
   const runChecks = useMutation({

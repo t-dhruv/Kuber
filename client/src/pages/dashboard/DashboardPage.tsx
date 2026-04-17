@@ -5,7 +5,7 @@ import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { api } from '@/lib/api';
-import { Card, CardHeader, CardDivider, Skeleton } from '@/components/ui';
+import { Card, CardHeader, CardDivider, Skeleton, notify } from '@/components/ui';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -1270,6 +1270,7 @@ export default function DashboardPage() {
       queryClient.setQueryData(['settings', 'dashboard-layout'], data);
       setShowCustomize(false);
     },
+    onError: () => notify.error('Failed to save dashboard layout'),
   });
 
   // ── Build ordered, filtered widget lists per column ──────────────────────

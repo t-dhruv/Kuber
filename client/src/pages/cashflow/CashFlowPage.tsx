@@ -919,15 +919,23 @@ export default function CashFlowPage() {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [period, setPeriod] = useState<'Monthly' | 'Quarterly' | 'Yearly'>('Monthly');
 
-  const { data: yearData, isLoading: yearLoading } = useQuery<YearData>({
+  const { data: yearData, isLoading: yearLoading, isError: yearError } = useQuery<YearData>({
     queryKey: ['cashflow', year],
     queryFn: () => api.get(`/cashflow?year=${year}`).then((r) => r.data),
   });
 
-  const { data: monthData, isLoading: monthLoading } = useQuery<MonthData>({
+  const { data: monthData, isLoading: monthLoading, isError: monthError } = useQuery<MonthData>({
     queryKey: ['cashflow-month', year, selectedMonth],
     queryFn: () => api.get(`/cashflow/month?year=${year}&month=${selectedMonth}`).then((r) => r.data),
   });
+
+  if (yearError || monthError) {
+    return (
+      <div className="flex items-center justify-center py-24 text-[color:var(--color-text-secondary)]">
+        <p>Failed to load cash flow data. Please refresh the page.</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1rem' }}>

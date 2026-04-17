@@ -364,6 +364,8 @@ export default function RulesPage() {
     mutationFn: (id: string) => api.post<{ matched: number }>(`/rules/${id}/apply`).then(r => r.data),
     onSuccess: (data, id) => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
       setApplyTarget(null);
       notify.success(`Rule applied`, `Updated ${data.matched} transaction${data.matched !== 1 ? 's' : ''}`);
     },
@@ -374,6 +376,8 @@ export default function RulesPage() {
     mutationFn: () => api.post<{ totalMatched: number }>('/rules/apply-all').then(r => r.data),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
       setApplyAllConfirm(false);
       notify.success('All rules applied', `Updated ${data.totalMatched} transaction${data.totalMatched !== 1 ? 's' : ''}`);
     },
