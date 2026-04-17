@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, X, Plus } from 'lucide-react';
-import { Button, Select, notify } from '@/components/ui';
+import { Button, CategoryCombobox, notify } from '@/components/ui';
 import { CreateCategoryInline } from './CreateCategoryInline';
 import type { ReviewCategory } from '../types';
 
@@ -48,10 +48,6 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, 
   const formattedAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(txn.amount));
   const isExpense = txn.amount < 0;
 
-  const categoryOptions = [
-    { value: '', label: 'Pick a category…' },
-    ...categories.map((c) => ({ value: c.id, label: `${c.emoji ?? ''} ${c.name}`.trim() })),
-  ];
 
   const handleApprove = async () => {
     if (!txn.aiSuggestedCategoryId) return;
@@ -162,10 +158,11 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, 
       {/* Reject — pick category */}
       {mode === 'rejecting' && (
         <div className="flex items-center gap-2 mt-3">
-          <Select
+          <CategoryCombobox
+            categories={categories}
             value={selectedCategoryId}
-            onChange={(e) => setSelectedCategoryId(e.target.value)}
-            options={categoryOptions}
+            onChange={setSelectedCategoryId}
+            placeholder="Pick a category…"
             className="flex-1"
           />
           <Button size="sm" onClick={handleRejectConfirm} disabled={!selectedCategoryId || loading}>

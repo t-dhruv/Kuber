@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.js';
-import { batchAutoCategorize, detectRuleSuggestions } from '../lib/autoCategorize.js';
+import { batchAutoCategorize, detectRuleSuggestions, suggestCategory } from '../lib/autoCategorize.js';
 import { getAiClientForHousehold } from '../lib/ai/index.js';
 import { rulesAppliedTotal } from '../lib/metrics.js';
 
@@ -41,7 +41,14 @@ router.get('/review-queue', async (req: AuthRequest, res: Response) => {
 
     const [transactions, total, ruleSuggestions] = await Promise.all([
       prisma.transaction.findMany({
-        where: { householdId: req.householdId!, needsReview: true },
+        where: {
+          householdId: req.householdId!,
+          needsReview: true,
+          OR: [
+            { aiSuggestedCategoryId: { not: null } },
+            { aiSuggestedCategoryName: { not: null } },
+          ],
+        },
         orderBy: { date: 'desc' },
         skip,
         take: limit,
@@ -58,7 +65,14 @@ router.get('/review-queue', async (req: AuthRequest, res: Response) => {
         },
       }),
       prisma.transaction.count({
-        where: { householdId: req.householdId!, needsReview: true },
+        where: {
+          householdId: req.householdId!,
+          needsReview: true,
+          OR: [
+            { aiSuggestedCategoryId: { not: null } },
+            { aiSuggestedCategoryName: { not: null } },
+          ],
+        },
       }),
       detectRuleSuggestions(prisma, req.householdId!),
     ]);
@@ -203,15 +217,70 @@ router.post('/confirm-bulk', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /api/v1/auto-categorize/re-run — re-run AI on transactions already in the review queue
+router.post('/re-run', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+
+    try {
+      await getAiClientForHousehold(householdId, prisma);
+    } catch {
+      return res.status(200).json({ updated: 0, notConfigured: true, setupMessage: NOT_CONFIGURED_MSG });
+    }
+
+    const pending = await prisma.transaction.findMany({
+      where: { householdId, needsReview: true },
+      select: { id: true, description: true, amount: true },
+    });
+
+    let updated = 0;
+    for (const txn of pending) {
+      const suggestion = await suggestCategory(prisma, householdId, txn.description, txn.amount);
+      if (suggestion && suggestion.confidence >= 0.5) {
+        await prisma.transaction.update({
+          where: { id: txn.id },
+          data: {
+            aiSuggestedCategoryId: suggestion.categoryId ?? null,
+            aiSuggestedCategoryName: suggestion.suggestedNewName ?? null,
+            aiSuggestionConfidence: suggestion.confidence,
+          },
+        });
+        updated++;
+      }
+    }
+
+    return res.json({ updated, total: pending.length, notConfigured: false });
+  } catch (err) {
+    req.log.error({ err }, 'auto-categorize/re-run');
+    return res.status(500).json({ error: 'Re-run failed' });
+  }
+});
+
 // GET /api/v1/auto-categorize/status
 router.get('/status', async (req: AuthRequest, res: Response) => {
   try {
     const [uncategorizedCount, reviewCount, configured] = await Promise.all([
       prisma.transaction.count({
-        where: { householdId: req.householdId!, categoryId: null, isHidden: false, needsReview: false },
+        where: {
+          householdId: req.householdId!,
+          categoryId: null,
+          isHidden: false,
+          OR: [
+            { needsReview: false },
+            // stale: needsReview but AI fields never populated
+            { needsReview: true, aiSuggestedCategoryId: null, aiSuggestedCategoryName: null },
+          ],
+        },
       }),
       prisma.transaction.count({
-        where: { householdId: req.householdId!, needsReview: true },
+        where: {
+          householdId: req.householdId!,
+          needsReview: true,
+          OR: [
+            { aiSuggestedCategoryId: { not: null } },
+            { aiSuggestedCategoryName: { not: null } },
+          ],
+        },
       }),
       getAiClientForHousehold(req.householdId!, prisma).then(() => true).catch(() => false),
     ]);

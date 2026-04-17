@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Settings, MoreHorizontal, Pencil, Trash2, PauseCircle, PlayCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Card, Button, Input, Select, Modal, ModalFooter, Skeleton, Toggle,
+  Card, Button, Input, Select, Modal, ModalFooter, Skeleton, Toggle, CategoryCombobox,
 } from '@/components/ui';
 import { notify } from '@/components/ui';
 
@@ -285,10 +285,6 @@ function RecurringModal({
     label: a.lastFour ? `${a.name} ••${a.lastFour}` : a.name,
   }));
 
-  const categoryOptions = categories.map((c) => ({
-    value: c.id,
-    label: c.icon ? `${c.icon} ${c.name}` : c.name,
-  }));
 
   return (
     <Modal
@@ -337,13 +333,12 @@ function RecurringModal({
               onChange={(e) => set('accountId', e.target.value)}
             />
           )}
-          {categoryOptions.length > 0 && (
-            <Select
+          {categories.length > 0 && (
+            <CategoryCombobox
               label="Category"
-              options={categoryOptions}
-              placeholder="Select category"
+              categories={categories.map((c) => ({ id: c.id, name: c.name, emoji: c.icon }))}
               value={form.categoryId}
-              onChange={(e) => set('categoryId', e.target.value)}
+              onChange={(id) => set('categoryId', id)}
             />
           )}
           <div className="flex items-center justify-between">

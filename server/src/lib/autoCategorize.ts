@@ -120,7 +120,16 @@ export async function batchAutoCategorize(
   }
 
   const uncategorized = await prisma.transaction.findMany({
-    where: { householdId, categoryId: null, isHidden: false, needsReview: false },
+    where: {
+      householdId,
+      categoryId: null,
+      isHidden: false,
+      OR: [
+        { needsReview: false },
+        // stale records: marked needsReview but AI fields never populated
+        { needsReview: true, aiSuggestedCategoryId: null, aiSuggestedCategoryName: null },
+      ],
+    },
     orderBy: { date: 'desc' },
     take: limit,
     select: { id: true, description: true, amount: true },
@@ -165,7 +174,14 @@ export async function detectRuleSuggestions(
   matchCount: number;
 }>> {
   const reviewQueue = await prisma.transaction.findMany({
-    where: { householdId, needsReview: true },
+    where: {
+      householdId,
+      needsReview: true,
+      OR: [
+        { aiSuggestedCategoryId: { not: null } },
+        { aiSuggestedCategoryName: { not: null } },
+      ],
+    },
     select: {
       description: true,
       aiSuggestedCategoryId: true,

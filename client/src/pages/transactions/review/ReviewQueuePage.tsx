@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCheck, Inbox } from 'lucide-react';
+import { CheckCheck, Inbox, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button, Skeleton, notify } from '@/components/ui';
 import { ReviewTransactionRow, ReviewTransaction } from './components/ReviewTransactionRow';
@@ -29,6 +29,20 @@ export default function ReviewQueuePage() {
   const { data: categories = [] } = useQuery<ReviewCategory[]>({
     queryKey: ['categories'],
     queryFn: () => api.get('/categories').then((r) => r.data),
+  });
+
+  const reRunMutation = useMutation({
+    mutationFn: () => api.post('/auto-categorize/re-run').then((r) => r.data),
+    onSuccess: (result) => {
+      if (result.notConfigured) {
+        notify.error('AI provider not configured');
+        return;
+      }
+      notify.success(`Re-ran AI on ${result.total} transaction${result.total !== 1 ? 's' : ''}, updated ${result.updated}`);
+      qc.invalidateQueries({ queryKey: ['auto-categorize-review'] });
+      qc.invalidateQueries({ queryKey: ['auto-categorize-status'] });
+    },
+    onError: () => notify.error('Re-run failed'),
   });
 
   const bulkApproveMutation = useMutation({
@@ -104,15 +118,26 @@ export default function ReviewQueuePage() {
             </p>
           )}
         </div>
-        {hasMatched && (
+        <div className="flex items-center gap-2">
           <Button
-            onClick={() => bulkApproveMutation.mutate()}
-            disabled={bulkApproveMutation.isPending}
+            variant="ghost"
+            onClick={() => reRunMutation.mutate()}
+            disabled={reRunMutation.isPending || total === 0}
+            title="Re-run AI suggestions on all pending transactions"
           >
-            <CheckCheck size={16} className="mr-2" />
-            Approve All
+            <RefreshCw size={16} className={`mr-2 ${reRunMutation.isPending ? 'animate-spin' : ''}`} />
+            Re-run AI
           </Button>
-        )}
+          {hasMatched && (
+            <Button
+              onClick={() => bulkApproveMutation.mutate()}
+              disabled={bulkApproveMutation.isPending}
+            >
+              <CheckCheck size={16} className="mr-2" />
+              Approve All
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Rule suggestion banners */}
