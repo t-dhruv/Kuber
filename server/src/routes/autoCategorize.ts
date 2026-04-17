@@ -14,7 +14,8 @@ const NOT_CONFIGURED_MSG =
 // POST /api/v1/auto-categorize/batch — queue uncategorized transactions for review
 router.post('/batch', async (req: AuthRequest, res: Response) => {
   try {
-    const limit = Math.min(parseInt(req.body?.limit) || 50, 200);
+    // Default to processing all uncategorized; caller can pass explicit limit to cap
+    const limit = req.body?.limit ? Math.min(parseInt(req.body.limit), 1000) : 1000;
     const result = await batchAutoCategorize(prisma, req.householdId!, limit);
 
     if (result.notConfigured) {

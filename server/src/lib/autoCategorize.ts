@@ -109,7 +109,7 @@ Transaction: "${description}" (${txnType}, $${Math.abs(amount).toFixed(2)})`;
 export async function batchAutoCategorize(
   prisma: PrismaClient,
   householdId: string,
-  limit = 50
+  limit = 1000
 ): Promise<{ queued: number; skipped: number; notConfigured: boolean }> {
   let client;
   try {

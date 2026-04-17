@@ -337,9 +337,8 @@ router.delete('/before', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'date is not a valid date' });
     }
 
-    const result = await prisma.transaction.updateMany({
+    const result = await prisma.transaction.deleteMany({
       where: { householdId, date: { lt: cutoff } },
-      data: { isHidden: true },
     });
 
     logAudit({
