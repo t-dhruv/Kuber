@@ -327,11 +327,16 @@ function AccountRow({
   onDelete: () => void;
   monthChange?: number;
 }) {
+  const TYPE_LABELS: Record<string, string> = {
+    checking: 'Checking', savings: 'Savings', credit_card: 'Credit Card',
+    investment: 'Investment', loan: 'Loan', tfsa: 'TFSA', rrsp: 'RRSP',
+    fhsa: 'FHSA', resp: 'RESP', '401k': '401(k)', ira: 'IRA', roth_ira: 'Roth IRA', other: 'Other',
+  };
   const displayName = account.institution
     ? account.lastFour
       ? `${account.institution} ••${account.lastFour}`
       : account.institution
-    : account.name;
+    : (TYPE_LABELS[account.type] ?? account.type);
 
   return (
     <div
@@ -1671,12 +1676,14 @@ export default function AccountsPage() {
       {/* Modals */}
       <AddAccountModal open={showAdd} onClose={() => setShowAdd(false)} />
       <EditAccountModal account={editAccount} onClose={() => setEditAccount(null)} />
-      <AccountDetailDrawer
-        account={detailAccount}
-        onClose={() => setDetailAccount(null)}
-        onEdit={handleEditFromDetail}
-        onDelete={handleDeleteFromDetail}
-      />
+      {detailAccount && (
+        <AccountDetailDrawer
+          account={detailAccount}
+          onClose={() => setDetailAccount(null)}
+          onEdit={handleEditFromDetail}
+          onDelete={handleDeleteFromDetail}
+        />
+      )}
 
       {/* Delete confirmation */}
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Account" size="sm">
