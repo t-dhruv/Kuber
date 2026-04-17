@@ -15,7 +15,7 @@ const fmtCurrency = (amount: number) =>
 
 const fmtPct = (value: number) => `${Math.round(value)}%`;
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -253,6 +253,18 @@ function YearOverviewChart({
     return (
       <Card padding="lg">
         <Skeleton height={220} width="100%" />
+      </Card>
+    );
+  }
+
+  const hasData = (data?.months ?? []).some((m) => m.income > 0 || m.expenses > 0);
+
+  if (!hasData) {
+    return (
+      <Card padding="lg">
+        <div className="flex flex-col items-center justify-center py-12 text-[var(--color-text-muted)] text-sm">
+          No transactions yet — add income or expenses to see your cash flow.
+        </div>
       </Card>
     );
   }
