@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Plus, ChevronRight, RotateCcw, X, Check,
-  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, CheckCheck,
+  ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, CheckCheck,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
@@ -1313,7 +1313,6 @@ export default function TransactionsPage() {
   const accounts = accountsData?.groups?.flatMap((g) => g.accounts) ?? [];
   const categories = categoriesData ?? [];
   const transactions: Transaction[] = txnPages?.pages.flatMap((p) => p.transactions) ?? [];
-  const total = txnPages?.pages[0]?.total ?? transactions.length;
 
   // ── URL param helpers ──
 
