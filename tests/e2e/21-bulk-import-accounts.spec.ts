@@ -4,6 +4,8 @@ test.describe('Bulk Import Accounts', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/accounts/bulk-import');
     await page.waitForLoadState('networkidle');
+    // Wait for the lazy-loaded component to render
+    await page.getByRole('heading', { name: /bulk import accounts/i }).waitFor({ timeout: 15000 }).catch(() => {});
   });
 
   test('page loads with correct heading', async ({ page }) => {
