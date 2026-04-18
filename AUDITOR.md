@@ -1,7 +1,20 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-04-17 — Production Stability Sweep (Sprint 17)
+> Last updated: 2026-04-18 — Sprint 18: Cursor Pagination + Security Hardening
+
+---
+
+## Sprint 18 — Cursor Pagination + Security Hardening (2026-04-18)
+
+**Goal:** Eliminate offset pagination on transactions (COUNT(*) bottleneck), close remaining CSP gaps, confirm TypeScript strict is active.
+
+**Completed:**
+- Switched `TransactionsPage` from `useQuery+page` to `useInfiniteQuery+cursor` — eliminates `COUNT(*)` on every page load, replaced page number UI with "Load more" button
+- Removed `Pagination` component (offset-based, 70 lines) from TransactionsPage
+- Enhanced CSP: added `scriptSrcAttr: ["'none'"]`, `formAction: ["'self'"]`, `upgradeInsecureRequests` in production
+- Confirmed `"strict": true` already set in both `client/tsconfig.json` and `server/tsconfig.json` — AUDITOR entries TD-016/TD-017 were stale
+- Fixed 61 failing E2E tests → 0 failures (created missing `helpers.ts`, fixed form validation gaps, strict mode violations, timing issues)
 
 ---
 
@@ -28,7 +41,7 @@
 | Dashboard | 🟢 Working | API shape fixed |
 | Accounts | 🟢 Enhanced | Net Worth chart (1M/3M/6M/1Y/ALL), assets/liabilities panel |
 | Net Worth History | 🟢 Done | Daily snapshots, history API, performance chart in AccountsPage |
-| Transactions | 🟢 Working | API shape fixed, bulk actions fixed, PATCH→PUT |
+| Transactions | 🟢 Enhanced | Cursor pagination (no COUNT(*)), bulk actions, PATCH→PUT |
 | Budget | 🟢 Enhanced | v2: Fixed/Flexible/Non-Monthly sections, unbudgeted alert, budgetType selector, Left-to-Budget banner |
 | Cash Flow | 🟢 Working | NaN crash fixed, income/expenses as objects; Sankey chart implemented |
 | Reports | 🟢 Enhanced | Reports v2: Filters panel (categories/accounts/tags/amount), Totals/Change toggle with period comparison, Monthly/Quarterly grouping, Cash Flow grouped bar+line chart, polished transaction rows + full summary sidebar |
@@ -815,9 +828,9 @@ User pulls models: `ollama pull qwen2.5:0.5b && ollama pull moondream`
 | TD-012 | Rules engine has no UI | P3 | Sprint 7 | Backend exists, frontend missing |
 | TD-013 | Plaid/MX bank sync not built | P3 | Sprint 7+ | Manual entry only for now |
 | TD-014 | No audit log table for financial changes | P1 | Sprint 2 | Security/compliance requirement |
-| TD-015 | No cursor-based pagination on transactions | P2 | Sprint 5 | May load all records |
-| TD-016 | TypeScript strict mode not enforced | P2 | Sprint 1 | `any` types exist |
-| TD-017 | No CSP headers configured in Helmet | P1 | Sprint 2 | XSS mitigation |
+| TD-015 | ~~No cursor-based pagination on transactions~~ | ✅ Done | Sprint 18 | Server implemented cursor path; client switched to `useInfiniteQuery` — COUNT(*) eliminated |
+| TD-016 | ~~TypeScript strict mode not enforced~~ | ✅ Done | Sprint 18 | Both tsconfigs already had `"strict": true`; AUDITOR was stale. Remaining `any` are explicit with lint warnings only |
+| TD-017 | ~~No CSP headers configured in Helmet~~ | ✅ Done | Sprint 18 | Full CSP in Helmet: added `scriptSrcAttr`, `formAction`, `upgradeInsecureRequests` (prod only) |
 | TD-018 | Account lockout after failed logins missing | P1 | Sprint 2 | Brute force protection |
 | TD-019 | OpenAPI/Swagger docs missing | P3 | Sprint 6 | Developer experience |
 | TD-020 | ~~No multi-stage Docker builds~~ | ✅ Done | Sprint 4 | server/Dockerfile + client/Dockerfile both multi-stage |

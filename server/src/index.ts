@@ -101,6 +101,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
+      scriptSrcAttr: ["'none'"],
       styleSrc: ["'self'", "'unsafe-inline'"],  // Tailwind CSS-in-JS requires this
       imgSrc: ["'self'", 'data:', 'blob:'],
       connectSrc: ["'self'", clientUrl],
@@ -108,6 +109,10 @@ app.use(helmet({
       frameSrc: ["'none'"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
+      formAction: ["'self'"],
+      ...(process.env.NODE_ENV === 'production' && {
+        upgradeInsecureRequests: [],
+      }),
     },
   },
   crossOriginEmbedderPolicy: process.env.NODE_ENV === 'production',
