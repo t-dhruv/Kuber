@@ -69,6 +69,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
   const markRead = useMutation({
     mutationFn: (id: string) => api.put(`/notifications/${id}/read`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onError: () => notify.error('Failed to mark notification as read'),
   });
 
   const markAllRead = useMutation({
@@ -77,6 +78,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
       notify.success('All notifications marked as read');
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
+    onError: () => notify.error('Failed to mark all notifications as read'),
   });
 
   const clearRead = useMutation({
@@ -85,6 +87,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
       notify.success('Read notifications cleared');
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
+    onError: () => notify.error('Failed to clear notifications'),
   });
 
   const runChecks = useMutation({
@@ -107,7 +110,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-sm z-50 bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-2xl flex flex-col">
+      <div role="dialog" aria-label="Notifications" className="fixed right-0 top-0 h-full w-full max-w-sm z-50 bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-2">

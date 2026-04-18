@@ -72,6 +72,7 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
       notify.success(`Imported ${data.imported} transaction${data.imported !== 1 ? 's' : ''}`);
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['import-history'] });
       onDone();
     },

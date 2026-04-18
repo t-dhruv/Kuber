@@ -749,6 +749,8 @@ function AddAccountModal({
     mutationFn: (body: object) => api.post('/accounts', body).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['networth'] });
       notify.success('Account added');
       onClose();
       setValues({ ...EMPTY_FORM, currency: defaultCurrency });
@@ -830,6 +832,8 @@ function EditAccountModal({
     mutationFn: (body: object) => api.put(`/accounts/${account!.id}`, body).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['networth'] });
       notify.success('Account updated');
       onClose();
     },
@@ -1198,37 +1202,37 @@ function AssetsLiabilitiesTab() {
 
   const createAsset = useMutation({
     mutationFn: (d: object) => api.post('/assets', d).then((r) => r.data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); notify.success('Asset added'); resetAssetForm(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); qc.invalidateQueries({ queryKey: ['networth'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); notify.success('Asset added'); resetAssetForm(); },
     onError: () => notify.error('Failed to add asset'),
   });
 
   const updateAsset = useMutation({
     mutationFn: ({ id, ...d }: { id: string } & object) => api.put(`/assets/${id}`, d).then((r) => r.data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); notify.success('Asset updated'); resetAssetForm(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); qc.invalidateQueries({ queryKey: ['networth'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); notify.success('Asset updated'); resetAssetForm(); },
     onError: () => notify.error('Failed to update asset'),
   });
 
   const deleteAsset = useMutation({
     mutationFn: (id: string) => api.delete(`/assets/${id}`).then((r) => r.data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); notify.success('Asset deleted'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); qc.invalidateQueries({ queryKey: ['networth'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); notify.success('Asset deleted'); },
     onError: () => notify.error('Failed to delete asset'),
   });
 
   const createLiab = useMutation({
     mutationFn: (d: object) => api.post('/liabilities', d).then((r) => r.data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); notify.success('Liability added'); resetLiabForm(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); qc.invalidateQueries({ queryKey: ['networth'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); notify.success('Liability added'); resetLiabForm(); },
     onError: () => notify.error('Failed to add liability'),
   });
 
   const updateLiab = useMutation({
     mutationFn: ({ id, ...d }: { id: string } & object) => api.put(`/liabilities/${id}`, d).then((r) => r.data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); notify.success('Liability updated'); resetLiabForm(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); qc.invalidateQueries({ queryKey: ['networth'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); notify.success('Liability updated'); resetLiabForm(); },
     onError: () => notify.error('Failed to update liability'),
   });
 
   const deleteLiab = useMutation({
     mutationFn: (id: string) => api.delete(`/liabilities/${id}`).then((r) => r.data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); notify.success('Liability deleted'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); qc.invalidateQueries({ queryKey: ['networth'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); notify.success('Liability deleted'); },
     onError: () => notify.error('Failed to delete liability'),
   });
 
@@ -1520,6 +1524,7 @@ export default function AccountsPage() {
     onSuccess: () => {
       notify.success('Account deleted');
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['networth'] });
       setDeleteTarget(null);
       setDetailAccount(null);

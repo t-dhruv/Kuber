@@ -12,28 +12,20 @@ test.describe('Rules', () => {
   });
 
   test('create a rule for Starbucks → Dining', async ({ page }) => {
-    await page.getByRole('button', { name: /add rule|new rule|create rule/i }).first().click();
+    await page.getByRole('button', { name: /new rule/i }).first().click();
     const dialog = page.getByRole('dialog');
     await dialog.waitFor({ timeout: 5000 });
 
-    // Fill condition field
-    const condField = dialog.getByLabel(/merchant|description|contains/i).first();
-    if (await condField.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await condField.fill('Starbucks');
-    } else {
-      // Try a generic text input as the condition value
-      await dialog.locator('input[type="text"]').first().fill('Starbucks');
-    }
+    // Rule name is required
+    await dialog.getByLabel('Rule name').fill('Starbucks rule');
 
-    // Set category action
-    const catSelect = dialog.getByLabel(/category/i).first();
-    if (await catSelect.isVisible({ timeout: 2000 }).catch(() => false)) {
-      const opts = await catSelect.locator('option').allTextContents();
-      const dining = opts.find((o) => /dining|food|restaurant/i.test(o));
-      if (dining) await catSelect.selectOption({ label: dining });
-    }
+    // Condition value (labeled "Value") is required
+    await dialog.getByLabel('Value').fill('Starbucks');
 
-    await dialog.getByRole('button', { name: /save|add rule|create/i }).click();
+    // Change action type to markReviewed (no extra value needed)
+    await dialog.getByLabel('Action').selectOption('markReviewed');
+
+    await dialog.getByRole('button', { name: /save rule/i }).click();
     await waitForToast(page, /added|created|saved|success/i);
   });
 
@@ -83,6 +75,6 @@ test.describe('Rules', () => {
     await page.waitForLoadState('networkidle');
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
-    await expect(dialog.locator('input[value="Netflix"]').or(dialog.getByDisplayValue('Netflix'))).toBeVisible({ timeout: 3000 });
+    await expect(dialog.locator('input[value="Netflix"]')).toBeVisible({ timeout: 3000 });
   });
 });

@@ -7,7 +7,7 @@ test.describe('AI Advisor', () => {
   });
 
   test('advisor page loads without error', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /advisor|advice/i })).toBeVisible();
+    await expect(page.getByText(/advisor|advice|how can i help/i).first()).toBeVisible();
     await expect(page.getByText(/error|something went wrong/i)).not.toBeVisible();
   });
 

@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Plus, ChevronRight, RotateCcw, X, Check,
-  ChevronLeft, ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, CheckCheck,
+  ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, CheckCheck,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
@@ -64,9 +64,12 @@ interface Transaction {
 
 interface TransactionListResponse {
   transactions: Transaction[];
-  total: number;
-  page: number;
-  totalPages: number;
+  nextCursor: string | null;
+  hasMore: boolean;
+  // offset-path fields (present when no cursor used)
+  total?: number;
+  page?: number;
+  totalPages?: number;
 }
 
 type TxType = 'expense' | 'income' | 'transfer';
@@ -278,6 +281,10 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['cashflow'] });
       onSaved();
     },
     onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to save transaction'),
@@ -289,6 +296,9 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
     mutationFn: () => api.delete(`/transactions/${transaction!.id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
       onClose();
     },
     onError: () => notify.error('Failed to delete transaction'),
@@ -630,6 +640,10 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
       );
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['cashflow'] });
       onClose();
       reset();
     },
@@ -1193,72 +1207,6 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
   );
 }
 
-// ─── Pagination ───────────────────────────────────────────────────────────────
-
-function Pagination({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) {
-  const totalPages = Math.ceil(total / pageSize);
-  if (totalPages <= 1) return null;
-
-  const pages: (number | '...')[] = [];
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) pages.push(i);
-  } else {
-    pages.push(1);
-    if (page > 3) pages.push('...');
-    for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
-    if (page < totalPages - 2) pages.push('...');
-    pages.push(totalPages);
-  }
-
-  const start = (page - 1) * pageSize + 1;
-  const end = Math.min(page * pageSize, total);
-
-  return (
-    <div className="flex items-center justify-between py-3 border-t border-[var(--color-border)]">
-      <span className="text-[0.8125rem] text-[var(--color-text-muted)]">
-        Showing {start}–{end} of {total} transactions
-      </span>
-      <div className="flex gap-1 items-center">
-        <button
-          onClick={() => onChange(page - 1)}
-          disabled={page === 1}
-          className="bg-transparent border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-[var(--color-text-secondary)]"
-          style={{ cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1 }}
-        >
-          <ChevronLeft size={14} />
-        </button>
-        {pages.map((p, i) => (
-          p === '...' ? (
-            <span key={`ellipsis-${i}`} className="px-1 text-[var(--color-text-muted)] text-sm">…</span>
-          ) : (
-            <button
-              key={p}
-              onClick={() => onChange(p as number)}
-              className="min-w-8 px-2 py-1 rounded-[var(--radius-sm)] text-[0.8125rem] cursor-pointer"
-              style={{
-                border: p === page ? 'none' : '1px solid var(--color-border)',
-                backgroundColor: p === page ? 'var(--color-accent)' : 'transparent',
-                color: p === page ? '#fff' : 'var(--color-text-secondary)',
-                fontWeight: p === page ? 600 : 400,
-              }}
-            >
-              {p}
-            </button>
-          )
-        ))}
-        <button
-          onClick={() => onChange(page + 1)}
-          disabled={page === totalPages}
-          className="bg-transparent border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-[var(--color-text-secondary)]"
-          style={{ cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1 }}
-        >
-          <ChevronRightIcon size={14} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TransactionsPage() {
@@ -1275,14 +1223,30 @@ export default function TransactionsPage() {
   const [splitTxn, setSplitTxn] = useState<Transaction | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
 
-  const page = parseInt(searchParams.get('page') ?? '1', 10);
   const search = searchParams.get('search') ?? '';
 
   // ── Data queries ──
 
-  const { data: txnData, isLoading: txnsLoading } = useQuery<TransactionListResponse>({
-    queryKey: ['transactions', Object.fromEntries(searchParams)],
-    queryFn: () => api.get('/transactions?' + searchParams.toString()).then((r) => r.data),
+  // Build filter params (strip page — cursor handles pagination now)
+  const filterParams = new URLSearchParams(searchParams);
+  filterParams.delete('page');
+
+  const {
+    data: txnPages,
+    isLoading: txnsLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<TransactionListResponse>({
+    queryKey: ['transactions', Object.fromEntries(filterParams)],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams(filterParams);
+      if (pageParam) params.set('cursor', pageParam as string);
+      params.set('limit', String(PAGE_SIZE));
+      return api.get('/transactions?' + params.toString()).then((r) => r.data);
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
 
   const { data: accountsData } = useQuery<{ groups: { type: string; totalBalance: number; accounts: Account[] }[] }>({
@@ -1331,6 +1295,8 @@ export default function TransactionsPage() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
       setShowAutoCatPanel(false);
       if (data.queued > 0) {
         notify.success(
@@ -1346,8 +1312,7 @@ export default function TransactionsPage() {
 
   const accounts = accountsData?.groups?.flatMap((g) => g.accounts) ?? [];
   const categories = categoriesData ?? [];
-  const transactions: Transaction[] = txnData?.transactions ?? [];
-  const total = txnData?.total ?? 0;
+  const transactions: Transaction[] = txnPages?.pages.flatMap((p) => p.transactions) ?? [];
 
   // ── URL param helpers ──
 
@@ -1358,13 +1323,7 @@ export default function TransactionsPage() {
     } else {
       next.delete(key);
     }
-    next.set('page', '1');
-    setSearchParams(next);
-  }
-
-  function setPage(p: number) {
-    const next = new URLSearchParams(searchParams);
-    next.set('page', String(p));
+    next.delete('page'); // cursor pagination resets automatically on filter change
     setSearchParams(next);
   }
 
@@ -1391,25 +1350,49 @@ export default function TransactionsPage() {
   const bulkRecategorizeMutation = useMutation({
     mutationFn: (categoryId: string) =>
       api.post('/transactions/bulk', { action: 'recategorize', ids: Array.from(selectedIds), categoryId }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
   });
 
   const bulkMarkReviewedMutation = useMutation({
     mutationFn: () =>
       api.post('/transactions/bulk', { action: 'mark-reviewed', ids: Array.from(selectedIds) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
   });
 
   const bulkHideMutation = useMutation({
     mutationFn: () =>
       api.post('/transactions/bulk', { action: 'hide', ids: Array.from(selectedIds) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
   });
 
   const bulkDeleteMutation = useMutation({
     mutationFn: () =>
       api.post('/transactions/bulk', { action: 'delete', ids: Array.from(selectedIds) }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setSelectedIds(new Set()); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['budget'] });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
   });
 
   // ── Inline merchant edit ──
@@ -1417,7 +1400,11 @@ export default function TransactionsPage() {
   const merchantEditMutation = useMutation({
     mutationFn: ({ id, merchantName }: { id: string; merchantName: string }) =>
       api.put(`/transactions/${id}`, { description: merchantName }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to update merchant. Please try again.'),
   });
 
   const handleMerchantEdit = useCallback((id: string, merchantName: string) => {
@@ -1696,10 +1683,17 @@ export default function TransactionsPage() {
           ))
         )}
 
-        {/* Pagination */}
-        {!txnsLoading && total > PAGE_SIZE && (
-          <div className="px-3">
-            <Pagination page={page} total={total} pageSize={PAGE_SIZE} onChange={setPage} />
+        {/* Load more */}
+        {hasNextPage && (
+          <div className="px-3 py-3 border-t border-[var(--color-border)] flex justify-center">
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={isFetchingNextPage}
+              onClick={() => fetchNextPage()}
+            >
+              Load more
+            </Button>
           </div>
         )}
       </Card>
@@ -1768,7 +1762,11 @@ export default function TransactionsPage() {
       <ImportModal
         open={showImportModal}
         onClose={() => setShowImportModal(false)}
-        onImported={() => queryClient.invalidateQueries({ queryKey: ['transactions'] })}
+        onImported={() => {
+          queryClient.invalidateQueries({ queryKey: ['transactions'] });
+          queryClient.invalidateQueries({ queryKey: ['accounts'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        }}
       />
 
       {/* Receipt OCR modal */}

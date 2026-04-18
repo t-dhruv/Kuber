@@ -13,6 +13,7 @@ export default defineConfig({
     storageState: 'tests/e2e/.auth/user.json',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    acceptDownloads: true,
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },

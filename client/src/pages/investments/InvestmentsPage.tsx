@@ -444,6 +444,7 @@ function PendingLotsCard({ lots }: { lots: PendingLot[] }) {
       api.post(`/investments/lots/${lotId}/confirm`).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
+      queryClient.invalidateQueries({ queryKey: ['investments-allocation'] });
       queryClient.invalidateQueries({ queryKey: ['investments-pending'] });
       notify.success('Purchase confirmed');
     },
@@ -659,6 +660,7 @@ function ExpandedHolding({
       api.delete(`/investments/lots/${lotId}`).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
+      queryClient.invalidateQueries({ queryKey: ['investments-allocation'] });
       notify.success('Lot deleted');
     },
     onError: () => notify.error('Failed to delete lot'),
@@ -1464,6 +1466,7 @@ function AddLotModal({
       api.post(`/investments/holdings/${holding.id}/lots`, payload).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
+      queryClient.invalidateQueries({ queryKey: ['investments-allocation'] });
       notify.success('Purchase added');
       setForm({ date: today, shares: '', pricePerShare: '', note: '' });
       onClose();

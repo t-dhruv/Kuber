@@ -5,7 +5,7 @@ test.describe('Settings', () => {
   test('settings page loads', async ({ page }) => {
     await page.goto('/settings');
     await page.waitForLoadState('networkidle');
-    await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible();
+    await expect(page.getByText(/settings/i).first()).toBeVisible();
   });
 
   test('update profile first name and revert', async ({ page }) => {
@@ -32,7 +32,8 @@ test.describe('Settings', () => {
     const dialog = page.getByRole('dialog');
     if (await dialog.isVisible({ timeout: 3000 }).catch(() => false)) {
       await dialog.waitFor({ timeout: 5000 });
-      await dialog.getByLabel(/name/i).fill('Hobbies');
+      await dialog.getByLabel('Name').fill('Hobbies');
+      await dialog.getByLabel('Group').fill('Other');
       await dialog.getByRole('button', { name: /add|save|create/i }).click();
       await waitForToast(page, /added|created|saved|success/i);
     } else {

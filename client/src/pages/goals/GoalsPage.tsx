@@ -486,6 +486,7 @@ function AddGoalModal({
     mutationFn: (body: object) => api.post('/goals', body).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       notify.success('Goal created');
       onClose();
     },
@@ -496,6 +497,7 @@ function AddGoalModal({
     mutationFn: (body: object) => api.put(`/goals/${editing!.id}`, body).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       notify.success('Goal updated');
       onClose();
     },
@@ -670,6 +672,7 @@ function AddDebtGoalModal({
     mutationFn: (body: object) => api.post('/goals', body).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       notify.success('Debt goal created');
       onClose();
     },
@@ -680,6 +683,7 @@ function AddDebtGoalModal({
     mutationFn: (body: object) => api.put(`/goals/${editing!.id}`, body).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       notify.success('Debt goal updated');
       onClose();
     },
@@ -809,6 +813,7 @@ function ContributeModal({
       api.post(`/goals/${goal!.id}/contribute`, body).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       notify.success(goal?.type === 'debt' ? 'Payment recorded' : 'Funds added');
       onClose();
     },
@@ -893,6 +898,7 @@ function DeleteGoalModal({
     mutationFn: () => api.delete(`/goals/${goal!.id}`).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
       notify.success('Goal deleted');
       onClose();
     },
