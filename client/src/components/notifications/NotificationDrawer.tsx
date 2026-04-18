@@ -110,7 +110,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-sm z-50 bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-2xl flex flex-col">
+      <div role="dialog" aria-label="Notifications" className="fixed right-0 top-0 h-full w-full max-w-sm z-50 bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-2">

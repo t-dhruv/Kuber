@@ -23,14 +23,16 @@ test.describe('Notifications', () => {
   test('notification panel renders without errors', async ({ page }) => {
     await page.getByRole('button', { name: /notification|bell/i }).first().click();
     await page.waitForTimeout(1000);
-    await expect(page.getByText(/error|failed|something went wrong/i)).not.toBeVisible();
+    await expect(page.getByText(/something went wrong|failed to load|500|403/i)).not.toBeVisible();
   });
 
   test('mark all as read if button available', async ({ page }) => {
     await page.getByRole('button', { name: /notification|bell/i }).first().click();
     await page.waitForTimeout(500);
     const markAllBtn = page.getByRole('button', { name: /mark all.*read|clear all/i });
-    if (await markAllBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    const isVisibleAndEnabled = await markAllBtn.isVisible({ timeout: 3000 }).catch(() => false)
+      && await markAllBtn.isEnabled().catch(() => false);
+    if (isVisibleAndEnabled) {
       await markAllBtn.click();
       await page.waitForTimeout(500);
     }

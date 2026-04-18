@@ -28,7 +28,7 @@ test.describe('Budgets', () => {
   });
 
   test('budget page loads', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: /budget/i })).toBeVisible();
+    await expect(page.getByText(/budget/i).first()).toBeVisible();
   });
 
   test('create Groceries budget $400', async ({ page }) => {

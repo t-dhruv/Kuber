@@ -15,7 +15,7 @@ test.describe('Dashboard', () => {
   });
 
   test('net worth widget visible', async ({ page }) => {
-    await expect(page.getByText(/net worth/i)).toBeVisible();
+    await expect(page.getByText(/net worth/i).first()).toBeVisible();
   });
 
   test('net worth is positive (accounts exist)', async ({ page }) => {

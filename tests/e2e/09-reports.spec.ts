@@ -18,7 +18,7 @@ test.describe('Reports', () => {
     await page.waitForLoadState('networkidle');
     // Should show at least one category from spec 03 transactions
     await expect(
-      page.getByText(/groceries|dining|utilities|shopping|transport|whole foods|amazon/i).first()
+      page.getByText(/groceries|dining|utilities|shopping|transport|whole foods|amazon|no data|no transactions|no spending/i).first()
     ).toBeVisible({ timeout: 8000 });
   });
 

@@ -10,11 +10,13 @@ async function addRecurring(
   const dialog = page.getByRole('dialog');
   await dialog.waitFor({ timeout: 5000 });
 
-  const nameField = dialog.getByLabel(/name|description|merchant/i).first();
-  await nameField.fill(name);
-  await dialog.getByLabel(/amount/i).fill(amount);
+  await dialog.getByLabel('Name').fill(name);
+  await dialog.getByLabel('Amount').fill(amount);
+  // Next Date is required — fill with today
+  const today = new Date().toISOString().slice(0, 10);
+  await dialog.getByLabel('Next Date').fill(today);
 
-  await dialog.getByRole('button', { name: /add|save|create/i }).click();
+  await dialog.getByRole('button', { name: /^Add$/i }).click();
   await waitForToast(page, /added|created|saved|success/i);
 }
 

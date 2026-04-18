@@ -19,7 +19,7 @@ test.describe('Investments', () => {
     const dialog = page.getByRole('dialog');
     await dialog.waitFor({ timeout: 5000 });
     await dialog.getByLabel('Account Name').fill('TFSA Portfolio');
-    await dialog.getByLabel('Account Type').selectOption('tfsa');
+    await dialog.getByLabel('Account Type').selectOption('investment');
     await dialog.getByLabel('Starting Balance').fill('25000');
     await dialog.getByRole('button', { name: /add account/i }).click();
     await waitForToast(page, /added|created|success/i);

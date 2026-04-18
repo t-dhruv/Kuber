@@ -87,7 +87,7 @@ test.describe('Transactions', () => {
   test('search filter finds transaction', async ({ page }) => {
     const searchInput = page.getByPlaceholder(/search/i);
     await searchInput.fill('Whole Foods');
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(1200);
     await expect(page.getByText('Whole Foods Market')).toBeVisible();
     await searchInput.clear();
   });

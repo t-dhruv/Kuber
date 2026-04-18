@@ -12,7 +12,7 @@ test.describe('Accounts', () => {
   });
 
   test('create Main Checking account ($5,000)', async ({ page }) => {
-    await page.getByRole('button', { name: /add account/i }).click();
+    await page.getByRole('button', { name: /add account/i }).first().click();
     const dialog = page.getByRole('dialog');
     await dialog.waitFor({ timeout: 5000 });
     await dialog.getByLabel('Account Name').fill('Main Checking');
@@ -24,7 +24,7 @@ test.describe('Accounts', () => {
   });
 
   test('create Main Savings account ($10,000)', async ({ page }) => {
-    await page.getByRole('button', { name: /add account/i }).click();
+    await page.getByRole('button', { name: /add account/i }).first().click();
     const dialog = page.getByRole('dialog');
     await dialog.waitFor({ timeout: 5000 });
     await dialog.getByLabel('Account Name').fill('Main Savings');
