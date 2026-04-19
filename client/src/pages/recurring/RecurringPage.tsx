@@ -206,12 +206,14 @@ function RecurringModal({
   open,
   onClose,
   editing,
+  prefill,
   accounts,
   categories,
 }: {
   open: boolean;
   onClose: () => void;
   editing: RecurringItem | null;
+  prefill?: Partial<RecurringFormValues>;
   accounts: AccountOption[];
   categories: CategoryOption[];
 }) {
@@ -230,7 +232,7 @@ function RecurringModal({
         isActive: editing.isActive,
       });
     } else {
-      setForm(EMPTY_FORM);
+      setForm({ ...EMPTY_FORM, ...prefill });
     }
   }, [editing, open]);
 
@@ -930,10 +932,8 @@ interface DetectedSubscription {
   nextDate: string;
 }
 
-function DetectedSubscriptionsBanner({ onAdded }: { onAdded: () => void }) {
-  const qc = useQueryClient();
+function DetectedSubscriptionsBanner({ onAdd }: { onAdd: (item: DetectedSubscription) => void }) {
   const [dismissed, setDismissed] = useState(false);
-  const [pending, setPending] = useState<Set<string>>(new Set());
 
   const { data: detected = [] } = useQuery<DetectedSubscription[]>({
     queryKey: ['recurring-detect'],
@@ -941,31 +941,7 @@ function DetectedSubscriptionsBanner({ onAdded }: { onAdded: () => void }) {
     staleTime: 5 * 60 * 1000,
   });
 
-  const addMut = useMutation({
-    mutationFn: (item: DetectedSubscription) => api.post('/recurring', item).then((r) => r.data),
-    onSuccess: (_data, item) => {
-      qc.invalidateQueries({ queryKey: ['recurring-monthly'] });
-      qc.invalidateQueries({ queryKey: ['recurring-all'] });
-      qc.setQueryData<DetectedSubscription[]>(['recurring-detect'], (prev) =>
-        (prev ?? []).filter((d) => d.name !== item.name || d.amount !== item.amount)
-      );
-      setPending((p) => { const n = new Set(p); n.delete(`${item.name}${item.amount}`); return n; });
-      notify.success(`Added ${item.name}`);
-      onAdded();
-    },
-    onError: (_err, item) => {
-      setPending((p) => { const n = new Set(p); n.delete(`${item.name}${item.amount}`); return n; });
-      notify.error('Failed to add item');
-    },
-  });
-
   if (dismissed || detected.length === 0) return null;
-
-  function handleAdd(item: DetectedSubscription) {
-    const key = `${item.name}${item.amount}`;
-    setPending((p) => new Set(p).add(key));
-    addMut.mutate(item);
-  }
 
   return (
     <div className="mb-4 p-4 rounded-[var(--radius-lg)] border border-[var(--color-accent)] bg-[var(--color-surface)]">
@@ -993,11 +969,10 @@ function DetectedSubscriptionsBanner({ onAdded }: { onAdded: () => void }) {
                 </span>
               </div>
               <button
-                onClick={() => handleAdd(item)}
-                disabled={pending.has(key)}
-                className="shrink-0 py-1 px-3 rounded-[var(--radius-sm)] border-none cursor-pointer text-xs font-semibold bg-[var(--color-accent)] text-white disabled:opacity-50"
+                onClick={() => onAdd(item)}
+                className="shrink-0 py-1 px-3 rounded-[var(--radius-sm)] border-none cursor-pointer text-xs font-semibold bg-[var(--color-accent)] text-white"
               >
-                {pending.has(key) ? 'Adding…' : 'Add'}
+                Add
               </button>
             </div>
           );
@@ -1058,6 +1033,7 @@ export default function RecurringPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<RecurringItem | null>(null);
+  const [modalPrefill, setModalPrefill] = useState<Partial<RecurringFormValues> | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<RecurringItem | null>(null);
 
   const qc = useQueryClient();
@@ -1109,6 +1085,18 @@ export default function RecurringPage() {
 
   function openAdd() {
     setEditing(null);
+    setModalPrefill(undefined);
+    setModalOpen(true);
+  }
+
+  function openAddDetected(item: DetectedSubscription) {
+    setEditing(null);
+    setModalPrefill({
+      name: item.name,
+      amount: String(item.amount),
+      frequency: item.frequency,
+      nextDate: item.nextDate ? item.nextDate.slice(0, 10) : '',
+    });
     setModalOpen(true);
   }
 
@@ -1156,7 +1144,7 @@ export default function RecurringPage() {
         </Button>
       </div>
 
-      <DetectedSubscriptionsBanner onAdded={() => qc.invalidateQueries({ queryKey: ['recurring-all'] })} />
+      <DetectedSubscriptionsBanner onAdd={openAddDetected} />
 
       {/* Content */}
       {view === 'monthly' ? (
@@ -1190,6 +1178,7 @@ export default function RecurringPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         editing={editing}
+        prefill={modalPrefill}
         accounts={accounts}
         categories={categories}
       />
