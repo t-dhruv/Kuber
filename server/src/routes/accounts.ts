@@ -400,9 +400,14 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (lastFour !== undefined) data.lastFour = lastFour;
     if (isHidden !== undefined) data.isHidden = isHidden;
     if (excludeFromNetWorth !== undefined) data.excludeFromNetWorth = excludeFromNetWorth;
-    const { creditLimit } = req.body;
+    const { creditLimit, balance } = req.body;
     if (creditLimit !== undefined) {
       data.creditLimit = typeof creditLimit === 'number' && creditLimit > 0 ? creditLimit : null;
+    }
+    if (balance !== undefined) {
+      const parsed = Number(balance);
+      if (isNaN(parsed)) return res.status(400).json({ error: 'balance must be a number' });
+      data.balance = parsed;
     }
 
     const account = await prisma.account.update({ where: { id }, data });
@@ -411,6 +416,58 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     return res.json({ account: formatAccount(account) });
   } catch (err) {
     req.log.error({ err }, 'accounts/PUT /:id');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/accounts/:id/reconcile
+router.post('/:id/reconcile', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+    const { actualBalance } = req.body;
+
+    if (actualBalance === undefined || isNaN(Number(actualBalance))) {
+      return res.status(400).json({ error: 'actualBalance is required and must be a number' });
+    }
+
+    const account = await prisma.account.findUnique({ where: { id } });
+    if (!account || account.householdId !== householdId) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    const target = Number(actualBalance);
+    const adjustment = target - Number(account.balance);
+
+    if (Math.abs(adjustment) < 0.001) {
+      return res.json({ message: 'Already balanced', adjustment: 0 });
+    }
+
+    await prisma.$transaction([
+      prisma.transaction.create({
+        data: {
+          householdId,
+          accountId: id,
+          date: new Date(),
+          description: 'Balance Adjustment',
+          originalDescription: 'Balance Adjustment',
+          amount: adjustment,
+          needsReview: false,
+          isHidden: false,
+          isSplit: false,
+        },
+      }),
+      prisma.account.update({
+        where: { id },
+        data: { balance: target },
+      }),
+    ]);
+
+    logAudit({ householdId, userId: req.userId!, action: 'UPDATE', entity: 'ACCOUNT', entityId: id, before: { balance: account.balance }, after: { balance: target } });
+
+    return res.json({ message: 'Account reconciled', adjustment });
+  } catch (err) {
+    req.log.error({ err }, 'accounts/POST /:id/reconcile');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
