@@ -361,7 +361,9 @@ function AccountRow({
       {/* Balance + optional 1M change */}
       <div className="flex flex-col items-end shrink-0 mr-1">
         <div className="text-sm font-semibold" style={{ color: balanceColor(account.balance, account.type) }}>
-          {fmtCurrency(account.balance, account.currency)}
+          {account.type === 'credit_card'
+            ? fmtCurrency(Math.abs(account.balance), account.currency)
+            : fmtCurrency(account.balance, account.currency)}
         </div>
         {monthChange !== undefined && (
           <div className="text-[0.6875rem]" style={{ color: monthChange >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
@@ -954,29 +956,67 @@ function AccountDetailDrawer({
             <>
               {/* Balance hero */}
               <div className="mb-6">
-                <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em] mb-1">
-                  Current Balance
-                </div>
-                <div className="text-[2rem] font-bold" style={{ color: detail && detail.balance < 0 ? 'var(--color-danger)' : 'var(--color-text)' }}>
-                  {detail ? fmtCurrency(detail.balance, detail.currency) : '—'}
-                </div>
-                <div className="text-xs text-[var(--color-text-muted)] mt-1">
-                  {detail?.type?.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-                  {detail?.currency !== 'USD' ? ` · ${detail?.currency}` : ''}
-                </div>
-                {detail?.type?.toUpperCase() === 'CREDIT_CARD' && detail.creditLimit != null && (
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2">
-                      <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em]">Credit Limit</div>
-                      <div className="text-[0.9375rem] font-semibold text-[var(--color-text)]">{fmtCurrency(detail.creditLimit, detail.currency)}</div>
+                {detail?.type?.toUpperCase() === 'CREDIT_CARD' ? (
+                  <>
+                    <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em] mb-1">
+                      Amount Owed
                     </div>
-                    <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2">
-                      <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em]">Available</div>
-                      <div className="text-[0.9375rem] font-semibold" style={{ color: (detail.availableCredit ?? 0) < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
-                        {fmtCurrency(detail.availableCredit ?? 0, detail.currency)}
+                    <div className="text-[2rem] font-bold" style={{ color: detail.balance < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                      {fmtCurrency(Math.abs(detail.balance), detail.currency)}
+                    </div>
+                    <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                      Credit Card{detail.currency !== 'USD' ? ` · ${detail.currency}` : ''}
+                    </div>
+                    {detail.creditLimit != null && (
+                      <div className="mt-3 grid grid-cols-2 gap-3">
+                        <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2">
+                          <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em]">Credit Limit</div>
+                          <div className="text-[0.9375rem] font-semibold text-[var(--color-text)]">{fmtCurrency(detail.creditLimit, detail.currency)}</div>
+                        </div>
+                        <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2">
+                          <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em]">Available</div>
+                          <div className="text-[0.9375rem] font-semibold" style={{ color: (detail.availableCredit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                            {fmtCurrency(Math.max(0, detail.availableCredit ?? 0), detail.currency)}
+                          </div>
+                        </div>
                       </div>
+                    )}
+                    {detail.creditLimit != null && detail.creditLimit > 0 && (
+                      <div className="mt-3">
+                        <div className="flex justify-between text-[0.6875rem] text-[var(--color-text-muted)] mb-1">
+                          <span>Utilization</span>
+                          <span>{((Math.abs(detail.balance) / detail.creditLimit) * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-[var(--color-surface-hover)] overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-[width] duration-300"
+                            style={{
+                              width: `${Math.min(100, (Math.abs(detail.balance) / detail.creditLimit) * 100)}%`,
+                              backgroundColor:
+                                Math.abs(detail.balance) / detail.creditLimit > 0.9
+                                  ? 'var(--color-danger)'
+                                  : Math.abs(detail.balance) / detail.creditLimit > 0.7
+                                  ? '#f59e0b'
+                                  : 'var(--color-success)',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em] mb-1">
+                      Current Balance
                     </div>
-                  </div>
+                    <div className="text-[2rem] font-bold" style={{ color: detail && detail.balance < 0 ? 'var(--color-danger)' : 'var(--color-text)' }}>
+                      {detail ? fmtCurrency(detail.balance, detail.currency) : '—'}
+                    </div>
+                    <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                      {detail?.type?.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                      {detail?.currency !== 'USD' ? ` · ${detail?.currency}` : ''}
+                    </div>
+                  </>
                 )}
               </div>
 

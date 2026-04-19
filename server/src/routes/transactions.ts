@@ -31,6 +31,12 @@ const TX_INCLUDE = {
   merchant: { select: { name: true, displayName: true } },
   account: { select: { id: true, name: true } },
   tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+  refundedTransaction: {
+    select: { id: true, description: true, amount: true, date: true, currency: true },
+  },
+  refunds: {
+    select: { id: true, description: true, amount: true, date: true },
+  },
 } as const;
 
 function formatMerchantName(
@@ -48,6 +54,7 @@ function formatTx(t: any) {
     merchantName: formatMerchantName(t.merchant, t.description),
     originalDescription: t.originalDescription,
     amount: t.amount,
+    currency: t.currency ?? 'USD',
     categoryId: t.categoryId ?? null,
     categoryName: t.category?.name ?? null,
     categoryIcon: t.category?.emoji ?? null,
@@ -63,6 +70,22 @@ function formatTx(t: any) {
     isTransfer: t.isTransfer ?? false,
     transferId: t.transferId ?? null,
     isRefund: t.isRefund ?? false,
+    refundedTransactionId: t.refundedTransactionId ?? null,
+    refundedTransaction: t.refundedTransaction
+      ? {
+          id: t.refundedTransaction.id,
+          description: t.refundedTransaction.description,
+          amount: t.refundedTransaction.amount,
+          date: t.refundedTransaction.date.toISOString(),
+          currency: t.refundedTransaction.currency ?? 'USD',
+        }
+      : null,
+    refunds: (t.refunds ?? []).map((r: any) => ({
+      id: r.id,
+      description: r.description,
+      amount: r.amount,
+      date: r.date.toISOString(),
+    })),
     notes: t.notes ?? null,
     tags: (t.tags ?? []).map((tt: any) => ({
       id: tt.tag.id,
@@ -656,8 +679,8 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
     // Merchant cache to avoid redundant DB calls within this import
     const merchantCache = new Map<string, string>(); // name -> id
 
-    // Run all inserts in a transaction
-    const created = await prisma.$transaction(async (tx) => {
+    // Run all inserts in a transaction (including balance update for atomicity)
+    const [created] = await prisma.$transaction(async (tx) => {
       const results: string[] = [];
 
       for (const row of parsed) {
@@ -708,7 +731,16 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
         results.push(newTx.id);
       }
 
-      return results;
+      // Update account running balance by the net sum of all imported transactions
+      const net = parsed.reduce((sum, row) => sum + row.amount, 0);
+      if (results.length > 0) {
+        await tx.account.update({
+          where: { id: accountId },
+          data: { balance: { increment: net } },
+        });
+      }
+
+      return [results, net] as const;
     });
 
     const skipped = totalAttempted - parsed.length;
@@ -940,6 +972,26 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       if (!cat) return res.status(404).json({ error: 'Category not found' });
     }
 
+    // Handle refundedTransactionId
+    if (req.body.refundedTransactionId !== undefined) {
+      if (req.body.refundedTransactionId === id) {
+        return res.status(400).json({ error: 'A transaction cannot be its own refund' });
+      }
+      if (req.body.refundedTransactionId !== null) {
+        const refTarget = await prisma.transaction.findFirst({
+          where: { id: req.body.refundedTransactionId, householdId },
+          select: { id: true },
+        });
+        if (!refTarget) return res.status(400).json({ error: 'refundedTransactionId not found' });
+      }
+      data.refundedTransactionId = req.body.refundedTransactionId ?? null;
+      if (req.body.refundedTransactionId !== null) {
+        data.isRefund = true;
+      } else {
+        data.isRefund = false; // clear flag when unlinking original transaction
+      }
+    }
+
     const tx = await prisma.transaction.update({
       where: { id },
       data,
@@ -1155,8 +1207,31 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
       }
 
       case 'delete': {
-        await prisma.transaction.deleteMany({
-          where: { id: { in: ids }, householdId },
+        await prisma.$transaction(async (tx) => {
+          // Fetch before delete so we can reverse balance effects
+          const toDelete = await tx.transaction.findMany({
+            where: { id: { in: ids }, householdId },
+            select: { id: true, accountId: true, amount: true },
+          });
+
+          await tx.transaction.deleteMany({
+            where: { id: { in: ids }, householdId },
+          });
+
+          // Group by accountId and reverse net balance per account
+          const balanceDelta = new Map<string, number>();
+          for (const t of toDelete) {
+            balanceDelta.set(t.accountId, (balanceDelta.get(t.accountId) ?? 0) - t.amount);
+          }
+
+          await Promise.all(
+            Array.from(balanceDelta.entries()).map(([accountId, delta]) =>
+              tx.account.update({
+                where: { id: accountId },
+                data: { balance: { increment: delta } },
+              })
+            )
+          );
         });
         break;
       }
