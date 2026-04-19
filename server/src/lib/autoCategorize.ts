@@ -7,6 +7,34 @@
 import { PrismaClient } from '@prisma/client';
 import { getAiClientForHousehold } from './ai/index.js';
 
+// ── In-memory job progress store ──────────────────────────────────────────────
+export interface BatchJobState {
+  total: number;
+  processed: number;
+  queued: number;
+  skipped: number;
+  done: boolean;
+  notConfigured: boolean;
+}
+
+const batchJobs = new Map<string, BatchJobState>();
+
+export function getBatchJobState(jobId: string): BatchJobState | null {
+  return batchJobs.get(jobId) ?? null;
+}
+
+/** Clean up jobs older than 10 minutes to avoid unbounded memory growth */
+const jobTimestamps = new Map<string, number>();
+function pruneOldJobs() {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [id, ts] of jobTimestamps) {
+    if (ts < cutoff) {
+      batchJobs.delete(id);
+      jobTimestamps.delete(id);
+    }
+  }
+}
+
 export interface CategorySuggestion {
   categoryId: string | null;       // null = no existing category matched
   categoryName: string;
@@ -51,14 +79,15 @@ export async function suggestCategory(
     .map((e) => `- "${e.descriptionPattern}" → ${e.correctCategory.name}`)
     .join('\n');
 
-  const categoryList = categories.map((c) => `${c.name} (${c.type})`).join(', ');
+  // Send only category names (no type suffix) — type context comes from txnType below
+  const categoryList = categories.map((c) => c.name).join(', ');
   const txnType = amount < 0 ? 'expense' : 'income';
 
   const fewShotSection = examples.length > 0
     ? `\nPast corrections (learn from these):\n${fewShotLines}\n`
     : '';
 
-  const prompt = `You are a transaction categorizer. Given a ${txnType} transaction, pick the BEST matching category from the list. If none fit well, suggest a new category name and set noMatch to true. Respond with ONLY a JSON object: {"category": "CategoryName", "confidence": 0.0-1.0, "noMatch": false}
+  const prompt = `You are a transaction categorizer. Given a ${txnType} transaction, pick the BEST matching category from the list. Return ONLY the exact category name from the list. If none fit well, suggest a new category name and set noMatch to true. Respond with ONLY a JSON object: {"category": "ExactCategoryName", "confidence": 0.0-1.0, "noMatch": false}
 ${fewShotSection}
 Available categories: ${categoryList}
 
@@ -72,12 +101,16 @@ Transaction: "${description}" (${txnType}, $${Math.abs(amount).toFixed(2)})`;
     });
 
     const json = JSON.parse(result.content.match(/\{.*\}/s)?.[0] ?? '{}');
-    const suggestedName = json.category as string;
+    const rawName = (json.category as string ?? '').trim();
     const confidence = parseFloat(json.confidence) || 0;
     const noMatch = Boolean(json.noMatch);
 
-    if (!suggestedName || confidence < 0.5) return null;
+    if (!rawName || confidence < 0.5) return null;
 
+    // Strip any type suffix AI may have hallucinated: "Foo (expense)" → "Foo"
+    const suggestedName = rawName.replace(/\s*\((expense|income|transfer)\)\s*$/i, '').trim();
+
+    // Exact match first, then case-insensitive
     const matched = categories.find(
       (c) => c.name.toLowerCase() === suggestedName.toLowerCase()
     );
@@ -105,18 +138,21 @@ Transaction: "${description}" (${txnType}, $${Math.abs(amount).toFixed(2)})`;
 /**
  * Batch auto-categorize uncategorized transactions.
  * Sets needsReview=true with AI suggestion fields — does NOT apply category directly.
+ * Returns a jobId immediately; processing runs asynchronously.
+ * Poll getBatchJobState(jobId) for progress.
  */
-export async function batchAutoCategorize(
+export async function startBatchAutoCategorize(
   prisma: PrismaClient,
   householdId: string,
   limit = 1000
-): Promise<{ queued: number; skipped: number; notConfigured: boolean }> {
-  let client;
+): Promise<{ jobId: string; total: number; notConfigured: boolean }> {
+  pruneOldJobs();
+
   try {
-    client = await getAiClientForHousehold(householdId, prisma);
+    const client = await getAiClientForHousehold(householdId, prisma);
     void client;
   } catch {
-    return { queued: 0, skipped: 0, notConfigured: true };
+    return { jobId: '', total: 0, notConfigured: true };
   }
 
   const uncategorized = await prisma.transaction.findMany({
@@ -124,9 +160,9 @@ export async function batchAutoCategorize(
       householdId,
       categoryId: null,
       isHidden: false,
+      // Pick up ALL uncategorized: not yet in review queue OR stale (in queue but AI fields missing)
       OR: [
         { needsReview: false },
-        // stale records: marked needsReview but AI fields never populated
         { needsReview: true, aiSuggestedCategoryId: null, aiSuggestedCategoryName: null },
       ],
     },
@@ -135,28 +171,66 @@ export async function batchAutoCategorize(
     select: { id: true, description: true, amount: true },
   });
 
-  let queued = 0;
-  let skipped = 0;
+  const jobId = `${householdId}-${Date.now()}`;
+  const state: BatchJobState = {
+    total: uncategorized.length,
+    processed: 0,
+    queued: 0,
+    skipped: 0,
+    done: uncategorized.length === 0,
+    notConfigured: false,
+  };
+  batchJobs.set(jobId, state);
+  jobTimestamps.set(jobId, Date.now());
 
-  for (const txn of uncategorized) {
-    const suggestion = await suggestCategory(prisma, householdId, txn.description, txn.amount);
-    if (suggestion && suggestion.confidence >= 0.5) {
-      await prisma.transaction.update({
-        where: { id: txn.id },
-        data: {
-          needsReview: true,
-          aiSuggestedCategoryId: suggestion.categoryId ?? null,
-          aiSuggestedCategoryName: suggestion.suggestedNewName ?? null,
-          aiSuggestionConfidence: suggestion.confidence,
-        },
-      });
-      queued++;
-    } else {
-      skipped++;
-    }
+  if (uncategorized.length > 0) {
+    // Fire and forget — runs in background
+    (async () => {
+      for (const txn of uncategorized) {
+        try {
+          const suggestion = await suggestCategory(prisma, householdId, txn.description, txn.amount);
+          if (suggestion && suggestion.confidence >= 0.5) {
+            await prisma.transaction.update({
+              where: { id: txn.id },
+              data: {
+                needsReview: true,
+                aiSuggestedCategoryId: suggestion.categoryId ?? null,
+                aiSuggestedCategoryName: suggestion.suggestedNewName ?? null,
+                aiSuggestionConfidence: suggestion.confidence,
+              },
+            });
+            state.queued++;
+          } else {
+            state.skipped++;
+          }
+        } catch {
+          state.skipped++;
+        }
+        state.processed++;
+      }
+      state.done = true;
+    })();
   }
 
-  return { queued, skipped, notConfigured: false };
+  return { jobId, total: uncategorized.length, notConfigured: false };
+}
+
+/** @deprecated Use startBatchAutoCategorize for async progress support */
+export async function batchAutoCategorize(
+  prisma: PrismaClient,
+  householdId: string,
+  limit = 1000
+): Promise<{ queued: number; skipped: number; notConfigured: boolean }> {
+  const { jobId, notConfigured, total } = await startBatchAutoCategorize(prisma, householdId, limit);
+  if (notConfigured) return { queued: 0, skipped: 0, notConfigured: true };
+  if (total === 0) return { queued: 0, skipped: 0, notConfigured: false };
+
+  // Wait for job to complete (sync wrapper for backwards compat)
+  const state = getBatchJobState(jobId)!;
+  while (!state.done) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return { queued: state.queued, skipped: state.skipped, notConfigured: false };
 }
 
 /**

@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.js';
-import { batchAutoCategorize, detectRuleSuggestions, suggestCategory } from '../lib/autoCategorize.js';
+import { startBatchAutoCategorize, getBatchJobState, detectRuleSuggestions, suggestCategory } from '../lib/autoCategorize.js';
 import { getAiClientForHousehold } from '../lib/ai/index.js';
 import { rulesAppliedTotal } from '../lib/metrics.js';
 
@@ -11,26 +11,33 @@ const router = Router();
 const NOT_CONFIGURED_MSG =
   'AI provider not configured. Go to Settings → Integrations → AI Advisor to set up Claude, OpenAI, Gemini, or Ollama (free, runs locally).';
 
-// POST /api/v1/auto-categorize/batch — queue uncategorized transactions for review
+// POST /api/v1/auto-categorize/batch — start async categorization job, returns jobId immediately
 router.post('/batch', async (req: AuthRequest, res: Response) => {
   try {
-    // Default to processing all uncategorized; caller can pass explicit limit to cap
     const limit = req.body?.limit ? Math.min(parseInt(req.body.limit), 1000) : 1000;
-    const result = await batchAutoCategorize(prisma, req.householdId!, limit);
+    const result = await startBatchAutoCategorize(prisma, req.householdId!, limit);
 
     if (result.notConfigured) {
       return res.status(200).json({
-        queued: 0, skipped: 0,
+        jobId: null,
+        total: 0,
         notConfigured: true,
         setupMessage: NOT_CONFIGURED_MSG,
       });
     }
 
-    return res.json({ ...result, notConfigured: false });
+    return res.json({ jobId: result.jobId, total: result.total, notConfigured: false });
   } catch (err) {
     req.log.error({ err }, 'auto-categorize/batch');
     return res.status(500).json({ error: 'Batch categorization failed' });
   }
+});
+
+// GET /api/v1/auto-categorize/batch/progress/:jobId — poll job progress
+router.get('/batch/progress/:jobId', (req: AuthRequest, res: Response) => {
+  const state = getBatchJobState(req.params.jobId);
+  if (!state) return res.status(404).json({ error: 'Job not found' });
+  return res.json(state);
 });
 
 // GET /api/v1/auto-categorize/review-queue — paginated list of transactions needing review
