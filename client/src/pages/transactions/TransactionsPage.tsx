@@ -60,6 +60,20 @@ interface Transaction {
   splitDetails?: Array<{ categoryId: string; amount: number; note?: string }> | null;
   isTransfer: boolean;
   transferId?: string | null;
+  isRefund: boolean;
+  refundedTransactionId: string | null;
+  refundedTransaction: {
+    id: string;
+    description: string;
+    amount: number;
+    date: string;
+  } | null;
+  refunds: Array<{
+    id: string;
+    description: string;
+    amount: number;
+    date: string;
+  }>;
 }
 
 interface TransactionListResponse {
@@ -198,6 +212,69 @@ function CategoryPicker({
   );
 }
 
+// ─── Refund Transaction Picker ────────────────────────────────────────────────
+
+function RefundTransactionPicker({
+  onSelect,
+}: {
+  onSelect: (tx: { id: string; description: string; amount: number; date: string }) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const { data } = useQuery({
+    queryKey: ['transactions', 'refund-search', search],
+    queryFn: () =>
+      api
+        .get(`/transactions?limit=10&search=${encodeURIComponent(search)}`)
+        .then((r) => r.data.transactions as Array<{ id: string; description: string; amount: number; date: string; merchantName: string }>),
+    enabled: search.length >= 2,
+    staleTime: 30_000,
+  });
+
+  return (
+    <div ref={ref} className="relative">
+      <Input
+        placeholder="Search original transaction..."
+        value={search}
+        onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+      />
+      {open && data && data.length > 0 && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-[var(--shadow-md)] max-h-48 overflow-y-auto">
+          {data.map((tx) => (
+            <button
+              key={tx.id}
+              type="button"
+              onClick={() => {
+                onSelect({ id: tx.id, description: tx.merchantName || tx.description, amount: tx.amount, date: tx.date });
+                setOpen(false);
+                setSearch('');
+              }}
+              className="flex items-center justify-between w-full px-3 py-2 text-left bg-transparent border-0 cursor-pointer hover:bg-[var(--color-surface-hover)] text-[0.8125rem]"
+            >
+              <span className="truncate">{tx.merchantName || tx.description}</span>
+              <span className="text-[var(--color-text-muted)] ml-2 shrink-0">
+                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(tx.amount))} · {new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Transaction Detail Drawer ────────────────────────────────────────────────
 
 interface DrawerProps {
@@ -247,6 +324,8 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
         needsReview: form.needsReview,
         isRecurring: form.isRecurring,
         isHidden: form.isHidden,
+        isRefund: form.isRefund ?? false,
+        refundedTransactionId: form.refundedTransactionId ?? null,
       });
 
       // 2. Sync tags
@@ -506,6 +585,63 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
                   onChange={(e) => setForm((f) => ({ ...f, isHidden: e.target.checked }))}
                 />
               </div>
+            </div>
+
+            {/* Refund section */}
+            <div className="border-t border-[var(--color-border)] pt-4 mt-2">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-[0.8125rem] font-medium text-[var(--color-text)]">Refund</div>
+                  <div className="text-[0.75rem] text-[var(--color-text-muted)]">Mark if this is money returned to you</div>
+                </div>
+                <Toggle
+                  id="txn-is-refund"
+                  checked={form.isRefund ?? false}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      isRefund: e.target.checked,
+                      refundedTransactionId: e.target.checked ? f.refundedTransactionId : null,
+                      refundedTransaction: e.target.checked ? f.refundedTransaction : null,
+                    }))
+                  }
+                />
+              </div>
+
+              {form.isRefund && (
+                <div>
+                  <div className="text-[0.75rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
+                    Link to original transaction (optional)
+                  </div>
+                  {form.refundedTransaction ? (
+                    <div className="flex items-center justify-between bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2">
+                      <div>
+                        <div className="text-[0.8125rem] font-medium">{form.refundedTransaction.description}</div>
+                        <div className="text-[0.75rem] text-[var(--color-text-muted)]">
+                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(form.refundedTransaction.amount))} · {new Date(form.refundedTransaction.date).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, refundedTransactionId: null, refundedTransaction: null }))}
+                        className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] bg-transparent border-0 cursor-pointer p-1"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <RefundTransactionPicker
+                      onSelect={(tx) =>
+                        setForm((f) => ({
+                          ...f,
+                          refundedTransactionId: tx.id,
+                          refundedTransaction: tx,
+                        }))
+                      }
+                    />
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1195,6 +1331,15 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       >
         {txn.amount < 0 ? '-' : '+'}{fmtCurrency(txn.amount)}
       </div>
+
+      {txn.refunds && txn.refunds.length > 0 && (
+        <span
+          className="text-[0.625rem] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
+          style={{ backgroundColor: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}
+        >
+          REFUNDED
+        </span>
+      )}
 
       {/* Arrow */}
       <button
