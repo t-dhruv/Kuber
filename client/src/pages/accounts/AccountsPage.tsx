@@ -405,7 +405,7 @@ function AccountGroup({
   const change = groupMonthChange(accounts);
 
   return (
-    <Card padding="none" style={{ overflow: 'hidden' }}>
+    <Card padding="none" style={{ overflow: 'visible' }}>
       {/* Group header */}
       <div
         onClick={() => setCollapsed((v) => !v)}
@@ -628,13 +628,13 @@ function AccountForm({
   onChange,
   onLogoChange,
   errors,
-  hideBalance = false,
+  balanceLabel = 'Starting Balance',
 }: {
   values: AccountFormValues;
   onChange: (field: keyof AccountFormValues, value: string) => void;
   onLogoChange: (slug: string | null) => void;
   errors: Partial<Record<keyof AccountFormValues, string>>;
-  hideBalance?: boolean;
+  balanceLabel?: string;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -696,9 +696,8 @@ function AccountForm({
           min="0"
         />
       )}
-      {!hideBalance && (
-        <Input
-          label="Starting Balance"
+      <Input
+          label={balanceLabel}
           value={values.balance}
           onChange={(e) => onChange('balance', e.target.value)}
           error={errors.balance}
@@ -707,7 +706,6 @@ function AccountForm({
           step="0.01"
           required
         />
-      )}
     </div>
   );
 }
@@ -859,10 +857,83 @@ function EditAccountModal({
 
   return (
     <Modal open={!!account} onClose={onClose} title="Edit Account" size="md">
-      <AccountForm values={values} onChange={handleChange} onLogoChange={handleLogoChange} errors={errors} hideBalance />
+      <AccountForm values={values} onChange={handleChange} onLogoChange={handleLogoChange} errors={errors} balanceLabel="Current Balance" />
       <ModalFooter>
         <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>Cancel</Button>
         <Button onClick={handleSubmit} loading={mutation.isPending}>Save Changes</Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+// ─── Reconcile Modal ──────────────────────────────────────────────────────────
+
+function ReconcileModal({
+  account,
+  onClose,
+}: {
+  account: Account | null;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [actualBalance, setActualBalance] = useState('');
+
+  useEffect(() => {
+    if (account) setActualBalance(String(account.balance));
+  }, [account]);
+
+  const mutation = useMutation({
+    mutationFn: (body: object) => api.post(`/accounts/${account!.id}/reconcile`, body).then((r) => r.data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['networth'] });
+      if (data.adjustment === 0) {
+        notify.info('Account already balanced');
+      } else {
+        notify.success(`Reconciled — adjustment: ${fmtCurrency(data.adjustment, account?.currency)}`);
+      }
+      onClose();
+    },
+    onError: () => notify.error('Reconcile failed'),
+  });
+
+  const diff = account ? Number(actualBalance) - account.balance : 0;
+  const diffValid = !isNaN(diff);
+
+  return (
+    <Modal open={!!account} onClose={onClose} title="Reconcile Account" size="sm">
+      {account && (
+        <div className="flex flex-col gap-4">
+          <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2.5 text-sm">
+            <div className="text-[var(--color-text-muted)] text-xs mb-0.5">Current balance in Kuber</div>
+            <div className="font-semibold">{fmtCurrency(account.balance, account.currency)}</div>
+          </div>
+          <Input
+            label="Actual balance (from your bank)"
+            value={actualBalance}
+            onChange={(e) => setActualBalance(e.target.value)}
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+          />
+          {actualBalance !== '' && diffValid && Math.abs(diff) >= 0.01 && (
+            <div className="text-[0.8125rem] rounded-[var(--radius-md)] px-3 py-2" style={{ backgroundColor: 'var(--color-surface-hover)', color: diff >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+              Adjustment: {diff >= 0 ? '+' : ''}{fmtCurrency(diff, account.currency)} — a "Balance Adjustment" transaction will be created.
+            </div>
+          )}
+          {actualBalance !== '' && diffValid && Math.abs(diff) < 0.01 && (
+            <div className="text-[0.8125rem] text-[var(--color-success)] bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2">
+              Already balanced — no adjustment needed.
+            </div>
+          )}
+        </div>
+      )}
+      <ModalFooter>
+        <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>Cancel</Button>
+        <Button onClick={() => mutation.mutate({ actualBalance: Number(actualBalance) })} loading={mutation.isPending} disabled={!actualBalance || isNaN(Number(actualBalance))}>
+          Reconcile
+        </Button>
       </ModalFooter>
     </Modal>
   );
@@ -877,11 +948,13 @@ function AccountDetailDrawer({
   onClose,
   onEdit,
   onDelete,
+  onReconcile,
 }: {
   account: Account | null;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onReconcile: () => void;
 }) {
   const [historyRange, setHistoryRange] = useState<BalanceHistoryRange>('3M');
 
@@ -1118,11 +1191,14 @@ function AccountDetailDrawer({
           <Button variant="outline" icon={<Pencil size={14} />} onClick={onEdit} style={{ flex: 1 }}>
             Edit
           </Button>
+          <Button variant="outline" icon={<RefreshCw size={14} />} onClick={onReconcile} style={{ flex: 1 }}>
+            Reconcile
+          </Button>
           <Button
             variant="ghost"
             icon={<Trash2 size={14} />}
             onClick={onDelete}
-            style={{ color: 'var(--color-danger)', flex: 1 }}
+            style={{ color: 'var(--color-danger)' }}
           >
             Delete
           </Button>
@@ -1558,6 +1634,7 @@ export default function AccountsPage() {
   const [editAccount, setEditAccount] = useState<Account | null>(null);
   const [detailAccount, setDetailAccount] = useState<Account | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
+  const [reconcileAccount, setReconcileAccount] = useState<Account | null>(null);
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/accounts/${id}`),
@@ -1727,8 +1804,10 @@ export default function AccountsPage() {
           onClose={() => setDetailAccount(null)}
           onEdit={handleEditFromDetail}
           onDelete={handleDeleteFromDetail}
+          onReconcile={() => { setReconcileAccount(detailAccount); setDetailAccount(null); }}
         />
       )}
+      <ReconcileModal account={reconcileAccount} onClose={() => setReconcileAccount(null)} />
 
       {/* Delete confirmation */}
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Account" size="sm">
