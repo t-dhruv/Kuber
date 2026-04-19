@@ -31,6 +31,12 @@ const TX_INCLUDE = {
   merchant: { select: { name: true, displayName: true } },
   account: { select: { id: true, name: true } },
   tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+  refundedTransaction: {
+    select: { id: true, description: true, amount: true, date: true },
+  },
+  refunds: {
+    select: { id: true, description: true, amount: true, date: true },
+  },
 } as const;
 
 function formatMerchantName(
@@ -63,6 +69,21 @@ function formatTx(t: any) {
     isTransfer: t.isTransfer ?? false,
     transferId: t.transferId ?? null,
     isRefund: t.isRefund ?? false,
+    refundedTransactionId: t.refundedTransactionId ?? null,
+    refundedTransaction: t.refundedTransaction
+      ? {
+          id: t.refundedTransaction.id,
+          description: t.refundedTransaction.description,
+          amount: t.refundedTransaction.amount,
+          date: t.refundedTransaction.date.toISOString(),
+        }
+      : null,
+    refunds: (t.refunds ?? []).map((r: any) => ({
+      id: r.id,
+      description: r.description,
+      amount: r.amount,
+      date: r.date.toISOString(),
+    })),
     notes: t.notes ?? null,
     tags: (t.tags ?? []).map((tt: any) => ({
       id: tt.tag.id,
@@ -947,6 +968,21 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (data.categoryId) {
       const cat = await prisma.category.findFirst({ where: { id: data.categoryId, householdId } });
       if (!cat) return res.status(404).json({ error: 'Category not found' });
+    }
+
+    // Handle refundedTransactionId
+    if (req.body.refundedTransactionId !== undefined) {
+      if (req.body.refundedTransactionId !== null) {
+        const refTarget = await prisma.transaction.findFirst({
+          where: { id: req.body.refundedTransactionId, householdId },
+          select: { id: true },
+        });
+        if (!refTarget) return res.status(400).json({ error: 'refundedTransactionId not found' });
+      }
+      data.refundedTransactionId = req.body.refundedTransactionId ?? null;
+      if (req.body.refundedTransactionId !== null) {
+        data.isRefund = true;
+      }
     }
 
     const tx = await prisma.transaction.update({
