@@ -32,7 +32,7 @@ const TX_INCLUDE = {
   account: { select: { id: true, name: true } },
   tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
   refundedTransaction: {
-    select: { id: true, description: true, amount: true, date: true },
+    select: { id: true, description: true, amount: true, date: true, currency: true },
   },
   refunds: {
     select: { id: true, description: true, amount: true, date: true },
@@ -77,6 +77,7 @@ function formatTx(t: any) {
           description: t.refundedTransaction.description,
           amount: t.refundedTransaction.amount,
           date: t.refundedTransaction.date.toISOString(),
+          currency: t.refundedTransaction.currency ?? 'USD',
         }
       : null,
     refunds: (t.refunds ?? []).map((r: any) => ({
