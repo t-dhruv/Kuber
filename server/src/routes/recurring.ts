@@ -3,10 +3,27 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 
+const normalizeFrequency = (val: string) => {
+  const map: Record<string, string> = {
+    weekly: 'weekly',
+    biweekly: 'biweekly',
+    monthly: 'monthly',
+    quarterly: 'quarterly',
+    annual: 'annual',
+    annually: 'annual',
+  };
+  // Trim + lowercase so 'MONTHLY', ' Monthly ', etc. all normalize correctly.
+  // Unknown values fall through to Zod enum validation which produces a clear error.
+  return map[val.toLowerCase().trim()] ?? val.toLowerCase().trim();
+};
+
 const recurringCreateSchema = z.object({
   name: z.string().min(1),
   amount: z.number(),
-  frequency: z.enum(['weekly', 'biweekly', 'monthly', 'quarterly', 'annual']),
+  frequency: z
+    .string()
+    .transform(normalizeFrequency)
+    .pipe(z.enum(['weekly', 'biweekly', 'monthly', 'quarterly', 'annual'])),
   nextDate: z.string().min(1),
   accountId: z.string().min(1),
   categoryId: z.string().optional().nullable(),
