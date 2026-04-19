@@ -1367,6 +1367,7 @@ export default function TransactionsPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [showAutoCatPanel, setShowAutoCatPanel] = useState(false);
+  const autoCatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [splitTxn, setSplitTxn] = useState<Transaction | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
 
@@ -1431,28 +1432,56 @@ export default function TransactionsPage() {
     retry: false,
   });
 
+  const [autoCatProgress, setAutoCatProgress] = useState<{
+    processed: number; total: number; queued: number; done: boolean;
+  } | null>(null);
+
+  function stopAutoCatPolling() {
+    if (autoCatPollRef.current) {
+      clearInterval(autoCatPollRef.current);
+      autoCatPollRef.current = null;
+    }
+  }
+
   const autoCatMutation = useMutation({
     mutationFn: () =>
       api
         .post('/auto-categorize/batch')
-        .then((r) => r.data as { queued: number; skipped: number; notConfigured?: boolean; setupMessage?: string }),
+        .then((r) => r.data as { jobId: string | null; total: number; notConfigured?: boolean; setupMessage?: string }),
     onSuccess: (data) => {
       if (data.notConfigured) {
         notify.error(data.setupMessage ?? 'AI not configured');
         return;
       }
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['budget'] });
-      setShowAutoCatPanel(false);
-      if (data.queued > 0) {
-        notify.success(
-          `${data.queued} transaction${data.queued !== 1 ? 's' : ''} queued for review`,
-        );
-        queryClient.invalidateQueries({ queryKey: ['auto-categorize-status'] });
-      } else {
+      if (data.total === 0) {
         notify.info('No new transactions to categorize');
+        setShowAutoCatPanel(false);
+        return;
       }
+      setAutoCatProgress({ processed: 0, total: data.total, queued: 0, done: false });
+
+      // Poll for progress
+      autoCatPollRef.current = setInterval(async () => {
+        try {
+          const res = await api.get(`/auto-categorize/batch/progress/${data.jobId}`);
+          const state = res.data as { processed: number; total: number; queued: number; done: boolean };
+          setAutoCatProgress(state);
+          if (state.done) {
+            stopAutoCatPolling();
+            queryClient.invalidateQueries({ queryKey: ['transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['budget'] });
+            queryClient.invalidateQueries({ queryKey: ['auto-categorize-status'] });
+            if (state.queued > 0) {
+              notify.success(`${state.queued} transaction${state.queued !== 1 ? 's' : ''} queued for review`);
+            } else {
+              notify.info('No confident matches found');
+            }
+          }
+        } catch {
+          stopAutoCatPolling();
+        }
+      }, 1500);
     },
     onError: () => notify.error('Auto-categorize failed. Please try again.'),
   });
@@ -1460,6 +1489,9 @@ export default function TransactionsPage() {
   const accounts = accountsData?.groups?.flatMap((g) => g.accounts) ?? [];
   const categories = categoriesData ?? [];
   const transactions: Transaction[] = txnPages?.pages.flatMap((p) => p.transactions) ?? [];
+
+  // Cleanup polling interval on unmount
+  useEffect(() => () => stopAutoCatPolling(), []);
 
   // ── URL param helpers ──
 
@@ -1694,24 +1726,64 @@ export default function TransactionsPage() {
             </>
           )}
           {!autoCatStatusFetching && autoCatStatus && autoCatStatus.configured && (
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-[color:var(--color-text-secondary)]">
-                {autoCatStatus.uncategorizedCount > 0
-                  ? `Auto-categorize ${autoCatStatus.uncategorizedCount} uncategorized transaction${autoCatStatus.uncategorizedCount !== 1 ? 's' : ''}?`
-                  : 'All transactions are already categorized.'}
-              </p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--color-text-secondary)] hover:underline">Cancel</button>
-                {autoCatStatus.uncategorizedCount > 0 && (
-                  <Button
-                    variant="primary"
-                    disabled={autoCatMutation.isPending}
-                    onClick={() => autoCatMutation.mutate()}
+            <div className="flex flex-col gap-3">
+              {/* Progress state */}
+              {autoCatMutation.isPending || (autoCatProgress && !autoCatProgress.done) ? (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-[color:var(--color-text-secondary)]">
+                      Analyzing transactions… {autoCatProgress ? `${autoCatProgress.processed} / ${autoCatProgress.total}` : ''}
+                    </span>
+                    {autoCatProgress && (
+                      <span className="text-[color:var(--color-text-secondary)] text-xs">
+                        {autoCatProgress.queued} matched
+                      </span>
+                    )}
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-[color:var(--color-border)] overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-[color:var(--color-accent)] transition-all duration-300"
+                      style={{
+                        width: autoCatProgress && autoCatProgress.total > 0
+                          ? `${Math.round((autoCatProgress.processed / autoCatProgress.total) * 100)}%`
+                          : '5%',
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : autoCatProgress?.done ? (
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-sm text-[color:var(--color-text-secondary)]">
+                    Done — {autoCatProgress.queued} queued for review, {autoCatProgress.total - autoCatProgress.queued} skipped.
+                  </p>
+                  <button
+                    onClick={() => { setShowAutoCatPanel(false); setAutoCatProgress(null); }}
+                    className="text-sm text-[color:var(--color-text-secondary)] hover:underline"
                   >
-                    {autoCatMutation.isPending ? 'Categorizing…' : 'Confirm'}
-                  </Button>
-                )}
-              </div>
+                    Dismiss
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-sm text-[color:var(--color-text-secondary)]">
+                    {autoCatStatus.uncategorizedCount > 0
+                      ? `Auto-categorize ${autoCatStatus.uncategorizedCount} uncategorized transaction${autoCatStatus.uncategorizedCount !== 1 ? 's' : ''}?`
+                      : 'All transactions are already categorized.'}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--color-text-secondary)] hover:underline">Cancel</button>
+                    {autoCatStatus.uncategorizedCount > 0 && (
+                      <Button
+                        variant="primary"
+                        disabled={autoCatMutation.isPending}
+                        onClick={() => autoCatMutation.mutate()}
+                      >
+                        Confirm
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
