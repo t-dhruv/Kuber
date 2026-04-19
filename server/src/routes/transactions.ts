@@ -711,6 +711,15 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
       return results;
     });
 
+    // Update account running balance by the net sum of all imported transactions
+    if (created.length > 0) {
+      const netAmount = parsed.reduce((sum, row) => sum + row.amount, 0);
+      await prisma.account.update({
+        where: { id: accountId },
+        data: { balance: { increment: netAmount } },
+      });
+    }
+
     const skipped = totalAttempted - parsed.length;
 
     logAudit({

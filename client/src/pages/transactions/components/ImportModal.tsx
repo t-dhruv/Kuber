@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, ChangeEvent, DragEvent } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload, ArrowRight, ArrowLeft, FileText, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Modal, ModalFooter, Button, toast } from '@/components/ui';
@@ -374,6 +374,7 @@ interface Step3Props {
 }
 
 function Step3Preview({ file, accountId, dateFormat, mapping, invertAmounts, onBack, onDone }: Step3Props) {
+  const queryClient = useQueryClient();
   const previewQuery = useQuery<PreviewResponse>({
     queryKey: ['import-preview', file.name, accountId, dateFormat, JSON.stringify(mapping), invertAmounts],
     queryFn: async () => {
@@ -402,6 +403,7 @@ function Step3Preview({ file, accountId, dateFormat, mapping, invertAmounts, onB
     },
     onSuccess: (data) => {
       toast.success(`Imported ${data.imported} transactions${data.skipped ? ` (${data.skipped} skipped)` : ''}`);
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
       onDone();
     },
     onError: (err: any) => {
