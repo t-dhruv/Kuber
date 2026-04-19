@@ -135,12 +135,19 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     // Net worth: only non-excluded accounts
     const netWorthAccounts = accounts.filter(a => !a.excludeFromNetWorth);
+    const LIABILITY_TYPES = ['CREDIT_CARD', 'LOAN'];
+
     const assets = netWorthAccounts
-      .filter(a => a.balance > 0)
+      .filter(a => !LIABILITY_TYPES.includes(a.type) && a.balance > 0)
       .reduce((sum, a) => sum + a.balance, 0);
+
+    // Credit cards and loans are always liabilities. If balance is positive (overpayment),
+    // they contribute 0 to liabilities (not counted as assets).
     const liabilities = netWorthAccounts
-      .filter(a => a.balance < 0)
-      .reduce((sum, a) => sum + a.balance, 0);
+      .filter(a => LIABILITY_TYPES.includes(a.type) || a.balance < 0)
+      .reduce((sum, a) => {
+        return sum + (LIABILITY_TYPES.includes(a.type) ? Math.min(a.balance, 0) : a.balance);
+      }, 0);
 
     return res.json({
       groups,
