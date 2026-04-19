@@ -1,7 +1,22 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-04-18 — Sprint 18: Cursor Pagination + Security Hardening
+> Last updated: 2026-04-19 — Sprint 19: Bug Fixes + Refund Linkage
+
+---
+
+## Sprint 19 — Bug Fixes + Refund Linkage (2026-04-19)
+
+**Goal:** Fix 6 production bugs discovered in manual testing; add refund linkage to transaction model.
+
+**Completed:**
+- Fixed recurring create/edit: normalized frequency case + `ANNUALLY`→`annual` mapping — was always returning 400
+- Fixed CSV import: now updates account.balance by net imported amount — was silently skipping
+- Fixed bulk delete: now reverses account balance per deleted transaction — was silently skipping
+- Fixed notifications: dedup window expanded 24h→7 days, now checks read+unread, added entity-level dedup for missed_payment
+- Fixed credit card display: shows "Amount Owed: $500" + utilization bar instead of raw -$500
+- Fixed net worth: credit card / loan accounts never counted as assets even if balance is positive
+- Added refund linkage: `refundedTransactionId` on Transaction, link picker in detail drawer, "REFUNDED" badge on originals
 
 ---
 
@@ -45,11 +60,11 @@
 | Budget | 🟢 Enhanced | v2: Fixed/Flexible/Non-Monthly sections, unbudgeted alert, budgetType selector, Left-to-Budget banner |
 | Cash Flow | 🟢 Working | NaN crash fixed, income/expenses as objects; Sankey chart implemented |
 | Reports | 🟢 Enhanced | Reports v2: Filters panel (categories/accounts/tags/amount), Totals/Change toggle with period comparison, Monthly/Quarterly grouping, Cash Flow grouped bar+line chart, polished transaction rows + full summary sidebar |
-| Recurring | 🟢 Working | Runtime crash fixed, MonthlySummary corrected |
+| Recurring | 🟢 Enhanced | Frequency case normalization, create/edit fixed (400 error resolved) |
 | Goals | 🟢 Working | currentAmount/targetAmount fixed in display + forms |
 | Investments | 🟢 Enhanced | Live benchmarks via Yahoo Finance (SPY/BND/VTI) with 15-min cache + fallback |
 | Settings | 🟢 Working | Notifications fixed; 2FA setup/disable UI; SMTP test; Integrations section |
-| Notifications | 🟢 Working | Read/write envelope corrected |
+| Notifications | 🟢 Enhanced | 7-day dedup window, read+unread checks, entity-level dedup, missed_payment alerts |
 | AI Advisor | 🟢 Done | Real multi-provider (Claude/OpenAI/Gemini/OpenRouter); conversation persistence |
 | Advice Library | 🟢 Done | 6 topics × 6 tasks, task checklist UI, per-household completion tracking |
 | Tags Management | 🟢 Done | Settings > Tags CRUD with color swatches and transaction counts |
