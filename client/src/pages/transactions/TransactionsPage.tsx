@@ -1390,6 +1390,8 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['budget'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['networth'] });
       setSelectedIds(new Set());
     },
     onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),

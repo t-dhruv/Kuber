@@ -1164,9 +1164,30 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
       }
 
       case 'delete': {
+        // Fetch before delete so we can reverse balance effects
+        const toDelete = await prisma.transaction.findMany({
+          where: { id: { in: ids }, householdId },
+          select: { id: true, accountId: true, amount: true },
+        });
+
         await prisma.transaction.deleteMany({
           where: { id: { in: ids }, householdId },
         });
+
+        // Group by accountId and reverse net balance per account
+        const balanceDelta = new Map<string, number>();
+        for (const tx of toDelete) {
+          balanceDelta.set(tx.accountId, (balanceDelta.get(tx.accountId) ?? 0) - tx.amount);
+        }
+
+        await Promise.all(
+          Array.from(balanceDelta.entries()).map(([accountId, delta]) =>
+            prisma.account.update({
+              where: { id: accountId },
+              data: { balance: { increment: delta } },
+            })
+          )
+        );
         break;
       }
 
