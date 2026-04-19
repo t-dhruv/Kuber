@@ -175,18 +175,33 @@ export async function runProactiveChecks(
   ]);
 
   const allInsights = [...anomalies, ...subscriptions, ...missedPayments];
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  // Load recent unread notifications to deduplicate
+  // Load ALL notifications (read or unread) from last 7 days to deduplicate.
+  // Previous 24h/unread-only window allowed the same insight to respawn daily once read.
   const recentNotifications = await prisma.notification.findMany({
-    where: { householdId, createdAt: { gte: oneDayAgo }, read: false },
-    select: { title: true },
+    where: { householdId, createdAt: { gte: sevenDaysAgo } },
+    select: { title: true, type: true, linkedEntityId: true },
   });
   const recentTitles = new Set(recentNotifications.map((n) => n.title));
+
+  // Secondary dedup: don't re-create missed_payment for the same recurring item within 7 days,
+  // even if the title changed (e.g. date differs slightly).
+  const recentMissedPaymentEntityIds = new Set(
+    recentNotifications
+      .filter((n) => n.type === 'missed_payment' && n.linkedEntityId)
+      .map((n) => n.linkedEntityId!)
+  );
 
   let created = 0;
   for (const insight of allInsights) {
     if (recentTitles.has(insight.title)) continue; // deduplicate
+    // Entity-level dedup for missed_payment: same recurring item, different title (date changes)
+    if (
+      insight.type === 'missed_payment' &&
+      insight.linkedEntityId &&
+      recentMissedPaymentEntityIds.has(insight.linkedEntityId)
+    ) continue;
     await prisma.notification.create({
       data: {
         householdId,
