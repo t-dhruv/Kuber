@@ -49,6 +49,7 @@ interface Transaction {
   accountName: string;
   accountLastFour?: string;
   amount: number;
+  currency?: string;
   date: string;
   notes?: string;
   tags: Tag[];
@@ -66,6 +67,7 @@ interface Transaction {
     id: string;
     description: string;
     amount: number;
+    currency?: string;
     date: string;
   } | null;
   refunds: Array<{
@@ -237,7 +239,7 @@ function RefundTransactionPicker({
     queryFn: () =>
       api
         .get(`/transactions?limit=10&search=${encodeURIComponent(search)}`)
-        .then((r) => r.data.transactions as Array<{ id: string; description: string; amount: number; date: string; merchantName: string }>),
+        .then((r) => r.data.transactions as Array<{ id: string; description: string; amount: number; currency?: string; date: string; merchantName: string }>),
     enabled: search.length >= 2,
     staleTime: 30_000,
   });
@@ -265,7 +267,7 @@ function RefundTransactionPicker({
             >
               <span className="truncate">{tx.merchantName || tx.description}</span>
               <span className="text-[var(--color-text-muted)] ml-2 shrink-0">
-                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(tx.amount))} · {new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {new Intl.NumberFormat('en-US', { style: 'currency', currency: tx.currency ?? 'USD' }).format(Math.abs(tx.amount))} · {new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </span>
             </button>
           ))}
@@ -618,7 +620,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
                       <div>
                         <div className="text-[0.8125rem] font-medium">{form.refundedTransaction.description}</div>
                         <div className="text-[0.75rem] text-[var(--color-text-muted)]">
-                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(form.refundedTransaction.amount))} · {new Date(form.refundedTransaction.date).toLocaleDateString()}
+                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: form.refundedTransaction.currency ?? 'USD' }).format(Math.abs(form.refundedTransaction.amount))} · {new Date(form.refundedTransaction.date).toLocaleDateString()}
                         </div>
                       </div>
                       <button
