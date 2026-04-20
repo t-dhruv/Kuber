@@ -1,26 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// ── Mock Prisma ──────────────────────────────────────────────────────────────
-const mockTransaction = {
-  findFirst: vi.fn(),
-  update:    vi.fn(),
-};
-const mockCategory = {
-  findMany: vi.fn(),
-};
-const mockTransactionSplit = {
-  deleteMany: vi.fn(),
-  createMany: vi.fn(),
-  findMany:   vi.fn(),
-};
-const mockPrismaTransaction = vi.fn();
-
 vi.mock('../lib/prisma', () => ({
   prisma: {
-    transaction:      mockTransaction,
-    category:         mockCategory,
-    transactionSplit: mockTransactionSplit,
-    $transaction:     mockPrismaTransaction,
+    transaction: {
+      findFirst: vi.fn(),
+      update: vi.fn(),
+    },
+    category: {
+      findMany: vi.fn(),
+    },
+    transactionSplit: {
+      deleteMany: vi.fn(),
+      createMany: vi.fn(),
+      findMany: vi.fn(),
+    },
+    $transaction: vi.fn(),
   },
 }));
 
