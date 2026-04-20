@@ -1,129 +1,164 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma';
 import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 
-const router = Router();
+export const router = Router();
 
-// ---------------------------------------------------------------------------
-// Zod schemas
-// ---------------------------------------------------------------------------
+// ─── Zod schema ──────────────────────────────────────────────────────────────
 
-const splitSchema = z.object({
-  splits: z
-    .array(
-      z.object({
-        categoryId: z.string().min(1),
-        amount: z.number(),
-        note: z.string().optional(),
-      })
-    )
-    .min(2, 'At least 2 splits required'),
+const splitItemSchema = z.object({
+  amountDecimal: z.number().positive({ message: 'Split amounts must be greater than zero' }),
+  categoryId:    z.string().min(1),
+  notes:         z.string().optional().nullable(),
 });
 
-// ---------------------------------------------------------------------------
-// POST /api/v1/transactions/:id/split
-// ---------------------------------------------------------------------------
+const splitBodySchema = z.object({
+  splits: z.array(splitItemSchema).min(2, 'At least 2 splits required'),
+});
+
+export type SplitItem = z.infer<typeof splitItemSchema>;
+
+// ─── Pure validation helpers (exported for unit tests) ───────────────────────
+
+export function validateSplitAmounts(
+  parentAmount: number,
+  splits: { amountDecimal: number; categoryId: string; notes?: string | null }[],
+): void {
+  if (splits.length < 2) throw new Error('At least 2 splits required');
+
+  for (const s of splits) {
+    if (s.amountDecimal <= 0) {
+      throw new Error('Split amounts must be greater than zero');
+    }
+  }
+
+  const parentCents = Math.round(Math.abs(parentAmount) * 100);
+  const splitCents  = Math.round(
+    splits.reduce((sum, s) => sum + Math.abs(s.amountDecimal), 0) * 100,
+  );
+
+  if (parentCents !== splitCents) {
+    throw new Error(
+      `Split amounts must sum to ${(parentCents / 100).toFixed(2)} (got ${(splitCents / 100).toFixed(2)})`,
+    );
+  }
+}
+
+export function validateSplitCategories(
+  categoryIds: string[],
+  validSet: Set<string>,
+): string | undefined {
+  return categoryIds.find((cid) => !validSet.has(cid));
+}
+
+// ─── POST /api/v1/transactions/:id/split ─────────────────────────────────────
 
 router.post('/:id/split', async (req: AuthRequest, res: Response) => {
+  const householdId = req.householdId!;
+  const { id }      = req.params;
+
+  const parsed = splitBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+  }
+
+  const { splits } = parsed.data;
+
+  const txn = await prisma.transaction.findFirst({ where: { id, householdId } });
+  if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+
   try {
-    const householdId = req.householdId!;
-    const { id } = req.params;
+    validateSplitAmounts(txn.amount, splits);
+  } catch (err: unknown) {
+    return res.status(400).json({ error: err instanceof Error ? err.message : 'Validation error' });
+  }
 
-    const parseResult = splitSchema.safeParse(req.body);
-    if (!parseResult.success) {
-      return res.status(400).json({ error: parseResult.error.issues[0]?.message ?? 'Invalid body' });
-    }
+  const categoryIds = splits.map((s) => s.categoryId);
+  const validCategories = await prisma.category.findMany({
+    where:  { id: { in: categoryIds }, householdId },
+    select: { id: true },
+  });
+  const invalidCategoryId = validateSplitCategories(
+    categoryIds,
+    new Set(validCategories.map((c) => c.id)),
+  );
+  if (invalidCategoryId) {
+    return res.status(400).json({ error: `Category not found: ${invalidCategoryId}` });
+  }
 
-    const { splits } = parseResult.data;
-
-    // Load the parent transaction, scoped to household
-    const transaction = await prisma.transaction.findFirst({
-      where: { id, householdId },
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.transactionSplit.deleteMany({ where: { transactionId: id } });
+    await tx.transactionSplit.createMany({
+      data: splits.map((s) => ({
+        transactionId: id,
+        amountDecimal: s.amountDecimal,
+        categoryId:    s.categoryId,
+        notes:         s.notes ?? null,
+      })),
     });
-
-    if (!transaction) {
-      return res.status(404).json({ error: 'Transaction not found' });
-    }
-
-    // Validate amounts sum to original (integer-cent comparison to avoid float issues)
-    const originalCents = Math.round(Math.abs(transaction.amount) * 100);
-    const splitsCents = Math.round(
-      splits.reduce((sum, s) => sum + Math.abs(s.amount), 0) * 100
-    );
-
-    if (originalCents !== splitsCents) {
-      return res.status(400).json({
-        error: `Split amounts must sum to ${(originalCents / 100).toFixed(2)} (got ${(splitsCents / 100).toFixed(2)})`,
-      });
-    }
-
-    // Validate all categoryIds belong to this household
-    const categoryIds = splits.map((s) => s.categoryId);
-    const validCategories = await prisma.category.findMany({
-      where: { id: { in: categoryIds }, householdId },
-      select: { id: true },
-    });
-
-    const validCategoryIdSet = new Set(validCategories.map((c) => c.id));
-    const invalidCategoryId = categoryIds.find((cid) => !validCategoryIdSet.has(cid));
-    if (invalidCategoryId) {
-      return res.status(400).json({ error: `Category not found: ${invalidCategoryId}` });
-    }
-
-    // Update the transaction
-    const updated = await prisma.transaction.update({
+    return tx.transaction.update({
       where: { id },
       data: {
-        isSplit: true,
-        splitDetails: splits,
+        isSplit:      true,
+        splitDetails: Prisma.DbNull,
       },
       include: {
         category: { select: { id: true, name: true, emoji: true } },
-        merchant: { select: { name: true, displayName: true } },
-        account: { select: { id: true, name: true } },
-        tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+        account:  { select: { id: true, name: true } },
+        splits: {
+          include: { category: { select: { id: true, name: true, emoji: true } } },
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
+  });
 
-    return res.json(updated);
-  } catch (err) {
-    req.log.error({ err }, 'POST split error');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
+  return res.json(updated);
 });
 
-// ---------------------------------------------------------------------------
-// DELETE /api/v1/transactions/:id/split
-// ---------------------------------------------------------------------------
+// ─── GET /api/v1/transactions/:id/splits ─────────────────────────────────────
+
+router.get('/:id/splits', async (req: AuthRequest, res: Response) => {
+  const householdId = req.householdId!;
+  const { id }      = req.params;
+
+  const txn = await prisma.transaction.findFirst({
+    where: { id, householdId },
+    select: { id: true, isSplit: true },
+  });
+  if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+
+  if (!txn.isSplit) return res.json([]);
+
+  const splits = await prisma.transactionSplit.findMany({
+    where:   { transactionId: id },
+    include: { category: { select: { id: true, name: true, emoji: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return res.json(splits);
+});
+
+// ─── DELETE /api/v1/transactions/:id/split ───────────────────────────────────
 
 router.delete('/:id/split', async (req: AuthRequest, res: Response) => {
-  try {
-    const householdId = req.householdId!;
-    const { id } = req.params;
+  const householdId = req.householdId!;
+  const { id }      = req.params;
 
-    const transaction = await prisma.transaction.findFirst({
-      where: { id, householdId },
-    });
+  const txn = await prisma.transaction.findFirst({ where: { id, householdId } });
+  if (!txn) return res.status(404).json({ error: 'Transaction not found' });
 
-    if (!transaction) {
-      return res.status(404).json({ error: 'Transaction not found' });
-    }
-
-    const updated = await prisma.transaction.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.transactionSplit.deleteMany({ where: { transactionId: id } });
+    await tx.transaction.update({
       where: { id },
-      data: {
-        isSplit: false,
-        splitDetails: Prisma.DbNull,
-      },
+      data:  { isSplit: false, splitDetails: Prisma.DbNull },
     });
+  });
 
-    return res.json(updated);
-  } catch (err) {
-    req.log.error({ err }, 'DELETE split error');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
+  return res.json({ message: 'Split removed' });
 });
 
 export default router;
