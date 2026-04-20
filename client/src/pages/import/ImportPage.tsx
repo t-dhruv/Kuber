@@ -178,6 +178,8 @@ export interface ParsedRow {
   error?: string;
   investmentType?: 'buy' | 'sell' | 'dividend' | 'transfer' | 'fee' | 'other';
   ticker?: string | null;
+  suggestedCategoryId?: string | null;
+  suggestedCategoryName?: string | null;
 }
 
 export interface ParseResult {
