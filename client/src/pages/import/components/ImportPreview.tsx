@@ -1,16 +1,22 @@
 /**
  * ImportPreview.tsx
  * Shows parsed rows with NEW / DUPLICATE / INVALID status.
- * User can deselect rows they don't want to import, then confirm.
+ * User can deselect rows, assign/override categories, then confirm.
  */
 
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, XCircle, AlertTriangle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CheckCircle2, XCircle, AlertTriangle, Loader2, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui';
 import { notify } from '@/components/ui';
 import type { ParseResult, ParsedRow } from '../ImportPage';
+
+interface Category {
+  id: string;
+  name: string;
+  emoji?: string | null;
+}
 
 interface Props {
   result: ParseResult;
@@ -41,10 +47,22 @@ const BANK_NAMES: Record<string, string> = {
 
 export default function ImportPreview({ result, filename, accountId, onDone, onCancel }: Props) {
   const queryClient = useQueryClient();
+
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(result.rows.filter((r) => r.status === 'new').map((r) => r.hash))
   );
   const [showDuplicates, setShowDuplicates] = useState(false);
+
+  // Category overrides: hash → categoryId (null = unassigned)
+  const [categoryMap, setCategoryMap] = useState<Map<string, string | null>>(
+    () => new Map(result.rows.map((r) => [r.hash, r.suggestedCategoryId ?? null]))
+  );
+
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ['categories'],
+    queryFn: () => api.get('/categories').then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -57,6 +75,7 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
           description: r.description,
           amount: r.amount,
           hash: r.hash,
+          ...(categoryMap.get(r.hash) ? { categoryId: categoryMap.get(r.hash) } : {}),
           ...(r.investmentType ? { investmentType: r.investmentType, ticker: r.ticker } : {}),
         }));
       const res = await api.post('/import/confirm', {
@@ -95,12 +114,15 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
     });
   }
 
+  function setCategory(hash: string, categoryId: string | null) {
+    setCategoryMap((prev) => new Map(prev).set(hash, categoryId));
+  }
+
   const newRows = result.rows.filter((r) => r.status === 'new');
   const dupRows = result.rows.filter((r) => r.status === 'duplicate');
   const invalidRows = result.rows.filter((r) => r.status === 'invalid');
-  const selectedCount = [...selected].filter((h) =>
-    result.rows.some((r) => r.hash === h)
-  ).length;
+  const selectedCount = [...selected].filter((h) => result.rows.some((r) => r.hash === h)).length;
+  const suggestedCount = newRows.filter((r) => r.suggestedCategoryId).length;
   const bankLabel = BANK_NAMES[result.bankSource] ?? result.bankSource;
 
   return (
@@ -116,9 +138,23 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
           {invalidRows.length > 0 && (
             <Stat label="Invalid" value={String(invalidRows.length)} color="red" />
           )}
+          {suggestedCount > 0 && (
+            <Stat label="Auto-categorized" value={String(suggestedCount)} color="blue" />
+          )}
         </div>
         <p className="text-sm text-[color:var(--color-text-secondary)]">{filename}</p>
       </div>
+
+      {/* Category suggestion notice */}
+      {suggestedCount > 0 && (
+        <div className="flex items-start gap-2.5 bg-[color:var(--color-surface-hover)] border border-[color:var(--color-border)] rounded-lg px-4 py-3 text-sm text-[color:var(--color-text-secondary)]">
+          <Tag size={15} className="shrink-0 mt-0.5" style={{ color: 'var(--color-accent)' }} />
+          <span>
+            <strong style={{ color: 'var(--color-text)' }}>{suggestedCount}</strong> transaction{suggestedCount !== 1 ? 's' : ''} auto-categorized using your rules.
+            Review and adjust categories below before importing.
+          </span>
+        </div>
+      )}
 
       {/* New rows table */}
       {newRows.length > 0 && (
@@ -144,7 +180,14 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
               </button>
             </div>
           </div>
-          <RowTable rows={newRows} selected={selected} onToggle={toggleRow} />
+          <RowTable
+            rows={newRows}
+            selected={selected}
+            categoryMap={categoryMap}
+            categories={categories}
+            onToggle={toggleRow}
+            onCategoryChange={setCategory}
+          />
         </div>
       )}
 
@@ -160,7 +203,15 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
             Duplicates ({dupRows.length}) — already in Kuber
           </button>
           {showDuplicates && (
-            <RowTable rows={dupRows} selected={selected} onToggle={toggleRow} dimmed />
+            <RowTable
+              rows={dupRows}
+              selected={selected}
+              categoryMap={categoryMap}
+              categories={categories}
+              onToggle={toggleRow}
+              onCategoryChange={setCategory}
+              dimmed
+            />
           )}
         </div>
       )}
@@ -210,12 +261,12 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: string; color?: 'green' | 'gray' | 'red' }) {
-  const colorClass = color === 'green'
-    ? 'text-green-600 dark:text-green-400'
-    : color === 'red'
-    ? 'text-red-600 dark:text-red-400'
-    : 'text-[color:var(--color-text)]';
+function Stat({ label, value, color }: { label: string; value: string; color?: 'green' | 'gray' | 'red' | 'blue' }) {
+  const colorClass =
+    color === 'green' ? 'text-green-600 dark:text-green-400' :
+    color === 'red'   ? 'text-red-600 dark:text-red-400' :
+    color === 'blue'  ? 'text-blue-600 dark:text-blue-400' :
+    'text-[color:var(--color-text)]';
   return (
     <div>
       <p className="text-xs text-[color:var(--color-text-secondary)]">{label}</p>
@@ -227,21 +278,25 @@ function Stat({ label, value, color }: { label: string; value: string; color?: '
 interface RowTableProps {
   rows: ParsedRow[];
   selected: Set<string>;
+  categoryMap: Map<string, string | null>;
+  categories: Category[];
   onToggle: (hash: string) => void;
+  onCategoryChange: (hash: string, categoryId: string | null) => void;
   dimmed?: boolean;
 }
 
 const INV_TYPE_COLORS: Record<string, string> = {
-  buy: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  sell: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+  buy:      'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  sell:     'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
   dividend: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
   transfer: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  fee: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  other: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  fee:      'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  other:    'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 };
 
-function RowTable({ rows, selected, onToggle, dimmed }: RowTableProps) {
+function RowTable({ rows, selected, categoryMap, categories, onToggle, onCategoryChange, dimmed }: RowTableProps) {
   const hasInvestmentData = rows.some((r) => r.investmentType);
+
   return (
     <div className={`rounded-lg border border-[color:var(--color-border)] overflow-hidden ${dimmed ? 'opacity-60' : ''}`}>
       <table className="w-full text-sm">
@@ -251,44 +306,71 @@ function RowTable({ rows, selected, onToggle, dimmed }: RowTableProps) {
             <th className="px-3 py-2 text-left">Date</th>
             <th className="px-3 py-2 text-left">Description</th>
             {hasInvestmentData && <th className="px-3 py-2 text-left">Type</th>}
+            <th className="px-3 py-2 text-left">Category</th>
             <th className="px-3 py-2 text-right">Amount</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.hash}
-              className="border-t border-[color:var(--color-border)] hover:bg-[color:var(--color-surface-hover)] cursor-pointer"
-              onClick={() => onToggle(row.hash)}
-            >
-              <td className="px-3 py-2">
-                <input
-                  type="checkbox"
-                  checked={selected.has(row.hash)}
-                  onChange={() => onToggle(row.hash)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="rounded"
-                />
-              </td>
-              <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{row.date}</td>
-              <td className="px-3 py-2 max-w-xs truncate">
-                {row.ticker && <span className="font-mono font-bold mr-1.5">{row.ticker}</span>}
-                {row.description}
-              </td>
-              {hasInvestmentData && (
+          {rows.map((row) => {
+            const isSelected = selected.has(row.hash);
+            const selectedCategoryId = categoryMap.get(row.hash) ?? null;
+            const isSuggested = !!row.suggestedCategoryId && selectedCategoryId === row.suggestedCategoryId;
+
+            return (
+              <tr
+                key={row.hash}
+                className="border-t border-[color:var(--color-border)] hover:bg-[color:var(--color-surface-hover)] cursor-pointer"
+                onClick={() => onToggle(row.hash)}
+              >
                 <td className="px-3 py-2">
-                  {row.investmentType && (
-                    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${INV_TYPE_COLORS[row.investmentType] ?? INV_TYPE_COLORS.other}`}>
-                      {row.investmentType.toUpperCase()}
-                    </span>
-                  )}
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggle(row.hash)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded"
+                  />
                 </td>
-              )}
-              <td className={`px-3 py-2 text-right font-medium ${row.amount < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                {row.amount < 0 ? '-' : '+'}${Math.abs(row.amount).toFixed(2)}
-              </td>
-            </tr>
-          ))}
+                <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{row.date}</td>
+                <td className="px-3 py-2 max-w-[180px] truncate">
+                  {row.ticker && <span className="font-mono font-bold mr-1.5">{row.ticker}</span>}
+                  {row.description}
+                </td>
+                {hasInvestmentData && (
+                  <td className="px-3 py-2">
+                    {row.investmentType && (
+                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${INV_TYPE_COLORS[row.investmentType] ?? INV_TYPE_COLORS.other}`}>
+                        {row.investmentType.toUpperCase()}
+                      </span>
+                    )}
+                  </td>
+                )}
+                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1">
+                    <select
+                      value={selectedCategoryId ?? ''}
+                      onChange={(e) => onCategoryChange(row.hash, e.target.value || null)}
+                      className="text-xs border border-[color:var(--color-border)] rounded px-1.5 py-1 bg-[color:var(--color-surface)] text-[color:var(--color-text)] max-w-[140px]"
+                      style={{ minWidth: 100 }}
+                    >
+                      <option value="">— none —</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.name}</option>
+                      ))}
+                    </select>
+                    {isSuggested && (
+                      <span className="text-[10px] font-semibold px-1 py-0.5 rounded" style={{ backgroundColor: 'var(--color-accent)', color: '#fff', opacity: 0.85 }}>
+                        auto
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className={`px-3 py-2 text-right font-medium whitespace-nowrap ${row.amount < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                  {row.amount < 0 ? '-' : '+'}${Math.abs(row.amount).toFixed(2)}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

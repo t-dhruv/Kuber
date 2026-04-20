@@ -215,6 +215,74 @@ function extractTicker(description: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Category suggestion via rules
+// ---------------------------------------------------------------------------
+
+type RuleCondition = { field: 'merchantName' | 'description' | 'amount'; operator: 'contains' | 'equals' | 'startsWith' | 'endsWith' | 'gt' | 'lt' | 'gte' | 'lte'; value: string | number };
+type RuleAction    = { type: 'setCategory' | 'addTag' | 'hide' | 'markReviewed'; value?: string };
+
+function evalRuleCond(cond: RuleCondition, tx: { description: string; amount: number }): boolean {
+  if (cond.field === 'amount') {
+    const n = tx.amount;
+    const v = typeof cond.value === 'number' ? cond.value : parseFloat(cond.value as string);
+    switch (cond.operator) {
+      case 'equals': return n === v;
+      case 'gt': return n > v;
+      case 'lt': return n < v;
+      case 'gte': return n >= v;
+      case 'lte': return n <= v;
+      default: return false;
+    }
+  } else {
+    const s = tx.description.toLowerCase();
+    const v = String(cond.value).toLowerCase();
+    switch (cond.operator) {
+      case 'contains': return s.includes(v);
+      case 'equals': return s === v;
+      case 'startsWith': return s.startsWith(v);
+      case 'endsWith': return s.endsWith(v);
+      default: return false;
+    }
+  }
+}
+
+async function suggestCategoriesForRows(
+  rows: ParsedRow[],
+  householdId: string
+): Promise<Map<string, { categoryId: string; categoryName: string } | null>> {
+  const [rules, categories] = await Promise.all([
+    prisma.rule.findMany({ where: { householdId, isActive: true }, orderBy: { sortOrder: 'asc' } }),
+    prisma.category.findMany({ where: { householdId }, select: { id: true, name: true } }),
+  ]);
+
+  const catMap = new Map(categories.map((c) => [c.id, c.name]));
+
+  const activeRules = rules
+    .map((r) => ({ conditions: r.conditions as RuleCondition[], actions: r.actions as RuleAction[] }))
+    .filter((r) => r.actions.some((a) => a.type === 'setCategory' && a.value));
+
+  const result = new Map<string, { categoryId: string; categoryName: string } | null>();
+
+  for (const row of rows) {
+    if (row.status !== 'new') { result.set(row.hash, null); continue; }
+    let matched: { categoryId: string; categoryName: string } | null = null;
+    for (const rule of activeRules) {
+      const tx = { description: row.description, amount: row.amount };
+      if (rule.conditions.every((c) => evalRuleCond(c, tx))) {
+        const action = rule.actions.find((a) => a.type === 'setCategory' && a.value);
+        if (action?.value) {
+          matched = { categoryId: action.value, categoryName: catMap.get(action.value) ?? 'Unknown' };
+          break;
+        }
+      }
+    }
+    result.set(row.hash, matched);
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/v1/import/detect-mapping
 // Upload CSV → fuzzy-detect column mapping → return mapping + sample rows
 // No DB writes. Used by the UI mapping confirmation step.
@@ -371,6 +439,13 @@ router.post('/parse-with-mapping', upload.single('file'), async (req: AuthReques
     const dupCount = parsedRows.filter((r) => r.status === 'duplicate').length;
     const invalidCount = parsedRows.filter((r) => r.status === 'invalid').length;
 
+    const capped = parsedRows.slice(0, 200) as ParsedRow[];
+    const suggestions = await suggestCategoriesForRows(capped, req.householdId!);
+    const rowsWithSuggestions = capped.map((r) => {
+      const s = suggestions.get(r.hash);
+      return s ? { ...r, suggestedCategoryId: s.categoryId, suggestedCategoryName: s.categoryName } : r;
+    });
+
     return res.json({
       bankSource: 'custom-mapping',
       confidence: 100,
@@ -378,7 +453,7 @@ router.post('/parse-with-mapping', upload.single('file'), async (req: AuthReques
       newCount,
       dupCount,
       invalidCount,
-      rows: parsedRows.slice(0, 200),
+      rows: rowsWithSuggestions,
     });
   } catch (err) {
     req.log.error({ err }, 'import/parse-with-mapping');
@@ -415,6 +490,13 @@ router.post('/parse', upload.single('file'), async (req: AuthRequest, res) => {
     const dupCount = rows.filter((r) => r.status === 'duplicate').length;
     const invalidCount = rows.filter((r) => r.status === 'invalid').length;
 
+    const capped = rows.slice(0, 200);
+    const suggestions = await suggestCategoriesForRows(capped, req.householdId!);
+    const rowsWithSuggestions = capped.map((r) => {
+      const s = suggestions.get(r.hash);
+      return s ? { ...r, suggestedCategoryId: s.categoryId, suggestedCategoryName: s.categoryName } : r;
+    });
+
     return res.json({
       bankSource,
       confidence: Math.round(confidence * 100),
@@ -422,7 +504,7 @@ router.post('/parse', upload.single('file'), async (req: AuthRequest, res) => {
       newCount,
       dupCount,
       invalidCount,
-      rows: rows.slice(0, 200), // cap preview at 200 rows
+      rows: rowsWithSuggestions,
     });
   } catch (err) {
     req.log.error({ err }, 'Import parse error');
