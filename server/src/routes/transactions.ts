@@ -6,6 +6,8 @@ import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { fireWebhooks } from '../lib/webhookFire';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
+import { applyActiveRulesToTransaction } from '../lib/ruleEngine';
+import { getTransactionSplitDetails } from '../lib/transactionSplits';
 
 // multer: memory storage, CSV only, 10 MB limit
 const upload = multer({
@@ -30,6 +32,10 @@ const TX_INCLUDE = {
   category: { select: { id: true, name: true, emoji: true } },
   merchant: { select: { name: true, displayName: true } },
   account: { select: { id: true, name: true } },
+  splits: {
+    include: { category: { select: { id: true, name: true, emoji: true } } },
+    orderBy: { createdAt: 'asc' as const },
+  },
   tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
   refundedTransaction: {
     select: { id: true, description: true, amount: true, date: true, currency: true },
@@ -66,7 +72,7 @@ function formatTx(t: any) {
     isHidden: t.isHidden,
     isPending: t.isPending,
     isSplit: t.isSplit,
-    splitDetails: t.splitDetails ?? null,
+    splitDetails: getTransactionSplitDetails(t),
     isTransfer: t.isTransfer ?? false,
     transferId: t.transferId ?? null,
     isRefund: t.isRefund ?? false,
@@ -85,6 +91,14 @@ function formatTx(t: any) {
       description: r.description,
       amount: r.amount,
       date: r.date.toISOString(),
+    })),
+    splits: (t.splits ?? []).map((s: any) => ({
+      id:            s.id,
+      amountDecimal: Number(s.amountDecimal),
+      categoryId:    s.categoryId ?? null,
+      categoryName:  s.category?.name ?? null,
+      categoryEmoji: s.category?.emoji ?? null,
+      notes:         s.notes ?? null,
     })),
     notes: t.notes ?? null,
     tags: (t.tags ?? []).map((tt: any) => ({
@@ -775,34 +789,26 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
     const tx = await prisma.transaction.findFirst({
       where: { id, householdId },
-      include: TX_INCLUDE,
+      include: {
+        ...TX_INCLUDE,
+        splits: {
+          include: {
+            category: { select: { id: true, name: true } },
+          },
+        },
+      },
     });
 
     if (!tx) return res.status(404).json({ error: 'Transaction not found' });
 
     const base = formatTx(tx);
-
-    // Parse splits from splitDetails JSON if isSplit
-    let splits: Array<{
-      id: string;
-      categoryId: string | null;
-      categoryName: string | null;
-      amount: number;
-      notes: string | null;
-    }> = [];
-
-    if (tx.isSplit && tx.splitDetails) {
-      const raw = tx.splitDetails as any;
-      if (Array.isArray(raw)) {
-        splits = raw.map((s: any) => ({
-          id: s.id ?? '',
-          categoryId: s.categoryId ?? null,
-          categoryName: s.categoryName ?? null,
-          amount: typeof s.amount === 'number' ? s.amount : 0,
-          notes: s.notes ?? null,
-        }));
-      }
-    }
+    const splits = getTransactionSplitDetails(tx).map((split) => ({
+      id: split.id,
+      categoryId: split.categoryId,
+      categoryName: split.categoryName,
+      amount: split.amount,
+      notes: split.notes ?? null,
+    }));
 
     return res.json({ ...base, splits, attachments: [] });
   } catch (err) {
@@ -849,7 +855,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const tx = await prisma.transaction.create({
+    const createdTx = await prisma.transaction.create({
       data: {
         householdId,
         accountId,
@@ -868,6 +874,17 @@ router.post('/', async (req: AuthRequest, res: Response) => {
           ? { tags: { create: tagIds.map((tagId: string) => ({ tagId })) } }
           : {}),
       },
+      include: TX_INCLUDE,
+    });
+
+    await applyActiveRulesToTransaction(prisma, createdTx.id, householdId, {
+      description: createdTx.description,
+      merchantName: createdTx.description,
+      amount: createdTx.amount,
+    });
+
+    const tx = await prisma.transaction.findUniqueOrThrow({
+      where: { id: createdTx.id },
       include: TX_INCLUDE,
     });
 
