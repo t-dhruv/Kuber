@@ -54,14 +54,17 @@ export function mapDbSplitsToLegacyDetails(splits: DbSplit[]): SplitResponse[] {
 export function normalizeLegacySplitDetails(raw: unknown): SplitResponse[] {
   if (!Array.isArray(raw)) return [];
 
-  return raw.map((split: any, index) => ({
-    id: typeof split?.id === 'string' ? split.id : `legacy-${index}`,
-    categoryId: typeof split?.categoryId === 'string' ? split.categoryId : null,
-    categoryName: typeof split?.categoryName === 'string' ? split.categoryName : null,
-    amount: roundMoney(typeof split?.amount === 'number' ? split.amount : 0),
-    note: typeof split?.note === 'string' ? split.note : typeof split?.notes === 'string' ? split.notes : undefined,
-    notes: typeof split?.notes === 'string' ? split.notes : typeof split?.note === 'string' ? split.note : null,
-  }));
+  return raw.map((split: unknown, index) => {
+    const s = split as Record<string, unknown>;
+    return {
+      id: typeof s?.id === 'string' ? s.id : `legacy-${index}`,
+      categoryId: typeof s?.categoryId === 'string' ? s.categoryId : null,
+      categoryName: typeof s?.categoryName === 'string' ? s.categoryName : null,
+      amount: roundMoney(typeof s?.amount === 'number' ? s.amount : 0),
+      note: typeof s?.note === 'string' ? s.note : typeof s?.notes === 'string' ? s.notes : undefined,
+      notes: typeof s?.notes === 'string' ? s.notes : typeof s?.note === 'string' ? s.note : null,
+    };
+  });
 }
 
 export function getTransactionSplitDetails(tx: { splits?: DbSplit[]; splitDetails?: unknown }): SplitResponse[] {
