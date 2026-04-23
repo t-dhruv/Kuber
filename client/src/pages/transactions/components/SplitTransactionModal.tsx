@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
@@ -27,6 +27,7 @@ interface Transaction {
 interface SplitDetail {
   categoryId: string;
   amount: number;
+  categoryName?: string | null;
   note?: string;
 }
 
@@ -55,23 +56,30 @@ function emptyRow(): SplitRow {
   return { _id: String(++_rowCounter), categoryId: '', amount: '', note: '' };
 }
 
+function buildRows(transaction: Transaction): SplitRow[] {
+  if (transaction.isSplit && transaction.splitDetails && transaction.splitDetails.length >= 2) {
+    return transaction.splitDetails.map((detail, index) => ({
+      _id: String(index + 1),
+      categoryId: detail.categoryId,
+      amount: String(Math.abs(detail.amount)),
+      note: detail.note ?? '',
+    }));
+  }
+
+  return [emptyRow(), emptyRow()];
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function SplitTransactionModal({ transaction, categories, isOpen, onClose, onSuccess }: Props) {
   const originalAmount = Math.abs(transaction.amount);
 
-  // Seed rows from existing split details if already split
-  const [rows, setRows] = useState<SplitRow[]>(() => {
-    if (transaction.isSplit && transaction.splitDetails && transaction.splitDetails.length >= 2) {
-      return transaction.splitDetails.map((d, i) => ({
-        _id: String(i + 1),
-        categoryId: d.categoryId,
-        amount: String(Math.abs(d.amount)),
-        note: d.note ?? '',
-      }));
-    }
-    return [emptyRow(), emptyRow()];
-  });
+  const [rows, setRows] = useState<SplitRow[]>(() => buildRows(transaction));
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setRows(buildRows(transaction));
+  }, [isOpen, transaction]);
 
   const splitMutation = useMutation({
     mutationFn: (splits: SplitDetail[]) =>
