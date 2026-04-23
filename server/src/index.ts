@@ -233,6 +233,23 @@ function checkIfDigestDue(schedule: { frequency: string; lastSentAt: Date | null
   return false;
 }
 
+// Rule auto-execution: apply active rules to recent transactions every 5 minutes
+import { runRuleExecutionJob } from './lib/ruleExecutionJob.js';
+setInterval(async () => {
+  const end = jobDurationSeconds.startTimer({ job: 'rule-execution' });
+  try {
+    const { processed, matched } = await runRuleExecutionJob();
+    jobRunsTotal.inc({ job: 'rule-execution', status: 'success' });
+    jobLastRunTimestamp.set({ job: 'rule-execution' }, Date.now() / 1000);
+    jobLog.info({ processed, matched }, 'Rule execution job complete');
+  } catch (err) {
+    jobRunsTotal.inc({ job: 'rule-execution', status: 'failure' });
+    jobLog.error({ err }, 'Rule execution job failed');
+  } finally {
+    end();
+  }
+}, 5 * 60 * 1000);
+
 setInterval(async () => {
   const end = jobDurationSeconds.startTimer({ job: 'digest-email' });
   try {
