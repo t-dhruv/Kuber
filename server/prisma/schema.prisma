@@ -287,9 +287,27 @@ model Budget {
   budgetType  String    @default("FLEXIBLE") // FIXED | FLEXIBLE | NON_MONTHLY
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  category    Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category    Category?     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  limits      BudgetLimit[]
   @@map("budgets")
+}
+
+model BudgetLimit {
+  id              String   @id @default(cuid())
+  householdId     String
+  budgetId        String
+  periodKey       String   // e.g. "2024-01" for monthly, "2024-W03" for weekly, "2024-Q1" for quarterly
+  limitAmount     Decimal  @db.Decimal(19, 4)
+  spentAmount     Decimal  @default(0) @db.Decimal(19, 4)
+  rolloverAmount  Decimal  @default(0) @db.Decimal(19, 4)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  budget          Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetId, periodKey])
+  @@index([householdId, periodKey])
+  @@map("budget_limits")
 }
 
 model RecurringItem {
