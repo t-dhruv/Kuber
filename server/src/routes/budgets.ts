@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
+import { getPeriodKey, getOrCreateBudgetLimit, recalcSpentAmount, rolloverPreviousPeriod } from '../lib/budgetLimits';
 
 const router = Router();
 
@@ -434,6 +435,141 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     return res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, 'budgets/DELETE');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// BudgetLimit endpoints
+// ---------------------------------------------------------------------------
+
+const budgetLimitQuerySchema = z.object({
+  periodKey: z.string().optional(), // override; defaults to current period
+});
+
+// GET /api/v1/budgets/:id/limits — list all period limits for a budget
+router.get('/:id/limits', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+
+    const budget = await prisma.budget.findUnique({ where: { id } });
+    if (!budget || budget.householdId !== householdId) {
+      return res.status(404).json({ error: 'Budget not found' });
+    }
+
+    const limits = await prisma.budgetLimit.findMany({
+      where: { budgetId: id },
+      orderBy: { periodKey: 'desc' },
+    });
+
+    return res.json(limits.map(l => ({
+      id: l.id,
+      periodKey: l.periodKey,
+      limitAmount: Number(l.limitAmount),
+      spentAmount: Number(l.spentAmount),
+      rolloverAmount: Number(l.rolloverAmount),
+      effectiveLimit: Number(l.limitAmount) + Number(l.rolloverAmount),
+      remaining: Number(l.limitAmount) + Number(l.rolloverAmount) - Number(l.spentAmount),
+      createdAt: l.createdAt,
+      updatedAt: l.updatedAt,
+    })));
+  } catch (err) {
+    req.log.error({ err }, 'budgets/limits/GET');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/budgets/:id/limits/current — get-or-create limit for current period
+router.post('/:id/limits/current', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+    const { periodKey: overridePeriodKey } = budgetLimitQuerySchema.parse(req.query);
+
+    const budget = await prisma.budget.findUnique({ where: { id } });
+    if (!budget || budget.householdId !== householdId) {
+      return res.status(404).json({ error: 'Budget not found' });
+    }
+
+    const periodKey = overridePeriodKey ?? getPeriodKey(new Date(), budget.period);
+    const baseLimit = budget.amountDecimal ?? budget.amount;
+    const { Prisma: PrismaNamespace } = await import('@prisma/client');
+    const limit = await getOrCreateBudgetLimit(id, householdId, periodKey, new PrismaNamespace.Decimal(Number(baseLimit)));
+
+    return res.json({
+      id: limit.id,
+      periodKey: limit.periodKey,
+      limitAmount: Number(limit.limitAmount),
+      spentAmount: Number(limit.spentAmount),
+      rolloverAmount: Number(limit.rolloverAmount),
+      effectiveLimit: Number(limit.limitAmount) + Number(limit.rolloverAmount),
+      remaining: Number(limit.limitAmount) + Number(limit.rolloverAmount) - Number(limit.spentAmount),
+    });
+  } catch (err) {
+    req.log.error({ err }, 'budgets/limits/current/POST');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/budgets/:id/limits/recalc — recompute spentAmount from transactions
+router.post('/:id/limits/recalc', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+    const { periodKey: overridePeriodKey } = budgetLimitQuerySchema.parse(req.query);
+
+    const budget = await prisma.budget.findUnique({ where: { id } });
+    if (!budget || budget.householdId !== householdId) {
+      return res.status(404).json({ error: 'Budget not found' });
+    }
+
+    const periodKey = overridePeriodKey ?? getPeriodKey(new Date(), budget.period);
+    const spent = await recalcSpentAmount(id, periodKey, budget.period);
+
+    return res.json({ periodKey, spentAmount: Number(spent) });
+  } catch (err) {
+    req.log.error({ err }, 'budgets/limits/recalc/POST');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/budgets/:id/limits/rollover — apply rollover from prev period to next
+const rolloverSchema = z.object({
+  prevPeriodKey: z.string(),
+  nextPeriodKey: z.string(),
+});
+
+router.post('/:id/limits/rollover', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+    const { prevPeriodKey, nextPeriodKey } = rolloverSchema.parse(req.body);
+
+    const budget = await prisma.budget.findUnique({ where: { id } });
+    if (!budget || budget.householdId !== householdId) {
+      return res.status(404).json({ error: 'Budget not found' });
+    }
+
+    if (!budget.rollover) {
+      return res.status(400).json({ error: 'Rollover is not enabled for this budget' });
+    }
+
+    await rolloverPreviousPeriod(id, prevPeriodKey, nextPeriodKey, budget.period);
+
+    const nextLimit = await prisma.budgetLimit.findUnique({
+      where: { budgetId_periodKey: { budgetId: id, periodKey: nextPeriodKey } },
+    });
+
+    return res.json(nextLimit ? {
+      periodKey: nextLimit.periodKey,
+      limitAmount: Number(nextLimit.limitAmount),
+      rolloverAmount: Number(nextLimit.rolloverAmount),
+      spentAmount: Number(nextLimit.spentAmount),
+      effectiveLimit: Number(nextLimit.limitAmount) + Number(nextLimit.rolloverAmount),
+    } : { periodKey: nextPeriodKey });
+  } catch (err) {
+    req.log.error({ err }, 'budgets/limits/rollover/POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
