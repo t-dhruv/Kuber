@@ -4,6 +4,12 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { createCheckpoint } from '../lib/checkpoint.js';
+import {
+  applyActionsToTransaction,
+  ruleMatches,
+  type RuleAction as Action,
+  type RuleCondition as Condition,
+} from '../lib/ruleEngine';
 
 const router = Router();
 
@@ -28,83 +34,6 @@ const ruleBodySchema = z.object({
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-type Condition = z.infer<typeof conditionSchema>;
-type Action = z.infer<typeof actionSchema>;
-
-function evalCondition(cond: Condition, tx: { description: string; merchantName: string; amount: number }): boolean {
-  const raw = cond.field === 'amount'
-    ? tx.amount
-    : (cond.field === 'merchantName' ? tx.merchantName : tx.description);
-
-  if (cond.field === 'amount') {
-    const n = typeof raw === 'number' ? raw : 0;
-    const v = typeof cond.value === 'number' ? cond.value : parseFloat(cond.value as string);
-    switch (cond.operator) {
-      case 'equals': return n === v;
-      case 'gt': return n > v;
-      case 'lt': return n < v;
-      case 'gte': return n >= v;
-      case 'lte': return n <= v;
-      default: return false;
-    }
-  } else {
-    const s = (raw as string).toLowerCase();
-    const v = String(cond.value).toLowerCase();
-    switch (cond.operator) {
-      case 'contains': return s.includes(v);
-      case 'equals': return s === v;
-      case 'startsWith': return s.startsWith(v);
-      case 'endsWith': return s.endsWith(v);
-      default: return false;
-    }
-  }
-}
-
-function ruleMatches(conditions: Condition[], tx: { description: string; merchantName: string; amount: number }): boolean {
-  return conditions.every(c => evalCondition(c, tx));
-}
-
-async function applyActionsToTransaction(
-  txId: string,
-  actions: Action[],
-  householdId: string,
-): Promise<number> {
-  const updates: Record<string, unknown> = {};
-  const tagIds: string[] = [];
-
-  for (const action of actions) {
-    switch (action.type) {
-      case 'setCategory':
-        if (action.value) updates.categoryId = action.value;
-        break;
-      case 'hide':
-        updates.isHidden = true;
-        break;
-      case 'markReviewed':
-        updates.needsReview = false;
-        break;
-      case 'addTag':
-        if (action.value) tagIds.push(action.value);
-        break;
-    }
-  }
-
-  await prisma.$transaction(async (tx) => {
-    if (Object.keys(updates).length > 0) {
-      await tx.transaction.updateMany({ where: { id: txId, householdId }, data: updates });
-    }
-    for (const tagId of tagIds) {
-      await tx.transactionTag.upsert({
-        where: { transactionId_tagId: { transactionId: txId, tagId } },
-        update: {},
-        create: { transactionId: txId, tagId },
-      });
-    }
-  });
-
-  return 1;
-}
 
 // ─── GET /api/v1/rules ────────────────────────────────────────────────────────
 
@@ -260,7 +189,7 @@ router.post('/:id/apply', async (req: AuthRequest, res: Response) => {
     for (const tx of transactions) {
       const merchantName = tx.merchant?.displayName ?? tx.merchant?.name ?? tx.description;
       if (ruleMatches(conditions, { description: tx.description, merchantName, amount: tx.amount })) {
-        await applyActionsToTransaction(tx.id, actions, householdId);
+        await applyActionsToTransaction(prisma, tx.id, actions, householdId);
         matched++;
       }
     }
@@ -316,7 +245,7 @@ router.post('/apply-all', async (req: AuthRequest, res: Response) => {
       for (const tx of transactions) {
         const merchantName = tx.merchant?.displayName ?? tx.merchant?.name ?? tx.description;
         if (ruleMatches(conditions, { description: tx.description, merchantName, amount: tx.amount })) {
-          await applyActionsToTransaction(tx.id, actions, householdId);
+          await applyActionsToTransaction(prisma, tx.id, actions, householdId);
           totalMatched++;
         }
       }
