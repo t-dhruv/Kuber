@@ -1,124 +1,138 @@
 import type { PrismaClient } from '@prisma/client';
 
 export type RuleCondition = {
-  field: 'merchantName' | 'description' | 'amount';
-  operator: 'contains' | 'equals' | 'startsWith' | 'endsWith' | 'gt' | 'lt' | 'gte' | 'lte';
+  field: 'merchantName' | 'description' | 'amount' | 'categoryId' | 'accountId' | 'notes';
+  operator: 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'equals' | 'notEquals' | 'gt' | 'gte' | 'lt' | 'lte';
   value: string | number;
 };
 
 export type RuleAction = {
-  type: 'setCategory' | 'addTag' | 'hide' | 'markReviewed';
+  type: 'setCategory' | 'clearCategory' | 'addTag' | 'removeTag' | 'hide' | 'unhide' |
+        'markReviewed' | 'flagForReview' | 'setDescription' | 'setNotes' | 'appendNotes';
   value?: string;
 };
 
 export type RuleMatchInput = {
-  description: string;
-  merchantName: string;
-  amount: number;
+  merchantName?: string | null;
+  description?:  string | null;
+  amount?:       number | null;
+  categoryId?:   string | null;
+  accountId?:    string | null;
+  notes?:        string | null;
 };
 
 export function evalCondition(cond: RuleCondition, tx: RuleMatchInput): boolean {
-  const raw = cond.field === 'amount'
-    ? tx.amount
-    : (cond.field === 'merchantName' ? tx.merchantName : tx.description);
+  const raw = tx[cond.field as keyof RuleMatchInput];
 
-  if (cond.field === 'amount') {
-    const n = typeof raw === 'number' ? raw : 0;
-    const v = typeof cond.value === 'number' ? cond.value : parseFloat(cond.value);
-    switch (cond.operator) {
-      case 'equals': return n === v;
-      case 'gt': return n > v;
-      case 'lt': return n < v;
-      case 'gte': return n >= v;
-      case 'lte': return n <= v;
-      default: return false;
-    }
+  if (['gt', 'gte', 'lt', 'lte'].includes(cond.operator)) {
+    const num = typeof raw === 'number' ? raw : parseFloat(String(raw ?? '0'));
+    const v   = typeof cond.value === 'number' ? cond.value : parseFloat(String(cond.value));
+    if (cond.operator === 'gt')  return num > v;
+    if (cond.operator === 'gte') return num >= v;
+    if (cond.operator === 'lt')  return num < v;
+    if (cond.operator === 'lte') return num <= v;
   }
 
-  const s = String(raw).toLowerCase();
+  const s = String(raw ?? '').toLowerCase();
   const v = String(cond.value).toLowerCase();
-  switch (cond.operator) {
-    case 'contains': return s.includes(v);
-    case 'equals': return s === v;
-    case 'startsWith': return s.startsWith(v);
-    case 'endsWith': return s.endsWith(v);
-    default: return false;
-  }
+  if (cond.operator === 'equals')      return s === v;
+  if (cond.operator === 'notEquals')   return s !== v;
+  if (cond.operator === 'contains')    return s.includes(v);
+  if (cond.operator === 'notContains') return !s.includes(v);
+  if (cond.operator === 'startsWith')  return s.startsWith(v);
+  if (cond.operator === 'endsWith')    return s.endsWith(v);
+  return false;
 }
 
 export function ruleMatches(conditions: RuleCondition[], tx: RuleMatchInput): boolean {
-  return conditions.every((condition) => evalCondition(condition, tx));
+  return conditions.every(c => evalCondition(c, tx));
 }
 
 export async function applyActionsToTransaction(
-  prisma: PrismaClient,
+  prisma: Pick<PrismaClient, '$transaction'>,
   txId: string,
   actions: RuleAction[],
   householdId: string,
-): Promise<number> {
-  const updates: Record<string, unknown> = {};
-  const tagIds: string[] = [];
+): Promise<void> {
+  const updateData: Record<string, unknown> = {};
+  const tagUpserts: string[] = [];
+  const tagRemovals: string[] = [];
 
   for (const action of actions) {
     switch (action.type) {
-      case 'setCategory':
-        if (action.value) updates.categoryId = action.value;
-        break;
-      case 'hide':
-        updates.isHidden = true;
-        break;
-      case 'markReviewed':
-        updates.needsReview = false;
-        break;
-      case 'addTag':
-        if (action.value) tagIds.push(action.value);
-        break;
+      case 'setCategory':    updateData.categoryId   = action.value; break;
+      case 'clearCategory':  updateData.categoryId   = null; break;
+      case 'hide':           updateData.isHidden      = true; break;
+      case 'unhide':         updateData.isHidden      = false; break;
+      case 'markReviewed':   updateData.needsReview   = false; break;
+      case 'flagForReview':  updateData.needsReview   = true; break;
+      case 'setDescription': updateData.description   = action.value; break;
+      case 'setNotes':       updateData.notes         = action.value; break;
+      case 'appendNotes':    break; // no-op for now
+      case 'addTag':    if (action.value) tagUpserts.push(action.value); break;
+      case 'removeTag': if (action.value) tagRemovals.push(action.value); break;
     }
   }
 
-  await prisma.$transaction(async (tx) => {
-    if (Object.keys(updates).length > 0) {
-      await tx.transaction.updateMany({ where: { id: txId, householdId }, data: updates });
+  await (prisma as any).$transaction(async (tx: any) => {
+    if (Object.keys(updateData).length > 0) {
+      await tx.transaction.updateMany({ where: { id: txId, householdId }, data: updateData });
     }
-    for (const tagId of tagIds) {
+    for (const tagId of tagUpserts) {
       await tx.transactionTag.upsert({
-        where: { transactionId_tagId: { transactionId: txId, tagId } },
+        where:  { transactionId_tagId: { transactionId: txId, tagId } },
         update: {},
         create: { transactionId: txId, tagId },
       });
     }
+    for (const tagId of tagRemovals) {
+      await tx.transactionTag.deleteMany({ where: { transactionId: txId, tagId } }).catch(() => {});
+    }
   });
-
-  return 1;
 }
 
 export async function applyActiveRulesToTransaction(
-  prisma: PrismaClient,
+  prisma: Pick<PrismaClient, 'rule' | '$transaction'>,
   txId: string,
   householdId: string,
-  tx: RuleMatchInput,
-): Promise<{ matched: number; ruleIds: string[] }> {
-  const rules = await prisma.rule.findMany({
-    where: { householdId, isActive: true },
+  txData: RuleMatchInput,
+): Promise<string[]> {
+  const rules = await (prisma as any).rule.findMany({
+    where: { householdId, isActive: true, ruleGroupId: null },
     orderBy: { sortOrder: 'asc' },
   });
-
-  let matched = 0;
-  const ruleIds: string[] = [];
-
+  const fired: string[] = [];
   for (const rule of rules) {
-    const conditions = rule.conditions as unknown as RuleCondition[];
-    if (!ruleMatches(conditions, tx)) continue;
-
-    await applyActionsToTransaction(
-      prisma,
-      txId,
-      rule.actions as unknown as RuleAction[],
-      householdId,
-    );
-    matched += 1;
-    ruleIds.push(rule.id);
+    if (ruleMatches(rule.conditions as RuleCondition[], txData)) {
+      await applyActionsToTransaction(prisma, txId, rule.actions as RuleAction[], householdId);
+      fired.push(rule.id);
+    }
   }
+  return fired;
+}
 
-  return { matched, ruleIds };
+export async function applyActiveRulesToTransactionGrouped(
+  prisma: Pick<PrismaClient, 'ruleGroup' | '$transaction'>,
+  txId: string,
+  householdId: string,
+  txData: RuleMatchInput,
+): Promise<string[]> {
+  const groups = await (prisma as any).ruleGroup.findMany({
+    where: { householdId, isActive: true },
+    include: { rules: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } } },
+    orderBy: { sortOrder: 'asc' },
+  });
+  const fired: string[] = [];
+  for (const group of groups) {
+    let groupFired = false;
+    for (const rule of group.rules) {
+      if (ruleMatches(rule.conditions as RuleCondition[], txData)) {
+        await applyActionsToTransaction(prisma, txId, rule.actions as RuleAction[], householdId);
+        fired.push(rule.id);
+        groupFired = true;
+      }
+    }
+    if (groupFired && group.stopProcessing) break;
+  }
+  return fired;
 }
