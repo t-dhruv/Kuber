@@ -75,7 +75,7 @@ Visit **http://localhost** and create your account on first run.
 
 ## Development Setup
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full instructions. The short version:
+See [DEV.md](DEV.md) for all Makefile commands and setup instructions.
 
 ```bash
 # Prerequisites: Node.js 20+, Docker, npm
@@ -83,7 +83,8 @@ git clone https://github.com/yourusername/kuber.git
 cd kuber
 npm install
 cp .env.example .env   # fill in values
-make dev               # starts DB + server + client
+make dev-server       # starts backend on localhost:4000
+make dev-client      # starts frontend on localhost:3000
 ```
 
 | URL | Service |
@@ -93,6 +94,8 @@ make dev               # starts DB + server + client
 | http://localhost:5555 | Prisma Studio (run `make db-studio`) |
 
 Demo credentials after seeding (`make db-seed`): `demo@kuber.app` / `password123`
+
+> **Full contributor guide**: See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---
 
