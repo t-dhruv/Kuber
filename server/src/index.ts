@@ -29,6 +29,7 @@ import adviceLibraryRouter from './routes/advice';
 import wealthRouter from './routes/wealth';
 import investmentIntelRouter from './routes/investmentIntel';
 import splitsRouter from './routes/splits';
+import billsRouter from './routes/bills';
 import importRouter from './routes/import';
 import checkpointRouter from './routes/checkpoints';
 import assetsRouter from './routes/assets';
@@ -41,6 +42,7 @@ import emailConnectorRouter from './routes/emailConnector';
 import apiTokensRouter from './routes/apiTokens';
 import webhooksRouter from './routes/webhooks';
 import pushRouter from './routes/push';
+import reconciliationRouter from './routes/reconciliation';
 import { requireAuth } from './middleware/auth';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
 import { runAccountBalanceSnapshot } from './lib/accountBalanceJob';
@@ -212,6 +214,8 @@ app.use('/api/v1/email-connector', requireAuth, emailConnectorRouter);
 app.use('/api/v1/settings/api-tokens', requireAuth, apiTokensRouter);
 app.use('/api/v1/webhooks', requireAuth, webhooksRouter);
 app.use('/api/v1/push', requireAuth, pushRouter);
+app.use('/api/v1/bills', requireAuth, billsRouter);
+app.use('/api/v1/accounts', requireAuth, reconciliationRouter);
 
 function checkIfDigestDue(schedule: { frequency: string; lastSentAt: Date | null }, now: Date): boolean {
   const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday

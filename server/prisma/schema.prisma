@@ -74,6 +74,7 @@ model Household {
   transferGroups          TransferGroup[]
   categoryLearningExamples CategoryLearningExample[]
   ruleGroups              RuleGroup[]
+  reconciliations         Reconciliation[]
 
   @@map("households")
 }
@@ -186,6 +187,7 @@ model Account {
   investmentHoldings    InvestmentHolding[]
   balanceSnapshots      AccountBalanceSnapshot[]
   taxAccounts           TaxAccount[]
+  reconciliations       Reconciliation[]
 
   @@map("accounts")
 }
@@ -219,6 +221,9 @@ model Transaction {
   transferId          String?
   transferGroupId     String?
   isRefund            Boolean          @default(false)
+  isCleared           Boolean          @default(false)
+  clearedDate         DateTime?
+  reconcileId         String?
   refundedTransactionId String?
   refundedTransaction   Transaction? @relation("RefundLink", fields: [refundedTransactionId], references: [id], onDelete: SetNull)
   refunds               Transaction[] @relation("RefundLink")
@@ -313,6 +318,22 @@ model BudgetLimit {
   @@unique([budgetId, periodKey])
   @@index([householdId, periodKey])
   @@map("budget_limits")
+}
+
+model Reconciliation {
+  id               String    @id @default(cuid())
+  householdId      String
+  accountId        String
+  statementDate    DateTime
+  statementBalance Decimal   @db.Decimal(19, 4)
+  openingBalance   Decimal   @db.Decimal(19, 4)
+  difference       Decimal   @db.Decimal(19, 4)
+  createdAt        DateTime  @default(now())
+  account          Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  household        Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, accountId])
+  @@map("reconciliations")
 }
 
 model Bill {

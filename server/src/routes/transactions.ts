@@ -8,6 +8,7 @@ import { fireWebhooks } from '../lib/webhookFire';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
 import { applyActiveRulesToTransaction } from '../lib/ruleEngine';
 import { getTransactionSplitDetails } from '../lib/transactionSplits';
+import { matchBillsForTransaction } from '../lib/billMatcher';
 
 // multer: memory storage, CSV only, 10 MB limit
 const upload = multer({
@@ -887,6 +888,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       merchantName: createdTx.description,
       amount: createdTx.amount,
     });
+
+    // Match bills — fire-and-forget, never fail the request
+    matchBillsForTransaction(prisma, {
+      id: createdTx.id,
+      householdId: req.householdId!,
+      date: createdTx.date,
+      amount: createdTx.amount,
+      description: createdTx.description,
+    }).catch(() => {});
 
     const tx = await prisma.transaction.findUniqueOrThrow({
       where: { id: createdTx.id },
