@@ -43,6 +43,7 @@ import apiTokensRouter from './routes/apiTokens';
 import webhooksRouter from './routes/webhooks';
 import pushRouter from './routes/push';
 import reconciliationRouter from './routes/reconciliation';
+import attachmentsRouter from './routes/attachments';
 import { requireAuth } from './middleware/auth';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
 import { runAccountBalanceSnapshot } from './lib/accountBalanceJob';
@@ -216,6 +217,7 @@ app.use('/api/v1/webhooks', requireAuth, webhooksRouter);
 app.use('/api/v1/push', requireAuth, pushRouter);
 app.use('/api/v1/bills', requireAuth, billsRouter);
 app.use('/api/v1/accounts', requireAuth, reconciliationRouter);
+app.use('/api/v1', requireAuth, attachmentsRouter);
 
 function checkIfDigestDue(schedule: { frequency: string; lastSentAt: Date | null }, now: Date): boolean {
   const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday
