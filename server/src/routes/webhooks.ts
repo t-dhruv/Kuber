@@ -136,4 +136,24 @@ router.post('/:id/test', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/v1/webhooks/:id/deliveries
+router.get('/:id/deliveries', async (req: AuthRequest, res: Response) => {
+  try {
+    const webhook = await prisma.webhook.findFirst({
+      where: { id: req.params.id, householdId: req.householdId! },
+    });
+    if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
+
+    const deliveries = await prisma.webhookDelivery.findMany({
+      where:   { webhookId: req.params.id },
+      orderBy: { createdAt: 'desc' },
+      take:    50,
+    });
+    return res.json(deliveries);
+  } catch (err) {
+    req.log.error({ err }, 'webhooks/deliveries');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

@@ -856,9 +856,27 @@ model Webhook {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  deliveries  WebhookDelivery[]
 
   @@index([householdId])
   @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id            String   @id @default(cuid())
+  webhookId     String
+  event         String
+  payload       Json
+  statusCode    Int?
+  responseBody  String?
+  success       Boolean  @default(false)
+  attempts      Int      @default(1)
+  lastAttemptAt DateTime
+  createdAt     DateTime @default(now())
+  webhook       Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId])
+  @@map("webhook_deliveries")
 }
 
 model TransactionSplit {
