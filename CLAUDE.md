@@ -5,6 +5,17 @@
 
 ---
 
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md
+- For cross-module questions, prefer `graphify query "<question>"` over grep
+- Use `graphify path "<A>" "<B>"` for dependency tracing
+- After modifying files, `graphify update .` runs automatically via hook
+
+---
+
 ## Approach
 
 - Think before acting. Read existing files before writing code.
@@ -320,7 +331,7 @@ gh pr create
 ```
 
 - Commits should be atomic: one logical change per commit
-- Commit message body explains *why*, not just *what*
+- Commit message body explains _why_, not just _what_
 - Squash noise commits before PR (fixup, wip) — keep history clean
 
 ---
