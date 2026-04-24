@@ -40,7 +40,7 @@ const TX_INCLUDE = {
   },
   tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
   refundedTransaction: {
-    select: { id: true, description: true, amount: true, date: true, currency: true },
+    select: { id: true, description: true, amount: true, date: true, currencyCode: true },
   },
   refunds: {
     select: { id: true, description: true, amount: true, date: true },
@@ -62,9 +62,9 @@ function formatTx(t: any) {
     merchantName: formatMerchantName(t.merchant, t.description),
     originalDescription: t.originalDescription,
     amount: t.amount,
-    currency: t.currency ?? 'USD',
-    originalAmount: t.originalAmount ? Number(t.originalAmount) : null,
-    exchangeRate: t.exchangeRate ? Number(t.exchangeRate) : null,
+    currencyCode: t.currencyCode ?? 'CAD',
+    originalAmountFloat: t.originalAmountFloat ?? null,
+    fxRate: t.fxRate ?? null,
     categoryId: t.categoryId ?? null,
     categoryName: t.category?.name ?? null,
     categoryIcon: t.category?.emoji ?? null,
@@ -87,7 +87,7 @@ function formatTx(t: any) {
           description: t.refundedTransaction.description,
           amount: t.refundedTransaction.amount,
           date: t.refundedTransaction.date.toISOString(),
-          currency: t.refundedTransaction.currency ?? 'USD',
+          currencyCode: t.refundedTransaction.currencyCode ?? 'CAD',
         }
       : null,
     refunds: (t.refunds ?? []).map((r: any) => ({
@@ -832,7 +832,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { date, description, amount, accountId, notes, tagIds, isRecurring, isRefund, currency, originalAmount, exchangeRate } = req.body;
+    const { date, description, amount, accountId, notes, tagIds, isRecurring, isRefund, originalAmountFloat, fxRate } = req.body;
+    const currencyCode = req.body.currencyCode ?? 'CAD';
     // Normalize empty string categoryId to null to avoid Prisma FK constraint error
     const categoryId = req.body.categoryId || null;
 
@@ -872,9 +873,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         description,
         originalDescription: description,
         amount,
-        currency: currency ?? 'USD',
-        originalAmount: originalAmount !== undefined ? originalAmount : undefined,
-        exchangeRate: exchangeRate !== undefined ? exchangeRate : undefined,
+        currencyCode,
+        originalAmountFloat: originalAmountFloat ?? null,
+        fxRate: fxRate ?? null,
         categoryId: categoryId ?? null,
         notes: notes ?? null,
         isRecurring: isRecurring ?? false,
@@ -971,7 +972,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
 
-    const allowed = ['date', 'description', 'amount', 'categoryId', 'accountId', 'notes', 'isRecurring', 'isRefund', 'needsReview', 'isHidden'];
+    const allowed = ['date', 'description', 'amount', 'categoryId', 'accountId', 'notes', 'isRecurring', 'isRefund', 'needsReview', 'isHidden', 'currencyCode', 'originalAmountFloat', 'fxRate'];
     const data: any = {};
 
     for (const field of allowed) {
