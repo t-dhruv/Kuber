@@ -34,7 +34,7 @@ export async function runRuleExecutionJob(): Promise<{ processed: number; matche
       amount: tx.amountDecimal ? Number(tx.amountDecimal) : tx.amount,
     };
 
-    const fired = await applyActiveRulesToTransaction(prisma, tx.id, tx.householdId, txContext);
+    const fired: string[] = await applyActiveRulesToTransaction(prisma, tx.id, tx.householdId, txContext);
     processed++;
     matched += fired.length;
   }
