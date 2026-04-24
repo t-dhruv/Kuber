@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
 import { listLinkTypes, createLink, deleteLink, getLinksForTransaction } from '../lib/transactionLinks';
 
@@ -34,8 +35,11 @@ router.post('/transaction-links', async (req: AuthRequest, res: Response) => {
     const link = await createLink({ householdId: req.householdId!, ...parsed.data });
     return res.status(201).json(link);
   } catch (err: unknown) {
-    if (err instanceof Error && err.message.includes('Cannot link')) {
+    if (err instanceof Error && (err.message.includes('Cannot link') || err.message.includes('Transaction not found'))) {
       return res.status(400).json({ error: err.message });
+    }
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      return res.status(409).json({ error: 'Link already exists between these transactions' });
     }
     req.log.error({ err }, 'transactionLinks/create');
     return res.status(500).json({ error: 'Internal server error' });
