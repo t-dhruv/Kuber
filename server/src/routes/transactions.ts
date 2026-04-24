@@ -9,6 +9,7 @@ import { toCSV, setCsvHeaders } from '../lib/csvExport';
 import { applyActiveRulesToTransaction } from '../lib/ruleEngine';
 import { getTransactionSplitDetails } from '../lib/transactionSplits';
 import { matchBillsForTransaction } from '../lib/billMatcher';
+import { buildSearchWhere } from '../lib/searchParser';
 
 // multer: memory storage, CSV only, 10 MB limit
 const upload = multer({
@@ -209,18 +210,23 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     }
 
     if (search) {
-      where.OR = [
-        { description: { contains: search, mode: 'insensitive' } },
-        { originalDescription: { contains: search, mode: 'insensitive' } },
-        {
-          merchant: {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } },
-              { displayName: { contains: search, mode: 'insensitive' } },
-            ],
+      const parsed = buildSearchWhere(search);
+      if (parsed.AND && (parsed.AND as unknown[]).length > 0) {
+        Object.assign(where, parsed);
+      } else {
+        where.OR = [
+          { description: { contains: search, mode: 'insensitive' } },
+          { originalDescription: { contains: search, mode: 'insensitive' } },
+          {
+            merchant: {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { displayName: { contains: search, mode: 'insensitive' } },
+              ],
+            },
           },
-        },
-      ];
+        ];
+      }
     }
 
     if (isRecurring !== undefined) where.isRecurring = isRecurring === 'true';

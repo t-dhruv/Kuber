@@ -75,6 +75,7 @@ model Household {
   categoryLearningExamples CategoryLearningExample[]
   ruleGroups              RuleGroup[]
   reconciliations         Reconciliation[]
+  availableBudgets        AvailableBudget[]
 
   @@map("households")
 }
@@ -294,13 +295,29 @@ model Budget {
   period         String    @default("monthly")
   rollover    Boolean   @default(false)
   startDate   DateTime  @default(now())
-  budgetType  String    @default("FLEXIBLE") // FIXED | FLEXIBLE | NON_MONTHLY
+  budgetType        String    @default("FLEXIBLE") // FIXED | FLEXIBLE | NON_MONTHLY
+  autoBudgetType    String?
+  autoBudgetAmount  Decimal?  @db.Decimal(19, 4)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
   category    Category?     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   limits      BudgetLimit[]
   @@map("budgets")
+}
+
+model AvailableBudget {
+  id           String   @id @default(cuid())
+  householdId  String
+  amount       Decimal  @db.Decimal(19, 4)
+  currencyCode String   @default("USD")
+  periodKey    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, periodKey])
+  @@map("available_budgets")
 }
 
 model BudgetLimit {
