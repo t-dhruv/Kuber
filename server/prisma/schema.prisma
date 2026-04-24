@@ -77,6 +77,8 @@ model Household {
   reconciliations         Reconciliation[]
   availableBudgets        AvailableBudget[]
   attachments             Attachment[]
+  transactionLinks        TransactionLink[]
+  objectGroups          ObjectGroup[]
 
   @@map("households")
 }
@@ -179,10 +181,12 @@ model Account {
   isHidden              Boolean                  @default(false)
   excludeFromNetWorth   Boolean                  @default(false)
   lastSynced            DateTime?
+  objectGroupId        String?
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   household             Household                @relation(fields: [householdId], references: [id], onDelete: Cascade)
   providerConnection    ProviderConnection?      @relation(fields: [providerConnectionId], references: [id], onDelete: SetNull)
+  objectGroup           ObjectGroup?             @relation(fields: [objectGroupId], references: [id], onDelete: SetNull)
   transactions          Transaction[]
   recurringItems        RecurringItem[]
   goals                 Goal[]
@@ -203,9 +207,11 @@ model Transaction {
   originalDescription String
   amount              Float
   amountDecimal       Decimal?         @db.Decimal(19, 4)
-  currency            String           @default("USD")
+  currencyCode        String           @default("CAD")
   exchangeRate        Decimal?         @db.Decimal(19, 6)
   originalAmount      Decimal?         @db.Decimal(19, 4)
+  originalAmountFloat Float?
+  fxRate              Float?
   categoryId          String?
   merchantId          String?
   notes               String?
@@ -241,6 +247,8 @@ model Transaction {
   splits              TransactionSplit[]
   billPaidPeriods     BillPaidPeriod[]
   attachments         Attachment[]
+  linksFrom           TransactionLink[]  @relation("LinksFrom")
+  linksTo             TransactionLink[]  @relation("LinksTo")
 
   @@index([householdId, date])
   @@index([householdId, date, amount])
@@ -259,6 +267,7 @@ model Category {
   type           String
   groupId        String?
   group          CategoryGroup?  @relation(fields: [groupId], references: [id])
+  objectGroupId  String?
   sortOrder      Int             @default(0)
   isSystem          Boolean         @default(false)
   bucketType        String          @default("uncategorized") // needs | wants | savings | uncategorized
@@ -266,6 +275,7 @@ model Category {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  objectGroup     ObjectGroup?       @relation(fields: [objectGroupId], references: [id], onDelete: SetNull)
   transactions        Transaction[]
   budgets             Budget[]
   recurringItems      RecurringItem[]
@@ -300,10 +310,12 @@ model Budget {
   budgetType        String    @default("FLEXIBLE") // FIXED | FLEXIBLE | NON_MONTHLY
   autoBudgetType    String?
   autoBudgetAmount  Decimal?  @db.Decimal(19, 4)
+  groupId      String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
   category    Category?     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  objectGroup ObjectGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
   limits      BudgetLimit[]
   @@map("budgets")
 }
@@ -1015,4 +1027,51 @@ model TransferGroup {
   transactions Transaction[]
 
   @@map("transfer_groups")
+}
+
+model TransactionLinkType {
+  id      String            @id @default(cuid())
+  name    String            @unique
+  inward  String
+  outward String
+  links   TransactionLink[]
+
+  @@map("transaction_link_types")
+}
+
+model TransactionLink {
+  id          String              @id @default(cuid())
+  householdId String
+  linkTypeId  String
+  fromId      String
+  toId        String
+  createdAt   DateTime            @default(now())
+
+  household   Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  linkType    TransactionLinkType @relation(fields: [linkTypeId], references: [id])
+  from       Transaction         @relation("LinksFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to         Transaction         @relation("LinksTo",   fields: [toId],   references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId, linkTypeId])
+  @@index([householdId])
+  @@map("transaction_links")
+}
+
+model ObjectGroup {
+  id          String     @id @default(cuid())
+  householdId String
+  household   Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  name        String
+  entityType  String     // "account" | "category" | "budget"
+  color       String?
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  accounts    Account[]
+  categories  Category[]
+  budgets     Budget[]
+
+  @@index([householdId, entityType])
+  @@map("object_groups")
 }
