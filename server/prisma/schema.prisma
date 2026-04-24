@@ -208,10 +208,8 @@ model Transaction {
   amount              Float
   amountDecimal       Decimal?         @db.Decimal(19, 4)
   currencyCode        String           @default("CAD")
-  exchangeRate        Decimal?         @db.Decimal(19, 6)
   originalAmount      Decimal?         @db.Decimal(19, 4)
-  originalAmountFloat Float?
-  fxRate              Float?
+  fxRate              Decimal?         @db.Decimal(19, 6)
   categoryId          String?
   merchantId          String?
   notes               String?

@@ -63,8 +63,8 @@ function formatTx(t: any) {
     originalDescription: t.originalDescription,
     amount: t.amount,
     currencyCode: t.currencyCode ?? 'CAD',
-    originalAmountFloat: t.originalAmountFloat ?? null,
-    fxRate: t.fxRate ?? null,
+    originalAmount: t.originalAmount !== null && t.originalAmount !== undefined ? Number(t.originalAmount) : null,
+    fxRate: t.fxRate !== null && t.fxRate !== undefined ? Number(t.fxRate) : null,
     categoryId: t.categoryId ?? null,
     categoryName: t.category?.name ?? null,
     categoryIcon: t.category?.emoji ?? null,
@@ -832,17 +832,29 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { date, description, amount, accountId, notes, tagIds, isRecurring, isRefund, originalAmountFloat, fxRate } = req.body;
-    const currencyCode = req.body.currencyCode ?? 'CAD';
-    // Normalize empty string categoryId to null to avoid Prisma FK constraint error
-    const categoryId = req.body.categoryId || null;
 
-    // Validation
-    if (!date) return res.status(400).json({ error: 'date is required' });
-    if (!description) return res.status(400).json({ error: 'description is required' });
-    if (amount === undefined || amount === null) return res.status(400).json({ error: 'amount is required' });
-    if (amount === 0) return res.status(400).json({ error: 'amount must be non-zero' });
-    if (!accountId) return res.status(400).json({ error: 'accountId is required' });
+    const CreateTxSchema = z.object({
+      date:           z.string().min(1, 'date is required'),
+      description:    z.string().min(1, 'description is required'),
+      amount:         z.number().refine(n => n !== 0, 'amount must be non-zero'),
+      accountId:      z.string().min(1, 'accountId is required'),
+      categoryId:     z.string().optional().nullable(),
+      notes:          z.string().optional().nullable(),
+      tagIds:         z.array(z.string()).optional(),
+      isRecurring:    z.boolean().optional(),
+      isRefund:       z.boolean().optional(),
+      currencyCode:   z.string().length(3).toUpperCase().default('CAD'),
+      originalAmount: z.number().optional().nullable(),
+      fxRate:         z.number().positive().optional().nullable(),
+    });
+
+    const bodyParsed = CreateTxSchema.safeParse(req.body);
+    if (!bodyParsed.success) {
+      return res.status(400).json({ error: bodyParsed.error.errors[0]?.message ?? 'Invalid input' });
+    }
+    const { date, description, amount, accountId, notes, tagIds, isRecurring, isRefund, currencyCode, originalAmount, fxRate } = bodyParsed.data;
+    // Normalize empty string categoryId to null to avoid Prisma FK constraint error
+    const categoryId = bodyParsed.data.categoryId || null;
 
     // IDOR: verify account belongs to household
     const account = await prisma.account.findFirst({ where: { id: accountId, householdId } });
@@ -874,7 +886,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         originalDescription: description,
         amount,
         currencyCode,
-        originalAmountFloat: originalAmountFloat ?? null,
+        originalAmount: originalAmount ?? null,
         fxRate: fxRate ?? null,
         categoryId: categoryId ?? null,
         notes: notes ?? null,
@@ -972,7 +984,17 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
 
-    const allowed = ['date', 'description', 'amount', 'categoryId', 'accountId', 'notes', 'isRecurring', 'isRefund', 'needsReview', 'isHidden', 'currencyCode', 'originalAmountFloat', 'fxRate'];
+    const UpdateTxCurrencySchema = z.object({
+      currencyCode:   z.string().length(3).toUpperCase().optional(),
+      originalAmount: z.number().optional().nullable(),
+      fxRate:         z.number().positive().optional().nullable(),
+    });
+    const currencyParsed = UpdateTxCurrencySchema.safeParse(req.body);
+    if (!currencyParsed.success) {
+      return res.status(400).json({ error: currencyParsed.error.errors[0]?.message ?? 'Invalid currency fields' });
+    }
+
+    const allowed = ['date', 'description', 'amount', 'categoryId', 'accountId', 'notes', 'isRecurring', 'isRefund', 'needsReview', 'isHidden', 'currencyCode', 'originalAmount', 'fxRate'];
     const data: any = {};
 
     for (const field of allowed) {
@@ -981,6 +1003,12 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
           data.date = new Date(req.body.date);
         } else if (field === 'amount' && req.body.amount === 0) {
           return res.status(400).json({ error: 'amount must be non-zero' });
+        } else if (field === 'currencyCode' && currencyParsed.data.currencyCode !== undefined) {
+          data.currencyCode = currencyParsed.data.currencyCode;
+        } else if (field === 'originalAmount') {
+          data.originalAmount = currencyParsed.data.originalAmount ?? null;
+        } else if (field === 'fxRate') {
+          data.fxRate = currencyParsed.data.fxRate ?? null;
         } else {
           data[field] = req.body[field];
         }
