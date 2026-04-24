@@ -22,7 +22,7 @@ const billCreateSchema = z.object({
 
 const billUpdateSchema = billCreateSchema.partial();
 
-function formatBill(b: any) {
+function formatBill(b: Record<string, unknown>) {
   return {
     ...b,
     amountMin: b.amountMin !== null ? Number(b.amountMin) : null,
@@ -86,7 +86,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         notes:       d.notes ?? null,
       },
     });
-    logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'CREATE', entity: 'BILL', entityId: bill.id, after: bill as any });
+    logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'CREATE', entity: 'BILL', entityId: bill.id, after: bill as Record<string, unknown> });
     return res.status(201).json(formatBill(bill));
   } catch (err) {
     req.log.error({ err }, 'bills/create');
@@ -130,7 +130,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     if (!existing) return res.status(404).json({ error: 'Bill not found' });
 
     await prisma.bill.update({ where: { id: req.params.id }, data: { isDeleted: true, isActive: false } });
-    logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'DELETE', entity: 'BILL', entityId: req.params.id, before: existing as any });
+    logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'DELETE', entity: 'BILL', entityId: req.params.id, before: existing as Record<string, unknown> });
     return res.json({ message: 'Deleted' });
   } catch (err) {
     req.log.error({ err }, 'bills/delete');
