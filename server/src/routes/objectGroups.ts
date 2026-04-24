@@ -60,15 +60,15 @@ router.patch('/assign', async (req: AuthRequest, res: Response) => {
   if (entityType === 'account') {
     const entity = await prisma.account.findFirst({ where: { id: entityId, householdId } });
     if (!entity) return res.status(404).json({ error: 'Account not found' });
-    await prisma.account.update({ where: { id: entityId }, data: { objectGroupId: groupId ?? null } });
+    await prisma.account.update({ where: { id: entityId, householdId }, data: { objectGroupId: groupId ?? null } });
   } else if (entityType === 'category') {
     const entity = await prisma.category.findFirst({ where: { id: entityId, householdId } });
     if (!entity) return res.status(404).json({ error: 'Category not found' });
-    await prisma.category.update({ where: { id: entityId }, data: { objectGroupId: groupId ?? null } });
+    await prisma.category.update({ where: { id: entityId, householdId }, data: { objectGroupId: groupId ?? null } });
   } else {
     const entity = await prisma.budget.findFirst({ where: { id: entityId, householdId } });
     if (!entity) return res.status(404).json({ error: 'Budget not found' });
-    await prisma.budget.update({ where: { id: entityId }, data: { groupId: groupId ?? null } });
+    await prisma.budget.update({ where: { id: entityId, householdId }, data: { groupId: groupId ?? null } });
   }
 
   return res.json({ message: 'Assigned' });
