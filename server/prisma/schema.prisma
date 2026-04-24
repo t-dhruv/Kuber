@@ -45,6 +45,7 @@ model Household {
   accounts                Account[]
   categories              Category[]
   budgets                 Budget[]
+  bills                   Bill[]
   recurringItems          RecurringItem[]
   goals                   Goal[]
   rules                   Rule[]
@@ -200,6 +201,7 @@ model Transaction {
   amountDecimal       Decimal?         @db.Decimal(19, 4)
   currency            String           @default("USD")
   exchangeRate        Decimal?         @db.Decimal(19, 6)
+  originalAmount      Decimal?         @db.Decimal(19, 4)
   categoryId          String?
   merchantId          String?
   notes               String?
@@ -230,6 +232,7 @@ model Transaction {
   tags                TransactionTag[]
   goalAllocations     GoalAllocation[]
   splits              TransactionSplit[]
+  billPaidPeriods     BillPaidPeriod[]
 
   @@index([householdId, date])
   @@index([householdId, date, amount])
@@ -310,6 +313,42 @@ model BudgetLimit {
   @@unique([budgetId, periodKey])
   @@index([householdId, periodKey])
   @@map("budget_limits")
+}
+
+model Bill {
+  id           String          @id @default(cuid())
+  householdId  String
+  name         String
+  amountMin    Decimal?        @db.Decimal(19, 4)
+  amountMax    Decimal?        @db.Decimal(19, 4)
+  currency     String          @default("USD")
+  startDate    DateTime
+  endDate      DateTime?
+  repeatFreq   String
+  skipPeriods  Int             @default(0)
+  isActive     Boolean         @default(true)
+  notes        String?
+  isDeleted    Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  paidPeriods  BillPaidPeriod[]
+  household    Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@map("bills")
+}
+
+model BillPaidPeriod {
+  id            String      @id @default(cuid())
+  billId        String
+  transactionId String
+  periodKey     String
+  createdAt     DateTime    @default(now())
+  bill          Bill        @relation(fields: [billId], references: [id], onDelete: Cascade)
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@unique([billId, periodKey])
+  @@map("bill_paid_periods")
 }
 
 model RecurringItem {

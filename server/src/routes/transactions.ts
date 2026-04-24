@@ -61,6 +61,8 @@ function formatTx(t: any) {
     originalDescription: t.originalDescription,
     amount: t.amount,
     currency: t.currency ?? 'USD',
+    originalAmount: t.originalAmount ? Number(t.originalAmount) : null,
+    exchangeRate: t.exchangeRate ? Number(t.exchangeRate) : null,
     categoryId: t.categoryId ?? null,
     categoryName: t.category?.name ?? null,
     categoryIcon: t.category?.emoji ?? null,
@@ -823,7 +825,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { date, description, amount, accountId, notes, tagIds, isRecurring, isRefund } = req.body;
+    const { date, description, amount, accountId, notes, tagIds, isRecurring, isRefund, currency, originalAmount, exchangeRate } = req.body;
     // Normalize empty string categoryId to null to avoid Prisma FK constraint error
     const categoryId = req.body.categoryId || null;
 
@@ -863,6 +865,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         description,
         originalDescription: description,
         amount,
+        currency: currency ?? 'USD',
+        originalAmount: originalAmount !== undefined ? originalAmount : undefined,
+        exchangeRate: exchangeRate !== undefined ? exchangeRate : undefined,
         categoryId: categoryId ?? null,
         notes: notes ?? null,
         isRecurring: isRecurring ?? false,
