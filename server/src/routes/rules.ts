@@ -258,4 +258,94 @@ router.post('/apply-all', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ─── Rule Groups ─────────────────────────────────────────────────────────────
+
+const groupBodySchema = z.object({
+  name: z.string().min(1),
+  sortOrder: z.number().int().optional(),
+  stopProcessing: z.boolean().optional().default(false),
+  isActive: z.boolean().optional().default(true),
+});
+
+router.get('/groups', async (req: AuthRequest, res: Response) => {
+  try {
+    const groups = await prisma.ruleGroup.findMany({
+      where: { householdId: req.householdId! },
+      include: { rules: { orderBy: { sortOrder: 'asc' } } },
+      orderBy: { sortOrder: 'asc' },
+    });
+    return res.json(groups);
+  } catch (err) {
+    req.log.error({ err }, 'ruleGroups/list');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/groups', async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = groupBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+
+    const maxOrder = await prisma.ruleGroup.aggregate({
+      where: { householdId: req.householdId! },
+      _max: { sortOrder: true },
+    });
+
+    const group = await prisma.ruleGroup.create({
+      data: {
+        householdId:    req.householdId!,
+        name:           parsed.data.name,
+        stopProcessing: parsed.data.stopProcessing,
+        isActive:       parsed.data.isActive,
+        sortOrder:      parsed.data.sortOrder ?? (maxOrder._max.sortOrder ?? 0) + 1,
+      },
+    });
+    logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'CREATE', entity: 'RULE_GROUP', entityId: group.id, after: group as any });
+    return res.status(201).json(group);
+  } catch (err) {
+    req.log.error({ err }, 'ruleGroups/create');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.put('/groups/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await prisma.ruleGroup.findFirst({
+      where: { id: req.params.id, householdId: req.householdId! },
+    });
+    if (!existing) return res.status(404).json({ error: 'Rule group not found' });
+
+    const parsed = groupBodySchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+
+    const group = await prisma.ruleGroup.update({
+      where: { id: req.params.id },
+      data:  parsed.data,
+    });
+    return res.json(group);
+  } catch (err) {
+    req.log.error({ err }, 'ruleGroups/update');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/groups/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await prisma.ruleGroup.findFirst({
+      where: { id: req.params.id, householdId: req.householdId! },
+    });
+    if (!existing) return res.status(404).json({ error: 'Rule group not found' });
+
+    await prisma.rule.updateMany({
+      where: { ruleGroupId: req.params.id },
+      data:  { ruleGroupId: null },
+    });
+    await prisma.ruleGroup.delete({ where: { id: req.params.id } });
+    return res.json({ message: 'Deleted' });
+  } catch (err) {
+    req.log.error({ err }, 'ruleGroups/delete');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

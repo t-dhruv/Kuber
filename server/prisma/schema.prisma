@@ -72,6 +72,7 @@ model Household {
   providerConnections     ProviderConnection[]
   transferGroups          TransferGroup[]
   categoryLearningExamples CategoryLearningExample[]
+  ruleGroups              RuleGroup[]
 
   @@map("households")
 }
@@ -553,16 +554,34 @@ model TransactionTag {
   @@map("transaction_tags")
 }
 
+model RuleGroup {
+  id              String    @id @default(cuid())
+  householdId     String
+  name            String
+  sortOrder       Int       @default(0)
+  stopProcessing  Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  rules           Rule[]
+  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@map("rule_groups")
+}
+
 model Rule {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
   householdId String
   conditions  Json
   actions     Json
-  sortOrder   Int       @default(0)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  sortOrder   Int        @default(0)
+  isActive    Boolean    @default(true)
+  ruleGroupId String?
+  ruleGroup   RuleGroup? @relation(fields: [ruleGroupId], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  household   Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@map("rules")
 }

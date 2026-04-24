@@ -47,6 +47,7 @@ import { runAccountBalanceSnapshot } from './lib/accountBalanceJob';
 import { sendDigestEmail } from './lib/digestEmail';
 import { runProactiveChecks } from './lib/proactiveAi';
 import { runImapCheckForAllHouseholds } from './lib/imapWatcher';
+import { processRecurringItems } from './lib/recurringJob';
 import { prisma } from './lib/prisma';
 import pinoHttp from 'pino-http';
 import { randomUUID } from 'crypto';
@@ -310,6 +311,21 @@ setInterval(async () => {
     end();
   }
 }, 60 * 60 * 1000);
+
+// Daily recurring auto-create — runs every 24 hours
+setInterval(async () => {
+  const end = jobDurationSeconds.startTimer({ job: 'recurring-autocreate' });
+  try {
+    await processRecurringItems(prisma);
+    jobRunsTotal.inc({ job: 'recurring-autocreate', status: 'success' });
+    jobLastRunTimestamp.set({ job: 'recurring-autocreate' }, Date.now() / 1000);
+  } catch (err) {
+    jobRunsTotal.inc({ job: 'recurring-autocreate', status: 'failure' });
+    jobLog.error({ err }, 'Recurring auto-create job failed');
+  } finally {
+    end();
+  }
+}, 24 * 60 * 60 * 1000);
 
 const server = app.listen(PORT, () => {
   logger.info({ port: PORT }, 'Kuber server started');
