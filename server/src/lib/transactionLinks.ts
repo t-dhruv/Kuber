@@ -20,6 +20,12 @@ export async function listLinkTypes() {
 export async function createLink(input: CreateLinkInput) {
   if (input.fromId === input.toId) throw new Error('Cannot link a transaction to itself');
 
+  const [fromTx, toTx] = await Promise.all([
+    prisma.transaction.findFirst({ where: { id: input.fromId, householdId: input.householdId } }),
+    prisma.transaction.findFirst({ where: { id: input.toId,   householdId: input.householdId } }),
+  ]);
+  if (!fromTx || !toTx) throw new Error('Transaction not found');
+
   return prisma.transactionLink.create({
     data:    { ...input },
     include: LINK_INCLUDE,

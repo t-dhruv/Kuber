@@ -14,6 +14,9 @@ vi.mock('../lib/prisma', async () => {
       transactionLinkType: {
         findMany: vi.fn(),
       },
+      transaction: {
+        findFirst: vi.fn(),
+      },
     },
   };
 });
@@ -37,6 +40,7 @@ describe('createLink', () => {
   });
 
   it('creates a link between two different transactions', async () => {
+    (prisma.transaction.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'tx-1', householdId: 'hh-1' });
     (prisma.transactionLink.create as ReturnType<typeof vi.fn>).mockResolvedValue({
       id:          'link-1',
       householdId: 'hh-1',
@@ -57,6 +61,14 @@ describe('createLink', () => {
       include: expect.any(Object),
     });
     expect(result.fromId).toBe('tx-1');
+  });
+
+  it('throws when transactions do not belong to household', async () => {
+    (prisma.transaction.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    await expect(
+      createLink({ householdId: 'hh-1', linkTypeId: 'lt-1', fromId: 'tx-1', toId: 'tx-2' })
+    ).rejects.toThrow('Transaction not found');
+    expect(prisma.transactionLink.create).not.toHaveBeenCalled();
   });
 
   it('throws when fromId === toId', async () => {
