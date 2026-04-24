@@ -76,6 +76,7 @@ model Household {
   ruleGroups              RuleGroup[]
   reconciliations         Reconciliation[]
   availableBudgets        AvailableBudget[]
+  attachments             Attachment[]
 
   @@map("households")
 }
@@ -239,6 +240,7 @@ model Transaction {
   goalAllocations     GoalAllocation[]
   splits              TransactionSplit[]
   billPaidPeriods     BillPaidPeriod[]
+  attachments         Attachment[]
 
   @@index([householdId, date])
   @@index([householdId, date, amount])
@@ -318,6 +320,22 @@ model AvailableBudget {
 
   @@unique([householdId, periodKey])
   @@map("available_budgets")
+}
+
+model Attachment {
+  id            String      @id @default(cuid())
+  householdId   String
+  transactionId String
+  filename      String
+  mimeType      String
+  sizeBytes     Int
+  storagePath   String
+  uploadedAt    DateTime    @default(now())
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  household     Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+  @@map("attachments")
 }
 
 model BudgetLimit {
