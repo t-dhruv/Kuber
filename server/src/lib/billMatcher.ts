@@ -21,7 +21,7 @@ export function getExpectedPeriodStart(
 ): Date | null {
   if (txDate < billStart) return null;
 
-  let cursor = new Date(billStart);
+  const cursor = new Date(billStart);
   let prev   = new Date(billStart);
 
   while (cursor <= txDate) {
