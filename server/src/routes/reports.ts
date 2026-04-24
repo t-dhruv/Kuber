@@ -1249,4 +1249,122 @@ router.get('/benchmarks', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/v1/reports/tags?start=YYYY-MM-DD&end=YYYY-MM-DD
+// Returns income/expense totals grouped by tag for the given period.
+router.get('/tags', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const start = req.query.start as string | undefined;
+    const end   = req.query.end   as string | undefined;
+
+    const dateFilter = start && end
+      ? { gte: new Date(start), lte: new Date(end) }
+      : undefined;
+
+    const tags = await prisma.tag.findMany({
+      where:   { householdId },
+      orderBy: { name: 'asc' },
+    });
+
+    const results = await Promise.all(
+      tags.map(async (tag) => {
+        const [incomeAgg, expenseAgg, count] = await Promise.all([
+          prisma.transaction.aggregate({
+            where: {
+              householdId,
+              isHidden: false,
+              amount:   { gt: 0 },
+              tags:     { some: { tagId: tag.id } },
+              ...(dateFilter ? { date: dateFilter } : {}),
+            },
+            _sum: { amount: true },
+          }),
+          prisma.transaction.aggregate({
+            where: {
+              householdId,
+              isHidden: false,
+              amount:   { lt: 0 },
+              tags:     { some: { tagId: tag.id } },
+              ...(dateFilter ? { date: dateFilter } : {}),
+            },
+            _sum: { amount: true },
+          }),
+          prisma.transaction.count({
+            where: {
+              householdId,
+              isHidden: false,
+              tags:     { some: { tagId: tag.id } },
+              ...(dateFilter ? { date: dateFilter } : {}),
+            },
+          }),
+        ]);
+
+        return {
+          id:       tag.id,
+          name:     tag.name,
+          color:    tag.color ?? null,
+          income:   incomeAgg._sum.amount ?? 0,
+          expenses: Math.abs(expenseAgg._sum.amount ?? 0),
+          count,
+        };
+      })
+    );
+
+    return res.json(results.filter((r) => r.count > 0));
+  } catch (err) {
+    req.log.error({ err }, 'reports/tags');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/v1/reports/no-category?start=YYYY-MM-DD&end=YYYY-MM-DD&limit=50&cursor=
+// Returns paginated transactions that have no category assigned.
+router.get('/no-category', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const start  = req.query.start  as string | undefined;
+    const end    = req.query.end    as string | undefined;
+    const limit  = Math.min(parseInt((req.query.limit as string) ?? '50', 10), 200);
+    const cursor = req.query.cursor as string | undefined;
+
+    const dateFilter = start && end
+      ? { gte: new Date(start), lte: new Date(end) }
+      : undefined;
+
+    const baseWhere = {
+      householdId,
+      isHidden:   false,
+      categoryId: null,
+      ...(dateFilter ? { date: dateFilter } : {}),
+    };
+
+    const [transactions, total] = await Promise.all([
+      prisma.transaction.findMany({
+        where:   baseWhere,
+        orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        take:    limit + 1,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+        select:  {
+          id:          true,
+          date:        true,
+          description: true,
+          amount:      true,
+          account:     { select: { name: true } },
+          merchant:    { select: { displayName: true } },
+        },
+      }),
+      prisma.transaction.count({ where: baseWhere }),
+    ]);
+
+    const hasMore    = transactions.length > limit;
+    const items      = hasMore ? transactions.slice(0, limit) : transactions;
+    const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+    return res.json({ items, nextCursor, total });
+  } catch (err) {
+    req.log.error({ err }, 'reports/no-category');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
