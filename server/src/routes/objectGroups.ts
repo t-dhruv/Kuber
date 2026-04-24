@@ -57,8 +57,6 @@ router.patch('/assign', async (req: AuthRequest, res: Response) => {
     if (!group) return res.status(404).json({ error: 'Group not found' });
   }
 
-  const updateData = { groupId: groupId ?? undefined };
-
   if (entityType === 'account') {
     const entity = await prisma.account.findFirst({ where: { id: entityId, householdId } });
     if (!entity) return res.status(404).json({ error: 'Account not found' });
