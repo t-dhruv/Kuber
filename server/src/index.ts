@@ -44,7 +44,11 @@ import webhooksRouter from './routes/webhooks';
 import pushRouter from './routes/push';
 import reconciliationRouter from './routes/reconciliation';
 import attachmentsRouter from './routes/attachments';
+import transactionLinksRouter from './routes/transactionLinks';
+import objectGroupsRouter from './routes/objectGroups';
+import cronRouter from './routes/cron';
 import { requireAuth } from './middleware/auth';
+import { registerJob }  from './lib/cronRegistry';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
 import { runAccountBalanceSnapshot } from './lib/accountBalanceJob';
 import { sendDigestEmail } from './lib/digestEmail';
@@ -59,6 +63,27 @@ import { metricsHandler, httpRequestsTotal, httpRequestDurationSeconds,
          jobRunsTotal, jobDurationSeconds, jobLastRunTimestamp } from './lib/metrics.js';
 
 const jobLog = logger.child({ module: 'jobs' });
+
+// ── Cron job registry ─────────────────────────────────────────────────────────
+// Register all recurring jobs so they are visible via GET /api/v1/cron/jobs
+// and triggerable via POST /api/v1/cron/jobs/:name/trigger.
+registerJob('rule-execution', async () => {
+  const { runRuleExecutionJob } = await import('./lib/ruleExecutionJob.js');
+  await runRuleExecutionJob();
+});
+registerJob('auto-budget', async () => {
+  const { runAutoBudget } = await import('./lib/autoBudgetJob.js');
+  await runAutoBudget(prisma);
+});
+registerJob('net-worth-snapshot', async () => {
+  await takeNetWorthSnapshot();
+});
+registerJob('account-balance-snapshot', async () => {
+  await runAccountBalanceSnapshot();
+});
+registerJob('recurring-autocreate', async () => {
+  await processRecurringItems(prisma);
+});
 
 // ── Startup env validation ────────────────────────────────────────────────────
 const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'DATABASE_URL'] as const;
@@ -218,6 +243,9 @@ app.use('/api/v1/push', requireAuth, pushRouter);
 app.use('/api/v1/bills', requireAuth, billsRouter);
 app.use('/api/v1/accounts', requireAuth, reconciliationRouter);
 app.use('/api/v1', requireAuth, attachmentsRouter);
+app.use('/api/v1', requireAuth, transactionLinksRouter);
+app.use('/api/v1/object-groups', requireAuth, objectGroupsRouter);
+app.use('/api/v1/cron', requireAuth, cronRouter);
 
 function checkIfDigestDue(schedule: { frequency: string; lastSentAt: Date | null }, now: Date): boolean {
   const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday
