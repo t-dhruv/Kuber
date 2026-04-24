@@ -3,7 +3,7 @@ import { createModuleLogger } from './logger.js';
 const log = createModuleLogger('audit');
 
 export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE';
-export type AuditEntity = 'TRANSACTION' | 'ACCOUNT' | 'BUDGET' | 'GOAL' | 'RULE' | 'RULE_GROUP' | 'RECURRING';
+export type AuditEntity = 'TRANSACTION' | 'ACCOUNT' | 'BUDGET' | 'GOAL' | 'RULE' | 'RULE_GROUP' | 'RECURRING' | 'BILL';
 
 interface AuditParams {
   householdId: string;
