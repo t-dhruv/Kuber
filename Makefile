@@ -10,7 +10,7 @@ help:
 	@echo "Usage: make <target>"
 	@echo ""
 	@echo "Dev"
-	@echo "  dev            Start server + client (separate terminals recommended)"
+	@echo "  dev            Start server + client concurrently"
 	@echo "  dev-server     Start Express API (port 4000)"
 	@echo "  dev-client     Start Vite dev server (port 3000)"
 	@echo "  install        Install all npm deps"
@@ -50,10 +50,9 @@ help:
 # ── Dev ──────────────────────────────────────────────────────────────────────
 
 dev:
-	@echo "Starting server and client — run in separate terminals for best DX:"
-	@echo "  make dev-server"
-	@echo "  make dev-client"
-	$(MAKE) dev-server
+	npx concurrently --kill-others-on-fail \
+		"cd server && npm run dev" \
+		"cd client && npm run dev"
 
 dev-client:
 	cd client && npm run dev
@@ -133,6 +132,11 @@ db-studio:
 up:
 	docker-compose up -d
 
+update:
+	docker-compose down
+	docker-compose pull
+	docker-compose up -d
+
 down:
 	docker-compose down
 
@@ -146,6 +150,11 @@ prod-up:
 
 prod-down:
 	docker compose -f docker-compose.prod.yml --profile observability --profile automation down
+
+prod-update:
+	docker compose -f docker-compose.prod.yml --profile observability --profile automation down
+	docker compose -f docker-compose.prod.yml --profile observability --profile automation pull
+	docker compose -f docker-compose.prod.yml --profile observability --profile automation up -d
 
 prod-logs:
 	docker compose -f docker-compose.prod.yml --profile observability --profile automation logs -f

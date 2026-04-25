@@ -17,11 +17,11 @@ export default function AiPage() {
 
   const { data: config, isLoading } = useQuery<AiConfig>({
     queryKey: ['system', 'ai'],
-    queryFn: () => api.get('/api/v1/system/ai').then(r => r.data),
+    queryFn: () => api.get('/system/ai').then(r => r.data),
   });
 
   const mutation = useMutation({
-    mutationFn: (data: AiConfig) => api.put('/api/v1/system/ai', data).then(r => r.data),
+    mutationFn: (data: AiConfig) => api.put('/system/ai', data).then(r => r.data),
     onSuccess: (data) => {
       qc.setQueryData(['system', 'ai'], data);
       notify.success('AI settings saved');
@@ -50,7 +50,7 @@ export default function AiPage() {
         title="Proactive AI"
         description="Analyzes your finances and surfaces insights, anomalies, and recommendations."
         status={config.proactiveAiEnabled ? 'ok' : 'disabled'}
-        actions={<TriggerButton endpoint="/api/v1/system/ai/proactive/trigger" label="Run Now" />}
+        actions={<TriggerButton endpoint="/system/ai/proactive/trigger" label="Run Now" />}
       >
         <div className="space-y-3">
           <Toggle

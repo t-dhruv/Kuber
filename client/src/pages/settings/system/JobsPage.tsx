@@ -19,7 +19,7 @@ export default function JobsPage() {
   const qc = useQueryClient();
   const { data: jobs = [], isLoading, isError } = useQuery<Job[]>({
     queryKey: ['system', 'jobs'],
-    queryFn: () => api.get('/api/v1/cron/jobs').then(r => r.data),
+    queryFn: () => api.get('/cron/jobs').then(r => r.data),
     refetchInterval: 10_000,
   });
 
@@ -61,7 +61,7 @@ export default function JobsPage() {
                   <td className="px-4 py-3 text-xs text-red-500 max-w-xs truncate">{job.lastError ?? '—'}</td>
                   <td className="px-4 py-3 text-right">
                     <TriggerButton
-                      endpoint={`/api/v1/cron/jobs/${job.name}/trigger`}
+                      endpoint={`/cron/jobs/${job.name}/trigger`}
                       onSuccess={() => qc.invalidateQueries({ queryKey: ['system', 'jobs'] })}
                     />
                   </td>
