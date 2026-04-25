@@ -13,6 +13,11 @@ vi.mock('../lib/prisma', () => ({
   },
 }));
 
+vi.mock('../lib/encryption', () => ({
+  encrypt: (v: string) => v,
+  decrypt: (v: string) => v,
+}));
+
 function makeApp(householdId = 'hh1', userId = 'u1') {
   const app = express();
   app.use(express.json());
@@ -86,5 +91,50 @@ describe('GET /system/ai', () => {
     expect(res.status).toBe(200);
     expect(res.body.proactiveAiEnabled).toBe(true);
     expect(res.body.proactiveAiFrequency).toBe('daily');
+  });
+});
+
+describe('PUT /system/integrations', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('saves valid config and returns it', async () => {
+    vi.mocked(prisma.userPreference.upsert).mockResolvedValue({} as any);
+    const body = {
+      imapEnabled: true,
+      imapHost: 'imap.gmail.com',
+      imapPort: 993,
+      imapUser: 'test@gmail.com',
+      imapPass: 'secret',
+      digestEnabled: false,
+      digestSchedule: 'weekly',
+      webhooksEnabled: true,
+    };
+    const res = await request(makeApp()).put('/system/integrations').send(body);
+    expect(res.status).toBe(200);
+    expect(res.body.imapEnabled).toBe(true);
+    expect(prisma.userPreference.upsert).toHaveBeenCalled();
+  });
+
+  it('rejects invalid imapPort', async () => {
+    const res = await request(makeApp()).put('/system/integrations').send({ imapPort: 99999 });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('PUT /system/ai', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('saves valid config and returns it', async () => {
+    vi.mocked(prisma.userPreference.upsert).mockResolvedValue({} as any);
+    const body = {
+      proactiveAiEnabled: false,
+      proactiveAiFrequency: 'weekly',
+      investmentIntelEnabled: true,
+      wealthAnalysisEnabled: false,
+    };
+    const res = await request(makeApp()).put('/system/ai').send(body);
+    expect(res.status).toBe(200);
+    expect(res.body.proactiveAiEnabled).toBe(false);
+    expect(prisma.userPreference.upsert).toHaveBeenCalled();
   });
 });

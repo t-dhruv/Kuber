@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { encrypt, decrypt } from '../lib/encryption';
 
 const router = Router();
 
@@ -110,6 +111,9 @@ router.put('/automation', async (req: AuthRequest, res: Response) => {
 router.get('/integrations', async (req: AuthRequest, res: Response) => {
   try {
     const config = await getConfig(req.userId!, 'system.integrations', INTEGRATIONS_DEFAULTS);
+    if (config.imapPass) {
+      config.imapPass = decrypt(config.imapPass);
+    }
     return res.json(config);
   } catch (err) {
     req.log.error({ err }, 'system/integrations GET');
@@ -121,7 +125,11 @@ router.put('/integrations', async (req: AuthRequest, res: Response) => {
   const parsed = IntegrationsSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   try {
-    await saveConfig(req.userId!, 'system.integrations', parsed.data);
+    const dataToStore = {
+      ...parsed.data,
+      imapPass: parsed.data.imapPass ? encrypt(parsed.data.imapPass) : '',
+    };
+    await saveConfig(req.userId!, 'system.integrations', dataToStore);
     return res.json(parsed.data);
   } catch (err) {
     req.log.error({ err }, 'system/integrations PUT');
