@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { notify } from '@/components/ui';
 import { SectionCard } from './components/SectionCard';
 import { TriggerButton } from './components/TriggerButton';
+import { Toggle } from './components/Toggle';
 
 interface IntegrationsConfig {
   imapEnabled: boolean;
@@ -16,29 +18,20 @@ interface IntegrationsConfig {
   webhooksEnabled: boolean;
 }
 
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <label className="flex items-center gap-2 cursor-pointer">
-      <div
-        onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${checked ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'}`}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-4' : ''}`} />
-      </div>
-      <span className="text-sm text-[var(--color-text)]">{label}</span>
-    </label>
-  );
-}
-
 export default function IntegrationsPage() {
   const qc = useQueryClient();
   const [imapTestResult, setImapTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [imapTesting, setImapTesting] = useState(false);
+  const [imapFields, setImapFields] = useState({ host: '', port: 993, user: '', pass: '' });
 
   const { data: config, isLoading } = useQuery<IntegrationsConfig>({
     queryKey: ['system', 'integrations'],
     queryFn: () => api.get('/api/v1/system/integrations').then(r => r.data),
   });
+
+  useEffect(() => {
+    if (config) setImapFields({ host: config.imapHost, port: config.imapPort, user: config.imapUser, pass: config.imapPass });
+  }, [config]);
 
   const mutation = useMutation({
     mutationFn: (data: IntegrationsConfig) => api.put('/api/v1/system/integrations', data).then(r => r.data),
@@ -46,7 +39,10 @@ export default function IntegrationsPage() {
       qc.setQueryData(['system', 'integrations'], data);
       notify.success('Integration settings saved');
     },
-    onError: (err: any) => notify.error(err.response?.data?.error ?? 'Save failed'),
+    onError: (err: unknown) => {
+      const msg = err instanceof Error && 'response' in err ? (err as any).response?.data?.error : undefined;
+      notify.error(msg ?? 'Save failed');
+    },
   });
 
   function update(patch: Partial<IntegrationsConfig>) {
@@ -60,14 +56,14 @@ export default function IntegrationsPage() {
     setImapTestResult(null);
     try {
       await api.post('/api/v1/system/integrations/imap/test', {
-        host: config.imapHost,
-        port: config.imapPort,
-        user: config.imapUser,
-        pass: config.imapPass,
+        host: imapFields.host,
+        port: imapFields.port,
+        user: imapFields.user,
+        pass: imapFields.pass,
       });
       setImapTestResult({ ok: true, message: 'Connection successful' });
-    } catch (err: any) {
-      setImapTestResult({ ok: false, message: err.response?.data?.error ?? 'Connection failed' });
+    } catch (err: unknown) {
+      setImapTestResult({ ok: false, message: (err instanceof Error && 'response' in err ? (err as any).response?.data?.error : undefined) ?? 'Connection failed' });
     } finally {
       setImapTesting(false);
     }
@@ -91,17 +87,20 @@ export default function IntegrationsPage() {
           <Toggle checked={config.imapEnabled} onChange={v => update({ imapEnabled: v })} label="Enable IMAP watcher" />
           <div className="grid grid-cols-2 gap-3 mt-3">
             {[
-              { field: 'imapHost' as const, label: 'Host', placeholder: 'imap.gmail.com' },
-              { field: 'imapPort' as const, label: 'Port', placeholder: '993', type: 'number' },
-              { field: 'imapUser' as const, label: 'Username', placeholder: 'you@gmail.com' },
-              { field: 'imapPass' as const, label: 'Password', placeholder: '••••••••', type: 'password' },
+              { field: 'host' as const, label: 'Host', placeholder: 'imap.gmail.com' },
+              { field: 'port' as const, label: 'Port', placeholder: '993', type: 'number' },
+              { field: 'user' as const, label: 'Username', placeholder: 'you@gmail.com' },
+              { field: 'pass' as const, label: 'Password', placeholder: '••••••••', type: 'password' },
             ].map(({ field, label, placeholder, type = 'text' }) => (
               <div key={field}>
                 <label className="block text-xs text-[var(--color-text-muted)] mb-1">{label}</label>
                 <input
                   type={type}
-                  value={String(config[field])}
-                  onChange={e => update({ [field]: type === 'number' ? Number(e.target.value) : e.target.value } as Partial<IntegrationsConfig>)}
+                  value={String(imapFields[field])}
+                  onChange={e => {
+                    setImapTestResult(null);
+                    setImapFields(f => ({ ...f, [field]: type === 'number' ? Number(e.target.value) : e.target.value }));
+                  }}
                   placeholder={placeholder}
                   className="w-full px-2.5 py-1.5 text-sm border border-[var(--color-border)] rounded-[var(--radius-sm)] bg-[var(--color-surface)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
                 />
@@ -115,6 +114,13 @@ export default function IntegrationsPage() {
               className="px-3 py-1.5 text-xs font-medium rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50 transition-colors"
             >
               {imapTesting ? 'Testing…' : 'Test Connection'}
+            </button>
+            <button
+              onClick={() => update({ imapHost: imapFields.host, imapPort: imapFields.port, imapUser: imapFields.user, imapPass: imapFields.pass })}
+              disabled={mutation.isPending}
+              className="px-3 py-1.5 text-xs font-medium rounded-[var(--radius-sm)] border border-[var(--color-primary)] bg-[var(--color-primary)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              Save
             </button>
             {imapTestResult && (
               <span className={`text-xs ${imapTestResult.ok ? 'text-green-600' : 'text-red-500'}`}>
@@ -154,7 +160,7 @@ export default function IntegrationsPage() {
       >
         <Toggle checked={config.webhooksEnabled} onChange={v => update({ webhooksEnabled: v })} label="Enable webhooks" />
         <p className="text-xs text-[var(--color-text-muted)] mt-2">
-          Manage individual webhook endpoints in <a href="/settings" className="underline">Settings → Webhooks</a>.
+          Manage individual webhook endpoints in <Link to="/settings" className="underline">Settings → Webhooks</Link>.
         </p>
       </SectionCard>
     </div>
