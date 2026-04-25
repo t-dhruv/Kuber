@@ -6,7 +6,7 @@ import { StatusBadge } from './components/StatusBadge';
 interface Job {
   name: string;
   lastRunAt?: string;
-  lastResult?: 'ok' | 'error';
+  lastResult?: 'ok' | 'error' | 'running' | 'disabled';
   lastError?: string;
 }
 
@@ -17,7 +17,7 @@ function formatDate(iso?: string) {
 
 export default function JobsPage() {
   const qc = useQueryClient();
-  const { data: jobs = [], isLoading } = useQuery<Job[]>({
+  const { data: jobs = [], isLoading, isError } = useQuery<Job[]>({
     queryKey: ['system', 'jobs'],
     queryFn: () => api.get('/api/v1/cron/jobs').then(r => r.data),
     refetchInterval: 10_000,
@@ -32,6 +32,8 @@ export default function JobsPage() {
 
       {isLoading ? (
         <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+      ) : isError ? (
+        <p className="text-sm text-red-500">Failed to load jobs. Check server logs.</p>
       ) : (
         <div className="border border-[var(--color-border)] rounded-[var(--radius-md)] overflow-hidden">
           <table className="w-full text-sm">
@@ -65,6 +67,13 @@ export default function JobsPage() {
                   </td>
                 </tr>
               ))}
+              {jobs.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-xs text-[var(--color-text-muted)]">
+                    No jobs registered.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -1,7 +1,5 @@
 import { ReactNode } from 'react';
-import { StatusBadge } from './StatusBadge';
-
-type Status = 'ok' | 'error' | 'running' | 'disabled';
+import { StatusBadge, Status } from './StatusBadge';
 
 interface SectionCardProps {
   title: string;

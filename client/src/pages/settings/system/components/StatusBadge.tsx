@@ -1,4 +1,4 @@
-type Status = 'ok' | 'error' | 'running' | 'disabled';
+export type Status = 'ok' | 'error' | 'running' | 'disabled';
 
 const styles: Record<Status, string> = {
   ok:       'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',

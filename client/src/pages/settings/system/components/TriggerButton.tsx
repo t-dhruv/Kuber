@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import { notify } from '@/components/ui';
-import { Play } from 'lucide-react';
+import { Play, Loader2 } from 'lucide-react';
 
 interface TriggerButtonProps {
   endpoint: string;
@@ -31,7 +31,7 @@ export function TriggerButton({ endpoint, label = 'Run Now', onSuccess }: Trigge
       disabled={loading}
       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-raised)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
     >
-      <Play size={12} className={loading ? 'animate-spin' : ''} />
+      {loading ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
       {loading ? 'Running…' : label}
     </button>
   );

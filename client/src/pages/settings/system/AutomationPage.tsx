@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { notify } from '@/components/ui';
@@ -27,11 +28,16 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 
 export default function AutomationPage() {
   const qc = useQueryClient();
+  const [confidence, setConfidence] = useState(0);
 
   const { data: config, isLoading } = useQuery<AutomationConfig>({
     queryKey: ['system', 'automation'],
     queryFn: () => api.get('/api/v1/system/automation').then(r => r.data),
   });
+
+  useEffect(() => {
+    if (config) setConfidence(config.billMatcherConfidence);
+  }, [config]);
 
   const mutation = useMutation({
     mutationFn: (data: AutomationConfig) => api.put('/api/v1/system/automation', data).then(r => r.data),
@@ -39,7 +45,12 @@ export default function AutomationPage() {
       qc.setQueryData(['system', 'automation'], data);
       notify.success('Automation settings saved');
     },
-    onError: (err: any) => notify.error(err.response?.data?.error ?? 'Save failed'),
+    onError: (err: unknown) => {
+      const msg = err instanceof Error && 'response' in err
+        ? (err as any).response?.data?.error
+        : undefined;
+      notify.error(msg ?? 'Save failed');
+    },
   });
 
   function update(patch: Partial<AutomationConfig>) {
@@ -86,12 +97,12 @@ export default function AutomationPage() {
               type="range"
               min={0}
               max={100}
-              value={config.billMatcherConfidence}
-              onChange={e => update({ billMatcherConfidence: Number(e.target.value) })}
-              onMouseUp={() => mutation.mutate(config)}
+              value={confidence}
+              onChange={e => setConfidence(Number(e.target.value))}
+              onMouseUp={() => update({ billMatcherConfidence: confidence })}
               className="flex-1"
             />
-            <span className="text-xs font-mono w-8 text-right">{config.billMatcherConfidence}%</span>
+            <span className="text-xs font-mono w-8 text-right">{confidence}%</span>
           </div>
         </div>
       </SectionCard>
