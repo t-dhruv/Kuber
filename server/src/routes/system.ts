@@ -161,4 +161,57 @@ router.put('/ai', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ── Triggers ──────────────────────────────────────────────────────────────────
+
+router.post('/automation/auto-categorize/trigger', async (req: AuthRequest, res: Response) => {
+  try {
+    const { batchAutoCategorize } = await import('../lib/autoCategorize.js');
+    await batchAutoCategorize(prisma, req.householdId!);
+    return res.json({ message: 'Auto-categorize triggered successfully' });
+  } catch (err) {
+    req.log.error({ err }, 'system/auto-categorize trigger');
+    return res.status(500).json({ error: 'Auto-categorize failed' });
+  }
+});
+
+router.post('/integrations/imap/test', async (req: AuthRequest, res: Response) => {
+  const schema = z.object({
+    host: z.string().min(1),
+    port: z.number().int().min(1).max(65535),
+    user: z.string().min(1),
+    pass: z.string().min(1),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  try {
+    const { testImapConnection } = await import('../lib/imapWatcher.js');
+    await testImapConnection(parsed.data);
+    return res.json({ message: 'IMAP connection successful' });
+  } catch (err) {
+    return res.status(400).json({ error: `Connection failed: ${String(err)}` });
+  }
+});
+
+router.post('/integrations/digest/trigger', async (req: AuthRequest, res: Response) => {
+  try {
+    const { sendDigestEmail } = await import('../lib/digestEmail.js');
+    await sendDigestEmail(req.householdId!);
+    return res.json({ message: 'Digest email sent successfully' });
+  } catch (err) {
+    req.log.error({ err }, 'system/digest trigger');
+    return res.status(500).json({ error: 'Digest email failed' });
+  }
+});
+
+router.post('/ai/proactive/trigger', async (req: AuthRequest, res: Response) => {
+  try {
+    const { runProactiveChecks } = await import('../lib/proactiveAi.js');
+    await runProactiveChecks(prisma, req.householdId!);
+    return res.json({ message: 'Proactive AI checks triggered successfully' });
+  } catch (err) {
+    req.log.error({ err }, 'system/proactive trigger');
+    return res.status(500).json({ error: 'Proactive AI failed' });
+  }
+});
+
 export default router;
