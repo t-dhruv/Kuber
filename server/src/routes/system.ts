@@ -188,7 +188,8 @@ router.post('/integrations/imap/test', async (req: AuthRequest, res: Response) =
     await testImapConnection(parsed.data);
     return res.json({ message: 'IMAP connection successful' });
   } catch (err) {
-    return res.status(400).json({ error: `Connection failed: ${String(err)}` });
+    req.log.error({ err }, 'system/integrations/imap test');
+    return res.status(400).json({ error: 'IMAP connection failed' });
   }
 });
 

@@ -111,7 +111,10 @@ export async function testImapConnection(cfg: { host: string; port: number; user
   } catch {
     throw new Error('imap-simple package not installed');
   }
-  const connection = await imapSimple.connect({
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Connection timed out')), 10_000)
+  );
+  const connect = imapSimple.connect({
     imap: {
       user: cfg.user,
       password: cfg.pass,
@@ -120,8 +123,10 @@ export async function testImapConnection(cfg: { host: string; port: number; user
       tls: true,
       authTimeout: 5000,
     },
-  });
-  connection.end();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  }).then((connection: any) => connection.end());
+
+  await Promise.race([connect, timeout]);
 }
 
 /**
