@@ -1,13 +1,74 @@
-.PHONY: dev dev-client dev-server build build-client build-server test test-server test-client test-unit test-coverage test-e2e clean db-reset db-migrate db-generate db-seed db-studio lint start install up down logs prod-up prod-down prod-logs
+.PHONY: help dev dev-client dev-server build build-client build-server \
+        test test-server test-client test-unit test-coverage test-e2e \
+        clean db-reset db-drop db-migrate db-generate db-seed db-studio \
+        lint typecheck format start install up down logs \
+        prod-up prod-down prod-logs
 
-dev: dev-server
-	@echo "Run 'make dev-server' or 'make dev-client' separately"
+# ── Default ──────────────────────────────────────────────────────────────────
+
+help:
+	@echo "Usage: make <target>"
+	@echo ""
+	@echo "Dev"
+	@echo "  dev            Start server + client (separate terminals recommended)"
+	@echo "  dev-server     Start Express API (port 4000)"
+	@echo "  dev-client     Start Vite dev server (port 3000)"
+	@echo "  install        Install all npm deps"
+	@echo ""
+	@echo "Build / Quality"
+	@echo "  build          Build server + client"
+	@echo "  lint           ESLint across workspaces"
+	@echo "  typecheck      tsc --noEmit across workspaces"
+	@echo "  format         Prettier check across workspaces"
+	@echo ""
+	@echo "Test"
+	@echo "  test           Run all unit tests"
+	@echo "  test-coverage  Unit tests with coverage"
+	@echo "  test-e2e       Playwright E2E tests"
+	@echo ""
+	@echo "Database"
+	@echo "  db-migrate     Run pending Prisma migrations"
+	@echo "  db-generate    Regenerate Prisma client"
+	@echo "  db-seed        Seed database with test data"
+	@echo "  db-reset       Drop + migrate + seed (full reset)"
+	@echo "  db-studio      Open Prisma Studio on :5555"
+	@echo ""
+	@echo "Docker (dev)"
+	@echo "  up             docker-compose up -d"
+	@echo "  down           docker-compose down"
+	@echo "  logs           Follow all container logs"
+	@echo ""
+	@echo "Docker (prod)"
+	@echo "  prod-up        Start full prod stack (observability + automation)"
+	@echo "  prod-down      Stop prod stack"
+	@echo "  prod-logs      Follow prod logs"
+	@echo ""
+	@echo "Misc"
+	@echo "  clean          Remove all dist + node_modules"
+	@echo "  start          Start compiled server (production mode)"
+
+# ── Dev ──────────────────────────────────────────────────────────────────────
+
+dev:
+	@echo "Starting server and client — run in separate terminals for best DX:"
+	@echo "  make dev-server"
+	@echo "  make dev-client"
+	$(MAKE) dev-server
 
 dev-client:
 	cd client && npm run dev
 
 dev-server:
 	cd server && npm run dev
+
+# ── Install ───────────────────────────────────────────────────────────────────
+
+install:
+	npm install
+	cd server && npm install
+	cd client && npm install
+
+# ── Build ─────────────────────────────────────────────────────────────────────
 
 build: build-server build-client
 
@@ -17,12 +78,43 @@ build-client:
 build-server:
 	cd server && npm run build
 
-install:
-	cd server && npm install
-	cd client && npm install
+# ── Quality ───────────────────────────────────────────────────────────────────
 
-db-reset:
-	cd server && npm run db:migrate && npm run db:seed
+lint:
+	cd server && npm run lint
+	cd client && npm run lint
+
+typecheck:
+	cd server && npx tsc --noEmit
+	cd client && npx tsc --noEmit
+	cd shared && npx tsc --noEmit 2>/dev/null || true
+
+format:
+	cd server && npx prettier --check "src/**/*.{ts,json}"
+	cd client && npx prettier --check "src/**/*.{ts,tsx,css}"
+
+# ── Test ──────────────────────────────────────────────────────────────────────
+
+test: test-server
+
+test-server:
+	cd server && npm run test
+
+test-unit:
+	cd server && npm run test
+
+test-coverage:
+	cd server && npm run test:coverage
+
+test-e2e:
+	npx playwright test
+
+# ── Database ──────────────────────────────────────────────────────────────────
+
+db-reset: db-drop db-migrate db-seed
+
+db-drop:
+	cd server && npx prisma migrate reset --force --skip-seed
 
 db-migrate:
 	cd server && npm run db:migrate
@@ -36,8 +128,7 @@ db-seed:
 db-studio:
 	cd server && npx prisma studio
 
-logs:
-	docker-compose logs -f
+# ── Docker (dev) ──────────────────────────────────────────────────────────────
 
 up:
 	docker-compose up -d
@@ -45,32 +136,10 @@ up:
 down:
 	docker-compose down
 
-test: test-server test-client
+logs:
+	docker-compose logs -f
 
-test-server:
-	cd server && npm run test
-
-test-client:
-	@echo "No client tests found (TODO: add tests)"
-
-test-unit:
-	cd server && npm run test
-
-test-coverage:
-	cd server && npm run test:coverage
-
-test-e2e:
-	cd server && npx playwright test tests/e2e/01-auth.spec.ts tests/e2e/02-accounts.spec.ts tests/e2e/03-transactions.spec.ts tests/e2e/04-import-export.spec.ts tests/e2e/05-budgets.spec.ts tests/e2e/06-goals.spec.ts tests/e2e/07-recurring.spec.ts tests/e2e/08-investments.spec.ts tests/e2e/09-rules.spec.ts tests/e2e/10-reports.spec.ts tests/e2e/11-settings.spec.ts tests/e2e/12-advisor.spec.ts tests/e2e/13-import.spec.ts
-
-lint:
-	cd server && npm run lint
-	cd client && npm run lint
-
-start:
-	cd server && npm run start
-
-clean:
-	rm -rf client/dist server/dist node_modules client/node_modules server/node_modules shared/node_modules .turbo
+# ── Docker (prod) ─────────────────────────────────────────────────────────────
 
 prod-up:
 	docker compose -f docker-compose.prod.yml --profile observability --profile automation up -d
@@ -80,3 +149,11 @@ prod-down:
 
 prod-logs:
 	docker compose -f docker-compose.prod.yml --profile observability --profile automation logs -f
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+
+start:
+	cd server && npm run start
+
+clean:
+	rm -rf client/dist server/dist node_modules client/node_modules server/node_modules shared/node_modules .turbo
