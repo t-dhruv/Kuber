@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import axios from 'axios';
 import { api } from '@/lib/api';
 import { notify } from '@/components/ui';
 import { Play, Loader2 } from 'lucide-react';
@@ -18,8 +19,9 @@ export function TriggerButton({ endpoint, label = 'Run Now', onSuccess }: Trigge
       const res = await api.post(endpoint);
       notify.success(res.data.message ?? 'Triggered successfully');
       onSuccess?.();
-    } catch (err: any) {
-      notify.error(err.response?.data?.error ?? 'Trigger failed');
+    } catch (err: unknown) {
+      const msg = axios.isAxiosError(err) ? err.response?.data?.error : undefined;
+      notify.error(msg ?? 'Trigger failed');
     } finally {
       setLoading(false);
     }

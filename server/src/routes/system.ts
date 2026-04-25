@@ -1,8 +1,17 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { encrypt, decrypt } from '../lib/encryption';
+
+const triggerLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: { error: 'Too many trigger requests, please wait before retrying' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const router = Router();
 
@@ -111,10 +120,17 @@ router.put('/automation', async (req: AuthRequest, res: Response) => {
 router.get('/integrations', async (req: AuthRequest, res: Response) => {
   try {
     const config = await getConfig(req.userId!, 'system.integrations', INTEGRATIONS_DEFAULTS);
+    let imapPassSet = false;
     if (config.imapPass) {
-      config.imapPass = decrypt(config.imapPass);
+      try {
+        const decrypted = decrypt(config.imapPass);
+        imapPassSet = decrypted.length > 0;
+      } catch {
+        imapPassSet = false;
+      }
     }
-    return res.json(config);
+    const { imapPass: _omit, ...rest } = config;
+    return res.json({ ...rest, imapPassSet });
   } catch (err) {
     req.log.error({ err }, 'system/integrations GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -125,12 +141,16 @@ router.put('/integrations', async (req: AuthRequest, res: Response) => {
   const parsed = IntegrationsSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   try {
-    const dataToStore = {
-      ...parsed.data,
-      imapPass: parsed.data.imapPass ? encrypt(parsed.data.imapPass) : '',
-    };
-    await saveConfig(req.userId!, 'system.integrations', dataToStore);
-    return res.json(parsed.data);
+    let dataToSave = parsed.data;
+    if (!parsed.data.imapPass) {
+      const existing = await getConfig(req.userId!, 'system.integrations', INTEGRATIONS_DEFAULTS);
+      dataToSave = { ...parsed.data, imapPass: existing.imapPass };
+    } else {
+      dataToSave = { ...parsed.data, imapPass: encrypt(parsed.data.imapPass) };
+    }
+    await saveConfig(req.userId!, 'system.integrations', dataToSave);
+    const { imapPass: _omit, ...rest } = dataToSave;
+    return res.json({ ...rest, imapPassSet: !!dataToSave.imapPass });
   } catch (err) {
     req.log.error({ err }, 'system/integrations PUT');
     return res.status(500).json({ error: 'Internal server error' });
@@ -163,7 +183,7 @@ router.put('/ai', async (req: AuthRequest, res: Response) => {
 
 // ── Triggers ──────────────────────────────────────────────────────────────────
 
-router.post('/automation/auto-categorize/trigger', async (req: AuthRequest, res: Response) => {
+router.post('/automation/auto-categorize/trigger', triggerLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const { batchAutoCategorize } = await import('../lib/autoCategorize.js');
     await batchAutoCategorize(prisma, req.householdId!);
@@ -174,7 +194,7 @@ router.post('/automation/auto-categorize/trigger', async (req: AuthRequest, res:
   }
 });
 
-router.post('/integrations/imap/test', async (req: AuthRequest, res: Response) => {
+router.post('/integrations/imap/test', triggerLimiter, async (req: AuthRequest, res: Response) => {
   const schema = z.object({
     host: z.string().min(1),
     port: z.number().int().min(1).max(65535),
@@ -193,7 +213,7 @@ router.post('/integrations/imap/test', async (req: AuthRequest, res: Response) =
   }
 });
 
-router.post('/integrations/digest/trigger', async (req: AuthRequest, res: Response) => {
+router.post('/integrations/digest/trigger', triggerLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const { sendDigestEmail } = await import('../lib/digestEmail.js');
     await sendDigestEmail(req.householdId!);
@@ -204,7 +224,7 @@ router.post('/integrations/digest/trigger', async (req: AuthRequest, res: Respon
   }
 });
 
-router.post('/ai/proactive/trigger', async (req: AuthRequest, res: Response) => {
+router.post('/ai/proactive/trigger', triggerLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const { runProactiveChecks } = await import('../lib/proactiveAi.js');
     await runProactiveChecks(prisma, req.householdId!);

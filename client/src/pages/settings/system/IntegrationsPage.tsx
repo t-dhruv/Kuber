@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 import { api } from '@/lib/api';
 import { notify } from '@/components/ui';
 import { SectionCard } from './components/SectionCard';
@@ -12,7 +13,7 @@ interface IntegrationsConfig {
   imapHost: string;
   imapPort: number;
   imapUser: string;
-  imapPass: string;
+  imapPassSet: boolean;
   digestEnabled: boolean;
   digestSchedule: 'daily' | 'weekly';
   webhooksEnabled: boolean;
@@ -30,22 +31,22 @@ export default function IntegrationsPage() {
   });
 
   useEffect(() => {
-    if (config) setImapFields({ host: config.imapHost, port: config.imapPort, user: config.imapUser, pass: config.imapPass });
+    if (config) setImapFields(f => ({ host: config.imapHost, port: config.imapPort, user: config.imapUser, pass: f.pass }));
   }, [config]);
 
   const mutation = useMutation({
-    mutationFn: (data: IntegrationsConfig) => api.put('/api/v1/system/integrations', data).then(r => r.data),
+    mutationFn: (data: IntegrationsConfig & { imapPass?: string }) => api.put('/api/v1/system/integrations', data).then(r => r.data),
     onSuccess: (data) => {
       qc.setQueryData(['system', 'integrations'], data);
       notify.success('Integration settings saved');
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error && 'response' in err ? (err as any).response?.data?.error : undefined;
+      const msg = axios.isAxiosError(err) ? err.response?.data?.error : undefined;
       notify.error(msg ?? 'Save failed');
     },
   });
 
-  function update(patch: Partial<IntegrationsConfig>) {
+  function update(patch: Partial<IntegrationsConfig> & { imapPass?: string }) {
     if (!config) return;
     mutation.mutate({ ...config, ...patch });
   }
@@ -63,7 +64,7 @@ export default function IntegrationsPage() {
       });
       setImapTestResult({ ok: true, message: 'Connection successful' });
     } catch (err: unknown) {
-      setImapTestResult({ ok: false, message: (err instanceof Error && 'response' in err ? (err as any).response?.data?.error : undefined) ?? 'Connection failed' });
+      setImapTestResult({ ok: false, message: (axios.isAxiosError(err) ? err.response?.data?.error : undefined) ?? 'Connection failed' });
     } finally {
       setImapTesting(false);
     }
@@ -90,7 +91,7 @@ export default function IntegrationsPage() {
               { field: 'host' as const, label: 'Host', placeholder: 'imap.gmail.com' },
               { field: 'port' as const, label: 'Port', placeholder: '993', type: 'number' },
               { field: 'user' as const, label: 'Username', placeholder: 'you@gmail.com' },
-              { field: 'pass' as const, label: 'Password', placeholder: '••••••••', type: 'password' },
+              { field: 'pass' as const, label: 'Password', placeholder: config.imapPassSet ? '••••••••  (saved)' : 'Enter password', type: 'password' },
             ].map(({ field, label, placeholder, type = 'text' }) => (
               <div key={field}>
                 <label className="block text-xs text-[var(--color-text-muted)] mb-1">{label}</label>
