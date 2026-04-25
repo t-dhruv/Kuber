@@ -100,6 +100,36 @@ export async function fetchReceiptEmails(
 }
 
 /**
+ * Test an IMAP connection with the given credentials.
+ * Uses dynamic import of imap-simple (optional dependency).
+ */
+export async function testImapConnection(cfg: { host: string; port: number; user: string; pass: string }): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let imapSimple: any = null;
+  try {
+    imapSimple = await import('imap-simple');
+  } catch {
+    throw new Error('imap-simple package not installed');
+  }
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Connection timed out')), 10_000)
+  );
+  const connect = imapSimple.connect({
+    imap: {
+      user: cfg.user,
+      password: cfg.pass,
+      host: cfg.host,
+      port: cfg.port,
+      tls: true,
+      authTimeout: 5000,
+    },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  }).then((connection: any) => connection.end());
+
+  await Promise.race([connect, timeout]);
+}
+
+/**
  * Run IMAP check for all households that have email connector configured.
  * Called by scheduled job.
  */

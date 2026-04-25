@@ -30,6 +30,11 @@ const WealthPage = lazy(() => import('@/pages/wealth/WealthPage'));
 const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
 const AccountBulkImportPage = lazy(() => import('@/pages/accounts/AccountBulkImportPage'));
 const ReviewQueuePage = lazy(() => import('./pages/transactions/review/ReviewQueuePage'));
+const SystemSettingsLayout   = lazy(() => import('@/pages/settings/system'));
+const SystemJobsPage         = lazy(() => import('@/pages/settings/system/JobsPage'));
+const SystemAutomationPage   = lazy(() => import('@/pages/settings/system/AutomationPage'));
+const SystemIntegrationsPage = lazy(() => import('@/pages/settings/system/IntegrationsPage'));
+const SystemAiPage           = lazy(() => import('@/pages/settings/system/AiPage'));
 
 // ─── Loading fallback ─────────────────────────────────────────────────────────
 
@@ -248,6 +253,13 @@ export default function App() {
             </Suspense>
           }
         />
+        <Route path="/settings/system" element={<Suspense fallback={<PageLoader />}><SystemSettingsLayout /></Suspense>}>
+          <Route index element={<Navigate to="/settings/system/jobs" replace />} />
+          <Route path="jobs"         element={<Suspense fallback={<PageLoader />}><SystemJobsPage /></Suspense>} />
+          <Route path="automation"   element={<Suspense fallback={<PageLoader />}><SystemAutomationPage /></Suspense>} />
+          <Route path="integrations" element={<Suspense fallback={<PageLoader />}><SystemIntegrationsPage /></Suspense>} />
+          <Route path="ai"           element={<Suspense fallback={<PageLoader />}><SystemAiPage /></Suspense>} />
+        </Route>
         <Route
           path="/settings/*"
           element={

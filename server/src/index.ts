@@ -47,6 +47,7 @@ import attachmentsRouter from './routes/attachments';
 import transactionLinksRouter from './routes/transactionLinks';
 import objectGroupsRouter from './routes/objectGroups';
 import cronRouter from './routes/cron';
+import systemRouter from './routes/system';
 import { requireAuth } from './middleware/auth';
 import { registerJob }  from './lib/cronRegistry';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
@@ -246,6 +247,7 @@ app.use('/api/v1', requireAuth, attachmentsRouter);
 app.use('/api/v1', requireAuth, transactionLinksRouter);
 app.use('/api/v1/object-groups', requireAuth, objectGroupsRouter);
 app.use('/api/v1/cron', requireAuth, cronRouter);
+app.use('/api/v1/system', requireAuth, systemRouter);
 
 function checkIfDigestDue(schedule: { frequency: string; lastSentAt: Date | null }, now: Date): boolean {
   const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   User, Monitor, Bell, Shield, Home, Tag, Database, CreditCard,
   Pencil, Trash2, Plus, ChevronDown, ChevronRight, Upload, ShieldCheck, ShieldOff, Mail, Bot,
-  CheckCircle2, XCircle, Receipt, Zap, Globe, Eye, EyeOff,
+  CheckCircle2, XCircle, Receipt, Zap, Globe, Eye, EyeOff, Server,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
@@ -2902,6 +2903,7 @@ function SectionHeader({
 
 export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<NavSection>('profile');
+  const navigate = useNavigate();
 
   function renderSection() {
     switch (activeSection) {
@@ -2967,6 +2969,27 @@ export default function SettingsPage() {
               </button>
             );
           })}
+        </div>
+        <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
+          <div className="mb-2 text-[0.6875rem] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.06em]">
+            System
+          </div>
+          <button
+            onClick={() => navigate('/settings/system')}
+            className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-[var(--radius-md)] border-none cursor-pointer text-left text-sm transition-[background-color,color] duration-[0.15s]"
+            style={{ fontWeight: 400, backgroundColor: 'transparent', color: 'var(--color-text-secondary)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)';
+              e.currentTarget.style.color = 'var(--color-text)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = 'var(--color-text-secondary)';
+            }}
+          >
+            <span className="shrink-0 flex items-center"><Server size={16} /></span>
+            System
+          </button>
         </div>
       </nav>
 
