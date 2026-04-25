@@ -19,7 +19,7 @@ export default function AutomationPage() {
 
   const { data: config, isLoading } = useQuery<AutomationConfig>({
     queryKey: ['system', 'automation'],
-    queryFn: () => api.get('/api/v1/system/automation').then(r => r.data),
+    queryFn: () => api.get('/system/automation').then(r => r.data),
   });
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export default function AutomationPage() {
   }, [config]);
 
   const mutation = useMutation({
-    mutationFn: (data: AutomationConfig) => api.put('/api/v1/system/automation', data).then(r => r.data),
+    mutationFn: (data: AutomationConfig) => api.put('/system/automation', data).then(r => r.data),
     onSuccess: (data) => {
       qc.setQueryData(['system', 'automation'], data);
       notify.success('Automation settings saved');
@@ -58,7 +58,7 @@ export default function AutomationPage() {
         title="Rule Engine"
         description="Automatically applies transaction rules on import and on schedule."
         status={config.ruleEngineEnabled ? 'ok' : 'disabled'}
-        actions={<TriggerButton endpoint="/api/v1/cron/jobs/rule-execution/trigger" label="Run Now" />}
+        actions={<TriggerButton endpoint="/cron/jobs/rule-execution/trigger" label="Run Now" />}
       >
         <Toggle
           checked={config.ruleEngineEnabled}
@@ -98,7 +98,7 @@ export default function AutomationPage() {
         title="Auto-Categorize"
         description="Uses AI to automatically categorize uncategorized transactions."
         status={config.autoCategorizeEnabled ? 'ok' : 'disabled'}
-        actions={<TriggerButton endpoint="/api/v1/system/automation/auto-categorize/trigger" label="Run Now" />}
+        actions={<TriggerButton endpoint="/system/automation/auto-categorize/trigger" label="Run Now" />}
       >
         <Toggle
           checked={config.autoCategorizeEnabled}

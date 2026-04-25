@@ -27,7 +27,7 @@ export default function IntegrationsPage() {
 
   const { data: config, isLoading } = useQuery<IntegrationsConfig>({
     queryKey: ['system', 'integrations'],
-    queryFn: () => api.get('/api/v1/system/integrations').then(r => r.data),
+    queryFn: () => api.get('/system/integrations').then(r => r.data),
   });
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function IntegrationsPage() {
   }, [config]);
 
   const mutation = useMutation({
-    mutationFn: (data: IntegrationsConfig & { imapPass?: string }) => api.put('/api/v1/system/integrations', data).then(r => r.data),
+    mutationFn: (data: IntegrationsConfig & { imapPass?: string }) => api.put('/system/integrations', data).then(r => r.data),
     onSuccess: (data) => {
       qc.setQueryData(['system', 'integrations'], data);
       notify.success('Integration settings saved');
@@ -56,7 +56,7 @@ export default function IntegrationsPage() {
     setImapTesting(true);
     setImapTestResult(null);
     try {
-      await api.post('/api/v1/system/integrations/imap/test', {
+      await api.post('/system/integrations/imap/test', {
         host: imapFields.host,
         port: imapFields.port,
         user: imapFields.user,
@@ -136,7 +136,7 @@ export default function IntegrationsPage() {
         title="Digest Email"
         description="Sends a periodic summary of your finances to your email."
         status={config.digestEnabled ? 'ok' : 'disabled'}
-        actions={<TriggerButton endpoint="/api/v1/system/integrations/digest/trigger" label="Send Now" />}
+        actions={<TriggerButton endpoint="/system/integrations/digest/trigger" label="Send Now" />}
       >
         <div className="space-y-3">
           <Toggle checked={config.digestEnabled} onChange={v => update({ digestEnabled: v })} label="Enable digest email" />
