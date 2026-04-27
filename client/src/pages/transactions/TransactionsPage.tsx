@@ -6,6 +6,7 @@ import {
   ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, CheckCheck,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { usePrefetchLogos } from '@/hooks/usePrefetchLogos';
 import {
   Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card, notify, ConfirmDialog, CategoryCombobox,
 } from '@/components/ui';
@@ -14,6 +15,7 @@ import { SplitTransactionModal } from './components/SplitTransactionModal';
 import { DuplicateReviewModal } from './components/DuplicateReviewModal';
 import { ReceiptOcrModal } from './components/ReceiptOcrModal';
 import { AiSetupNudge } from '@/components/ui/AiSetupNudge';
+import { InstitutionLogo } from '@/components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1251,13 +1253,14 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
         className="accent-[var(--color-accent)] shrink-0 cursor-pointer"
       />
 
-      {/* Category circle */}
-      <div
-        className="w-8 h-8 rounded-[var(--radius-full)] shrink-0 flex items-center justify-center text-white text-xs font-bold"
-        style={{ backgroundColor: txn.categoryColor ?? 'var(--color-accent)' }}
-      >
-        {txn.categoryIcon ?? merchantInitial(txn.merchantName)}
-      </div>
+      {/* Merchant logo — falls back to category emoji */}
+      <InstitutionLogo
+        name={txn.merchantName}
+        type="merchant"
+        size={32}
+        fallback={txn.categoryIcon ?? merchantInitial(txn.merchantName)}
+        style={{ backgroundColor: txn.categoryColor ?? 'var(--color-accent)', borderRadius: '50%' }}
+      />
 
       {/* Merchant name */}
       <div className="flex-[1_1_180px] min-w-0" onDoubleClick={startEdit}>
@@ -1415,6 +1418,12 @@ export default function TransactionsPage() {
   });
 
   const duplicateCount = duplicatesData?.count ?? 0;
+
+  const allTxns = txnPages?.pages.flatMap(p => p.transactions) ?? [];
+  usePrefetchLogos([
+    ...allTxns.map(t => ({ name: t.merchantName, type: 'merchant' as const })),
+    ...(accountsData?.groups ?? []).flatMap(g => g.accounts).map(a => ({ name: a.institutionName, type: 'bank' as const })),
+  ]);
 
   // ── Auto-categorize ──
 

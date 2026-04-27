@@ -33,8 +33,6 @@ export type { ActiveFilter, FilterOption } from './FilterBar';
 
 export { InstitutionLogo } from './InstitutionLogo';
 
-export { LogoPicker } from './LogoPicker';
-
 export { ConfirmDialog } from './ConfirmDialog';
 
 export { Textarea } from './Textarea';

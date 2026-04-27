@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { sendTestEmail } from '../lib/email';
-import { encrypt, decrypt } from '../lib/encryption';
+import { encrypt } from '../lib/encryption';
 import { getAiClient, invalidateAiCache } from '../lib/ai';
 import ExcelJS from 'exceljs';
 
