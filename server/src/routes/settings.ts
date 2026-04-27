@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { sendTestEmail } from '../lib/email';
-import { encrypt } from '../lib/encryption';
+import { encrypt, decrypt } from '../lib/encryption';
 import { getAiClient, invalidateAiCache } from '../lib/ai';
 import ExcelJS from 'exceljs';
 
@@ -1074,7 +1074,100 @@ router.post('/email/test', async (req: AuthRequest, res: Response) => {
     return res.json({ message: `Test email sent to ${user.email}` });
   } catch (err) {
     req.log.error({ err }, 'settings/email/test');
-    return res.status(500).json({ error: 'Failed to send test email. Check your SMTP configuration.' });
+    return res.status(500).json({ error: 'Failed to send test email. Check your email configuration.' });
+  }
+});
+
+// ─── Email Config ─────────────────────────────────────────────────────────────
+
+const emailConfigSchema = z.object({
+  provider: z.enum(['resend', 'smtp', 'none']),
+  resendApiKey: z.string().optional(),
+  resendFrom: z.string().optional(),
+  smtpHost: z.string().optional(),
+  smtpPort: z.number().int().min(1).max(65535).optional(),
+  smtpUser: z.string().optional(),
+  smtpPass: z.string().optional(),
+  smtpFrom: z.string().optional(),
+});
+
+// GET /api/v1/settings/email-config
+router.get('/email-config', async (req: AuthRequest, res: Response) => {
+  try {
+    const cfg = await prisma.emailConfig.findUnique({ where: { id: 'singleton' } });
+    if (!cfg) {
+      return res.json({ provider: 'none', resendFrom: '', smtpHost: '', smtpPort: 587, smtpUser: '', smtpFrom: '', hasResendKey: false, hasSmtpPass: false });
+    }
+    return res.json({
+      provider: cfg.provider,
+      resendFrom: cfg.resendFrom,
+      smtpHost: cfg.smtpHost,
+      smtpPort: cfg.smtpPort,
+      smtpUser: cfg.smtpUser,
+      smtpFrom: cfg.smtpFrom,
+      hasResendKey: cfg.resendApiKey !== '',
+      hasSmtpPass: cfg.smtpPass !== '',
+    });
+  } catch (err) {
+    req.log.error({ err }, 'settings/email-config GET');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/v1/settings/email-config
+router.put('/email-config', async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = emailConfigSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
+    const { provider, resendApiKey, resendFrom, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = parsed.data;
+
+    const existing = await prisma.emailConfig.findUnique({ where: { id: 'singleton' } });
+
+    const encryptedResendKey = resendApiKey?.trim()
+      ? encrypt(resendApiKey.trim())
+      : (existing?.resendApiKey ?? '');
+    const encryptedSmtpPass = smtpPass?.trim()
+      ? encrypt(smtpPass.trim())
+      : (existing?.smtpPass ?? '');
+
+    const cfg = await prisma.emailConfig.upsert({
+      where: { id: 'singleton' },
+      update: {
+        provider,
+        resendApiKey: encryptedResendKey,
+        resendFrom: resendFrom ?? existing?.resendFrom ?? '',
+        smtpHost: smtpHost ?? existing?.smtpHost ?? '',
+        smtpPort: smtpPort ?? existing?.smtpPort ?? 587,
+        smtpUser: smtpUser ?? existing?.smtpUser ?? '',
+        smtpPass: encryptedSmtpPass,
+        smtpFrom: smtpFrom ?? existing?.smtpFrom ?? '',
+      },
+      create: {
+        id: 'singleton',
+        provider,
+        resendApiKey: encryptedResendKey,
+        resendFrom: resendFrom ?? '',
+        smtpHost: smtpHost ?? '',
+        smtpPort: smtpPort ?? 587,
+        smtpUser: smtpUser ?? '',
+        smtpPass: encryptedSmtpPass,
+        smtpFrom: smtpFrom ?? '',
+      },
+    });
+
+    return res.json({
+      provider: cfg.provider,
+      resendFrom: cfg.resendFrom,
+      smtpHost: cfg.smtpHost,
+      smtpPort: cfg.smtpPort,
+      smtpUser: cfg.smtpUser,
+      smtpFrom: cfg.smtpFrom,
+      hasResendKey: cfg.resendApiKey !== '',
+      hasSmtpPass: cfg.smtpPass !== '',
+    });
+  } catch (err) {
+    req.log.error({ err }, 'settings/email-config PUT');
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
