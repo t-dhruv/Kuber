@@ -14,23 +14,26 @@ function normalizeKey(name: string): string {
 type LogoItem = { type: 'bank' | 'merchant'; name: string };
 
 async function collectItems(): Promise<LogoItem[]> {
-  const now = Date.now();
-  const retryBefore = new Date(now - RETRY_COOLDOWN_MS);
+  const retryBefore = new Date(Date.now() - RETRY_COOLDOWN_MS);
 
-  const allCached = await prisma.logoCache.findMany({
-    select: { type: true, key: true, logoData: true, fetchedAt: true },
-  });
+  // Targeted queries — no full table scan
+  const [cachedMerchantRows, cachedBankRows, retryRows] = await Promise.all([
+    prisma.logoCache.findMany({
+      where: { type: 'merchant' },
+      select: { key: true },
+    }),
+    prisma.logoCache.findMany({
+      where: { type: 'bank' },
+      select: { key: true },
+    }),
+    prisma.logoCache.findMany({
+      where: { logoData: null, fetchedAt: { lt: retryBefore } },
+      select: { type: true, key: true },
+    }),
+  ]);
 
-  const cachedMerchantKeys = new Set(
-    allCached
-      .filter(c => c.type === 'merchant')
-      .map(c => c.key)
-  );
-  const cachedBankKeys = new Set(
-    allCached
-      .filter(c => c.type === 'bank')
-      .map(c => c.key)
-  );
+  const cachedMerchantKeys = new Set(cachedMerchantRows.map(c => c.key));
+  const cachedBankKeys = new Set(cachedBankRows.map(c => c.key));
 
   const merchants = await prisma.merchant.findMany({ select: { name: true } });
   const missingMerchants: LogoItem[] = merchants
@@ -40,14 +43,16 @@ async function collectItems(): Promise<LogoItem[]> {
   const accounts = await prisma.account.findMany({
     where: { institution: { not: null } },
     select: { institution: true },
+    distinct: ['institution'],
   });
   const missingBanks: LogoItem[] = accounts
     .filter(a => a.institution && !cachedBankKeys.has(normalizeKey(a.institution)))
     .map(a => ({ type: 'bank' as const, name: a.institution! }));
 
-  const retryItems: LogoItem[] = allCached
-    .filter(c => c.logoData === null && c.fetchedAt < retryBefore)
-    .map(e => ({ type: e.type as 'bank' | 'merchant', name: e.key }));
+  const retryItems: LogoItem[] = retryRows.map(e => ({
+    type: e.type as 'bank' | 'merchant',
+    name: e.key,
+  }));
 
   const seen = new Set<string>();
   const all: LogoItem[] = [];
@@ -91,9 +96,13 @@ export async function runLogoFetchJob(): Promise<void> {
   let failed = 0;
 
   for (let i = 0; i < items.length; i++) {
-    const result = await processItem(items[i]);
-    if (result === 'ok') fetched++;
-    else failed++;
+    try {
+      const result = await processItem(items[i]);
+      if (result === 'ok') fetched++;
+      else failed++;
+    } catch {
+      failed++;
+    }
     if (i < items.length - 1) {
       await delay(REQUEST_DELAY_MS);
     }
