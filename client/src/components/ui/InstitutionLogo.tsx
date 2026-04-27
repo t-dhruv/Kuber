@@ -1,106 +1,4 @@
 import { useState } from 'react';
-import { LOGO_CATALOG } from '@/lib/logoCatalog';
-
-// ─── Slug mapping ─────────────────────────────────────────────────────────────
-// Maps institution name fragments (lowercased) → local SVG slug.
-// SVGs live at /logos/bank/{slug}.svg (served from client/public/).
-
-const SLUG_MAP: [string, string][] = [
-  // US mega banks
-  ['chase', 'chase'],
-  ['jpmorgan', 'chase'],
-  ['bank of america', 'bofa'],
-  ['capital one', 'capital-one'],
-  ['citibank', 'citibank'],
-  ['citi', 'citibank'],
-  ['us bank', 'usbank'],
-  ['usbank', 'usbank'],
-  ['pnc', 'pnc'],
-  ['truist', 'truist'],
-  ['regions', 'regions'],
-  ['fifth third', '53'],
-  ['huntington', 'huntington'],
-  ['citizens bank', 'citizens_bank'],
-  ['citizens', 'citizensbank'],
-  ['ally', 'ally'],
-  ['discover', 'discover'],
-  ['american express', 'amex'],
-  ['amex', 'amex'],
-  ['hsbc', 'hsbc'],
-  ['goldman sachs', 'goldmansachs'],
-  ['marcus', 'goldmansachs'],
-  ['charles schwab', 'schwab'],
-  ['schwab', 'schwab'],
-  ['fidelity', 'fidelity'],
-  ['etrade', 'etrade'],
-  ['e*trade', 'etrade'],
-  ['chime', 'chime'],
-  ['keybank', 'keybank'],
-  ['key bank', 'keybank'],
-  ['usaa', 'usaa'],
-  ['robinhood', 'robinhood'],
-  ['paypal', 'paypal'],
-  // Regional / community
-  ['bny mellon', 'bny'],
-  ['bny', 'bny'],
-  ['dime', 'dime'],
-  ['emigrant', 'emigrant'],
-  ['axos', 'axosbank'],
-  ['first horizon', 'firsthorizon'],
-  ['first citizens', 'firstcitizensbank'],
-  ['first community', 'firstcommunitybank'],
-  ['heartland', 'heartland'],
-  ['columbia bank', 'columbiabankonline'],
-  ['columbia', 'columbia'],
-  ['community bank', 'communitybank'],
-  ['enterprise bank', 'enterprisebanking'],
-  ['atlantic union', 'atlanticunionbank'],
-  ['eastern bank', 'easternbank'],
-  ['brookline', 'brooklinebank'],
-  ['cross river', 'crossriver'],
-  ['cross-river', 'crossriver'],
-  ['fulton', 'fultonbank'],
-  ['cadence', 'cadencebank'],
-  ['hancock', 'hancockwhitney'],
-  // International
-  ['anz', 'anz'],
-  ['cathay', 'cathaybank'],
-  ['east west', 'eastwestbank'],
-  ['east-west', 'eastwestbank'],
-  ['icici', 'icicibankusa'],
-  ['canara', 'canarabank'],
-  ['baroda', 'bankofbaroda-usa'],
-  ['bnp paribas', 'bnpparibasfortis'],
-  ['credit suisse', 'credit-suisse'],
-  ['handelsbanken', 'handelsbanken'],
-  ['dnb', 'dnb'],
-  ['bundesbank', 'bundesbank'],
-  // Government / GSEs
-  ['fannie mae', 'fanniemae'],
-  ['freddie mac', 'freddiemac'],
-  ['federal reserve', 'federalreserve'],
-  ['fdic', 'fdic'],
-  ['imf', 'imf'],
-];
-
-function getSlug(institutionName: string): string | null {
-  const lower = institutionName.toLowerCase();
-  // Priority 1: curated SLUG_MAP (handles aliases, abbreviations, common names)
-  for (const [key, slug] of SLUG_MAP) {
-    if (lower.includes(key)) return slug;
-  }
-  // Priority 2: search full catalog by slug (e.g. "TD Bank" → "tdbank")
-  const compact = lower.replace(/[^a-z0-9]/g, '');
-  for (const entry of LOGO_CATALOG) {
-    const slugNorm = entry.slug.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (slugNorm === compact || slugNorm.startsWith(compact) || compact.startsWith(slugNorm)) {
-      if (compact.length >= 3) return entry.slug;
-    }
-  }
-  return null;
-}
-
-// ─── Abbreviation fallback ────────────────────────────────────────────────────
 
 function getAbbrev(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -122,23 +20,29 @@ function hashColor(name: string): string {
   return palette[Math.abs(h) % palette.length];
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 interface InstitutionLogoProps {
   name: string;
-  /** Explicit logo slug override — skips auto-detection */
-  logoSlug?: string;
+  /** Direct logo URL — skips API fetch (use when already stored on account) */
+  logoUrl?: string | null;
+  type?: 'bank' | 'merchant';
   size?: number;
   style?: React.CSSProperties;
+  /** Shown instead of abbreviation when no logo loads (e.g. category emoji) */
+  fallback?: string;
 }
 
-export function InstitutionLogo({ name, logoSlug, size = 32, style }: InstitutionLogoProps) {
+export function InstitutionLogo({ name, logoUrl: logoUrlProp, type = 'bank', size = 32, style, fallback }: InstitutionLogoProps) {
   const [imgFailed, setImgFailed] = useState(false);
-  // Reset failed state when slug changes
-  const slug = logoSlug ?? getSlug(name);
   const abbrev = getAbbrev(name);
   const bg = hashColor(name);
   const radius = size * 0.25;
+
+  // Build direct image URL — route serves binary, usable as <img src>
+  const fetchedUrl = !logoUrlProp && name
+    ? `/api/v1/logos/${type}?name=${encodeURIComponent(name)}`
+    : null;
+
+  const resolvedUrl = logoUrlProp ?? fetchedUrl;
 
   const containerStyle: React.CSSProperties = {
     width: size,
@@ -153,11 +57,11 @@ export function InstitutionLogo({ name, logoSlug, size = 32, style }: Institutio
     ...style,
   };
 
-  if (slug && !imgFailed) {
+  if (resolvedUrl && !imgFailed) {
     return (
       <div style={{ ...containerStyle, backgroundColor: '#fff', border: '1px solid var(--color-border)' }}>
         <img
-          src={`/logos/bank/${slug}.svg`}
+          src={resolvedUrl}
           alt={name}
           width={size}
           height={size}
@@ -173,12 +77,12 @@ export function InstitutionLogo({ name, logoSlug, size = 32, style }: Institutio
     <div style={containerStyle}>
       <span style={{
         color: '#fff',
-        fontSize: size * 0.34,
-        fontWeight: 700,
-        letterSpacing: '-0.02em',
+        fontSize: fallback ? size * 0.5 : size * 0.34,
+        fontWeight: fallback ? 400 : 700,
+        letterSpacing: fallback ? 0 : '-0.02em',
         lineHeight: 1,
       }}>
-        {abbrev}
+        {fallback ?? abbrev}
       </span>
     </div>
   );

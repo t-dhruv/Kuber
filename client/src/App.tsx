@@ -6,6 +6,7 @@ import { AppShell } from '@/components/layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import InstallPrompt from '@/components/pwa/InstallPrompt';
 import { OnboardingWizard, shouldShowOnboarding } from '@/components/onboarding/OnboardingWizard';
+import { NoAccountsGuard } from '@/components/NoAccountsGuard';
 import { api } from '@/lib/api';
 
 // ─── Lazy page imports ────────────────────────────────────────────────────────
@@ -161,7 +162,7 @@ export default function App() {
           path="/transactions"
           element={
             <Suspense fallback={<PageLoader />}>
-              <TransactionsPage />
+              <NoAccountsGuard><TransactionsPage /></NoAccountsGuard>
             </Suspense>
           }
         />
@@ -177,7 +178,7 @@ export default function App() {
           path="/cash-flow"
           element={
             <Suspense fallback={<PageLoader />}>
-              <CashFlowPage />
+              <NoAccountsGuard><CashFlowPage /></NoAccountsGuard>
             </Suspense>
           }
         />

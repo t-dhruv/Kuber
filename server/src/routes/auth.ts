@@ -6,7 +6,7 @@ import { generateSecret as totpGenerateSecret, verify as totpVerify, generateURI
 import { toDataURL } from 'qrcode';
 import { prisma } from '../lib/prisma';
 import { createRefreshToken, invalidateFamily, hashToken, DEFAULT_REFRESH_TTL_MS, REMEMBER_ME_REFRESH_TTL_MS } from '../lib/token';
-import { sendPasswordResetEmail, sendAccountLockoutEmail } from '../lib/email';
+import { sendPasswordResetEmail, sendAccountLockoutEmail, sendWelcomeEmail } from '../lib/email';
 import { requireAuth } from '../middleware/auth';
 import { seedDefaultCategories } from '../lib/default-categories';
 import type { AuthRequest } from '../middleware/auth';
@@ -100,6 +100,9 @@ router.post('/signup', async (req: Request, res: Response) => {
     const accessToken = signAccessToken(result.user.id, result.householdId, result.user.email);
     const { rawToken } = await createRefreshToken(result.user.id);
     setRefreshCookie(res, rawToken);
+
+    // Fire-and-forget welcome email
+    sendWelcomeEmail(result.user.email, result.user.firstName).catch(() => {});
 
     return res.status(201).json({ user: toUserDto(result.user, result.householdId), accessToken });
   } catch (err) {
