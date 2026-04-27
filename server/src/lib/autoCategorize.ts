@@ -335,8 +335,8 @@ export async function startBatchAutoCategorize(
             for (const txnId of siblingIds) {
               if (suggestion) {
                 updates.push(
-                  prisma.transaction.update({
-                    where: { id: txnId },
+                  prisma.transaction.updateMany({
+                    where: { id: txnId, categoryId: null },
                     data: {
                       needsReview: true,
                       aiSuggestedCategoryId: suggestion.categoryId ?? null,
@@ -406,6 +406,20 @@ export async function detectRuleSuggestions(
   suggestedCategoryName: string;
   matchCount: number;
 }>> {
+  const existingRules = await prisma.rule.findMany({
+    where: { householdId, isActive: true },
+    select: { conditions: true },
+  });
+
+  const existingPatterns = new Set<string>(
+    existingRules.flatMap((r) => {
+      const conds = r.conditions as Array<{ field?: string; operator?: string; value?: string }>;
+      return conds
+        .filter((c) => c.field === 'description' && c.operator === 'contains' && c.value)
+        .map((c) => c.value!.toLowerCase().trim());
+    })
+  );
+
   const reviewQueue = await prisma.transaction.findMany({
     where: {
       householdId,
@@ -452,9 +466,9 @@ export async function detectRuleSuggestions(
   }
 
   return Array.from(groups.values())
-    .filter((g) => g.count >= 3)
+    .filter((g) => g.count >= 3 && !existingPatterns.has(g.value.toLowerCase()))
     .map((g) => ({
-      pattern: `description startsWith "${g.value}"`,
+      pattern: `description contains "${g.value}"`,
       value: g.value,
       suggestedCategoryId: g.suggestedCategoryId,
       suggestedCategoryName: g.suggestedCategoryName,
