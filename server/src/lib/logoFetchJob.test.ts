@@ -41,7 +41,12 @@ describe('runLogoFetchJob', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    mockPrisma.logoCache.findMany.mockResolvedValue([]);
+    mockPrisma.logoCache.findMany.mockImplementation(({ where }: { where: Record<string, unknown> }) => {
+      if (where.type === 'merchant') return Promise.resolve([]);
+      if (where.type === 'bank') return Promise.resolve([]);
+      if ('logoData' in where) return Promise.resolve([]); // retry query
+      return Promise.resolve([]);
+    });
     mockPrisma.logoCache.upsert.mockResolvedValue({});
     mockPrisma.logoCache.deleteMany.mockResolvedValue({ count: 0 });
     mockPrisma.account.findMany.mockResolvedValue([]);
@@ -56,7 +61,6 @@ describe('runLogoFetchJob', () => {
 
   it('fetches logo for merchant with no cache entry', async () => {
     mockPrisma.merchant.findMany.mockResolvedValue([{ name: 'Amazon' }]);
-    mockPrisma.logoCache.findMany.mockResolvedValue([]);
     vi.mocked(getOrFetchMerchantLogo).mockResolvedValue({ data: Buffer.from('img'), mimeType: 'image/png' });
 
     await runJobWithTimers();
@@ -65,10 +69,6 @@ describe('runLogoFetchJob', () => {
   });
 
   it('skips retry entries fetched within the last 24 hours', async () => {
-    mockPrisma.logoCache.findMany
-      .mockResolvedValueOnce([])  // merchant keys
-      .mockResolvedValueOnce([])  // bank keys
-      .mockResolvedValueOnce([]); // retry (recent entry filtered OUT by DB — fetchedAt > retryBefore)
     mockPrisma.merchant.findMany.mockResolvedValue([]);
     mockPrisma.account.findMany.mockResolvedValue([]);
 
@@ -79,10 +79,12 @@ describe('runLogoFetchJob', () => {
   });
 
   it('retries failed entries older than 24 hours', async () => {
-    mockPrisma.logoCache.findMany
-      .mockResolvedValueOnce([{ key: 'amazon' }])  // merchant keys (has entry — won't be in missing)
-      .mockResolvedValueOnce([])                    // bank keys
-      .mockResolvedValueOnce([{ type: 'merchant', key: 'amazon' }]); // retry: stale entry
+    mockPrisma.logoCache.findMany.mockImplementation(({ where }: { where: Record<string, unknown> }) => {
+      if (where.type === 'merchant') return Promise.resolve([{ key: 'amazon' }]);
+      if (where.type === 'bank') return Promise.resolve([]);
+      if ('logoData' in where) return Promise.resolve([{ type: 'merchant', key: 'amazon' }]);
+      return Promise.resolve([]);
+    });
     mockPrisma.merchant.findMany.mockResolvedValue([]);
     mockPrisma.account.findMany.mockResolvedValue([]);
     mockPrisma.logoCache.deleteMany.mockResolvedValue({ count: 1 });
@@ -97,10 +99,6 @@ describe('runLogoFetchJob', () => {
   });
 
   it('writes negative cache entry when fetch fails', async () => {
-    mockPrisma.logoCache.findMany
-      .mockResolvedValueOnce([]) // merchant keys
-      .mockResolvedValueOnce([]) // bank keys
-      .mockResolvedValueOnce([]); // retry
     mockPrisma.merchant.findMany.mockResolvedValue([{ name: 'UnknownShop' }]);
     mockPrisma.account.findMany.mockResolvedValue([]);
     vi.mocked(getOrFetchMerchantLogo).mockResolvedValue(null);
@@ -118,10 +116,12 @@ describe('runLogoFetchJob', () => {
 
   it('deduplicates items that appear in both missing and retry sets', async () => {
     // amazon has no positive cache entry, so appears in missing; also in retry (stale failure)
-    mockPrisma.logoCache.findMany
-      .mockResolvedValueOnce([])   // merchant keys — amazon NOT cached
-      .mockResolvedValueOnce([])   // bank keys
-      .mockResolvedValueOnce([{ type: 'merchant', key: 'amazon' }]); // retry stale
+    mockPrisma.logoCache.findMany.mockImplementation(({ where }: { where: Record<string, unknown> }) => {
+      if (where.type === 'merchant') return Promise.resolve([]); // amazon not cached → appears in missing
+      if (where.type === 'bank') return Promise.resolve([]);
+      if ('logoData' in where) return Promise.resolve([{ type: 'merchant', key: 'amazon' }]); // stale retry
+      return Promise.resolve([]);
+    });
     mockPrisma.merchant.findMany.mockResolvedValue([{ name: 'Amazon' }]);
     mockPrisma.account.findMany.mockResolvedValue([]);
     vi.mocked(getOrFetchMerchantLogo).mockResolvedValue(null);
@@ -132,10 +132,6 @@ describe('runLogoFetchJob', () => {
   });
 
   it('processes at most 200 items per run', async () => {
-    mockPrisma.logoCache.findMany
-      .mockResolvedValueOnce([]) // merchant keys
-      .mockResolvedValueOnce([]) // bank keys
-      .mockResolvedValueOnce([]); // retry
     mockPrisma.merchant.findMany.mockResolvedValue(
       Array.from({ length: 300 }, (_, i) => ({ name: `Merchant${i}` }))
     );
@@ -148,10 +144,12 @@ describe('runLogoFetchJob', () => {
   });
 
   it('skips merchants that already have a successful cache entry', async () => {
-    mockPrisma.logoCache.findMany
-      .mockResolvedValueOnce([{ key: 'amazon' }]) // merchant keys — amazon cached
-      .mockResolvedValueOnce([])                   // bank keys
-      .mockResolvedValueOnce([]);                  // retry
+    mockPrisma.logoCache.findMany.mockImplementation(({ where }: { where: Record<string, unknown> }) => {
+      if (where.type === 'merchant') return Promise.resolve([{ key: 'amazon' }]);
+      if (where.type === 'bank') return Promise.resolve([]);
+      if ('logoData' in where) return Promise.resolve([]);
+      return Promise.resolve([]);
+    });
     mockPrisma.merchant.findMany.mockResolvedValue([{ name: 'Amazon' }]);
     mockPrisma.account.findMany.mockResolvedValue([]);
 
@@ -161,10 +159,6 @@ describe('runLogoFetchJob', () => {
   });
 
   it('fetches bank logo for account institution with no cache entry', async () => {
-    mockPrisma.logoCache.findMany
-      .mockResolvedValueOnce([]) // merchant keys
-      .mockResolvedValueOnce([]) // bank keys
-      .mockResolvedValueOnce([]); // retry
     mockPrisma.account.findMany.mockResolvedValue([{ institution: 'Chase Bank' }]);
     mockPrisma.merchant.findMany.mockResolvedValue([]);
     vi.mocked(getOrFetchBankLogo).mockResolvedValue({ data: Buffer.from('img'), mimeType: 'image/png' });
@@ -175,10 +169,6 @@ describe('runLogoFetchJob', () => {
   });
 
   it('continues processing remaining items if one throws', async () => {
-    mockPrisma.logoCache.findMany
-      .mockResolvedValueOnce([]) // merchant keys
-      .mockResolvedValueOnce([]) // bank keys
-      .mockResolvedValueOnce([]); // retry
     mockPrisma.merchant.findMany.mockResolvedValue([
       { name: 'BadShop' },
       { name: 'GoodShop' },
