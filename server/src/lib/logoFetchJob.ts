@@ -23,12 +23,12 @@ async function collectItems(): Promise<LogoItem[]> {
 
   const cachedMerchantKeys = new Set(
     allCached
-      .filter(c => c.type === 'merchant' && c.logoData !== null)
+      .filter(c => c.type === 'merchant')
       .map(c => c.key)
   );
   const cachedBankKeys = new Set(
     allCached
-      .filter(c => c.type === 'bank' && c.logoData !== null)
+      .filter(c => c.type === 'bank')
       .map(c => c.key)
   );
 
