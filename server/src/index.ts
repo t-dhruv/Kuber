@@ -48,6 +48,7 @@ import transactionLinksRouter from './routes/transactionLinks';
 import objectGroupsRouter from './routes/objectGroups';
 import cronRouter from './routes/cron';
 import systemRouter from './routes/system';
+import logosRouter from './routes/logos';
 import { requireAuth } from './middleware/auth';
 import { registerJob }  from './lib/cronRegistry';
 import { takeNetWorthSnapshot } from './lib/netWorthJob';
@@ -56,6 +57,7 @@ import { sendDigestEmail } from './lib/digestEmail';
 import { runProactiveChecks } from './lib/proactiveAi';
 import { runImapCheckForAllHouseholds } from './lib/imapWatcher';
 import { processRecurringItems } from './lib/recurringJob';
+import { runLogoFetchJob } from './lib/logoFetchJob.js';
 import { prisma } from './lib/prisma';
 import pinoHttp from 'pino-http';
 import { randomUUID } from 'crypto';
@@ -85,6 +87,7 @@ registerJob('account-balance-snapshot', async () => {
 registerJob('recurring-autocreate', async () => {
   await processRecurringItems(prisma);
 });
+registerJob('logo-fetch', runLogoFetchJob);
 
 // ── Startup env validation ────────────────────────────────────────────────────
 const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'DATABASE_URL'] as const;
@@ -208,6 +211,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', name: 'Kuber API' }))
 app.get('/metrics', metricsHandler);
 
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/logos', logosRouter);
 app.use('/api/v1/users', requireAuth, usersRouter);
 app.use('/api/v1/dashboard', requireAuth, dashboardRouter);
 app.use('/api/v1/accounts', requireAuth, accountsRouter);
@@ -363,6 +367,21 @@ setInterval(async () => {
   } catch (err) {
     jobRunsTotal.inc({ job: 'recurring-autocreate', status: 'failure' });
     jobLog.error({ err }, 'Recurring auto-create job failed');
+  } finally {
+    end();
+  }
+}, 24 * 60 * 60 * 1000);
+
+// Daily logo fetch — runs every 24 hours to pre-warm logo cache
+setInterval(async () => {
+  const end = jobDurationSeconds.startTimer({ job: 'logo-fetch' });
+  try {
+    await runLogoFetchJob();
+    jobRunsTotal.inc({ job: 'logo-fetch', status: 'success' });
+    jobLastRunTimestamp.set({ job: 'logo-fetch' }, Date.now() / 1000);
+  } catch (err) {
+    jobRunsTotal.inc({ job: 'logo-fetch', status: 'failure' });
+    jobLog.error({ err }, 'Logo fetch job failed');
   } finally {
     end();
   }

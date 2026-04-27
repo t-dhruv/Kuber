@@ -90,11 +90,27 @@ model AiConfig {
   model           String    @default("")
   encryptedApiKey String    @default("")
   baseUrl         String?
+  headers         String?   // JSON: {"key": "value"} for custom provider
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@map("ai_configs")
+}
+
+model EmailConfig {
+  id               String   @id @default("singleton")
+  provider         String   @default("none") // "resend" | "smtp" | "none"
+  resendApiKey     String   @default("") // encrypted
+  resendFrom       String   @default("")
+  smtpHost         String   @default("")
+  smtpPort         Int      @default(587)
+  smtpUser         String   @default("")
+  smtpPass         String   @default("") // encrypted
+  smtpFrom         String   @default("")
+  updatedAt        DateTime @updatedAt
+
+  @@map("email_config")
 }
 
 model Conversation {
@@ -1072,4 +1088,17 @@ model ObjectGroup {
 
   @@index([householdId, entityType])
   @@map("object_groups")
+}
+
+model LogoCache {
+  id        String   @id @default(cuid())
+  type      String   // "bank" | "merchant"
+  key       String   // normalized name (lowercase, trimmed)
+  logoData  Bytes?   // null = confirmed no logo found (negative cache)
+  mimeType  String?
+  source    String?  // "clearbit" | "duckduckgo"
+  fetchedAt DateTime @default(now())
+
+  @@unique([type, key])
+  @@map("logo_cache")
 }

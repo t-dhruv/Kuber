@@ -2149,16 +2149,20 @@ interface AiConfigResponse {
   provider: string;
   model: string;
   baseUrl: string | null;
+  headers: string | null;
   hasApiKey: boolean;
   updatedAt: string | null;
 }
 
-const PROVIDER_DEFAULTS: Record<string, { model: string; label: string; keyHint: string }> = {
-  anthropic:  { model: 'claude-sonnet-4-6', label: 'Claude (Anthropic)', keyHint: 'console.anthropic.com' },
-  openai:     { model: 'gpt-4o',            label: 'OpenAI (GPT)',        keyHint: 'platform.openai.com' },
-  gemini:     { model: 'gemini-1.5-pro',    label: 'Google Gemini',       keyHint: 'aistudio.google.com' },
-  openrouter: { model: 'openai/gpt-4o',     label: 'OpenRouter',          keyHint: 'openrouter.ai/keys' },
-  none:       { model: '',                  label: 'None (disabled)',      keyHint: '' },
+const PROVIDER_DEFAULTS: Record<string, { model: string; label: string; keyHint: string; needsBaseUrl: boolean; apiKeyOptional: boolean }> = {
+  anthropic:  { model: 'claude-sonnet-4-6', label: 'Claude (Anthropic)', keyHint: 'console.anthropic.com',  needsBaseUrl: false, apiKeyOptional: false },
+  openai:     { model: 'gpt-4o',            label: 'OpenAI (GPT)',        keyHint: 'platform.openai.com',    needsBaseUrl: false, apiKeyOptional: false },
+  gemini:     { model: 'gemini-1.5-pro',    label: 'Google Gemini',       keyHint: 'aistudio.google.com',    needsBaseUrl: false, apiKeyOptional: false },
+  openrouter: { model: 'openai/gpt-4o',     label: 'OpenRouter',          keyHint: 'openrouter.ai/keys',     needsBaseUrl: false, apiKeyOptional: false },
+  nvidia:     { model: 'moonshotai/kimi-k2-instruct', label: 'Nvidia NIM',  keyHint: 'build.nvidia.com',       needsBaseUrl: false, apiKeyOptional: false },
+  ollama:     { model: 'llama3.2',          label: 'Ollama (local)',       keyHint: '',                       needsBaseUrl: true,  apiKeyOptional: true  },
+  custom:     { model: '',                  label: 'Custom API endpoint',  keyHint: '',                       needsBaseUrl: true,  apiKeyOptional: true  },
+  none:       { model: '',                  label: 'None (disabled)',      keyHint: '',                       needsBaseUrl: false, apiKeyOptional: true  },
 };
 
 const PROVIDER_OPTIONS = [
@@ -2167,6 +2171,9 @@ const PROVIDER_OPTIONS = [
   { value: 'openai',     label: 'OpenAI (GPT)' },
   { value: 'gemini',     label: 'Google Gemini' },
   { value: 'openrouter', label: 'OpenRouter' },
+  { value: 'nvidia',     label: 'Nvidia NIM' },
+  { value: 'ollama',     label: 'Ollama (local)' },
+  { value: 'custom',     label: 'Custom API endpoint' },
 ];
 
 function AiAdvisorCard() {
@@ -2175,6 +2182,7 @@ function AiAdvisorCard() {
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  const [headers, setHeaders] = useState('');
   const [testResult, setTestResult] = useState<{ valid: boolean; error?: string } | null>(null);
   const [initialized, setInitialized] = useState(false);
 
@@ -2189,6 +2197,7 @@ function AiAdvisorCard() {
       setProvider(config.provider);
       setModel(config.model || PROVIDER_DEFAULTS[config.provider]?.model || '');
       setBaseUrl(config.baseUrl ?? '');
+      setHeaders(config.headers ?? '');
       setInitialized(true);
     }
   }, [config, initialized]);
@@ -2200,6 +2209,7 @@ function AiAdvisorCard() {
         model,
         apiKey: apiKey || undefined,
         baseUrl: baseUrl || undefined,
+        headers: headers.trim() || undefined,
       }).then((r) => r.data as AiConfigResponse),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings', 'ai-config'] });
@@ -2220,12 +2230,17 @@ function AiAdvisorCard() {
   function handleProviderChange(newProvider: string) {
     setProvider(newProvider);
     setModel(PROVIDER_DEFAULTS[newProvider]?.model ?? '');
-    setBaseUrl('');
+    setBaseUrl(newProvider === 'ollama' ? 'http://localhost:11434/v1' : '');
+    setHeaders('');
     setTestResult(null);
   }
 
-  const isConfigured = config && config.provider !== 'none' && config.hasApiKey;
-  const keyHint = PROVIDER_DEFAULTS[provider]?.keyHint ?? '';
+  const providerMeta = PROVIDER_DEFAULTS[provider];
+  const isConfigured = config && config.provider !== 'none' && (config.hasApiKey || PROVIDER_DEFAULTS[config.provider]?.apiKeyOptional);
+  const keyHint = providerMeta?.keyHint ?? '';
+  const showBaseUrl = providerMeta?.needsBaseUrl || provider === 'openrouter';
+  const showHeaders = provider === 'custom';
+  const showApiKey = provider !== 'none';
 
   return (
     <Card padding="lg">
@@ -2269,16 +2284,36 @@ function AiAdvisorCard() {
             <Input
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder={PROVIDER_DEFAULTS[provider]?.model ?? 'Enter model name'}
+              placeholder={providerMeta?.model || 'Enter model name'}
+            />
+          </div>
+        )}
+
+        {/* Base URL */}
+        {showBaseUrl && (
+          <div>
+            <label className="text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5">
+              API Base URL
+              {provider === 'ollama' && (
+                <span className="font-normal text-[var(--color-text-muted)] ml-2">— default: http://localhost:11434/v1</span>
+              )}
+            </label>
+            <Input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder={provider === 'ollama' ? 'http://localhost:11434/v1' : provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://your-api.example.com/v1'}
             />
           </div>
         )}
 
         {/* API Key */}
-        {provider !== 'none' && (
+        {showApiKey && (
           <div>
             <label className="text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5">
               API Key
+              {providerMeta?.apiKeyOptional && (
+                <span className="font-normal text-[var(--color-text-muted)] ml-2">— optional</span>
+              )}
               {keyHint && (
                 <span className="font-normal text-[var(--color-text-muted)] ml-2">
                   — get yours at {keyHint}
@@ -2289,21 +2324,24 @@ function AiAdvisorCard() {
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={config?.hasApiKey && config.provider === provider ? '••••••••' : 'Enter API key'}
+              placeholder={config?.hasApiKey && config.provider === provider ? '••••••••' : providerMeta?.apiKeyOptional ? 'Leave empty if not required' : 'Enter API key'}
             />
           </div>
         )}
 
-        {/* Base URL (OpenRouter only) */}
-        {provider === 'openrouter' && (
+        {/* Custom headers */}
+        {showHeaders && (
           <div>
             <label className="text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5">
-              API Base URL
+              Custom Headers
+              <span className="font-normal text-[var(--color-text-muted)] ml-2">— JSON object, optional</span>
             </label>
-            <Input
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://openrouter.ai/api/v1"
+            <textarea
+              value={headers}
+              onChange={(e) => setHeaders(e.target.value)}
+              placeholder={'{"Authorization": "Bearer sk-...", "X-Custom-Header": "value"}'}
+              rows={3}
+              className="w-full px-3 py-2 text-sm font-mono border border-[var(--color-border)] rounded-[var(--radius-sm)] bg-[var(--color-surface)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] resize-y"
             />
           </div>
         )}
@@ -2345,13 +2383,136 @@ function AiAdvisorCard() {
   );
 }
 
-function IntegrationsSection() {
-  const testEmailMutation = useMutation({
-    mutationFn: () => api.post('/settings/email/test'),
-    onSuccess: () => notify.success('Test email sent', 'Check your inbox.'),
-    onError: (err: any) => notify.error('Failed to send test email', err?.response?.data?.error ?? 'Check server SMTP configuration.'),
+function EmailConfigCard() {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['email-config'],
+    queryFn: () => api.get('/settings/email-config').then((r) => r.data),
   });
 
+  const [provider, setProvider] = useState<'resend' | 'smtp' | 'none'>('none');
+  const [resendKey, setResendKey] = useState('');
+  const [resendFrom, setResendFrom] = useState('');
+  const [smtpHost, setSmtpHost] = useState('');
+  const [smtpPort, setSmtpPort] = useState('587');
+  const [smtpUser, setSmtpUser] = useState('');
+  const [smtpPass, setSmtpPass] = useState('');
+  const [smtpFrom, setSmtpFrom] = useState('');
+
+  useEffect(() => {
+    if (!data) return;
+    setProvider(data.provider ?? 'none');
+    setResendFrom(data.resendFrom ?? '');
+    setSmtpHost(data.smtpHost ?? '');
+    setSmtpPort(String(data.smtpPort ?? 587));
+    setSmtpUser(data.smtpUser ?? '');
+    setSmtpFrom(data.smtpFrom ?? '');
+  }, [data]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => api.put('/settings/email-config', {
+      provider,
+      ...(resendKey ? { resendApiKey: resendKey } : {}),
+      resendFrom,
+      smtpHost,
+      smtpPort: parseInt(smtpPort, 10) || 587,
+      smtpUser,
+      ...(smtpPass ? { smtpPass } : {}),
+      smtpFrom,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['email-config'] });
+      setResendKey('');
+      setSmtpPass('');
+      notify.success('Email config saved');
+    },
+    onError: (err: any) => notify.error('Failed to save', err?.response?.data?.error),
+  });
+
+  const testMutation = useMutation({
+    mutationFn: () => api.post('/settings/email/test'),
+    onSuccess: () => notify.success('Test email sent', 'Check your inbox.'),
+    onError: (err: any) => notify.error('Failed to send test email', err?.response?.data?.error ?? 'Check your email configuration.'),
+  });
+
+  if (isLoading) return <Card padding="lg"><Skeleton className="h-40" /></Card>;
+
+  return (
+    <Card padding="lg">
+      <div className="font-semibold text-[var(--color-text)] mb-1">Email provider</div>
+      <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+        Used for password resets, welcome emails, and notifications.
+      </p>
+
+      <div className="flex flex-col gap-3">
+        <Select
+          label="Provider"
+          value={provider}
+          onChange={(e) => setProvider(e.target.value as 'resend' | 'smtp' | 'none')}
+          options={[
+            { value: 'none', label: 'None (disabled)' },
+            { value: 'resend', label: 'Resend' },
+            { value: 'smtp', label: 'SMTP' },
+          ]}
+        />
+
+        {provider === 'resend' && (
+          <>
+            <Input
+              label={data?.hasResendKey ? 'Resend API key (leave blank to keep existing)' : 'Resend API key'}
+              type="password"
+              placeholder={data?.hasResendKey ? '••••••••••••' : 're_...'}
+              value={resendKey}
+              onChange={(e) => setResendKey(e.target.value)}
+            />
+            <Input
+              label="From address"
+              placeholder="Kuber <noreply@yourdomain.com>"
+              value={resendFrom}
+              onChange={(e) => setResendFrom(e.target.value)}
+            />
+          </>
+        )}
+
+        {provider === 'smtp' && (
+          <>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <Input label="SMTP host" placeholder="smtp.gmail.com" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
+              </div>
+              <Input label="Port" placeholder="587" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} />
+            </div>
+            <Input label="Username" placeholder="you@gmail.com" value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} />
+            <Input
+              label={data?.hasSmtpPass ? 'Password (leave blank to keep existing)' : 'Password'}
+              type="password"
+              placeholder={data?.hasSmtpPass ? '••••••••' : 'App password'}
+              value={smtpPass}
+              onChange={(e) => setSmtpPass(e.target.value)}
+            />
+            <Input
+              label="From address"
+              placeholder="Kuber <noreply@yourdomain.com>"
+              value={smtpFrom}
+              onChange={(e) => setSmtpFrom(e.target.value)}
+            />
+          </>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <Button variant="primary" size="sm" loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+            Save
+          </Button>
+          <Button variant="secondary" size="sm" loading={testMutation.isPending} onClick={() => testMutation.mutate()} disabled={provider === 'none'}>
+            Send test email
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function IntegrationsSection() {
   return (
     <div>
       <SectionHeader title="Integrations" description="Configure external services used by Kuber." />
@@ -2363,34 +2524,8 @@ function IntegrationsSection() {
         {/* Email / IMAP Connector */}
         <EmailConnectorSection />
 
-        {/* SMTP */}
-        <Card padding="lg">
-          <div className="mb-3">
-            <div className="font-semibold text-[var(--color-text)] mb-1">
-              Email (SMTP)
-            </div>
-            <p className="text-sm text-[var(--color-text-secondary)] m-0">
-              Kuber uses SMTP for password reset emails and account notifications. Configure SMTP via environment variables on your server:
-            </p>
-          </div>
-
-          <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-4 py-3.5 font-mono text-[0.8125rem] text-[var(--color-text-secondary)] mb-4 leading-[1.6]">
-            <div>SMTP_HOST=smtp.gmail.com</div>
-            <div>SMTP_PORT=587</div>
-            <div>SMTP_USER=you@gmail.com</div>
-            <div>SMTP_PASS=your-app-password</div>
-            <div>SMTP_FROM="Kuber &lt;noreply@yourdomain.com&gt;"</div>
-          </div>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={testEmailMutation.isPending}
-            onClick={() => testEmailMutation.mutate()}
-          >
-            Send test email to my address
-          </Button>
-        </Card>
+        {/* Email provider config */}
+        <EmailConfigCard />
       </div>
     </div>
   );

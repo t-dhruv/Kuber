@@ -5,8 +5,8 @@ export class OpenAiProvider implements AiProviderClient {
   private client: OpenAI;
   private model: string;
 
-  constructor(apiKey: string, model: string, baseUrl?: string | null) {
-    this.client = new OpenAI({ apiKey, baseURL: baseUrl ?? undefined });
+  constructor(apiKey: string, model: string, baseUrl?: string | null, defaultHeaders?: Record<string, string> | null) {
+    this.client = new OpenAI({ apiKey, baseURL: baseUrl ?? undefined, defaultHeaders: defaultHeaders ?? undefined });
     this.model  = model || 'gpt-4o-mini';
   }
 

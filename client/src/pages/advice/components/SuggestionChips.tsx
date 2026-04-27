@@ -3,7 +3,7 @@ interface Props {
   disabled?: boolean;
 }
 
-const SUGGESTIONS = [
+export const SUGGESTIONS = [
   "What's my net worth?",
   "How am I tracking against my budget this month?",
   "Which categories am I overspending on?",
@@ -14,13 +14,14 @@ const SUGGESTIONS = [
 
 export function SuggestionChips({ onSelect, disabled }: Props) {
   return (
-    <div className="flex flex-wrap gap-2 justify-center max-w-lg">
-      {SUGGESTIONS.map((s) => (
+    <div className="flex flex-wrap gap-2.5 justify-center">
+      {SUGGESTIONS.map((s, i) => (
         <button
           key={s}
           onClick={() => onSelect(s)}
           disabled={disabled}
-          className={`px-3.5 py-2 text-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-light)] transition-colors ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+          className={`px-4 py-2.5 text-[0.8125rem] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] hover:shadow-md hover:shadow-[var(--color-accent)]/10 hover:bg-[var(--color-accent-light)]/30 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
+          style={{ animationDelay: `${i * 50}ms` }}
         >
           {s}
         </button>

@@ -24,19 +24,27 @@ export function ChatMessage({ message }: Props) {
   }
 
   return (
-    <div className={`flex gap-3 px-4 py-2 ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start group`}>
+    <div className={`flex gap-3 px-4 py-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start group`}>
       {/* Avatar */}
-      <div className="w-8 h-8 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
-        {isUser ? '👤' : '✨'}
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0 mt-0.5 shadow-sm ${
+        isUser ? 'bg-[var(--color-surface-hover)]' : 'bg-gradient-to-br from-[var(--color-accent)] to-purple-500'
+      }`}>
+        {isUser ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--color-text-muted)]">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+          </svg>
+        ) : (
+          <span className="text-lg">✨</span>
+        )}
       </div>
 
       {/* Content */}
-      <div className={`flex flex-col gap-1 max-w-[75%] ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`flex flex-col gap-1.5 max-w-[78%] ${isUser ? 'items-end' : 'items-start'}`}>
         <div
-          className={`rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
+          className={`rounded-2xl px-4 py-3 text-[0.9375rem] leading-relaxed shadow-sm ${
             isUser
-              ? 'bg-[var(--color-accent)] text-white rounded-tr-sm'
-              : 'bg-[var(--color-surface-hover)] text-[var(--color-text)] rounded-tl-sm'
+              ? 'bg-gradient-to-br from-[var(--color-accent)] to-[#7c3aed] text-white rounded-tr-md'
+              : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] rounded-tl-md'
           }`}
         >
           {isUser ? (

@@ -766,10 +766,11 @@ router.put('/dashboard-layout', async (req: AuthRequest, res: Response) => {
 // ─── AI Config ────────────────────────────────────────────────────────────────
 
 const aiConfigSchema = z.object({
-  provider: z.enum(['anthropic', 'openai', 'gemini', 'openrouter', 'none']),
+  provider: z.enum(['anthropic', 'openai', 'gemini', 'openrouter', 'ollama', 'nvidia', 'custom', 'none']),
   model: z.string().optional(),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
+  headers: z.string().optional(), // JSON string: {"Authorization": "Bearer ..."}
 });
 
 function formatAiConfigResponse(config: {
@@ -777,15 +778,17 @@ function formatAiConfigResponse(config: {
   model: string;
   encryptedApiKey: string;
   baseUrl: string | null;
+  headers?: string | null;
   updatedAt: Date;
 } | null) {
   if (!config) {
-    return { provider: 'none', model: '', baseUrl: null, hasApiKey: false, updatedAt: null };
+    return { provider: 'none', model: '', baseUrl: null, headers: null, hasApiKey: false, updatedAt: null };
   }
   return {
     provider: config.provider,
     model: config.model,
     baseUrl: config.baseUrl,
+    headers: config.headers ?? null,
     hasApiKey: config.encryptedApiKey !== '',
     updatedAt: config.updatedAt.toISOString(),
   };
@@ -811,7 +814,7 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
     }
-    const { provider, model, apiKey, baseUrl } = parsed.data;
+    const { provider, model, apiKey, baseUrl, headers } = parsed.data;
 
     // Determine encrypted key: if a new apiKey is provided, encrypt it; otherwise keep existing
     let encryptedApiKey: string | undefined;
@@ -823,13 +826,21 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
       ? await prisma.aiConfig.findUnique({ where: { householdId }, select: { encryptedApiKey: true } })
       : null;
 
-    const config = await prisma.aiConfig.upsert({
+    // Validate headers JSON if provided
+    if (headers && headers.trim() !== '') {
+      try { JSON.parse(headers); } catch {
+        return res.status(400).json({ error: 'Headers must be valid JSON (e.g. {"Authorization": "Bearer sk-..."})' });
+      }
+    }
+
+    const config = await (prisma.aiConfig as any).upsert({
       where: { householdId },
       update: {
         provider,
         model: model ?? '',
         ...(encryptedApiKey !== undefined ? { encryptedApiKey } : { encryptedApiKey: existing?.encryptedApiKey ?? '' }),
         baseUrl: baseUrl ?? null,
+        headers: headers?.trim() || null,
       },
       create: {
         householdId,
@@ -837,6 +848,7 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
         model: model ?? '',
         encryptedApiKey: encryptedApiKey ?? '',
         baseUrl: baseUrl ?? null,
+        headers: headers?.trim() || null,
       },
     });
 
@@ -1074,7 +1086,100 @@ router.post('/email/test', async (req: AuthRequest, res: Response) => {
     return res.json({ message: `Test email sent to ${user.email}` });
   } catch (err) {
     req.log.error({ err }, 'settings/email/test');
-    return res.status(500).json({ error: 'Failed to send test email. Check your SMTP configuration.' });
+    return res.status(500).json({ error: 'Failed to send test email. Check your email configuration.' });
+  }
+});
+
+// ─── Email Config ─────────────────────────────────────────────────────────────
+
+const emailConfigSchema = z.object({
+  provider: z.enum(['resend', 'smtp', 'none']),
+  resendApiKey: z.string().optional(),
+  resendFrom: z.string().optional(),
+  smtpHost: z.string().optional(),
+  smtpPort: z.number().int().min(1).max(65535).optional(),
+  smtpUser: z.string().optional(),
+  smtpPass: z.string().optional(),
+  smtpFrom: z.string().optional(),
+});
+
+// GET /api/v1/settings/email-config
+router.get('/email-config', async (req: AuthRequest, res: Response) => {
+  try {
+    const cfg = await prisma.emailConfig.findUnique({ where: { id: 'singleton' } });
+    if (!cfg) {
+      return res.json({ provider: 'none', resendFrom: '', smtpHost: '', smtpPort: 587, smtpUser: '', smtpFrom: '', hasResendKey: false, hasSmtpPass: false });
+    }
+    return res.json({
+      provider: cfg.provider,
+      resendFrom: cfg.resendFrom,
+      smtpHost: cfg.smtpHost,
+      smtpPort: cfg.smtpPort,
+      smtpUser: cfg.smtpUser,
+      smtpFrom: cfg.smtpFrom,
+      hasResendKey: cfg.resendApiKey !== '',
+      hasSmtpPass: cfg.smtpPass !== '',
+    });
+  } catch (err) {
+    req.log.error({ err }, 'settings/email-config GET');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/v1/settings/email-config
+router.put('/email-config', async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = emailConfigSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
+    const { provider, resendApiKey, resendFrom, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = parsed.data;
+
+    const existing = await prisma.emailConfig.findUnique({ where: { id: 'singleton' } });
+
+    const encryptedResendKey = resendApiKey?.trim()
+      ? encrypt(resendApiKey.trim())
+      : (existing?.resendApiKey ?? '');
+    const encryptedSmtpPass = smtpPass?.trim()
+      ? encrypt(smtpPass.trim())
+      : (existing?.smtpPass ?? '');
+
+    const cfg = await prisma.emailConfig.upsert({
+      where: { id: 'singleton' },
+      update: {
+        provider,
+        resendApiKey: encryptedResendKey,
+        resendFrom: resendFrom ?? existing?.resendFrom ?? '',
+        smtpHost: smtpHost ?? existing?.smtpHost ?? '',
+        smtpPort: smtpPort ?? existing?.smtpPort ?? 587,
+        smtpUser: smtpUser ?? existing?.smtpUser ?? '',
+        smtpPass: encryptedSmtpPass,
+        smtpFrom: smtpFrom ?? existing?.smtpFrom ?? '',
+      },
+      create: {
+        id: 'singleton',
+        provider,
+        resendApiKey: encryptedResendKey,
+        resendFrom: resendFrom ?? '',
+        smtpHost: smtpHost ?? '',
+        smtpPort: smtpPort ?? 587,
+        smtpUser: smtpUser ?? '',
+        smtpPass: encryptedSmtpPass,
+        smtpFrom: smtpFrom ?? '',
+      },
+    });
+
+    return res.json({
+      provider: cfg.provider,
+      resendFrom: cfg.resendFrom,
+      smtpHost: cfg.smtpHost,
+      smtpPort: cfg.smtpPort,
+      smtpUser: cfg.smtpUser,
+      smtpFrom: cfg.smtpFrom,
+      hasResendKey: cfg.resendApiKey !== '',
+      hasSmtpPass: cfg.smtpPass !== '',
+    });
+  } catch (err) {
+    req.log.error({ err }, 'settings/email-config PUT');
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

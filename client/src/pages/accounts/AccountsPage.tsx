@@ -8,10 +8,11 @@ import {
 import { ChevronDown, ChevronRight, RefreshCw, Plus, MoreHorizontal, Pencil, EyeOff, MinusCircle, Trash2, X, ExternalLink, Upload } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Card, Button, Input, Select, Modal, ModalFooter, Skeleton, InstitutionLogo, LogoPicker,
+  Card, Button, Input, Select, Modal, ModalFooter, Skeleton, InstitutionLogo,
 } from '@/components/ui';
 import { notify } from '@/components/ui';
 import { LiabilityDetailPanel } from './components/LiabilityDetailPanel';
+import { usePrefetchLogos } from '@/hooks/usePrefetchLogos';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -346,7 +347,7 @@ function AccountRow({
       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
     >
       {/* Bank logo */}
-      <InstitutionLogo name={account.institution ?? account.name} logoSlug={account.institutionLogo ?? undefined} size={32} />
+      <InstitutionLogo name={account.institution ?? account.name} logoUrl={account.institutionLogo ?? undefined} size={32} />
 
       {/* Name + last four */}
       <div className="flex-1 min-w-0">
@@ -621,18 +622,85 @@ function NetWorthSummary({
   );
 }
 
+// ─── Institution Autocomplete ──────────────────────────────────────────────────
+
+const KNOWN_INSTITUTIONS = [
+  'Ally', 'American Express', 'ANZ', 'Axis Bank', 'Bank of America', 'Barclays',
+  'BMO', 'BNY Mellon', 'Capital One', 'Charles Schwab', 'Chase', 'Chime',
+  'CIBC', 'Citibank', 'Citizens Bank', 'Commonwealth Bank', 'Discover',
+  'eTrade', 'Fidelity', 'Fifth Third', 'Goldman Sachs', 'HDFC Bank',
+  'HSBC', 'Huntington', 'ICICI Bank', 'JPMorgan', 'KeyBank', 'Klarna',
+  'Lloyds', 'Marcus', 'Merrill', 'Monzo', 'Morgan Stanley', 'N26', 'NAB',
+  'PNC', 'PayPal', 'RBC', 'Regions', 'Revolut', 'Robinhood', 'Santander',
+  'SBI', 'Schwab', 'Scotiabank', 'SoFi', 'Starling Bank', 'Stripe',
+  'TD Bank', 'Truist', 'US Bank', 'USAA', 'Venmo', 'Wells Fargo', 'Westpac', 'Wise',
+];
+
+function InstitutionCombobox({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  const suggestions = value.trim().length === 0
+    ? []
+    : KNOWN_INSTITUTIONS.filter((n) =>
+        n.toLowerCase().includes(value.toLowerCase())
+      ).slice(0, 7);
+
+  return (
+    <div ref={ref} className="relative">
+      <Input
+        label="Institution"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="e.g. Chase Bank"
+        autoComplete="off"
+      />
+      {open && suggestions.length > 0 && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-[var(--shadow-md)] overflow-hidden">
+          {suggestions.map((name) => (
+            <button
+              key={name}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onChange(name); setOpen(false); }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-left bg-transparent border-0 cursor-pointer hover:bg-[var(--color-surface-hover)] text-[0.8125rem] text-[var(--color-text)]"
+            >
+              <InstitutionLogo name={name} type="bank" size={20} />
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Account Form ─────────────────────────────────────────────────────────────
 
 function AccountForm({
   values,
   onChange,
-  onLogoChange,
   errors,
   balanceLabel = 'Starting Balance',
 }: {
   values: AccountFormValues;
-  onChange: (field: keyof AccountFormValues, value: string) => void;
-  onLogoChange: (slug: string | null) => void;
+  onChange: (field: keyof AccountFormValues, value: string | null) => void;
   errors: Partial<Record<keyof AccountFormValues, string>>;
   balanceLabel?: string;
 }) {
@@ -653,22 +721,13 @@ function AccountForm({
         options={TYPE_OPTIONS}
         error={errors.type}
       />
-      <Input
-        label="Institution"
+      <InstitutionCombobox
         value={values.institution}
-        onChange={(e) => onChange('institution', e.target.value)}
-        placeholder="e.g. Chase Bank"
+        onChange={(val) => {
+          onChange('institution', val);
+          onChange('institutionLogo', null);
+        }}
       />
-      <div>
-        <div className="text-[0.8125rem] font-medium text-[var(--color-text-secondary)] mb-1.5">
-          Logo
-        </div>
-        <LogoPicker
-          value={values.institutionLogo}
-          institutionName={values.institution || values.name}
-          onChange={onLogoChange}
-        />
-      </div>
       <div className="grid grid-cols-2 gap-3">
         <Input
           label="Last Four Digits"
@@ -736,13 +795,9 @@ function AddAccountModal({
   const [values, setValues] = useState<AccountFormValues>({ ...EMPTY_FORM, currency: defaultCurrency });
   const [errors, setErrors] = useState<Partial<Record<keyof AccountFormValues, string>>>({});
 
-  function handleChange(field: keyof AccountFormValues, value: string) {
+  function handleChange(field: keyof AccountFormValues, value: string | null) {
     setValues((v) => ({ ...v, [field]: value }));
     setErrors((e) => ({ ...e, [field]: undefined }));
-  }
-
-  function handleLogoChange(slug: string | null) {
-    setValues((v) => ({ ...v, institutionLogo: slug }));
   }
 
   const mutation = useMutation({
@@ -781,7 +836,7 @@ function AddAccountModal({
 
   return (
     <Modal open={open} onClose={handleClose} title="Add Account" size="md">
-      <AccountForm values={values} onChange={handleChange} onLogoChange={handleLogoChange} errors={errors} />
+      <AccountForm values={values} onChange={handleChange} errors={errors} />
       <ModalFooter>
         <Button variant="ghost" onClick={handleClose} disabled={mutation.isPending}>Cancel</Button>
         <Button onClick={handleSubmit} loading={mutation.isPending}>Add Account</Button>
@@ -819,13 +874,9 @@ function EditAccountModal({
     }
   }, [account]);
 
-  function handleChange(field: keyof AccountFormValues, value: string) {
+  function handleChange(field: keyof AccountFormValues, value: string | null) {
     setValues((v) => ({ ...v, [field]: value }));
     setErrors((e) => ({ ...e, [field]: undefined }));
-  }
-
-  function handleLogoChange(slug: string | null) {
-    setValues((v) => ({ ...v, institutionLogo: slug }));
   }
 
   const mutation = useMutation({
@@ -857,7 +908,7 @@ function EditAccountModal({
 
   return (
     <Modal open={!!account} onClose={onClose} title="Edit Account" size="md">
-      <AccountForm values={values} onChange={handleChange} onLogoChange={handleLogoChange} errors={errors} balanceLabel="Current Balance" />
+      <AccountForm values={values} onChange={handleChange} errors={errors} balanceLabel="Current Balance" />
       <ModalFooter>
         <Button variant="ghost" onClick={onClose} disabled={mutation.isPending}>Cancel</Button>
         <Button onClick={handleSubmit} loading={mutation.isPending}>Save Changes</Button>
@@ -998,7 +1049,7 @@ function AccountDetailDrawer({
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)] shrink-0">
           <div className="flex items-center gap-3">
-            {account && <InstitutionLogo name={account.institution ?? account.name} logoSlug={account.institutionLogo ?? undefined} size={32} />}
+            {account && <InstitutionLogo name={account.institution ?? account.name} logoUrl={account.institutionLogo ?? undefined} size={32} />}
             <div>
               <div className="text-base font-semibold text-[var(--color-text)]">{account?.name}</div>
               {account?.institution && (
@@ -1650,6 +1701,10 @@ export default function AccountsPage() {
   });
 
   const grouped = data?.groups ? buildGroupMap(data.groups) : null;
+
+  usePrefetchLogos(
+    (data?.groups ?? []).flatMap(g => g.accounts).map(a => ({ name: a.institution, type: 'bank' as const }))
+  );
 
   function handleEditFromDetail() {
     const acct = detailAccount;

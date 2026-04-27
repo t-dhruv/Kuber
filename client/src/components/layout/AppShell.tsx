@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { BottomNav } from './BottomNav';
+import { FloatingChat } from './FloatingChat';
 
 const STORAGE_KEY = 'kuber-sidebar-collapsed';
 
@@ -97,6 +98,7 @@ export function AppShell() {
       </div>
 
       <BottomNav onOpenSidebar={() => setMobileOpen(true)} />
+      <FloatingChat />
     </div>
   );
 }

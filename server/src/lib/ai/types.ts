@@ -1,4 +1,4 @@
-export type AiProvider = 'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'ollama' | 'none';
+export type AiProvider = 'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'ollama' | 'nvidia' | 'custom' | 'none';
 
 export interface AiMessage {
   role: 'user' | 'assistant' | 'system';
@@ -29,4 +29,5 @@ export interface AiConfigData {
   model: string;
   apiKey: string;
   baseUrl?: string | null;
+  headers?: Record<string, string> | null;
 }

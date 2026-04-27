@@ -7,7 +7,7 @@ import { ChatMessage } from './components/ChatMessage';
 import { StreamingMessage } from './components/StreamingMessage';
 import { ChatInput } from './components/ChatInput';
 import { ConversationSidebar } from './components/ConversationSidebar';
-import { SuggestionChips } from './components/SuggestionChips';
+import { SuggestionChips, SUGGESTIONS } from './components/SuggestionChips';
 
 // ─── Advice Library Types ─────────────────────────────────────────────────────
 
@@ -277,22 +277,26 @@ function AiChatTab() {
       {/* Main chat area */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border)] flex-shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--color-border)] flex-shrink-0 bg-[var(--color-surface)]">
           <button
             onClick={() => setSidebarOpen((o) => !o)}
-            className="p-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] transition-colors"
+            className="p-2 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] transition-colors"
             title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" />
             </svg>
           </button>
-          <span className="text-sm font-medium text-[var(--color-text)] truncate flex-1">{hasMessages ? title : 'AI Advisor'}</span>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[var(--color-accent)] to-purple-500 flex items-center justify-center text-sm">✨</div>
+            <span className="text-sm font-semibold text-[var(--color-text)] truncate">{hasMessages ? title : 'AI Advisor'}</span>
+          </div>
           <button
             onClick={startNewConversation}
-            className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors"
+            className="text-xs px-3 py-2 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-light)] transition-all flex items-center gap-1.5"
           >
-            New Chat
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New
           </button>
         </div>
 
@@ -300,48 +304,80 @@ function AiChatTab() {
         <div
           ref={scrollRef}
           data-chat-scroll="true"
-          className="flex-1 overflow-y-auto py-4"
+          className="flex-1 overflow-y-auto"
         >
-          {!hasMessages && (
-            <div className="flex flex-col items-center justify-center h-full gap-6 px-4 text-center">
-              <div className="w-16 h-16 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-3xl">
-                ✨
+          {!hasMessages ? (
+            <div className="px-4 pt-12 pb-4">
+              <div className="max-w-2xl mx-auto">
+                <div className="flex items-start gap-4 mb-8">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-purple-500 flex items-center justify-center text-2xl shadow-lg shrink-0">
+                    ✨
+                  </div>
+                  <div className="pt-1">
+                    <h2 className="text-xl font-bold text-[var(--color-text)] mb-2">Your AI Financial Advisor</h2>
+                    <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
+                      I have access to your real financial data. Ask me anything about your spending, budgets, goals, or investments.
+                    </p>
+                  </div>
+                </div>
+                <div className="pl-16">
+                  <p className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wider mb-3">Quick questions</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {SUGGESTIONS.slice(0, 4).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => handleSend(s)}
+                        disabled={isNotConfigured}
+                        className="px-4 py-3 text-left text-sm rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent-light)]/30 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {SUGGESTIONS.slice(4).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => handleSend(s)}
+                        disabled={isNotConfigured}
+                        className="px-3 py-1.5 text-[0.8125rem] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-bold text-[var(--color-text)] mb-2">How can I help?</h2>
-                <p className="text-sm text-[var(--color-text-muted)] max-w-sm">
-                  I have access to your real financial data. Ask me anything about your spending, budgets, goals, or investments.
-                </p>
-              </div>
-              <SuggestionChips onSelect={handleSend} disabled={isNotConfigured} />
             </div>
-          )}
+          ) : (
+            <div className="py-4">
+              {messages.filter((m) => !m.streaming).map((msg, i) => (
+                <ChatMessage key={msg.id ?? `msg-${i}`} message={msg} />
+              ))}
 
-          {hasMessages && messages.filter((m) => !m.streaming).map((msg, i) => (
-            <ChatMessage key={msg.id ?? `msg-${i}`} message={msg} />
-          ))}
+              {isStreaming && (
+                <StreamingMessage
+                  content={messages.find((m) => m.streaming)?.content ?? ''}
+                  onCancel={cancel}
+                />
+              )}
 
-          {isStreaming && (
-            <StreamingMessage
-              content={messages.find((m) => m.streaming)?.content ?? ''}
-              onCancel={cancel}
-            />
-          )}
+              {error && !isStreaming && (
+                <div className="mx-4 mt-2 px-4 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm">
+                  {error}
+                </div>
+              )}
 
-          {error && !isStreaming && (
-            <div className="mx-4 mt-2 px-4 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm">
-              {error}
-            </div>
-          )}
-
-          {isNotConfigured && (
-            <div className="flex justify-center mt-4">
-              <button
-                onClick={() => navigate('/settings')}
-                className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
-              >
-                Go to Settings → AI Advisor
-              </button>
+              {isNotConfigured && (
+                <div className="flex justify-center mt-4">
+                  <button
+                    onClick={() => navigate('/settings')}
+                    className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                  >
+                    Go to Settings → AI Advisor
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -363,16 +399,16 @@ export default function AdvicePage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Tab header */}
-      <div className="flex gap-1 px-4 py-3 border-b border-[var(--color-border)] shrink-0">
+      <div className="flex gap-2 px-4 py-3 border-b border-[var(--color-border)] shrink-0 bg-[var(--color-surface)]">
         {([['chat', '✨ AI Advisor'], ['library', '📚 Advice Library']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className="py-1.5 px-3.5 rounded-[var(--radius-md)] border-none text-sm cursor-pointer transition-all duration-150"
+            className="py-2 px-4 rounded-xl text-sm font-medium cursor-pointer transition-all duration-200"
             style={{
               backgroundColor: tab === key ? 'var(--color-accent)' : 'transparent',
-              color: tab === key ? '#fff' : 'var(--color-text-muted)',
-              fontWeight: tab === key ? 600 : 400,
+              color: tab === key ? '#fff' : 'var(--color-text-secondary)',
+              boxShadow: tab === key ? '0 2px 8px var(--color-accent)/30' : 'none',
             }}
           >
             {label}

@@ -314,6 +314,7 @@ export default function RulesPage() {
     try {
       const parsed = JSON.parse(decodeURIComponent(raw));
       const form = defaultForm();
+      if (parsed.name) form.name = parsed.name;
       if (parsed.field) form.conditions[0].field = parsed.field;
       if (parsed.operator) form.conditions[0].operator = parsed.operator;
       if (parsed.value) form.conditions[0].value = parsed.value;

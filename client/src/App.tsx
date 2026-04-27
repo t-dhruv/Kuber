@@ -6,6 +6,7 @@ import { AppShell } from '@/components/layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import InstallPrompt from '@/components/pwa/InstallPrompt';
 import { OnboardingWizard, shouldShowOnboarding } from '@/components/onboarding/OnboardingWizard';
+import { NoAccountsGuard } from '@/components/NoAccountsGuard';
 import { api } from '@/lib/api';
 
 // ─── Lazy page imports ────────────────────────────────────────────────────────
@@ -23,7 +24,6 @@ const ReportsPage = lazy(() => import('@/pages/reports'));
 const RecurringPage = lazy(() => import('@/pages/recurring'));
 const GoalsPage = lazy(() => import('@/pages/goals'));
 const InvestmentsPage = lazy(() => import('@/pages/investments'));
-const AdvicePage = lazy(() => import('@/pages/advice'));
 const SettingsPage = lazy(() => import('@/pages/settings'));
 const RulesPage = lazy(() => import('@/pages/rules/RulesPage'));
 const WealthPage = lazy(() => import('@/pages/wealth/WealthPage'));
@@ -161,7 +161,7 @@ export default function App() {
           path="/transactions"
           element={
             <Suspense fallback={<PageLoader />}>
-              <TransactionsPage />
+              <NoAccountsGuard><TransactionsPage /></NoAccountsGuard>
             </Suspense>
           }
         />
@@ -177,7 +177,7 @@ export default function App() {
           path="/cash-flow"
           element={
             <Suspense fallback={<PageLoader />}>
-              <CashFlowPage />
+              <NoAccountsGuard><CashFlowPage /></NoAccountsGuard>
             </Suspense>
           }
         />
@@ -218,14 +218,6 @@ export default function App() {
           element={
             <Suspense fallback={<PageLoader />}>
               <InvestmentsPage />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/advice"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <AdvicePage />
             </Suspense>
           }
         />
