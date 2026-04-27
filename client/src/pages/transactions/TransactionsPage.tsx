@@ -1777,7 +1777,9 @@ export default function TransactionsPage() {
                   <p className="text-sm text-[color:var(--color-text-secondary)]">
                     {autoCatStatus.uncategorizedCount > 0
                       ? `Auto-categorize ${autoCatStatus.uncategorizedCount} uncategorized transaction${autoCatStatus.uncategorizedCount !== 1 ? 's' : ''}?`
-                      : 'All transactions are already categorized.'}
+                      : autoCatStatus.reviewCount > 0
+                        ? `${autoCatStatus.reviewCount} transaction${autoCatStatus.reviewCount !== 1 ? 's' : ''} awaiting review — no new ones to process.`
+                        : 'All transactions are already categorized.'}
                   </p>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--color-text-secondary)] hover:underline">Cancel</button>

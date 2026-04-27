@@ -18,7 +18,9 @@ export default function ReviewQueuePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [page] = useState(1);
-  const [pendingRulePattern, setPendingRulePattern] = useState<string | null>(null);
+  const [pendingRulePattern, setPendingRulePattern] = useState<string | null>(() => {
+    try { return sessionStorage.getItem('pendingRulePattern') ?? null; } catch (_e) { return null; }
+  });
 
   const { data, isLoading } = useQuery<ReviewQueueResponse>({
     queryKey: ['auto-categorize-review', page],
@@ -86,9 +88,19 @@ export default function ReviewQueuePage() {
     await confirmMutation.mutateAsync({ transactionId, action, categoryId, createCategory });
   };
 
+  const setPendingRulePatternPersisted = (val: string | null) => {
+    try {
+      if (val) sessionStorage.setItem('pendingRulePattern', val);
+      else sessionStorage.removeItem('pendingRulePattern');
+    } catch (_e) {
+      // sessionStorage unavailable
+    }
+    setPendingRulePattern(val);
+  };
+
   const handleCreateRuleFromRow = (description: string) => {
     const firstToken = description.toLowerCase().split(/[\s_-]/)[0].trim();
-    setPendingRulePattern(firstToken);
+    setPendingRulePatternPersisted(firstToken);
   };
 
   const handleCreateRule = (suggestion: RuleSuggestion) => {
@@ -165,12 +177,12 @@ export default function ReviewQueuePage() {
                   operator: 'startsWith',
                   value: pendingRulePattern,
                 }))}`);
-                setPendingRulePattern(null);
+                setPendingRulePatternPersisted(null);
               }}
             >
               Create Rule
             </Button>
-            <button onClick={() => setPendingRulePattern(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
+            <button onClick={() => setPendingRulePatternPersisted(null)} className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)]">
               Dismiss
             </button>
           </div>
