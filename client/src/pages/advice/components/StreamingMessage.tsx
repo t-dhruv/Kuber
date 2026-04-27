@@ -21,17 +21,17 @@ export const StreamingMessage = React.memo(function StreamingMessage({ content, 
   }, [content]);
 
   return (
-    <div className="flex gap-3 px-4 py-2 flex-row items-start">
+    <div className="flex gap-3 px-4 py-3 flex-row items-start">
       {/* Avatar */}
-      <div className="w-8 h-8 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5 animate-pulse">
-        ✨
+      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-purple-500 flex items-center justify-center text-base flex-shrink-0 mt-0.5 shadow-sm">
+        <span className="text-lg animate-pulse">✨</span>
       </div>
 
       {/* Content */}
-      <div className="flex flex-col gap-2 max-w-[75%] items-start">
+      <div className="flex flex-col gap-2.5 max-w-[78%] items-start">
         <div
           ref={contentRef}
-          className="rounded-xl rounded-tl-sm px-3.5 py-2.5 text-sm leading-relaxed bg-[var(--color-surface-hover)] text-[var(--color-text)]"
+          className="rounded-2xl rounded-tl-md px-4 py-3 text-[0.9375rem] leading-relaxed bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] shadow-sm"
         >
           {content ? (
             <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 prose-pre:my-2 prose-blockquote:my-1">

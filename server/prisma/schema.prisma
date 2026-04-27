@@ -90,6 +90,7 @@ model AiConfig {
   model           String    @default("")
   encryptedApiKey String    @default("")
   baseUrl         String?
+  headers         String?   // JSON: {"key": "value"} for custom provider
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)

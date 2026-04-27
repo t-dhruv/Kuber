@@ -766,10 +766,11 @@ router.put('/dashboard-layout', async (req: AuthRequest, res: Response) => {
 // ─── AI Config ────────────────────────────────────────────────────────────────
 
 const aiConfigSchema = z.object({
-  provider: z.enum(['anthropic', 'openai', 'gemini', 'openrouter', 'none']),
+  provider: z.enum(['anthropic', 'openai', 'gemini', 'openrouter', 'ollama', 'nvidia', 'custom', 'none']),
   model: z.string().optional(),
   apiKey: z.string().optional(),
   baseUrl: z.string().optional(),
+  headers: z.string().optional(), // JSON string: {"Authorization": "Bearer ..."}
 });
 
 function formatAiConfigResponse(config: {
@@ -777,15 +778,17 @@ function formatAiConfigResponse(config: {
   model: string;
   encryptedApiKey: string;
   baseUrl: string | null;
+  headers?: string | null;
   updatedAt: Date;
 } | null) {
   if (!config) {
-    return { provider: 'none', model: '', baseUrl: null, hasApiKey: false, updatedAt: null };
+    return { provider: 'none', model: '', baseUrl: null, headers: null, hasApiKey: false, updatedAt: null };
   }
   return {
     provider: config.provider,
     model: config.model,
     baseUrl: config.baseUrl,
+    headers: config.headers ?? null,
     hasApiKey: config.encryptedApiKey !== '',
     updatedAt: config.updatedAt.toISOString(),
   };
@@ -811,7 +814,7 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
     }
-    const { provider, model, apiKey, baseUrl } = parsed.data;
+    const { provider, model, apiKey, baseUrl, headers } = parsed.data;
 
     // Determine encrypted key: if a new apiKey is provided, encrypt it; otherwise keep existing
     let encryptedApiKey: string | undefined;
@@ -823,13 +826,21 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
       ? await prisma.aiConfig.findUnique({ where: { householdId }, select: { encryptedApiKey: true } })
       : null;
 
-    const config = await prisma.aiConfig.upsert({
+    // Validate headers JSON if provided
+    if (headers && headers.trim() !== '') {
+      try { JSON.parse(headers); } catch {
+        return res.status(400).json({ error: 'Headers must be valid JSON (e.g. {"Authorization": "Bearer sk-..."})' });
+      }
+    }
+
+    const config = await (prisma.aiConfig as any).upsert({
       where: { householdId },
       update: {
         provider,
         model: model ?? '',
         ...(encryptedApiKey !== undefined ? { encryptedApiKey } : { encryptedApiKey: existing?.encryptedApiKey ?? '' }),
         baseUrl: baseUrl ?? null,
+        headers: headers?.trim() || null,
       },
       create: {
         householdId,
@@ -837,6 +848,7 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
         model: model ?? '',
         encryptedApiKey: encryptedApiKey ?? '',
         baseUrl: baseUrl ?? null,
+        headers: headers?.trim() || null,
       },
     });
 

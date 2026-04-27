@@ -2149,16 +2149,20 @@ interface AiConfigResponse {
   provider: string;
   model: string;
   baseUrl: string | null;
+  headers: string | null;
   hasApiKey: boolean;
   updatedAt: string | null;
 }
 
-const PROVIDER_DEFAULTS: Record<string, { model: string; label: string; keyHint: string }> = {
-  anthropic:  { model: 'claude-sonnet-4-6', label: 'Claude (Anthropic)', keyHint: 'console.anthropic.com' },
-  openai:     { model: 'gpt-4o',            label: 'OpenAI (GPT)',        keyHint: 'platform.openai.com' },
-  gemini:     { model: 'gemini-1.5-pro',    label: 'Google Gemini',       keyHint: 'aistudio.google.com' },
-  openrouter: { model: 'openai/gpt-4o',     label: 'OpenRouter',          keyHint: 'openrouter.ai/keys' },
-  none:       { model: '',                  label: 'None (disabled)',      keyHint: '' },
+const PROVIDER_DEFAULTS: Record<string, { model: string; label: string; keyHint: string; needsBaseUrl: boolean; apiKeyOptional: boolean }> = {
+  anthropic:  { model: 'claude-sonnet-4-6', label: 'Claude (Anthropic)', keyHint: 'console.anthropic.com',  needsBaseUrl: false, apiKeyOptional: false },
+  openai:     { model: 'gpt-4o',            label: 'OpenAI (GPT)',        keyHint: 'platform.openai.com',    needsBaseUrl: false, apiKeyOptional: false },
+  gemini:     { model: 'gemini-1.5-pro',    label: 'Google Gemini',       keyHint: 'aistudio.google.com',    needsBaseUrl: false, apiKeyOptional: false },
+  openrouter: { model: 'openai/gpt-4o',     label: 'OpenRouter',          keyHint: 'openrouter.ai/keys',     needsBaseUrl: false, apiKeyOptional: false },
+  nvidia:     { model: 'moonshotai/kimi-k2-instruct', label: 'Nvidia NIM',  keyHint: 'build.nvidia.com',       needsBaseUrl: false, apiKeyOptional: false },
+  ollama:     { model: 'llama3.2',          label: 'Ollama (local)',       keyHint: '',                       needsBaseUrl: true,  apiKeyOptional: true  },
+  custom:     { model: '',                  label: 'Custom API endpoint',  keyHint: '',                       needsBaseUrl: true,  apiKeyOptional: true  },
+  none:       { model: '',                  label: 'None (disabled)',      keyHint: '',                       needsBaseUrl: false, apiKeyOptional: true  },
 };
 
 const PROVIDER_OPTIONS = [
@@ -2167,6 +2171,9 @@ const PROVIDER_OPTIONS = [
   { value: 'openai',     label: 'OpenAI (GPT)' },
   { value: 'gemini',     label: 'Google Gemini' },
   { value: 'openrouter', label: 'OpenRouter' },
+  { value: 'nvidia',     label: 'Nvidia NIM' },
+  { value: 'ollama',     label: 'Ollama (local)' },
+  { value: 'custom',     label: 'Custom API endpoint' },
 ];
 
 function AiAdvisorCard() {
@@ -2175,6 +2182,7 @@ function AiAdvisorCard() {
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  const [headers, setHeaders] = useState('');
   const [testResult, setTestResult] = useState<{ valid: boolean; error?: string } | null>(null);
   const [initialized, setInitialized] = useState(false);
 
@@ -2189,6 +2197,7 @@ function AiAdvisorCard() {
       setProvider(config.provider);
       setModel(config.model || PROVIDER_DEFAULTS[config.provider]?.model || '');
       setBaseUrl(config.baseUrl ?? '');
+      setHeaders(config.headers ?? '');
       setInitialized(true);
     }
   }, [config, initialized]);
@@ -2200,6 +2209,7 @@ function AiAdvisorCard() {
         model,
         apiKey: apiKey || undefined,
         baseUrl: baseUrl || undefined,
+        headers: headers.trim() || undefined,
       }).then((r) => r.data as AiConfigResponse),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings', 'ai-config'] });
@@ -2220,12 +2230,17 @@ function AiAdvisorCard() {
   function handleProviderChange(newProvider: string) {
     setProvider(newProvider);
     setModel(PROVIDER_DEFAULTS[newProvider]?.model ?? '');
-    setBaseUrl('');
+    setBaseUrl(newProvider === 'ollama' ? 'http://localhost:11434/v1' : '');
+    setHeaders('');
     setTestResult(null);
   }
 
-  const isConfigured = config && config.provider !== 'none' && config.hasApiKey;
-  const keyHint = PROVIDER_DEFAULTS[provider]?.keyHint ?? '';
+  const providerMeta = PROVIDER_DEFAULTS[provider];
+  const isConfigured = config && config.provider !== 'none' && (config.hasApiKey || PROVIDER_DEFAULTS[config.provider]?.apiKeyOptional);
+  const keyHint = providerMeta?.keyHint ?? '';
+  const showBaseUrl = providerMeta?.needsBaseUrl || provider === 'openrouter';
+  const showHeaders = provider === 'custom';
+  const showApiKey = provider !== 'none';
 
   return (
     <Card padding="lg">
@@ -2269,16 +2284,36 @@ function AiAdvisorCard() {
             <Input
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder={PROVIDER_DEFAULTS[provider]?.model ?? 'Enter model name'}
+              placeholder={providerMeta?.model || 'Enter model name'}
+            />
+          </div>
+        )}
+
+        {/* Base URL */}
+        {showBaseUrl && (
+          <div>
+            <label className="text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5">
+              API Base URL
+              {provider === 'ollama' && (
+                <span className="font-normal text-[var(--color-text-muted)] ml-2">— default: http://localhost:11434/v1</span>
+              )}
+            </label>
+            <Input
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder={provider === 'ollama' ? 'http://localhost:11434/v1' : provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://your-api.example.com/v1'}
             />
           </div>
         )}
 
         {/* API Key */}
-        {provider !== 'none' && (
+        {showApiKey && (
           <div>
             <label className="text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5">
               API Key
+              {providerMeta?.apiKeyOptional && (
+                <span className="font-normal text-[var(--color-text-muted)] ml-2">— optional</span>
+              )}
               {keyHint && (
                 <span className="font-normal text-[var(--color-text-muted)] ml-2">
                   — get yours at {keyHint}
@@ -2289,21 +2324,24 @@ function AiAdvisorCard() {
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={config?.hasApiKey && config.provider === provider ? '••••••••' : 'Enter API key'}
+              placeholder={config?.hasApiKey && config.provider === provider ? '••••••••' : providerMeta?.apiKeyOptional ? 'Leave empty if not required' : 'Enter API key'}
             />
           </div>
         )}
 
-        {/* Base URL (OpenRouter only) */}
-        {provider === 'openrouter' && (
+        {/* Custom headers */}
+        {showHeaders && (
           <div>
             <label className="text-[0.8125rem] font-medium text-[var(--color-text)] block mb-1.5">
-              API Base URL
+              Custom Headers
+              <span className="font-normal text-[var(--color-text-muted)] ml-2">— JSON object, optional</span>
             </label>
-            <Input
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://openrouter.ai/api/v1"
+            <textarea
+              value={headers}
+              onChange={(e) => setHeaders(e.target.value)}
+              placeholder={'{"Authorization": "Bearer sk-...", "X-Custom-Header": "value"}'}
+              rows={3}
+              className="w-full px-3 py-2 text-sm font-mono border border-[var(--color-border)] rounded-[var(--radius-sm)] bg-[var(--color-surface)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] resize-y"
             />
           </div>
         )}

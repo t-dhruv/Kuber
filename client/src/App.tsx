@@ -24,7 +24,6 @@ const ReportsPage = lazy(() => import('@/pages/reports'));
 const RecurringPage = lazy(() => import('@/pages/recurring'));
 const GoalsPage = lazy(() => import('@/pages/goals'));
 const InvestmentsPage = lazy(() => import('@/pages/investments'));
-const AdvicePage = lazy(() => import('@/pages/advice'));
 const SettingsPage = lazy(() => import('@/pages/settings'));
 const RulesPage = lazy(() => import('@/pages/rules/RulesPage'));
 const WealthPage = lazy(() => import('@/pages/wealth/WealthPage'));
@@ -219,14 +218,6 @@ export default function App() {
           element={
             <Suspense fallback={<PageLoader />}>
               <InvestmentsPage />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/advice"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <AdvicePage />
             </Suspense>
           }
         />

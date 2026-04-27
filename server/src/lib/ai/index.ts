@@ -1,9 +1,11 @@
 import type { AiConfig } from '@prisma/client';
 import { decrypt } from '../encryption';
 import { AnthropicProvider } from './anthropic';
+import { CustomProvider } from './custom';
 import { GeminiProvider } from './gemini';
 import { OllamaProvider } from './ollama';
 import { OpenAiProvider } from './openai';
+import { NvidiaProvider } from './nvidia';
 import { OpenRouterProvider } from './openrouter';
 import type { AiConfigData, AiProvider, AiProviderClient } from './types';
 
@@ -27,11 +29,16 @@ export function getAiClient(config: AiConfig): AiProviderClient {
   if (cached && Date.now() < cached.expiresAt) return cached.client;
 
   const apiKey  = decrypt(config.encryptedApiKey);
+  let parsedHeaders: Record<string, string> | null = null;
+  if ((config as any).headers) {
+    try { parsedHeaders = JSON.parse((config as any).headers); } catch { /* ignore bad JSON */ }
+  }
   const data: AiConfigData = {
     provider,
     model:   config.model,
     apiKey,
     baseUrl: config.baseUrl,
+    headers: parsedHeaders,
   };
 
   let client: AiProviderClient;
@@ -40,7 +47,9 @@ export function getAiClient(config: AiConfig): AiProviderClient {
     case 'openai':      client = new OpenAiProvider(apiKey, data.model); break;
     case 'gemini':      client = new GeminiProvider(apiKey, data.model); break;
     case 'openrouter':  client = new OpenRouterProvider(data); break;
+    case 'nvidia':      client = new NvidiaProvider(data); break;
     case 'ollama':      client = new OllamaProvider(data); break;
+    case 'custom':      client = new CustomProvider(data); break;
     default: throw new Error(`Unknown AI provider: ${provider}`);
   }
 

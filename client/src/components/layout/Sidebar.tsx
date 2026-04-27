@@ -85,7 +85,6 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     { to: '/goals', icon: <Target size={18} />, label: 'Goals' },
     { to: '/investments', icon: <LineChart size={18} />, label: 'Investments' },
     { to: '/rules', icon: <Zap size={18} />, label: 'Rules' },
-    { to: '/advice', icon: <Sparkles size={18} />, label: 'AI Advisor' },
   ];
 
   const handleLogout = () => {

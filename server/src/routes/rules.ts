@@ -21,6 +21,13 @@ const conditionSchema = z.object({
   value: z.union([z.string(), z.number()]),
 });
 
+type SanitizedCondition = { field: 'merchantName' | 'description' | 'amount'; operator: 'contains' | 'equals' | 'startsWith' | 'endsWith' | 'gt' | 'lt' | 'gte' | 'lte'; value: string | number };
+
+function sanitizeCondition(c: { field?: string; operator?: string; value?: string | number }): SanitizedCondition {
+  const field = c.field === 'merchant' ? 'merchantName' : c.field as SanitizedCondition['field'];
+  return { ...c, field } as SanitizedCondition;
+}
+
 const actionSchema = z.object({
   type: z.enum(['setCategory', 'addTag', 'hide', 'markReviewed']),
   value: z.string().optional(), // categoryId or tagId
@@ -54,7 +61,13 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const parsed = ruleBodySchema.safeParse(req.body);
+    // Sanitize before validation
+    const body = { ...req.body };
+    if (body.conditions) {
+      body.conditions = body.conditions.map(sanitizeCondition);
+    }
+
+    const parsed = ruleBodySchema.safeParse(body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
 
     const maxOrder = await prisma.rule.aggregate({
@@ -89,7 +102,13 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     });
     if (!existing) return res.status(404).json({ error: 'Rule not found' });
 
-    const parsed = ruleBodySchema.partial().safeParse(req.body);
+    // Sanitize before validation
+    const body = req.body;
+    if (body.conditions) {
+      body.conditions = body.conditions.map(sanitizeCondition);
+    }
+
+    const parsed = ruleBodySchema.partial().safeParse(body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
 
     const rule = await prisma.rule.update({

@@ -92,7 +92,9 @@ export default function ReviewQueuePage() {
   };
 
   const handleCreateRule = (suggestion: RuleSuggestion) => {
+    const ruleName = `${suggestion.suggestedCategoryName} (${suggestion.value}*)`;
     navigate(`/rules?prefill=${encodeURIComponent(JSON.stringify({
+      name: ruleName,
       field: 'description',
       operator: 'startsWith',
       value: suggestion.value,
@@ -156,7 +158,9 @@ export default function ReviewQueuePage() {
             <Button
               size="sm"
               onClick={() => {
+                const ruleName = `Rule (${pendingRulePattern}*)`;
                 navigate(`/rules?prefill=${encodeURIComponent(JSON.stringify({
+                  name: ruleName,
                   field: 'description',
                   operator: 'startsWith',
                   value: pendingRulePattern,
