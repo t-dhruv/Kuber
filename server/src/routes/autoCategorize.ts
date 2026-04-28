@@ -183,6 +183,79 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /api/v1/auto-categorize/reject-bulk — reject all suggestions (clear AI suggestions, keep uncategorized)
+router.post('/reject-bulk', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+
+    const CAP = 500;
+    const toReject = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        needsReview: true,
+        aiSuggestedCategoryId: { not: null },
+      },
+      take: CAP,
+      select: { id: true },
+    });
+
+    await prisma.$transaction(
+      toReject.map((t) =>
+        prisma.transaction.update({
+          where: { id: t.id },
+          data: {
+            needsReview: false,
+            aiSuggestedCategoryId: null,
+            aiSuggestedCategoryName: null,
+            aiSuggestionConfidence: null,
+          },
+        })
+      )
+    );
+
+    return res.json({ rejected: toReject.length });
+  } catch (err) {
+    req.log.error({ err }, 'auto-categorize/reject-bulk');
+    return res.status(500).json({ error: 'Bulk rejection failed' });
+  }
+});
+
+// POST /api/v1/auto-categorize/skip-bulk — skip all transactions (clear review flag, keep current category)
+router.post('/skip-bulk', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+
+    const CAP = 500;
+    const toSkip = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        needsReview: true,
+      },
+      take: CAP,
+      select: { id: true },
+    });
+
+    await prisma.$transaction(
+      toSkip.map((t) =>
+        prisma.transaction.update({
+          where: { id: t.id },
+          data: {
+            needsReview: false,
+            aiSuggestedCategoryId: null,
+            aiSuggestedCategoryName: null,
+            aiSuggestionConfidence: null,
+          },
+        })
+      )
+    );
+
+    return res.json({ skipped: toSkip.length });
+  } catch (err) {
+    req.log.error({ err }, 'auto-categorize/skip-bulk');
+    return res.status(500).json({ error: 'Bulk skip failed' });
+  }
+});
+
 // POST /api/v1/auto-categorize/confirm-bulk — approve all suggestions with a matched category
 router.post('/confirm-bulk', async (req: AuthRequest, res: Response) => {
   try {
