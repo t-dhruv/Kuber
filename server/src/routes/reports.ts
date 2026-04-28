@@ -33,7 +33,8 @@ async function fetchGroupedTransactions(
       date: { gte: start, lte: end },
       amount: amountWhere,
       isHidden: false,
-        isTransfer: false,
+      isTransfer: false,
+      NOT: [{ category: { type: 'investment' } }],
       ...(mode === 'income' ? { isRefund: false } : {}),
     },
     include: {
@@ -261,14 +262,15 @@ router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
         amount: { lt: 0 },
         isHidden: false,
         isTransfer: false,
+        NOT: [{ category: { type: 'investment' } }],
       },
       include: {
-      category: { select: { id: true, name: true, icon: true } },
-      merchant: { select: { id: true, displayName: true } },
-      account: { select: { id: true, name: true } },
-      tags: { include: { tag: { select: { id: true, name: true } } } },
-    },
-  });
+        category: { select: { id: true, name: true, icon: true } },
+        merchant: { select: { id: true, displayName: true } },
+        account: { select: { id: true, name: true } },
+        tags: { include: { tag: { select: { id: true, name: true } } } },
+      },
+    });
 
   // Build sorted month list in range
     const monthSet = new Set<string>();
@@ -503,7 +505,8 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
       date: { gte: range.start, lte: range.end },
       amount: amountWhere,
       isHidden: false,
-        isTransfer: false,
+      isTransfer: false,
+      NOT: [{ category: { type: 'investment' } }],
     };
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
@@ -824,7 +827,8 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
       householdId,
       date: { gte: range.start, lte: range.end },
       isHidden: false,
-        isTransfer: false,
+      isTransfer: false,
+      NOT: [{ category: { type: 'investment' } }],
     };
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
@@ -931,7 +935,8 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
       date: { gte: start, lt: end },
       amount: { lt: 0 },
       isHidden: false,
-        isTransfer: false,
+      isTransfer: false,
+      NOT: [{ category: { type: 'investment' } }],
     };
     if (categoryId) {
       whereClause.categoryId = categoryId;
@@ -1013,7 +1018,8 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
           householdId,
           date: { gte: range.start, lte: range.end },
           isHidden: false,
-        isTransfer: false,
+          isTransfer: false,
+          NOT: [{ category: { type: 'investment' } }],
         },
         select: { amount: true, date: true },
       });
@@ -1058,6 +1064,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
         amount: amountFilter,
         isHidden: false,
         isTransfer: false,
+        NOT: [{ category: { type: 'investment' } }],
       },
       include: {
         category: { select: { name: true } },
@@ -1240,6 +1247,7 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
         isHidden: false,
         isTransfer: false,
         isSplit: false,
+        NOT: [{ category: { type: 'investment' } }],
       },
       select: { categoryId: true, amount: true, category: { select: { id: true, name: true, icon: true } } },
     });
@@ -1361,6 +1369,7 @@ router.get('/benchmarks', async (req: AuthRequest, res: Response) => {
         isHidden: false,
         isTransfer: false,
         date: { gte: new Date(startDate), lte: new Date(endDate) },
+        NOT: [{ category: { type: 'investment' } }],
       },
       _sum: { amount: true },
     });
