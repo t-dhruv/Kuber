@@ -347,7 +347,7 @@ function AccountRow({
       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
     >
       {/* Bank logo */}
-      <InstitutionLogo name={account.institution ?? account.name} logoUrl={account.institutionLogo ?? undefined} size={32} />
+      <InstitutionLogo name={account.institution ?? account.name} logoUrl={account.institutionLogo ?? undefined} size={40} />
 
       {/* Name + last four */}
       <div className="flex-1 min-w-0">
@@ -1049,7 +1049,7 @@ function AccountDetailDrawer({
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)] shrink-0">
           <div className="flex items-center gap-3">
-            {account && <InstitutionLogo name={account.institution ?? account.name} logoUrl={account.institutionLogo ?? undefined} size={32} />}
+            {account && <InstitutionLogo name={account.institution ?? account.name} logoUrl={account.institutionLogo ?? undefined} size={40} />}
             <div>
               <div className="text-base font-semibold text-[var(--color-text)]">{account?.name}</div>
               {account?.institution && (

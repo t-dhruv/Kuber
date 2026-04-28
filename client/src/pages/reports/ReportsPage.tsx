@@ -2470,7 +2470,7 @@ function FiltersPanel({
                     onChange={() => toggleId(categoryIds, cat.id, onCategoryChange)}
                     style={{ accentColor: "var(--color-accent)" }}
                   />
-                  {cat.icon && <span style={{ fontSize: "1rem" }}>{cat.icon}</span>}
+                  {cat.icon && <span style={{ fontSize: "1.125rem", lineHeight: 1 }}>{cat.icon}</span>}
                   <span style={{ fontSize: "0.8125rem", color: "var(--color-text)" }}>
                     {cat.name}
                   </span>

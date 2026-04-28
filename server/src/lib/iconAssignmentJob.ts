@@ -1,8 +1,8 @@
 /**
  * iconAssignmentJob.ts
  *
- * Cron job: Assigns Lucide icon IDs to categories that don't have one.
- * Uses category name → icon mapping.
+ * Cron job: Assigns emoji icons to categories that don't have one,
+ * or that still have a legacy Lucide slug (ASCII-only string).
  *
  * Run via: POST /api/v1/cron/jobs/icon-assignment/trigger
  * Also runs daily via setInterval in index.ts.
@@ -10,174 +10,194 @@
 
 import { prisma } from './prisma.js';
 
-// Category name → Lucide icon mapping (covers default categories by name)
-const NAME_TO_ICON: Record<string, string> = {
-  'Salary & Wages': 'briefcase',
-  'Freelance & Consulting': 'laptop',
-  'Rental Income': 'home',
-  'Business Income': 'briefcase',
-  'Investment Dividends': 'trending-up',
-  'Capital Gains': 'trending-up',
-  'Government Benefits': 'landmark',
-  'Pension & Retirement': 'piggy-bank',
-  'Side Hustle': 'hammer',
-  'Gifts & Bonuses': 'gift',
-  'Tax Refund': 'credit-card',
-  'Reimbursements': 'dollar-sign',
-  'Interest Income': 'piggy-bank',
-  'Other Income': 'plus',
-  'Rent & Mortgage': 'home',
-  'Strata / HOA Fees': 'building',
-  'Property Taxes': 'landmark',
-  'Home Maintenance & Repairs': 'wrench',
-  'Home Renovations': 'hammer',
-  'Electricity / Hydro': 'zap',
-  'Water & Sewage': 'droplet',
-  'Natural Gas / Heating': 'flame',
-  'Internet': 'wifi',
-  'Phone Plan': 'smartphone',
-  'Cable / Satellite TV': 'tv',
-  'Home Insurance': 'shield',
-  'Security System': 'lock',
-  'Lawn & Garden': 'leaf',
-  'Cleaning & Housekeeping': 'sparkles',
-  'Furniture & Appliances': 'sofa',
-  'Groceries': 'shopping-cart',
-  'Restaurants': 'utensils',
-  'Fast Food': 'utensils',
-  'Coffee Shops': 'coffee',
-  'Takeout & Delivery': 'utensils',
-  'Alcohol & Bars': 'beer',
-  'Work Lunches': 'utensils',
-  'Fuel & Gas': 'car',
-  'Public Transit': 'bus',
-  'Rideshare & Taxi': 'car',
-  'Auto Insurance': 'shield',
-  'Car Maintenance & Repairs': 'wrench',
-  'Car Payment / Lease': 'car',
-  'Parking & Tolls': 'car',
-  'Registration & Licensing': 'id-card',
-  'Bicycle & Scooter': 'bike',
-  'Doctor & Specialists': 'stethoscope',
-  'Pharmacy & Medications': 'pill',
-  'Dental': 'tooth',
-  'Vision & Optometry': 'eye',
-  'Mental Health & Therapy': 'brain',
-  'Gym & Fitness': 'dumbbell',
-  'Yoga & Wellness': 'brain',
-  'Hair & Beauty': 'scissors',
-  'Toiletries & Hygiene': 'sparkles',
-  'Vitamins & Supplements': 'pill',
-  'Health Insurance': 'shield',
-  'Childcare & Daycare': 'baby',
-  'School Fees & Supplies': 'book-open',
-  'Extracurricular Activities': 'music',
-  'Toys & Kids Activities': 'gamepad2',
-  'Baby & Infant': 'baby',
-  'Pet Food & Supplies': 'paw-print',
-  'Vet & Pet Medications': 'paw-print',
-  'Pet Insurance': 'shield',
-  'Pet Grooming': 'paw-print',
-  'Elder Care': 'users',
-  'Clothing & Apparel': 'shirt',
-  'Shoes & Accessories': 'shoe-prints',
-  'Electronics & Gadgets': 'laptop',
-  'Books & Magazines': 'book-open',
-  'Online Shopping': 'shopping-cart',
-  'Home Goods & Décor': 'home',
-  'Sports & Outdoor Gear': 'dumbbell',
-  'Subscriptions': 'refresh-cw',
-  'Hobbies & Crafts': 'palette',
-  'Gifts Given': 'gift',
-  'Movies & Streaming': 'film',
-  'Music & Concerts': 'music',
-  'Video Games': 'gamepad2',
-  'Events & Tickets': 'ticket',
-  'Sports Events': 'dumbbell',
-  'Museums & Attractions': 'landmark',
-  'Gambling & Lottery': 'dice',
-  'Nightlife & Clubs': 'star',
-  'Flights': 'plane',
-  'Hotels & Lodging': 'hotel',
-  'Car Rental': 'car',
-  'Vacation Activities': 'palette',
-  'Travel Food & Dining': 'utensils',
-  'Travel Insurance': 'shield',
-  'Passport & Visas': 'id-card',
-  'Luggage & Accessories': 'briefcase',
-  'Tuition & University': 'graduation-cap',
-  'Student Loan Payments': 'landmark',
-  'Online Courses & Training': 'laptop',
-  'Books & Learning Materials': 'book-open',
-  'Professional Development': 'trending-up',
-  'Work Expenses': 'briefcase',
-  'Professional Memberships': 'award',
-  'Home Office Supplies': 'laptop',
-  'Emergency Fund': 'alert-triangle',
-  'RRSP / 401(k) Contribution': 'piggy-bank',
-  'TFSA / Roth IRA': 'credit-card',
-  'RESP / Education Savings': 'graduation-cap',
-  'General Investments': 'trending-down',
-  'Mortgage Payment': 'home',
-  'Loan / Debt Repayment': 'dollar-sign',
-  'Credit Card Payment': 'credit-card',
-  'Bank Fees & Interest': 'landmark',
-  'Life Insurance': 'file-text',
-  'Disability Insurance': 'activity',
-  'Accountant & Tax Prep': 'file-text',
-  'Financial Advisor': 'bar-chart-2',
-  'Income Tax Owing': 'file-text',
-  'HST / GST / VAT': 'credit-card',
-  'Property Transfer Tax': 'landmark',
-  'Capital Gains Tax': 'bar-chart-2',
-  'Charitable Donations': 'gift',
-  'Religious Giving / Tithing': 'gift',
-  'Birthday & Holiday Gifts': 'gift',
-  'Wedding & Baby Gifts': 'gift',
-  'Advertising & Marketing': 'megaphone',
-  'Software & SaaS': 'laptop',
-  'Business Travel': 'plane',
-  'Client Entertainment': 'utensils',
-  'Office Rent': 'building',
-  'Contractors & Subcontractors': 'users',
-  'Business Insurance': 'shield',
-  'Equipment & Tools': 'wrench',
-  'Professional Services': 'briefcase',
-  'Business Bank Fees': 'landmark',
-  'Internal Transfer': 'arrow-left-right',
-  'Balance Adjustment': 'briefcase',
-  'e-Transfer Sent': 'arrow-up-right',
-  'e-Transfer Received': 'arrow-down-left',
-  'Uncategorized': 'help-circle',
+const NAME_TO_EMOJI: Record<string, string> = {
+  // Income
+  'Salary & Wages': '💼',
+  'Freelance & Consulting': '💻',
+  'Rental Income': '🏠',
+  'Business Income': '🏢',
+  'Investment Dividends': '📈',
+  'Capital Gains': '📈',
+  'Government Benefits': '🏛️',
+  'Pension & Retirement': '🏦',
+  'Side Hustle': '⚡',
+  'Gifts & Bonuses': '🎁',
+  'Tax Refund': '💵',
+  'Reimbursements': '💵',
+  'Interest Income': '💰',
+  'Other Income': '💰',
+  // Housing
+  'Rent & Mortgage': '🏠',
+  'Strata / HOA Fees': '🏘️',
+  'Property Taxes': '🏛️',
+  'Home Maintenance & Repairs': '🔧',
+  'Home Renovations': '🏗️',
+  'Electricity / Hydro': '⚡',
+  'Water & Sewage': '💧',
+  'Natural Gas / Heating': '🔥',
+  'Internet': '🌐',
+  'Phone Plan': '📱',
+  'Cable / Satellite TV': '📺',
+  'Home Insurance': '🛡️',
+  'Security System': '🔒',
+  'Lawn & Garden': '🪴',
+  'Cleaning & Housekeeping': '🧹',
+  'Furniture & Appliances': '🛋️',
+  // Food & drink
+  'Groceries': '🛒',
+  'Restaurants': '🍽️',
+  'Fast Food': '🍔',
+  'Coffee Shops': '☕',
+  'Takeout & Delivery': '🥡',
+  'Alcohol & Bars': '🍺',
+  'Work Lunches': '🥗',
+  // Transport
+  'Fuel & Gas': '⛽',
+  'Public Transit': '🚌',
+  'Rideshare & Taxi': '🚕',
+  'Auto Insurance': '🛡️',
+  'Car Maintenance & Repairs': '🔧',
+  'Car Payment / Lease': '🚗',
+  'Parking & Tolls': '🅿️',
+  'Registration & Licensing': '📋',
+  'Bicycle & Scooter': '🚲',
+  // Health
+  'Doctor & Specialists': '🩺',
+  'Pharmacy & Medications': '💊',
+  'Dental': '🦷',
+  'Vision & Optometry': '👁️',
+  'Mental Health & Therapy': '🧠',
+  'Gym & Fitness': '🏋️',
+  'Yoga & Wellness': '🧘',
+  'Hair & Beauty': '✂️',
+  'Toiletries & Hygiene': '🪥',
+  'Vitamins & Supplements': '💊',
+  'Health Insurance': '🛡️',
+  // Family & kids
+  'Childcare & Daycare': '👶',
+  'School Fees & Supplies': '📚',
+  'Extracurricular Activities': '🎵',
+  'Toys & Kids Activities': '🎮',
+  'Baby & Infant': '👶',
+  // Pets
+  'Pet Food & Supplies': '🐾',
+  'Vet & Pet Medications': '🐾',
+  'Pet Insurance': '🛡️',
+  'Pet Grooming': '🐾',
+  // Family care
+  'Elder Care': '👥',
+  // Shopping
+  'Clothing & Apparel': '👗',
+  'Shoes & Accessories': '👟',
+  'Electronics & Gadgets': '💻',
+  'Books & Magazines': '📚',
+  'Online Shopping': '🛒',
+  'Home Goods & Décor': '🏠',
+  'Sports & Outdoor Gear': '🏋️',
+  'Subscriptions': '🔄',
+  'Hobbies & Crafts': '🎨',
+  'Gifts Given': '🎁',
+  // Entertainment
+  'Movies & Streaming': '🎬',
+  'Music & Concerts': '🎵',
+  'Video Games': '🎮',
+  'Events & Tickets': '🎟️',
+  'Sports Events': '⚽',
+  'Museums & Attractions': '🏛️',
+  'Gambling & Lottery': '🎲',
+  'Nightlife & Clubs': '🌙',
+  // Travel
+  'Flights': '✈️',
+  'Hotels & Lodging': '🏨',
+  'Car Rental': '🚗',
+  'Vacation Activities': '🏖️',
+  'Travel Food & Dining': '🍽️',
+  'Travel Insurance': '🛡️',
+  'Passport & Visas': '🛂',
+  'Luggage & Accessories': '🧳',
+  // Education
+  'Tuition & University': '🎓',
+  'Student Loan Payments': '🏛️',
+  'Online Courses & Training': '💻',
+  'Books & Learning Materials': '📚',
+  'Professional Development': '📈',
+  // Work
+  'Work Expenses': '💼',
+  'Professional Memberships': '🏅',
+  'Home Office Supplies': '💻',
+  // Savings & investments
+  'Emergency Fund': '⚠️',
+  'RRSP / 401(k) Contribution': '🏦',
+  'TFSA / Roth IRA': '💳',
+  'RESP / Education Savings': '🎓',
+  'General Investments': '📈',
+  // Debt & finance
+  'Mortgage Payment': '🏠',
+  'Loan / Debt Repayment': '💵',
+  'Credit Card Payment': '💳',
+  'Bank Fees & Interest': '🏦',
+  'Life Insurance': '📋',
+  'Disability Insurance': '🛡️',
+  'Accountant & Tax Prep': '📋',
+  'Financial Advisor': '📊',
+  'Income Tax Owing': '📋',
+  'HST / GST / VAT': '💳',
+  'Property Transfer Tax': '🏛️',
+  'Capital Gains Tax': '📊',
+  // Giving
+  'Charitable Donations': '❤️',
+  'Religious Giving / Tithing': '⛪',
+  'Birthday & Holiday Gifts': '🎁',
+  'Wedding & Baby Gifts': '🎁',
+  // Business
+  'Advertising & Marketing': '📣',
+  'Software & SaaS': '💻',
+  'Business Travel': '✈️',
+  'Client Entertainment': '🍽️',
+  'Office Rent': '🏢',
+  'Contractors & Subcontractors': '👥',
+  'Business Insurance': '🛡️',
+  'Equipment & Tools': '🔧',
+  'Professional Services': '💼',
+  'Business Bank Fees': '🏦',
+  // Transfers
+  'Internal Transfer': '↔️',
+  'Balance Adjustment': '⚖️',
+  'e-Transfer Sent': '↗️',
+  'e-Transfer Received': '↙️',
+  'Uncategorized': '❓',
 };
+
+/** Returns true if the value looks like a legacy Lucide slug (ASCII-only, e.g. "shopping-cart") */
+function isLegacySlug(icon: string): boolean {
+  return /^[a-z][a-z0-9-]*$/.test(icon);
+}
 
 export interface IconAssignmentResult {
   assigned: number;
   skipped: number;
 }
 
-/**
- * Assign icons to categories that don't have one.
- * Priority: name mapping → skip.
- */
 export async function runIconAssignmentJob(): Promise<IconAssignmentResult> {
   let assigned = 0;
   let skipped = 0;
 
   const categories = await prisma.category.findMany({
-    where: {
-      OR: [{ icon: null }, { icon: '' }],
-    },
-    select: { id: true, name: true },
+    select: { id: true, name: true, icon: true },
   });
 
   for (const cat of categories) {
-    const iconId = NAME_TO_ICON[cat.name];
+    const needsEmoji = !cat.icon || cat.icon === '' || isLegacySlug(cat.icon);
+    if (!needsEmoji) {
+      skipped++;
+      continue;
+    }
 
-    if (iconId) {
+    const emoji = NAME_TO_EMOJI[cat.name];
+    if (emoji) {
       await prisma.category.update({
         where: { id: cat.id },
-        data: { icon: iconId },
+        data: { icon: emoji },
       });
       assigned++;
     } else {
