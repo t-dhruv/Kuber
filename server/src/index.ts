@@ -59,6 +59,7 @@ import { runImapCheckForAllHouseholds } from './lib/imapWatcher';
 import { processRecurringItems } from './lib/recurringJob';
 import { runLogoFetchJob } from './lib/logoFetchJob.js';
 import { runCategoryBucketJob } from './lib/categoryBucketJob';
+import { runIconAssignmentJob } from './lib/iconAssignmentJob.js';
 import { prisma } from './lib/prisma';
 import pinoHttp from 'pino-http';
 import { randomUUID } from 'crypto';
@@ -91,6 +92,9 @@ registerJob('recurring-autocreate', async () => {
 registerJob('logo-fetch', runLogoFetchJob);
 registerJob('category-bucket-assign', async () => {
   await runCategoryBucketJob();
+});
+registerJob('icon-assignment', async () => {
+  await runIconAssignmentJob();
 });
 
 // ── Startup env validation ────────────────────────────────────────────────────
@@ -407,6 +411,22 @@ setInterval(async () => {
   } catch (err) {
     jobRunsTotal.inc({ job: 'category-bucket-assign', status: 'failure' });
     jobLog.error({ err }, 'Category bucket assignment job failed');
+  } finally {
+    end();
+  }
+}, 24 * 60 * 60 * 1000);
+
+// Daily icon assignment — runs every 24 hours to assign icons to categories missing them
+setInterval(async () => {
+  const end = jobDurationSeconds.startTimer({ job: 'icon-assignment' });
+  try {
+    const { assigned, skipped } = await runIconAssignmentJob();
+    jobRunsTotal.inc({ job: 'icon-assignment', status: 'success' });
+    jobLastRunTimestamp.set({ job: 'icon-assignment' }, Date.now() / 1000);
+    jobLog.info({ assigned, skipped }, 'Icon assignment job complete');
+  } catch (err) {
+    jobRunsTotal.inc({ job: 'icon-assignment', status: 'failure' });
+    jobLog.error({ err }, 'Icon assignment job failed');
   } finally {
     end();
   }

@@ -246,4 +246,15 @@ router.post('/jobs/category-bucket-assign/trigger', triggerLimiter, async (req: 
   }
 });
 
+router.post('/jobs/icon-assignment/trigger', triggerLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    const { runIconAssignmentJob } = await import('../lib/iconAssignmentJob.js');
+    const { assigned, skipped } = await runIconAssignmentJob();
+    return res.json({ message: 'Icon assignment triggered successfully', assigned, skipped });
+  } catch (err) {
+    req.log.error({ err }, 'system/icon-assignment trigger');
+    return res.status(500).json({ error: 'Icon assignment failed' });
+  }
+});
+
 export default router;
