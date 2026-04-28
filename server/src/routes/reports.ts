@@ -27,21 +27,26 @@ async function fetchGroupedTransactions(
 ) {
   const amountWhere = mode === 'spending' ? { lt: 0 } : { gt: 0 };
 
-  const transactions = await prisma.transaction.findMany({
+  const rawTransactions = await prisma.transaction.findMany({
     where: {
       householdId,
       date: { gte: start, lte: end },
       amount: amountWhere,
       isHidden: false,
         isTransfer: false,
+      ...(mode === 'income' ? { isRefund: false } : {}),
     },
     include: {
-      category: { select: { id: true, name: true, emoji: true } },
+      category: { select: { id: true, name: true, emoji: true, type: true } },
       merchant: { select: { id: true, displayName: true } },
       account: { select: { id: true, name: true } },
       tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
     },
   });
+
+  const transactions = mode === 'income'
+    ? rawTransactions.filter(t => !t.categoryId || (t.category?.type ?? 'income') === 'income')
+    : rawTransactions;
 
   const groupMap = new Map<string, { id: string; name: string; icon: string | null; amount: number }>();
 
@@ -282,21 +287,24 @@ router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
     }
 
-    const transactions = await prisma.transaction.findMany({
+    const rawTransactions = await prisma.transaction.findMany({
       where: {
         householdId,
         date: { gte: range.start, lte: range.end },
         amount: { gt: 0 },
         isHidden: false,
         isTransfer: false,
+        isRefund: false,
       },
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, emoji: true, type: true } },
         merchant: { select: { id: true, displayName: true } },
         account: { select: { id: true, name: true } },
         tags: { include: { tag: { select: { id: true, name: true } } } },
       },
     });
+
+    const transactions = rawTransactions.filter(t => !t.categoryId || (t.category?.type ?? 'income') === 'income');
 
     const monthSet = new Set<string>();
     const cur = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
@@ -545,16 +553,19 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
     if (tagIds) where.tags = { some: { tag: { id: { in: (tagIds as string).split(',') } } } };
+    where.isRefund = false;
 
-    const transactions = await prisma.transaction.findMany({
+    const rawTransactions = await prisma.transaction.findMany({
       where,
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, emoji: true, type: true } },
         merchant: { select: { id: true, displayName: true } },
         account: { select: { id: true, name: true } },
         tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
       },
     });
+
+    const transactions = rawTransactions.filter(t => !t.categoryId || (t.category?.type ?? 'income') === 'income');
 
     const total = transactions.reduce((s, t) => s + t.amount, 0);
     const transactionCount = transactions.length;
