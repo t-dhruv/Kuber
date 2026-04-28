@@ -32,7 +32,7 @@ COPY --from=server-builder /app/node_modules/@prisma/client ./node_modules/@pris
 COPY server/migrate-emoji-to-icon.js ./
 WORKDIR /app/server
 EXPOSE 9002
-CMD ["sh", "-c", "npx prisma migrate deploy && node migrate-emoji-to-icon.js && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
 
 # ─── Client: install + build ──────────────────────────────────────────────────
 FROM base AS client-builder
