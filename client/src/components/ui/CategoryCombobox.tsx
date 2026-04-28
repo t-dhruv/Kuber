@@ -78,9 +78,13 @@ export function CategoryCombobox({
         >
           {selected ? (
             <>
-              <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[0.625rem] shrink-0 text-white">
-                {selected.icon ?? selected.name[0]}
-              </span>
+              {selected.icon ? (
+                <span className="text-base shrink-0 leading-none">{selected.icon}</span>
+              ) : (
+                <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[0.625rem] shrink-0 text-white">
+                  {selected.name[0]}
+                </span>
+              )}
               <span className="flex-1 truncate text-[var(--color-text)]">{selected.name}</span>
             </>
           ) : (
@@ -129,9 +133,13 @@ export function CategoryCombobox({
                             : 'text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]'
                         }`}
                       >
-                        <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[0.625rem] shrink-0 text-white">
-                          {cat.icon ?? cat.name[0]}
-                        </span>
+                        {cat.icon ? (
+                          <span className="text-base shrink-0 leading-none">{cat.icon}</span>
+                        ) : (
+                          <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[0.625rem] shrink-0 text-white">
+                            {cat.name[0]}
+                          </span>
+                        )}
                         <span className={`flex-1 truncate ${cat.id === value ? 'font-semibold' : ''}`}>
                           {cat.name}
                         </span>

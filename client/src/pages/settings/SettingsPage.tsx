@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 import {
   Button, Input, Select, Checkbox, Avatar, Card, CardDivider, Modal, ModalFooter, notify, Skeleton,
 } from '@/components/ui';
+import { EmojiPicker } from '@/components/ui/EmojiPicker';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { TaxAccountsSection } from './components/TaxAccountsSection';
 import { EmailConnectorSection } from './components/EmailConnectorSection';
@@ -1207,104 +1208,6 @@ function HouseholdSection() {
   );
 }
 
-// ─── Emoji Picker ─────────────────────────────────────────────────────────────
-
-const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
-  { label: 'Money', emojis: ['💰','💵','💳','🏦','📈','📉','💸','🏧','💹','🪙','💴','💶','💷','🤑','📊','💼'] },
-  { label: 'Food', emojis: ['🍔','🍕','🥗','☕','🍺','🛒','🥩','🍣','🍜','🥐','🍎','🥑','🧃','🍷','🍰','🥡'] },
-  { label: 'Home', emojis: ['🏠','🏡','🛋️','🧹','🔑','🛏️','🪴','🧰','🔧','💡','🚿','🪟','🏗️','🪞','🧺','🏘️'] },
-  { label: 'Transport', emojis: ['🚗','✈️','🚌','🚇','⛽','🚕','🛵','🚲','🛫','🏎️','🚢','🚁','🛻','🏍️','⛵','🚐'] },
-  { label: 'Health', emojis: ['💊','🏥','🩺','🧘','🏋️','💉','🩻','🦷','🩹','😷','🫀','🧬','⚕️','🏃','🧪','🩼'] },
-  { label: 'Shopping', emojis: ['👗','👟','👜','💎','🎁','🛍️','⌚','👒','💄','🕶️','👔','🧥','💍','🎀','👠','🛒'] },
-  { label: 'Fun', emojis: ['🎮','🎬','🎵','🎭','⚽','🎯','🎲','🎸','🎟️','🏖️','🎡','🎠','🏄','🎳','🧩','🪂'] },
-  { label: 'Bills', emojis: ['📱','💻','📺','📡','💧','🔌','🌐','📰','🖨️','☁️','📷','⌨️','🖥️','📠','🔋','🎙️'] },
-  { label: 'Symbols', emojis: ['⭐','🔴','🟢','🔵','🟡','🟠','🟣','⚫','🔶','🔷','✅','❌','⚡','🔥','💥','🌈'] },
-];
-
-function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState(0);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  return (
-    <div>
-      <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
-        Emoji
-      </label>
-      <div className="relative" ref={ref}>
-        <button
-          type="button"
-          onClick={() => setOpen(v => !v)}
-          className="flex items-center gap-2.5 px-3.5 py-2 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-bg)] cursor-pointer text-2xl leading-none min-w-[120px]"
-        >
-          <span>{value || '—'}</span>
-          <span className="text-xs text-[var(--color-text-muted)] ml-auto">Pick ▾</span>
-        </button>
-
-        {open && (
-          <div className="absolute top-full left-0 z-[100] bg-[var(--color-surface-elevated,var(--color-surface))] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-[var(--shadow-lg)] w-[300px] mt-1">
-            {/* Tabs */}
-            <div className="flex border-b border-[var(--color-border)] overflow-x-auto px-2 pt-1">
-              {EMOJI_GROUPS.map((g, i) => (
-                <button
-                  key={g.label}
-                  type="button"
-                  onClick={() => setTab(i)}
-                  className="bg-none border-none cursor-pointer px-2 py-1 text-[0.6875rem] whitespace-nowrap shrink-0"
-                  style={{
-                    fontWeight: tab === i ? 700 : 400,
-                    color: tab === i ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                    borderBottom: tab === i ? '2px solid var(--color-accent)' : '2px solid transparent',
-                  }}
-                >
-                  {g.label}
-                </button>
-              ))}
-            </div>
-            {/* Emoji grid */}
-            <div className="p-2 grid grid-cols-8 gap-0.5">
-              {EMOJI_GROUPS[tab].emojis.map((em) => (
-                <button
-                  key={em}
-                  type="button"
-                  onClick={() => { onChange(em); setOpen(false); }}
-                  className="border-none cursor-pointer rounded-[var(--radius-sm)] text-xl p-1 leading-none text-center transition-[background] duration-100"
-                  style={{ background: value === em ? 'var(--color-accent-light)' : 'none' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = value === em ? 'var(--color-accent-light)' : 'transparent')}
-                  title={em}
-                >
-                  {em}
-                </button>
-              ))}
-            </div>
-            {/* Manual input for custom */}
-            <div className="border-t border-[var(--color-border)] p-2 flex gap-2 items-center">
-              <span className="text-xs text-[var(--color-text-muted)] shrink-0">Custom:</span>
-              <input
-                value={value}
-                onChange={(e) => onChange(e.target.value.slice(0, 2))}
-                placeholder="✏️"
-                maxLength={2}
-                className="flex-1 border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1 text-base bg-[var(--color-bg)] text-[var(--color-text)] outline-none"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Section: Categories ──────────────────────────────────────────────────────
 
 interface CategoryModalState {
@@ -1815,7 +1718,10 @@ function CategoriesSection() {
             onChange={(e) => setCatName(e.target.value)}
             placeholder="e.g. Groceries"
           />
-          <EmojiPicker value={catIcon} onChange={setCatIcon} />
+          <div>
+            <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">Emoji</label>
+            <EmojiPicker value={catIcon} onChange={setCatIcon} />
+          </div>
           <Select
             label="Group"
             value={catGroup}

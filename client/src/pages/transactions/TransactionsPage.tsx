@@ -195,9 +195,11 @@ function CategoryPicker({
                   if (selectedId !== cat.id) e.currentTarget.style.backgroundColor = 'transparent';
                 }}
               >
-                <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0">
-                  {cat.icon ?? cat.name[0]}
-                </span>
+                {cat.icon ? (
+                  <span className="text-base shrink-0 leading-none w-6 text-center">{cat.icon}</span>
+                ) : (
+                  <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0 text-white">{cat.name[0]}</span>
+                )}
                 <span className={`text-sm text-[var(--color-text)] ${selectedId === cat.id ? 'font-semibold' : 'font-normal'}`}>
                   {cat.name}
                 </span>
@@ -487,9 +489,11 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
               >
                 {selectedCategory ? (
                   <>
-                    <span className="w-[22px] h-[22px] rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-[0.6875rem] shrink-0">
-                      {selectedCategory.icon ?? selectedCategory.name[0]}
-                    </span>
+                    {selectedCategory.icon ? (
+                      <span className="text-base shrink-0 leading-none">{selectedCategory.icon}</span>
+                    ) : (
+                      <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0 text-white">{selectedCategory.name[0]}</span>
+                    )}
                     <span className="text-sm text-[var(--color-text)] flex-1">{selectedCategory.name}</span>
                   </>
                 ) : (
@@ -1257,9 +1261,9 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       <InstitutionLogo
         name={txn.merchantName}
         type="merchant"
-        size={32}
-        fallback={txn.categoryIcon ?? merchantInitial(txn.merchantName)}
-        style={{ backgroundColor: txn.categoryColor ?? 'var(--color-accent)', borderRadius: '50%' }}
+        size={38}
+        fallback={txn.categoryIcon ?? undefined}
+        style={{ borderRadius: '50%' }}
       />
 
       {/* Merchant name */}

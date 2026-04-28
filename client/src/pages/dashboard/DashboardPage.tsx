@@ -324,7 +324,7 @@ function BudgetWidget({ data, isLoading, isError }: { data?: BudgetData; isLoadi
                 <div key={cat.id}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '1rem' }}>{cat.icon}</span>
+                      <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>{cat.icon}</span>
                       <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)' }}>{cat.name}</span>
                     </div>
                     <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>

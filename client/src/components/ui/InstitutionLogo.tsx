@@ -44,6 +44,8 @@ export function InstitutionLogo({ name, logoUrl: logoUrlProp, type = 'bank', siz
 
   const resolvedUrl = logoUrlProp ?? fetchedUrl;
 
+  const isEmojiIcon = !!fallback && /\p{Emoji_Presentation}/u.test(fallback);
+
   const containerStyle: React.CSSProperties = {
     width: size,
     height: size,
@@ -53,7 +55,7 @@ export function InstitutionLogo({ name, logoUrl: logoUrlProp, type = 'bank', siz
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: bg,
+    backgroundColor: isEmojiIcon ? 'transparent' : bg,
     ...style,
   };
 
@@ -69,6 +71,14 @@ export function InstitutionLogo({ name, logoUrl: logoUrlProp, type = 'bank', siz
           style={{ objectFit: 'contain', padding: 3 }}
           onError={() => setImgFailed(true)}
         />
+      </div>
+    );
+  }
+
+  if (isEmojiIcon) {
+    return (
+      <div style={containerStyle}>
+        <span style={{ fontSize: size * 0.65, lineHeight: 1 }}>{fallback}</span>
       </div>
     );
   }
