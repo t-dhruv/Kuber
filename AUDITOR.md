@@ -1,7 +1,19 @@
 # Kuber — Auditor Log
 
 > Living document. Updated after every sprint. Tracks progress, tech debt, and open issues.
-> Last updated: 2026-04-19 — Sprint 19: Bug Fixes + Refund Linkage
+> Last updated: 2026-04-27 — Sprint 20: Reports Accuracy
+
+---
+
+## Sprint 20 — Reports Accuracy (2026-04-27)
+
+**Goal:** Fix income misclassification, broken refund handling in reports, and add chart drill-through.
+
+**Completed:**
+- Fixed income classification: reports now classify by `Category.type` not amount sign — CC credits, cashbacks, and non-income transactions no longer appear as income. Orphaned FK case handled with `?? 'income'` fallback.
+- Fixed refund netting: refunds (`isRefund: true`) are subtracted from their expense category total in spending reports. Items now carry `grossAmount`/`refundAmount` alongside net `amount`. Refunds excluded from income at DB level.
+- Added chart drill-through: clicking any pie slice or bar in Reports opens a side panel (`DrillPanel`) showing underlying transactions for that segment + date range. Resets on tab/date change. New `/drill` API endpoint.
+- PR: https://github.com/t-dhruv/Kuber/pull/64
 
 ---
 

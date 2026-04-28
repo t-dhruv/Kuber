@@ -14,6 +14,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { ReportsSankeyChart, type SankeyData } from "./components/ReportsSankeyChart";
+import { DrillPanel } from "./components/DrillPanel";
 import { BudgetVarianceChart } from "./components/BudgetVarianceChart";
 import { CashFlowForecast } from "./components/CashFlowForecast";
 import { SlidersHorizontal, BookmarkPlus, ChevronDown, Trash2, Bookmark, X, BarChart2, GitMerge, Receipt } from "lucide-react";
@@ -948,9 +949,10 @@ interface CategoryTabProps {
   startDate: string;
   endDate: string;
   extraParams?: string;
+  onDrillClick?: (id: string, name: string, icon: string | null | undefined, mode: "spending" | "income", groupBy: string) => void;
 }
 
-function CategoryTab({ mode, startDate, endDate, extraParams = "" }: CategoryTabProps) {
+function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick }: CategoryTabProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>("category");
   const [chartType, setChartType] = useState<ChartType>("donut");
   const [showAll, setShowAll] = useState(false);
@@ -1049,7 +1051,9 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "" }: CategoryTab
 
   // Recharts pie data
   const pieData = displayedCategories.map((cat, i) => ({
+    id: cat.id,
     name: cat.name,
+    icon: cat.icon,
     value: cat.amount,
     pct: cat.percent,
     color: CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length],
@@ -1181,6 +1185,7 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "" }: CategoryTab
                 mode={mode}
                 monthlyGrouping={monthlyGrouping}
                 onMonthlyGroupingChange={setMonthlyGrouping}
+                onDrillClick={onDrillClick ? (id, name, icon, m) => onDrillClick(id, name, icon, m, groupBy) : undefined}
               />
               {!compareLoading && compareData && compareData.items.length > 0 && (
                 <div style={{ marginTop: '1.25rem' }}>
@@ -1213,6 +1218,7 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "" }: CategoryTab
                 data={pieData}
                 total={total}
                 color={color}
+                onDrillClick={onDrillClick ? (id, name, icon) => onDrillClick(id, name, icon, mode, groupBy) : undefined}
               />
 
               {/* Legend */}
@@ -1563,7 +1569,9 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "" }: CategoryTab
 // ─── ChartView ────────────────────────────────────────────────────────────────
 
 interface PieEntry {
+  id: string;
   name: string;
+  icon?: string;
   value: number;
   pct: number;
   color: string;
@@ -1574,11 +1582,13 @@ function ChartView({
   data,
   total,
   color,
+  onDrillClick,
 }: {
   type: ChartType;
   data: PieEntry[];
   total: number;
   color: string;
+  onDrillClick?: (id: string, name: string, icon?: string) => void;
 }) {
   if (type === "donut" || type === "pie") {
     const innerRadius = type === "donut" ? 80 : 0;
@@ -1598,6 +1608,12 @@ function ChartView({
               paddingAngle={2}
               animationBegin={0}
               animationDuration={600}
+              onClick={(entry: PieEntry) => {
+                if (entry.id && onDrillClick) {
+                  onDrillClick(entry.id, entry.name, entry.icon);
+                }
+              }}
+              style={{ cursor: onDrillClick ? "pointer" : undefined }}
             >
               {data.map((entry, i) => (
                 <Cell key={`cell-${i}`} fill={entry.color} />
@@ -1760,12 +1776,14 @@ function CompareView({
   mode,
   monthlyGrouping,
   onMonthlyGroupingChange,
+  onDrillClick,
 }: {
   data: CompareReport | undefined;
   isLoading: boolean;
   mode: 'spending' | 'income';
   monthlyGrouping: MonthlyGrouping;
   onMonthlyGroupingChange: (v: MonthlyGrouping) => void;
+  onDrillClick?: (id: string, name: string, icon: string | null | undefined, mode: "spending" | "income") => void;
 }) {
   if (isLoading) return <Skeleton height={320} width="100%" />;
   if (!data || data.items.length === 0) {
@@ -1845,7 +1863,7 @@ function CompareView({
           <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
           <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} width={90} />
           <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="current" name="current" fill="#1971c2" radius={[0, 3, 3, 0]} maxBarSize={14} opacity={0.9} />
+          <Bar dataKey="current" name="current" fill="#1971c2" radius={[0, 3, 3, 0]} maxBarSize={14} opacity={0.9} onClick={(entry: CompareItem) => { if (entry?.id && onDrillClick) { onDrillClick(entry.id, entry.name, entry.icon, mode); } }} style={{ cursor: onDrillClick ? "pointer" : undefined }} />
           <Bar dataKey="prior" name="prior" fill="var(--color-border)" radius={[0, 3, 3, 0]} maxBarSize={14} opacity={0.7} />
         </ComposedChart>
         </ResponsiveContainer>
@@ -2814,6 +2832,16 @@ export default function ReportsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
 
+  const [drillFilter, setDrillFilter] = useState<{
+    groupId: string;
+    groupName: string;
+    groupIcon?: string | null;
+    mode: "spending" | "income";
+    groupBy: string;
+    startDate: string;
+    endDate: string;
+  } | null>(null);
+
   const activeFilterCount =
     filterCategoryIds.length +
     filterAccountIds.length +
@@ -2841,6 +2869,28 @@ export default function ReportsPage() {
     if (filters.datePreset) setDatePreset(filters.datePreset as DatePreset);
   }
 
+  function handleDrillClick(
+    groupId: string,
+    groupName: string,
+    groupIcon: string | null | undefined,
+    mode: "spending" | "income",
+    groupBy: string,
+  ) {
+    setDrillFilter({
+      groupId,
+      groupName,
+      groupIcon,
+      mode,
+      groupBy,
+      startDate,
+      endDate,
+    });
+  }
+
+  useEffect(() => {
+    setDrillFilter(null);
+  }, [tab, startDate, endDate]);
+
   // Build extra filter query params string for passing to child tabs
   const extraFilterParams = useMemo(() => {
     const parts: string[] = [];
@@ -2853,6 +2903,8 @@ export default function ReportsPage() {
   }, [filterCategoryIds, filterAccountIds, filterTagIds, filterMinAmount, filterMaxAmount]);
 
   return (
+    <div className="flex h-full overflow-hidden">
+      <div className="flex-1 overflow-y-auto min-w-0">
     <div
       style={{
         padding: "1rem 0",
@@ -3001,10 +3053,10 @@ export default function ReportsPage() {
         <CashFlowTab startDate={startDate} endDate={endDate} extraParams={extraFilterParams} />
       )}
       {tab === "spending" && (
-        <CategoryTab mode="spending" startDate={startDate} endDate={endDate} extraParams={extraFilterParams} />
+        <CategoryTab mode="spending" startDate={startDate} endDate={endDate} extraParams={extraFilterParams} onDrillClick={handleDrillClick} />
       )}
       {tab === "income" && (
-        <CategoryTab mode="income" startDate={startDate} endDate={endDate} extraParams={extraFilterParams} />
+        <CategoryTab mode="income" startDate={startDate} endDate={endDate} extraParams={extraFilterParams} onDrillClick={handleDrillClick} />
       )}
       {tab === "variance" && <BudgetVarianceChart from={startDate} to={endDate} />}
       {tab === "forecast" && <CashFlowForecast />}
@@ -3016,6 +3068,16 @@ export default function ReportsPage() {
         onClose={() => setSaveModalOpen(false)}
         filters={currentFilters}
       />
+    </div>
+      </div>
+      {drillFilter && (
+        <div className="w-80 shrink-0 overflow-hidden">
+          <DrillPanel
+            filter={drillFilter}
+            onClose={() => setDrillFilter(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

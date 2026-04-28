@@ -27,21 +27,26 @@ async function fetchGroupedTransactions(
 ) {
   const amountWhere = mode === 'spending' ? { lt: 0 } : { gt: 0 };
 
-  const transactions = await prisma.transaction.findMany({
+  const rawTransactions = await prisma.transaction.findMany({
     where: {
       householdId,
       date: { gte: start, lte: end },
       amount: amountWhere,
       isHidden: false,
         isTransfer: false,
+      ...(mode === 'income' ? { isRefund: false } : {}),
     },
     include: {
-      category: { select: { id: true, name: true, emoji: true } },
+      category: { select: { id: true, name: true, emoji: true, type: true } },
       merchant: { select: { id: true, displayName: true } },
       account: { select: { id: true, name: true } },
       tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
     },
   });
+
+  const transactions = mode === 'income'
+    ? rawTransactions.filter(t => !t.categoryId || (t.category?.type ?? 'income') === 'income')
+    : rawTransactions;
 
   const groupMap = new Map<string, { id: string; name: string; icon: string | null; amount: number }>();
 
@@ -74,7 +79,67 @@ async function fetchGroupedTransactions(
     }
   }
 
+  if (mode === 'spending') {
+    const refundMap = await fetchRefundsByGroup(householdId, start, end, groupBy);
+    for (const [key, refundAmt] of refundMap) {
+      const existing = groupMap.get(key);
+      if (existing) {
+        existing.amount = Math.max(0, existing.amount - refundAmt);
+      }
+    }
+  }
+
   return groupMap;
+}
+
+async function fetchRefundsByGroup(
+  householdId: string,
+  start: Date,
+  end: Date,
+  groupBy: string,
+): Promise<Map<string, number>> {
+  const refunds = await prisma.transaction.findMany({
+    where: {
+      householdId,
+      date: { gte: start, lte: end },
+      isRefund: true,
+      isHidden: false,
+      isTransfer: false,
+    },
+    include: {
+      category: { select: { id: true, name: true, emoji: true } },
+      merchant: { select: { id: true, displayName: true } },
+      account: { select: { id: true, name: true } },
+      tags: { include: { tag: { select: { id: true, name: true } } } },
+    },
+  });
+
+  const refundMap = new Map<string, number>();
+
+  for (const t of refunds) {
+    let key: string;
+    if (groupBy === 'category') {
+      key = t.categoryId ?? '__uncategorized__';
+    } else if (groupBy === 'merchant') {
+      key = t.merchantId ?? '__unknown__';
+    } else if (groupBy === 'account') {
+      key = t.accountId;
+    } else {
+      // tag
+      if (t.tags.length === 0) {
+        key = '__untagged__';
+        refundMap.set(key, (refundMap.get(key) ?? 0) + t.amount);
+        continue;
+      }
+      for (const tt of t.tags) {
+        refundMap.set(tt.tag.id, (refundMap.get(tt.tag.id) ?? 0) + t.amount);
+      }
+      continue;
+    }
+    refundMap.set(key, (refundMap.get(key) ?? 0) + t.amount);
+  }
+
+  return refundMap;
 }
 
 // GET /api/v1/reports/spending/compare
@@ -254,6 +319,56 @@ router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Net refunds into monthly series
+    const allRefunds = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        date: { gte: range.start, lte: range.end },
+        isRefund: true,
+        isHidden: false,
+        isTransfer: false,
+      },
+      include: {
+        category: { select: { id: true, name: true, emoji: true } },
+        merchant: { select: { id: true, displayName: true } },
+        account: { select: { id: true, name: true } },
+        tags: { include: { tag: { select: { id: true, name: true } } } },
+      },
+    });
+
+    for (const t of allRefunds) {
+      const d = new Date(t.date);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      let key: string;
+
+      if ((groupBy as string) === 'category') {
+        key = t.categoryId ?? '__uncategorized__';
+      } else if ((groupBy as string) === 'merchant') {
+        key = t.merchantId ?? '__unknown__';
+      } else if ((groupBy as string) === 'account') {
+        key = t.accountId;
+      } else {
+        if (t.tags.length === 0) {
+          key = '__untagged__';
+        } else {
+          for (const tt of t.tags) {
+            const entry = seriesMap.get(tt.tag.id);
+            if (entry) {
+              const cur = entry.byMonth.get(monthKey) ?? 0;
+              entry.byMonth.set(monthKey, Math.max(0, cur - t.amount));
+            }
+          }
+          continue;
+        }
+      }
+
+      const entry = seriesMap.get(key);
+      if (entry) {
+        const cur = entry.byMonth.get(monthKey) ?? 0;
+        entry.byMonth.set(monthKey, Math.max(0, cur - t.amount));
+      }
+    }
+
     const series = Array.from(seriesMap.values()).map((s) => ({
       id: s.id,
       name: s.name,
@@ -282,21 +397,24 @@ router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
     }
 
-    const transactions = await prisma.transaction.findMany({
+    const rawTransactions = await prisma.transaction.findMany({
       where: {
         householdId,
         date: { gte: range.start, lte: range.end },
         amount: { gt: 0 },
         isHidden: false,
         isTransfer: false,
+        isRefund: false,
       },
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, emoji: true, type: true } },
         merchant: { select: { id: true, displayName: true } },
         account: { select: { id: true, name: true } },
         tags: { include: { tag: { select: { id: true, name: true } } } },
       },
     });
+
+    const transactions = rawTransactions.filter(t => !t.categoryId || (t.category?.type ?? 'income') === 'income');
 
     const monthSet = new Set<string>();
     const cur = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
@@ -478,17 +596,44 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Net refunds against expense categories
+    const refundMap = await fetchRefundsByGroup(householdId, range.start, range.end, groupBy as string);
+    const grossTotal = Math.round(total * 100) / 100;
+
+    // Capture gross amounts before netting
+    const grossAmountByGroup = new Map<string, number>();
+    for (const [key, entry] of groupMap) {
+      grossAmountByGroup.set(key, entry.amount);
+    }
+
+    for (const [key, refundAmt] of refundMap) {
+      const existing = groupMap.get(key);
+      if (existing) {
+        existing.amount = Math.max(0, existing.amount - refundAmt);
+      }
+    }
+
+    // Compute net total for correct percentages (after refund netting)
+    const netTotal = Array.from(groupMap.values()).reduce((s, g) => s + g.amount, 0);
+
     const items = Array.from(groupMap.values())
       .sort((a, b) => b.amount - a.amount)
-      .map(g => ({
-        id: g.id,
-        name: g.name,
-        icon: g.icon,
-        color: g.color,
-        amount: Math.round(g.amount * 100) / 100,
-        percent: total > 0 ? Math.round((g.amount / total) * 10000) / 100 : 0,
-        transactionCount: g.count,
-      }));
+      .map(g => {
+        const netAmount = Math.round(g.amount * 100) / 100;
+        const refundAmount = Math.round((refundMap.get(g.id) ?? 0) * 100) / 100;
+        const grossAmount = Math.round((grossAmountByGroup.get(g.id) ?? g.amount) * 100) / 100;
+        return {
+          id: g.id,
+          name: g.name,
+          icon: g.icon,
+          color: g.color,
+          amount: netAmount,
+          grossAmount,
+          refundAmount,
+          percent: netTotal > 0 ? Math.round((netAmount / netTotal) * 10000) / 100 : 0,
+          transactionCount: g.count,
+        };
+      });
 
     // First / last transaction dates for spending
     const spendingDates = transactions.map(t => t.date.getTime()).sort((a, b) => a - b);
@@ -497,6 +642,7 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
 
     return res.json({
       total: Math.round(total * 100) / 100,
+      grossTotal,
       startDate: range.start.toISOString(),
       endDate: range.end.toISOString(),
       groupBy,
@@ -545,16 +691,19 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
     if (tagIds) where.tags = { some: { tag: { id: { in: (tagIds as string).split(',') } } } };
+    where.isRefund = false;
 
-    const transactions = await prisma.transaction.findMany({
+    const rawTransactions = await prisma.transaction.findMany({
       where,
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, emoji: true, type: true } },
         merchant: { select: { id: true, displayName: true } },
         account: { select: { id: true, name: true } },
         tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
       },
     });
+
+    const transactions = rawTransactions.filter(t => !t.categoryId || (t.category?.type ?? 'income') === 'income');
 
     const total = transactions.reduce((s, t) => s + t.amount, 0);
     const transactionCount = transactions.length;
@@ -1363,6 +1512,99 @@ router.get('/no-category', async (req: AuthRequest, res: Response) => {
     return res.json({ items, nextCursor, total });
   } catch (err) {
     req.log.error({ err }, 'reports/no-category');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/v1/reports/drill
+// Returns transactions behind a specific chart segment (for drill-through UI)
+router.get('/drill', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { startDate, endDate, groupBy = 'category', groupId, mode = 'spending' } = req.query;
+
+    const range = parseDateRange(startDate, endDate);
+    if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
+    if (!groupId) return res.status(400).json({ error: 'groupId is required' });
+    if (!['spending', 'income'].includes(mode as string))
+      return res.status(400).json({ error: 'mode must be spending or income' });
+    if (!['category', 'merchant', 'account', 'tag'].includes(groupBy as string))
+      return res.status(400).json({ error: 'groupBy must be category, merchant, account, or tag' });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: Record<string, any> = {
+      householdId,
+      date: { gte: range.start, lte: range.end },
+      isHidden: false,
+      isTransfer: false,
+    };
+
+    if ((mode as string) === 'income') {
+      where.isRefund = false;
+      where.amount = { gt: 0 };
+    } else {
+      // spending: regular expenses only (refunds are netted at report level, not shown as line items)
+      where.amount = { lt: 0 };
+      where.isRefund = false;
+    }
+
+    const gid = groupId as string;
+
+    if ((groupBy as string) === 'category') {
+      where.categoryId = gid === '__uncategorized__' ? null : gid;
+    } else if ((groupBy as string) === 'merchant') {
+      where.merchantId = gid === '__unknown__' ? null : gid;
+    } else if ((groupBy as string) === 'account') {
+      where.accountId = gid;
+    } else {
+      // tag
+      if (gid === '__untagged__') {
+        where.tags = { none: {} };
+      } else {
+        where.tags = { some: { tag: { id: gid } } };
+      }
+    }
+
+    const transactions = await prisma.transaction.findMany({
+      where,
+      orderBy: { date: 'desc' },
+      include: {
+        category: { select: { id: true, name: true, emoji: true, type: true } },
+        merchant: { select: { id: true, displayName: true } },
+        account: { select: { id: true, name: true } },
+        tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+      },
+    });
+
+    // For income: post-filter by category type (consistent with income routes)
+    const filtered = (mode as string) === 'income'
+      ? transactions.filter(t => !t.categoryId || (t.category?.type ?? 'income') === 'income')
+      : transactions;
+
+    return res.json({
+      transactions: filtered.map(t => ({
+        id: t.id,
+        date: t.date.toISOString(),
+        description: t.description,
+        amount: t.amount,
+        isRefund: t.isRefund,
+        category: t.category
+          ? { id: t.category.id, name: t.category.name, emoji: t.category.emoji }
+          : null,
+        merchant: t.merchant
+          ? { id: t.merchant.id, name: t.merchant.displayName }
+          : null,
+        account: { id: t.account.id, name: t.account.name },
+        tags: t.tags.map(tt => ({
+          id: tt.tag.id,
+          name: tt.tag.name,
+          color: tt.tag.color,
+        })),
+      })),
+      total: filtered.length,
+    });
+  } catch (err) {
+    req.log.error({ err }, 'reports/drill');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
