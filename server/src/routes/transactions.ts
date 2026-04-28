@@ -31,11 +31,11 @@ const router = Router();
 // ---------------------------------------------------------------------------
 
 const TX_INCLUDE = {
-  category: { select: { id: true, name: true, emoji: true } },
+  category: { select: { id: true, name: true, icon: true } },
   merchant: { select: { name: true, displayName: true } },
   account: { select: { id: true, name: true } },
   splits: {
-    include: { category: { select: { id: true, name: true, emoji: true } } },
+    include: { category: { select: { id: true, name: true, icon: true } } },
     orderBy: { createdAt: 'asc' as const },
   },
   tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
@@ -67,7 +67,7 @@ function formatTx(t: any) {
     fxRate: t.fxRate !== null && t.fxRate !== undefined ? Number(t.fxRate) : null,
     categoryId: t.categoryId ?? null,
     categoryName: t.category?.name ?? null,
-    categoryIcon: t.category?.emoji ?? null,
+    categoryIcon: t.category?.icon ?? null,
     categoryColor: null,
     accountId: t.accountId,
     accountName: t.account.name,
@@ -101,7 +101,7 @@ function formatTx(t: any) {
       amountDecimal: Number(s.amountDecimal),
       categoryId:    s.categoryId ?? null,
       categoryName:  s.category?.name ?? null,
-      categoryEmoji: s.category?.emoji ?? null,
+      categoryIcon: s.category?.icon ?? null,
       notes:         s.notes ?? null,
     })),
     notes: t.notes ?? null,

@@ -123,7 +123,7 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
         description: true,
         categoryId: true,
         category: {
-          select: { id: true, name: true, emoji: true, type: true, groupId: true, group: true },
+          select: { id: true, name: true, icon: true, type: true, groupId: true, group: true },
         },
         merchantId: true,
         merchant: {
@@ -166,7 +166,7 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
 
       const catId = t.categoryId ?? '__uncategorized';
       const catName = t.category?.name ?? 'Uncategorized';
-      const catIcon = t.category?.emoji ?? null;
+      const catIcon = t.category?.icon ?? null;
       const catType = t.category?.type ?? 'EXPENSE';
 
       // Merchant key: use merchantId if present, else fall back to description
@@ -375,7 +375,7 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
-            emoji: true,
+            icon: true,
             type: true,
             bucketType: true,
           },
@@ -394,7 +394,7 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
     for (const t of transactions) {
       const catId = t.categoryId ?? '__uncategorized';
       const catName = t.category?.name ?? 'Uncategorized';
-      const catIcon = t.category?.emoji ?? '';
+      const catIcon = t.category?.icon ?? '';
       const catType = t.category?.type ?? 'EXPENSE';
       const bucketType = t.category?.bucketType ?? 'uncategorized';
 

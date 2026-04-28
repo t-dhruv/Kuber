@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCheck, Inbox, RefreshCw } from 'lucide-react';
+import { CheckCheck, Inbox, RefreshCw, X, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button, Skeleton, notify } from '@/components/ui';
 import { ReviewTransactionRow, ReviewTransaction } from './components/ReviewTransactionRow';
@@ -61,12 +61,40 @@ export default function ReviewQueuePage() {
     onError: () => notify.error('Bulk approval failed'),
   });
 
+  const bulkRejectMutation = useMutation({
+    mutationFn: () => api.post('/auto-categorize/reject-bulk').then((r) => r.data),
+    onSuccess: (result) => {
+      notify.success(`Rejected ${result.rejected} suggestions`);
+      qc.invalidateQueries({ queryKey: ['auto-categorize-review'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['auto-categorize-status'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['budget'] });
+      qc.invalidateQueries({ queryKey: ['reports'] });
+    },
+    onError: () => notify.error('Bulk rejection failed'),
+  });
+
+  const bulkSkipMutation = useMutation({
+    mutationFn: () => api.post('/auto-categorize/skip-bulk').then((r) => r.data),
+    onSuccess: (result) => {
+      notify.success(`Skipped ${result.skipped} transactions`);
+      qc.invalidateQueries({ queryKey: ['auto-categorize-review'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['auto-categorize-status'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['budget'] });
+      qc.invalidateQueries({ queryKey: ['reports'] });
+    },
+    onError: () => notify.error('Bulk skip failed'),
+  });
+
   const confirmMutation = useMutation({
     mutationFn: (payload: {
       transactionId: string;
       action: 'approve' | 'reject' | 'skip';
       categoryId?: string;
-      createCategory?: { name: string; type: string; emoji?: string | null };
+      createCategory?: { name: string; type: string; icon?: string | null };
     }) => api.post('/auto-categorize/confirm', payload).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['auto-categorize-review'] });
@@ -83,7 +111,7 @@ export default function ReviewQueuePage() {
     transactionId: string,
     action: 'approve' | 'reject' | 'skip',
     categoryId?: string,
-    createCategory?: { name: string; type: string; emoji?: string | null }
+    createCategory?: { name: string; type: string; icon?: string | null }
   ) => {
     await confirmMutation.mutateAsync({ transactionId, action, categoryId, createCategory });
   };
@@ -142,13 +170,33 @@ export default function ReviewQueuePage() {
             <RefreshCw size={16} className={`mr-2 ${reRunMutation.isPending ? 'animate-spin' : ''}`} />
             Re-run AI
           </Button>
+          {total > 0 && (
+            <Button
+              onClick={() => bulkRejectMutation.mutate()}
+              disabled={bulkRejectMutation.isPending}
+              variant="secondary"
+            >
+              <X size={16} className="mr-2" />
+              Reject All
+            </Button>
+          )}
+          {total > 0 && (
+            <Button
+              onClick={() => bulkSkipMutation.mutate()}
+              disabled={bulkSkipMutation.isPending}
+              variant="ghost"
+            >
+              Skip All
+              <ChevronRight size={14} className="ml-1" />
+            </Button>
+          )}
           {hasMatched && (
             <Button
               onClick={() => bulkApproveMutation.mutate()}
               disabled={bulkApproveMutation.isPending}
             >
               <CheckCheck size={16} className="mr-2" />
-              Approve All
+              Accept All
             </Button>
           )}
         </div>

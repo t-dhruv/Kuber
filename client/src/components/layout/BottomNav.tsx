@@ -15,7 +15,7 @@ const navItems = [
 export function BottomNav({ onOpenSidebar }: BottomNavProps) {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden bg-[var(--color-surface)] border-t border-[var(--color-border)]"
+      className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden bg-[var(--color-surface)] border-t border-[var(--color-border)] pb-safe"
       aria-label="Bottom navigation"
     >
       {navItems.map((item) => (

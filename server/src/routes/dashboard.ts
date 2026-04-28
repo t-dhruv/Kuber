@@ -159,7 +159,7 @@ router.get('/budget-summary', async (req: AuthRequest, res: Response) => {
       where: { householdId },
       include: {
         category: {
-          select: { id: true, name: true, emoji: true },
+          select: { id: true, name: true, icon: true },
         },
       },
     });
@@ -202,7 +202,7 @@ router.get('/budget-summary', async (req: AuthRequest, res: Response) => {
       return {
         id: b.categoryId ?? null,
         name: b.category?.name ?? b.name ?? 'Uncategorized',
-        icon: b.category?.emoji ?? null,
+        icon: b.category?.icon ?? null,
         color: null,
         budget,
         spent,
@@ -228,7 +228,7 @@ router.get('/recent-transactions', async (req: AuthRequest, res: Response) => {
       orderBy: { date: 'desc' },
       take: 5,
       include: {
-        category: { select: { name: true, emoji: true } },
+        category: { select: { name: true, icon: true } },
         merchant: { select: { displayName: true } },
         account: { select: { name: true } },
       },
@@ -240,7 +240,7 @@ router.get('/recent-transactions', async (req: AuthRequest, res: Response) => {
       merchantName: t.merchant?.displayName ?? t.description,
       amount: t.amount,
       categoryName: t.category?.name ?? null,
-      categoryIcon: t.category?.emoji ?? null,
+      categoryIcon: t.category?.icon ?? null,
       categoryColor: null,
       accountName: t.account.name,
     }));
@@ -485,10 +485,10 @@ router.get('/weekly-recap', async (req: AuthRequest, res: Response) => {
         const [topCatId, topCatAmt] = [...byCategory.entries()].sort((a, b) => b[1] - a[1])[0];
         const cat = await prisma.category.findUnique({
           where: { id: topCatId },
-          select: { name: true, emoji: true },
+          select: { name: true, icon: true },
         });
         if (cat) {
-          topCategory = { name: cat.name, amount: topCatAmt, icon: cat.emoji ?? null };
+          topCategory = { name: cat.name, amount: topCatAmt, icon: cat.icon ?? null };
         }
       }
     }

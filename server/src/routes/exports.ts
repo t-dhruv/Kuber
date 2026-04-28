@@ -31,7 +31,7 @@ function fmtCurrency(amount: number): string {
 async function getSpendingData(householdId: string, start: Date, end: Date) {
   const transactions = await prisma.transaction.findMany({
     where: { householdId, date: { gte: start, lte: end }, amount: { lt: 0 }, isHidden: false },
-    include: { category: { select: { name: true, emoji: true } } },
+    include: { category: { select: { name: true, icon: true } } },
   });
 
   const categoryMap = new Map<string, { name: string; icon: string | null; amount: number }>();
@@ -41,7 +41,7 @@ async function getSpendingData(householdId: string, start: Date, end: Date) {
     total += abs;
     const key = t.categoryId ?? '__uncategorized__';
     const name = t.category?.name ?? 'Uncategorized';
-    const icon = t.category?.emoji ?? null;
+    const icon = t.category?.icon ?? null;
     const existing = categoryMap.get(key);
     if (existing) {
       existing.amount += abs;
@@ -82,7 +82,7 @@ async function getTaxData(householdId: string, year: number) {
       date: { gte: start, lte: end },
       category: { isTaxDeductible: true },
     },
-    include: { category: { select: { id: true, name: true, emoji: true } } },
+    include: { category: { select: { id: true, name: true, icon: true } } },
   });
 
   const categoryMap = new Map<string, { name: string; icon: string | null; amount: number; transactionCount: number }>();
@@ -94,7 +94,7 @@ async function getTaxData(householdId: string, year: number) {
       existing.amount += Math.abs(t.amount);
       existing.transactionCount += 1;
     } else {
-      categoryMap.set(key, { name: t.category.name, icon: t.category.emoji ?? null, amount: Math.abs(t.amount), transactionCount: 1 });
+      categoryMap.set(key, { name: t.category.name, icon: t.category.icon ?? null, amount: Math.abs(t.amount), transactionCount: 1 });
     }
   }
 

@@ -300,7 +300,7 @@ router.get('/categories', async (req: AuthRequest, res: Response) => {
 router.post('/categories', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { name, groupId, emoji, type = 'expense' } = req.body;
+    const { name, groupId, icon, type = 'expense', bucketType } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'name is required' });
@@ -321,8 +321,11 @@ router.post('/categories', async (req: AuthRequest, res: Response) => {
         householdId,
         name,
         groupId: groupId ?? null,
-        emoji: emoji ?? null,
+        icon: icon ?? null,
         type,
+        bucketType: (bucketType && ['needs', 'wants', 'savings', 'uncategorized'].includes(bucketType))
+          ? bucketType
+          : 'uncategorized',
       },
       include: { group: { select: { id: true, name: true } } },
     });
@@ -336,9 +339,11 @@ router.post('/categories', async (req: AuthRequest, res: Response) => {
 
 const categoryUpdateSchema = z.object({
   name: z.string().min(1).optional(),
-  emoji: z.string().optional(),
+  icon: z.string().optional(),
   groupId: z.string().optional().nullable(),
   isTaxDeductible: z.boolean().optional(),
+  bucketType: z.enum(['needs', 'wants', 'savings', 'uncategorized']).optional(),
+  type: z.enum(['income', 'expense', 'transfer']).optional(),
 });
 
 // PUT /api/v1/settings/categories/:id
@@ -351,7 +356,7 @@ router.put('/categories/:id', async (req: AuthRequest, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
     }
-    const { name, emoji, groupId, isTaxDeductible } = parsed.data;
+    const { name, icon, groupId, isTaxDeductible, bucketType, type } = parsed.data;
 
     const existing = await prisma.category.findFirst({
       where: { id, householdId },
@@ -362,9 +367,11 @@ router.put('/categories/:id', async (req: AuthRequest, res: Response) => {
 
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
-    if (emoji !== undefined) updateData.emoji = emoji;
+    if (icon !== undefined) updateData.icon = icon;
     if (groupId !== undefined) updateData.groupId = groupId;
     if (isTaxDeductible !== undefined) updateData.isTaxDeductible = isTaxDeductible;
+    if (bucketType !== undefined) updateData.bucketType = bucketType;
+    if (type !== undefined) updateData.type = type;
 
     const category = await prisma.category.update({
       where: { id },
@@ -407,6 +414,99 @@ router.delete('/categories/:id', async (req: AuthRequest, res: Response) => {
     return res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, 'settings/categories DELETE');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Category Groups ──────────────────────────────────────────────────────────
+
+// GET /api/v1/settings/category-groups
+router.get('/category-groups', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+
+    const groups = await prisma.categoryGroup.findMany({
+      where: { householdId },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: { _count: { select: { categories: true } } },
+    });
+
+    return res.json(groups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      type: g.type,
+      categoryCount: g._count.categories,
+    })));
+  } catch (err) {
+    req.log.error({ err }, 'settings/category-groups GET');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/settings/category-groups
+router.post('/category-groups', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { name, type = 'expense' } = req.body;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    if (!['income', 'expense', 'transfer'].includes(type)) {
+      return res.status(400).json({ error: 'type must be income, expense, or transfer' });
+    }
+
+    // Check if group already exists
+    const existing = await prisma.categoryGroup.findFirst({
+      where: { householdId, name: name.trim() },
+    });
+
+    if (existing) {
+      return res.status(409).json({ error: 'Group with this name already exists' });
+    }
+
+    const group = await prisma.categoryGroup.create({
+      data: {
+        householdId,
+        name: name.trim(),
+        type,
+      },
+    });
+
+    return res.status(201).json({ id: group.id, name: group.name, type: group.type, categoryCount: 0 });
+  } catch (err) {
+    req.log.error({ err }, 'settings/category-groups POST');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/v1/settings/category-groups/:id
+router.delete('/category-groups/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+
+    const existing = await prisma.categoryGroup.findFirst({
+      where: { id, householdId },
+      include: { _count: { select: { categories: true } } },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+
+    if (existing._count.categories > 0) {
+      return res.status(400).json({
+        error: `Cannot delete group: it contains ${existing._count.categories} categor${existing._count.categories !== 1 ? 'ies' : 'y'}. Move or delete them first.`,
+      });
+    }
+
+    await prisma.categoryGroup.delete({ where: { id } });
+
+    return res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, 'settings/category-groups DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

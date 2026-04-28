@@ -34,7 +34,7 @@ interface Rule {
 interface Category {
   id: string;
   name: string;
-  emoji: string | null;
+  icon: string | null;
 }
 
 // ─── Options ──────────────────────────────────────────────────────────────────
@@ -292,7 +292,7 @@ function actionLabel(a: RuleAction, categories: Category[]): string {
   switch (a.type) {
     case 'setCategory': {
       const cat = categories.find((c) => c.id === a.value);
-      return `Set category → ${cat ? `${cat.emoji ?? ''} ${cat.name}`.trim() : a.value}`;
+      return `Set category → ${cat ? `${cat.icon ?? ''} ${cat.name}`.trim() : a.value}`;
     }
     case 'addTag': return `Add tag "${a.value}"`;
     case 'hide': return 'Hide transaction';

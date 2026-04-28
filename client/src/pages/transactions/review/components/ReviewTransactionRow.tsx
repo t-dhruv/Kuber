@@ -13,7 +13,7 @@ export interface ReviewTransaction {
   aiSuggestedCategoryId: string | null;
   aiSuggestedCategoryName: string | null;
   aiSuggestionConfidence: number | null;
-  aiSuggestedCategory: { id: string; name: string; emoji: string | null } | null;
+  aiSuggestedCategory: { id: string; name: string; icon: string | null } | null;
   account: { name: string };
 }
 
@@ -24,7 +24,7 @@ interface Props {
     transactionId: string,
     action: 'approve' | 'reject' | 'skip',
     categoryId?: string,
-    createCategory?: { name: string; type: string; emoji?: string | null }
+    createCategory?: { name: string; type: string; icon?: string | null }
   ) => Promise<void>;
   onCreateRule?: (pattern: string) => void;
 }
@@ -122,7 +122,7 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, 
             <>
               <span className="text-sm text-[var(--color-text-secondary)]">Suggested:</span>
               <span className="text-sm font-medium text-[var(--color-text)]">
-                {txn.aiSuggestedCategory?.emoji} {txn.aiSuggestedCategory?.name}
+                {txn.aiSuggestedCategory?.icon} {txn.aiSuggestedCategory?.name}
               </span>
               {confidence !== null && (
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${confidenceColor(confidence)}`}>

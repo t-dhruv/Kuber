@@ -29,7 +29,7 @@ export interface TransactionInput {
   category?: {
     id: string;
     name: string;
-    emoji?: string | null;
+    icon?: string | null;
     bucketType?: string | null;
   } | null;
 }
@@ -96,7 +96,7 @@ export function bucketTransactions(transactions: TransactionInput[]): {
       catMap.set(catKey, {
         id: catKey,
         name: tx.category?.name ?? 'Uncategorized',
-        icon: tx.category?.emoji ?? null,
+        icon: tx.category?.icon ?? null,
         amount: absAmount,
         bucketType: bucket,
       });

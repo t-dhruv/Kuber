@@ -5,6 +5,7 @@ import { AuthRequest } from '../middleware/auth.js';
 import { startBatchAutoCategorize, getBatchJobState, detectRuleSuggestions, suggestCategory } from '../lib/autoCategorize.js';
 import { getAiClientForHousehold } from '../lib/ai/index.js';
 import { rulesAppliedTotal } from '../lib/metrics.js';
+import { logAudit } from '../lib/audit.js';
 
 const router = Router();
 
@@ -68,7 +69,7 @@ router.get('/review-queue', async (req: AuthRequest, res: Response) => {
           aiSuggestedCategoryId: true,
           aiSuggestedCategoryName: true,
           aiSuggestionConfidence: true,
-          aiSuggestedCategory: { select: { id: true, name: true, emoji: true } },
+          aiSuggestedCategory: { select: { id: true, name: true, icon: true } },
           account: { select: { name: true } },
         },
       }),
@@ -100,7 +101,7 @@ const confirmSchema = z.object({
   createCategory: z.object({
     name: z.string().min(1),
     type: z.string().min(1),
-    emoji: z.string().optional().nullable(),
+    icon: z.string().optional().nullable(),
   }).optional(),
 });
 
@@ -133,6 +134,14 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
           aiSuggestionConfidence: null,
         },
       });
+      logAudit({
+        householdId,
+        userId: req.userId!,
+        action: 'UPDATE',
+        entity: 'TRANSACTION',
+        entityId: transactionId,
+        after: { action: 'skip', needsReview: false },
+      });
       return res.json({ ok: true });
     }
 
@@ -144,7 +153,7 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
           householdId,
           name: createCategory.name.trim(),
           type: createCategory.type,
-          emoji: createCategory.emoji ?? null,
+          icon: createCategory.icon ?? null,
         },
       });
       finalCategoryId = newCat.id;
@@ -176,6 +185,15 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
       },
     });
 
+    logAudit({
+      householdId,
+      userId: req.userId!,
+      action: 'UPDATE',
+      entity: 'TRANSACTION',
+      entityId: transactionId,
+      after: { action: 'approve', categoryId: finalCategoryId },
+    });
+
     return res.json({ ok: true, categoryId: finalCategoryId });
   } catch (err) {
     req.log.error({ err }, 'auto-categorize/confirm');
@@ -183,24 +201,143 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /api/v1/auto-categorize/reject-bulk — reject all suggestions (clear AI suggestions, keep uncategorized)
+// Uses cursor-based pagination to handle large datasets without timeout
+router.post('/reject-bulk', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const cursor = req.body?.cursor as string | undefined;
+    const limit = Math.min(parseInt(req.body?.limit as string) || 500, 500);
+
+    const toReject = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        needsReview: true,
+        aiSuggestedCategoryId: { not: null },
+        ...(cursor ? { id: { gt: cursor } } : {}),
+      },
+      orderBy: { id: 'asc' },
+      take: limit + 1,
+      select: { id: true },
+    });
+
+    const hasMore = toReject.length > limit;
+    const items = hasMore ? toReject.slice(0, limit) : toReject;
+    const nextCursor = hasMore ? items[items.length - 1]?.id : null;
+
+    await prisma.$transaction(
+      items.map((t) =>
+        prisma.transaction.update({
+          where: { id: t.id },
+          data: {
+            needsReview: false,
+            aiSuggestedCategoryId: null,
+            aiSuggestedCategoryName: null,
+            aiSuggestionConfidence: null,
+          },
+        })
+      )
+    );
+
+    if (items.length > 0) {
+      logAudit({
+        householdId,
+        userId: req.userId!,
+        action: 'UPDATE',
+        entity: 'TRANSACTION',
+        entityId: 'bulk',
+        after: { action: 'reject-bulk', count: items.length },
+      });
+    }
+
+    return res.json({ rejected: items.length, cursor: nextCursor, hasMore });
+  } catch (err) {
+    req.log.error({ err }, 'auto-categorize/reject-bulk');
+    return res.status(500).json({ error: 'Bulk rejection failed' });
+  }
+});
+
+// POST /api/v1/auto-categorize/skip-bulk — skip all transactions (clear review flag, keep current category)
+// Uses cursor-based pagination to handle large datasets without timeout
+router.post('/skip-bulk', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const cursor = req.body?.cursor as string | undefined;
+    const limit = Math.min(parseInt(req.body?.limit as string) || 500, 500);
+
+    const toSkip = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        needsReview: true,
+        ...(cursor ? { id: { gt: cursor } } : {}),
+      },
+      orderBy: { id: 'asc' },
+      take: limit + 1,
+      select: { id: true },
+    });
+
+    const hasMore = toSkip.length > limit;
+    const items = hasMore ? toSkip.slice(0, limit) : toSkip;
+    const nextCursor = hasMore ? items[items.length - 1]?.id : null;
+
+    await prisma.$transaction(
+      items.map((t) =>
+        prisma.transaction.update({
+          where: { id: t.id },
+          data: {
+            needsReview: false,
+            aiSuggestedCategoryId: null,
+            aiSuggestedCategoryName: null,
+            aiSuggestionConfidence: null,
+          },
+        })
+      )
+    );
+
+    if (items.length > 0) {
+      logAudit({
+        householdId,
+        userId: req.userId!,
+        action: 'UPDATE',
+        entity: 'TRANSACTION',
+        entityId: 'bulk',
+        after: { action: 'skip-bulk', count: items.length },
+      });
+    }
+
+    return res.json({ skipped: items.length, cursor: nextCursor, hasMore });
+  } catch (err) {
+    req.log.error({ err }, 'auto-categorize/skip-bulk');
+    return res.status(500).json({ error: 'Bulk skip failed' });
+  }
+});
+
 // POST /api/v1/auto-categorize/confirm-bulk — approve all suggestions with a matched category
+// Uses cursor-based pagination to handle large datasets without timeout
 router.post('/confirm-bulk', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
+    const cursor = req.body?.cursor as string | undefined;
+    const limit = Math.min(parseInt(req.body?.limit as string) || 500, 500);
 
-    const CAP = 500;
     const toApply = await prisma.transaction.findMany({
       where: {
         householdId,
         needsReview: true,
         aiSuggestedCategoryId: { not: null },
+        ...(cursor ? { id: { gt: cursor } } : {}),
       },
-      take: CAP,
+      orderBy: { id: 'asc' },
+      take: limit + 1,
       select: { id: true, aiSuggestedCategoryId: true },
     });
 
+    const hasMore = toApply.length > limit;
+    const items = hasMore ? toApply.slice(0, limit) : toApply;
+    const nextCursor = hasMore ? items[items.length - 1]?.id : null;
+
     await prisma.$transaction(
-      toApply.map((t) =>
+      items.map((t) =>
         prisma.transaction.update({
           where: { id: t.id },
           data: {
@@ -214,11 +351,19 @@ router.post('/confirm-bulk', async (req: AuthRequest, res: Response) => {
       )
     );
 
-    if (toApply.length > 0) {
+    if (items.length > 0) {
       rulesAppliedTotal.inc({ household_id: householdId });
+      logAudit({
+        householdId,
+        userId: req.userId!,
+        action: 'UPDATE',
+        entity: 'TRANSACTION',
+        entityId: 'bulk',
+        after: { action: 'confirm-bulk', count: items.length },
+      });
     }
 
-    return res.json({ approved: toApply.length, capped: toApply.length === CAP });
+    return res.json({ approved: items.length, cursor: nextCursor, hasMore });
   } catch (err) {
     req.log.error({ err }, 'auto-categorize/confirm-bulk');
     return res.status(500).json({ error: 'Bulk approval failed' });
@@ -226,9 +371,12 @@ router.post('/confirm-bulk', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/v1/auto-categorize/re-run — re-run AI on transactions already in the review queue
+// Uses cursor-based pagination to handle large datasets without timeout
 router.post('/re-run', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
+    const limit = Math.min(parseInt(req.body?.limit as string) || 50, 200);
+    const cursor = req.body?.cursor as string | undefined;
 
     try {
       await getAiClientForHousehold(householdId, prisma);
@@ -237,12 +385,22 @@ router.post('/re-run', async (req: AuthRequest, res: Response) => {
     }
 
     const pending = await prisma.transaction.findMany({
-      where: { householdId, needsReview: true },
+      where: {
+        householdId,
+        needsReview: true,
+        ...(cursor ? { id: { gt: cursor } } : {}),
+      },
+      orderBy: { id: 'asc' },
+      take: limit + 1,
       select: { id: true, description: true, amount: true },
     });
 
+    const hasMore = pending.length > limit;
+    const items = hasMore ? pending.slice(0, limit) : pending;
+    const nextCursor = hasMore ? items[items.length - 1]?.id : null;
+
     let updated = 0;
-    for (const txn of pending) {
+    for (const txn of items) {
       const suggestion = await suggestCategory(prisma, householdId, txn.description, txn.amount);
       if (suggestion && suggestion.confidence >= 0.5) {
         await prisma.transaction.update({
@@ -257,7 +415,7 @@ router.post('/re-run', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    return res.json({ updated, total: pending.length, notConfigured: false });
+    return res.json({ updated, total: items.length, notConfigured: false, cursor: nextCursor, hasMore });
   } catch (err) {
     req.log.error({ err }, 'auto-categorize/re-run');
     return res.status(500).json({ error: 'Re-run failed' });

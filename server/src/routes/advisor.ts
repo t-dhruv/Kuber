@@ -398,7 +398,7 @@ router.post('/budget-coach/stream', async (req: AuthRequest, res: Response) => {
     const [budgets, transactions, categories] = await Promise.all([
       prisma.budget.findMany({
         where: { householdId },
-        include: { category: { select: { name: true, emoji: true } } },
+        include: { category: { select: { name: true, icon: true } } },
       }),
       prisma.transaction.findMany({
         where: { householdId, date: { gte: startDate, lte: endDate }, isHidden: false },
@@ -424,7 +424,7 @@ router.post('/budget-coach/stream', async (req: AuthRequest, res: Response) => {
     const budgetSummary = budgets.map((b) => {
       const actual = actualMap.get(b.categoryId ?? '') ?? 0;
       const over = actual > b.amount;
-      return `${b.category?.emoji ?? ''} ${b.category?.name ?? 'Unknown'}: budgeted $${b.amount.toFixed(0)}, spent $${actual.toFixed(0)}${over ? ' ⚠️ OVER' : ''}`;
+      return `${b.category?.icon ?? ''} ${b.category?.name ?? 'Unknown'}: budgeted $${b.amount.toFixed(0)}, spent $${actual.toFixed(0)}${over ? ' ⚠️ OVER' : ''}`;
     }).join('\n');
 
     const uncategorized = transactions.filter((t) => !t.categoryId && t.amount < 0).length;

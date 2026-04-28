@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Settings, MoreHorizontal, Pencil, Trash2, PauseCircle, PlayCircle } from 'lucide-react';
+import { Plus, Settings, MoreHorizontal, Pencil, Trash2, PauseCircle, PlayCircle, Check } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Card, Button, Input, Select, Modal, ModalFooter, Skeleton, Toggle, CategoryCombobox,
@@ -338,7 +338,7 @@ function RecurringModal({
           {categories.length > 0 && (
             <CategoryCombobox
               label="Category"
-              categories={categories.map((c) => ({ id: c.id, name: c.name, emoji: c.icon }))}
+              categories={categories.map((c) => ({ id: c.id, name: c.name, icon: c.icon }))}
               value={form.categoryId}
               onChange={(id) => set('categoryId', id)}
             />
@@ -506,7 +506,7 @@ function MonthlyView({
       <Card padding="lg">
         <div className="mb-3">
           <span className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em]">
-            Completed ✓
+            Completed
           </span>
         </div>
 
@@ -527,7 +527,7 @@ function MonthlyView({
               <div key={item.id}>
                 <div className="grid gap-2 py-[0.625rem] items-center text-[0.8125rem] opacity-80" style={{ gridTemplateColumns: '1fr 100px 90px' }}>
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[var(--color-success)] text-sm font-bold">✓</span>
+                    <Check size={14} className="text-[var(--color-success)] font-bold flex-shrink-0" />
                     <div className="min-w-0">
                       <div className="font-medium text-[var(--color-text-muted)] line-through whitespace-nowrap overflow-hidden text-ellipsis">
                         {item.name}
@@ -1068,7 +1068,7 @@ export default function RecurringPage() {
       (Array.isArray(r.data) ? r.data : []).map((c: any) => ({
         id: c.id,
         name: c.name,
-        icon: c.emoji ?? c.icon,
+        icon: c.icon ?? null,
       }))
     ),
   });

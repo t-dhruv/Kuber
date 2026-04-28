@@ -16,7 +16,7 @@ import { Card, Skeleton } from "@/components/ui";
 interface BudgetVarianceCategory {
   categoryId: string;
   name: string;
-  emoji: string | null;
+  icon: string | null;
   budgeted: number;
   actual: number;
   variance: number;
@@ -198,7 +198,7 @@ export function BudgetVarianceChart({ from, to }: Props) {
 
   // Prepare chart data — truncate long names
   const chartData = categories.map((c) => ({
-    name: (c.emoji ? c.emoji + " " : "") + (c.name.length > 14 ? c.name.slice(0, 13) + "…" : c.name),
+    name: (c.icon ? c.icon + " " : "") + (c.name.length > 14 ? c.name.slice(0, 13) + "…" : c.name),
     fullName: c.name,
     budgeted: c.budgeted,
     actual: c.actual,
@@ -285,7 +285,7 @@ export function BudgetVarianceChart({ from, to }: Props) {
                     style={{ borderBottom: "1px solid var(--color-border)" }}
                   >
                     <td style={{ padding: "0.625rem 1rem", color: "var(--color-text)" }}>
-                      {c.emoji && <span style={{ marginRight: "0.375rem" }}>{c.emoji}</span>}
+                      {c.icon && <span style={{ marginRight: "0.375rem" }}>{c.icon}</span>}
                       {c.name}
                     </td>
                     <td style={{ padding: "0.625rem 1rem", textAlign: "right", color: "var(--color-text-secondary)" }}>

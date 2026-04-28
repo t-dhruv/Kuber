@@ -10,7 +10,7 @@ import { Modal, ModalFooter, Button, CategoryCombobox, toast } from '@/component
 interface Category {
   id: string;
   name: string;
-  emoji?: string | null;
+  icon?: string | null;
   type: string;
   groupId?: string | null;
   groupName?: string | null;

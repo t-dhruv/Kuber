@@ -98,21 +98,21 @@ router.post('/:id/split', async (req: AuthRequest, res: Response) => {
         notes:         s.notes ?? null,
       })),
     });
-    return tx.transaction.update({
-      where: { id },
-      data: {
-        isSplit:      true,
-        splitDetails: Prisma.DbNull,
-      },
-      include: {
-        category: { select: { id: true, name: true, emoji: true } },
-        account:  { select: { id: true, name: true } },
-        splits: {
-          include: { category: { select: { id: true, name: true, emoji: true } } },
-          orderBy: { createdAt: 'asc' },
+      return tx.transaction.update({
+        where: { id },
+        data: {
+          isSplit:      true,
+          splitDetails: Prisma.DbNull,
         },
-      },
-    });
+        include: {
+          category: { select: { id: true, name: true, icon: true } },
+          account:  { select: { id: true, name: true } },
+          splits: {
+            include: { category: { select: { id: true, name: true, icon: true } } },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
   });
 
   return res.json(updated);
@@ -134,7 +134,7 @@ router.get('/:id/splits', async (req: AuthRequest, res: Response) => {
 
   const splits = await prisma.transactionSplit.findMany({
     where:   { transactionId: id },
-    include: { category: { select: { id: true, name: true, emoji: true } } },
+    include: { category: { select: { id: true, name: true, icon: true } } },
     orderBy: { createdAt: 'asc' },
   });
 

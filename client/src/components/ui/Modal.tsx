@@ -19,9 +19,17 @@ const sizeStyles = {
   xl: 'max-w-2xl',
 };
 
-export function Modal({ open, onClose, title, description, children, size = 'md', closeOnBackdrop = true }: ModalProps) {
+export function Modal({ open, onClose, title, description, children, size = 'md', closeOnBackdrop = false }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const firstFocusRef = useRef<HTMLButtonElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (closeOnBackdrop && e.target === overlayRef.current) {
+      e.stopPropagation();
+      onClose();
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -38,6 +46,29 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const content = contentRef.current;
+    if (!content) return;
+    const focusable = content.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    };
+    content.addEventListener('keydown', handleTab);
+    return () => content.removeEventListener('keydown', handleTab);
+  }, [open]);
 
   useEffect(() => {
     if (open) {
@@ -58,13 +89,14 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
       aria-labelledby={title ? 'modal-title' : undefined}
       aria-describedby={description ? 'modal-description' : undefined}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onClick={(e) => { if (closeOnBackdrop && e.target === overlayRef.current) onClose(); }}
+      onClick={handleBackdropClick}
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
 
       {/* Panel */}
       <div
+        ref={contentRef}
         className={`relative z-10 w-full ${sizeStyles[size]} rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] border border-[var(--color-border)]`}
       >
         {/* Header */}

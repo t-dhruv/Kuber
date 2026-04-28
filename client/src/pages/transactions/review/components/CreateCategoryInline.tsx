@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Button, Input, Select, notify } from '@/components/ui';
+import { Button, Input, Select, notify, Modal, ModalFooter } from '@/components/ui';
+import { IconPicker } from '@/components/ui/IconPicker';
 
 interface Props {
   suggestedName: string;
@@ -18,11 +19,12 @@ export function CreateCategoryInline({ suggestedName, onCreated, onCancel }: Pro
   const qc = useQueryClient();
   const [name, setName] = useState(suggestedName);
   const [type, setType] = useState('expense');
-  const [emoji, setEmoji] = useState('');
+  const [iconId, setIconId] = useState<string | null>(null);
+  const [showIconPicker, setShowIconPicker] = useState(false);
 
   const mutation = useMutation({
     mutationFn: () =>
-      api.post('/categories', { name: name.trim(), type, emoji: emoji || null }).then((r) => r.data),
+      api.post('/categories', { name: name.trim(), type, icon: iconId }).then((r) => r.data),
     onSuccess: (cat) => {
       qc.invalidateQueries({ queryKey: ['categories'] });
       notify.success(`Category "${cat.name}" created`);
@@ -37,7 +39,7 @@ export function CreateCategoryInline({ suggestedName, onCreated, onCancel }: Pro
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Category name"
-        className="w-40"
+        className="flex-1"
       />
       <Select
         value={type}
@@ -45,19 +47,37 @@ export function CreateCategoryInline({ suggestedName, onCreated, onCancel }: Pro
         options={TYPE_OPTIONS}
         className="w-32"
       />
-      <Input
-        value={emoji}
-        onChange={(e) => setEmoji(e.target.value)}
-        placeholder="Emoji (optional)"
-        className="w-24"
-        maxLength={4}
-      />
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => setShowIconPicker(true)}
+        className="w-10 p-2"
+        aria-label="Select icon"
+      >
+        {iconId ? (
+          <IconPicker.IconDisplay iconId={iconId} size={18} />
+        ) : (
+          <span className="text-xs text-[var(--color-text-muted)]">Icon</span>
+        )}
+      </Button>
       <Button size="sm" onClick={() => mutation.mutate()} disabled={!name.trim() || mutation.isPending}>
         Create
       </Button>
       <Button size="sm" variant="ghost" onClick={onCancel}>
         Cancel
       </Button>
+
+      <Modal
+        open={showIconPicker}
+        onClose={() => setShowIconPicker(false)}
+        title="Select Icon"
+        size="sm"
+      >
+        <IconPicker value={iconId} onChange={setIconId} />
+        <ModalFooter>
+          <Button size="sm" onClick={() => setShowIconPicker(false)}>Done</Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

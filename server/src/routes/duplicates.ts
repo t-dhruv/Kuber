@@ -25,18 +25,18 @@ router.get('/duplicates', async (req: AuthRequest, res: Response) => {
       },
       include: {
         account: { select: { id: true, name: true } },
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, icon: true } },
         merchant: { select: { name: true, displayName: true } },
-      },
-      orderBy: [{ amount: 'asc' }, { date: 'asc' }],
-      take: 1000, // Guard: cap at 1 000 transactions to keep O(n²) scan bounded
-    });
+       },
+       orderBy: [{ amount: 'asc' }, { date: 'asc' }],
+       take: 1000, // Guard: cap at 1 000 transactions to keep O(n²) scan bounded
+     });
 
-    // Fetch already-dismissed pairs
-    const dismissals = await prisma.duplicateDismissal.findMany({
-      where: { householdId },
-      select: { transactionId1: true, transactionId2: true },
-    });
+     // Fetch already-dismissed pairs
+     const dismissals = await prisma.duplicateDismissal.findMany({
+       where: { householdId },
+       select: { transactionId1: true, transactionId2: true },
+     });
     const dismissedSet = new Set(
       dismissals.map((d) => `${d.transactionId1}:${d.transactionId2}`)
     );
@@ -106,7 +106,7 @@ router.get('/duplicates', async (req: AuthRequest, res: Response) => {
         accountName: t.account.name,
         categoryId: t.categoryId ?? null,
         categoryName: t.category?.name ?? null,
-        categoryIcon: t.category?.emoji ?? null,
+        categoryIcon: t.category?.icon ?? null,
         isSplit: t.isSplit,
       })),
     }));
@@ -218,14 +218,14 @@ router.post('/duplicates/merge', async (req: AuthRequest, res: Response) => {
 
     const kept = await prisma.transaction.findUnique({
       where: { id: keepId },
-      include: {
-        account: { select: { id: true, name: true } },
-        category: { select: { id: true, name: true, emoji: true } },
-        merchant: { select: { name: true, displayName: true } },
-      },
-    });
+       include: {
+         account: { select: { id: true, name: true } },
+         category: { select: { id: true, name: true, icon: true } },
+         merchant: { select: { name: true, displayName: true } },
+       },
+     });
 
-    res.json(kept);
+     res.json(kept);
   } catch (err) {
     req.log.error({ err }, 'merge error');
     res.status(500).json({ error: 'Failed to merge transactions' });

@@ -29,7 +29,7 @@ interface Account {
 interface Category {
   id: string;
   name: string;
-  emoji?: string | null;
+  icon?: string | null;
   type: string;
   groupId?: string | null;
   groupName?: string | null;
@@ -196,7 +196,7 @@ function CategoryPicker({
                 }}
               >
                 <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0">
-                  {cat.emoji ?? cat.name[0]}
+                  {cat.icon ?? cat.name[0]}
                 </span>
                 <span className={`text-sm text-[var(--color-text)] ${selectedId === cat.id ? 'font-semibold' : 'font-normal'}`}>
                   {cat.name}
@@ -488,7 +488,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
                 {selectedCategory ? (
                   <>
                     <span className="w-[22px] h-[22px] rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-[0.6875rem] shrink-0">
-                      {selectedCategory.emoji ?? selectedCategory.name[0]}
+                      {selectedCategory.icon ?? selectedCategory.name[0]}
                     </span>
                     <span className="text-sm text-[var(--color-text)] flex-1">{selectedCategory.name}</span>
                   </>
@@ -1067,7 +1067,7 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
                     onChange={() => toggleCategory(cat.id)}
                     className="accent-[var(--color-accent)]"
                   />
-                  <span className="text-xs">{cat.emoji ?? ''}</span>
+                  <span className="text-xs">{cat.icon ?? ''}</span>
                   <span className="text-sm text-[var(--color-text)]">{cat.name}</span>
                 </label>
               ))}
@@ -1253,7 +1253,7 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
         className="accent-[var(--color-accent)] shrink-0 cursor-pointer"
       />
 
-      {/* Merchant logo — falls back to category emoji */}
+      {/* Merchant logo — falls back to category icon */}
       <InstitutionLogo
         name={txn.merchantName}
         type="merchant"

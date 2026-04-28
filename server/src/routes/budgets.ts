@@ -66,7 +66,7 @@ router.get('/categories', async (req: AuthRequest, res: Response) => {
       const catEntry = {
         id: cat.id,
         name: cat.name,
-        icon: cat.emoji ?? null,
+        icon: cat.icon ?? null,
         color: null,
       };
 
@@ -240,7 +240,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       const row: CategoryRow = {
         id: cat.id,
         name: cat.name,
-        icon: cat.emoji ?? null,
+        icon: cat.icon ?? null,
         budgeted,
         actual,
         remaining,
@@ -345,18 +345,18 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         budget = await prisma.budget.update({
           where: { id: existing.id },
           data: { amount, budgetType: resolvedBudgetType },
-          include: { category: { select: { id: true, name: true, emoji: true, type: true } } },
+          include: { category: { select: { id: true, name: true, icon: true, type: true } } },
         });
       } else {
         budget = await prisma.budget.create({
           data: { householdId, categoryId, amount, period: 'monthly', budgetType: resolvedBudgetType },
-          include: { category: { select: { id: true, name: true, emoji: true, type: true } } },
+          include: { category: { select: { id: true, name: true, icon: true, type: true } } },
         });
       }
     } else {
       budget = await prisma.budget.create({
         data: { householdId, name: name!, amount, period: 'monthly', budgetType: resolvedBudgetType },
-        include: { category: { select: { id: true, name: true, emoji: true, type: true } } },
+        include: { category: { select: { id: true, name: true, icon: true, type: true } } },
       });
     }
 
@@ -395,7 +395,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       where: { id },
       data: updateData,
       include: {
-        category: { select: { id: true, name: true, emoji: true, type: true } },
+        category: { select: { id: true, name: true, icon: true, type: true } },
       },
     });
 
