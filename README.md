@@ -48,11 +48,26 @@ Kuber is a full-featured personal finance web app you run on your own server. Tr
 
 ---
 
+## Documentation
+
+Kuber comes with full documentation for self-hosted users and contributors:
+
+| Doc | What's Inside |
+|-----|-----------------|
+| [📖 Tutorial](docs/01-tutorial.md) | Install Kuber + record your first transaction in 30min |
+| [🍳 How-to Guides](docs/02-how-to/00-index.md) | HTTPS, email, backups, accounts, budgets, 2FA, AI Advisor |
+| [📋 Reference](docs/03-reference.md) | Env vars, Docker services, API endpoints, CSV format |
+| [💡 Explanations](docs/04-explanation.md) | Why self-hosting, data model, security, 50/30/20 rule |
+
+**Contributors:** See [Development Setup](#development-setup) and [docs/dev/](docs/dev/) for QA reports, regression tests, and sprint plans.
+
+---
+
 ## Self-Hosting
 
 Kuber is built to run on your own hardware. The full deployment guide covers quick start, environment variables, HTTPS with Let's Encrypt, backups, updates, and troubleshooting:
 
-**[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**
+**[docs/01-tutorial.md](docs/01-tutorial.md)**
 
 ### Quick Start
 
