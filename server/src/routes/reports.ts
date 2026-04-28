@@ -1516,4 +1516,99 @@ router.get('/no-category', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/v1/reports/drill
+// Returns transactions behind a specific chart segment (for drill-through UI)
+router.get('/drill', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { startDate, endDate, groupBy = 'category', groupId, mode = 'spending' } = req.query;
+
+    const range = parseDateRange(startDate, endDate);
+    if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
+    if (!groupId) return res.status(400).json({ error: 'groupId is required' });
+    if (!['spending', 'income'].includes(mode as string))
+      return res.status(400).json({ error: 'mode must be spending or income' });
+    if (!['category', 'merchant', 'account', 'tag'].includes(groupBy as string))
+      return res.status(400).json({ error: 'groupBy must be category, merchant, account, or tag' });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: Record<string, any> = {
+      householdId,
+      date: { gte: range.start, lte: range.end },
+      isHidden: false,
+      isTransfer: false,
+    };
+
+    if ((mode as string) === 'income') {
+      where.isRefund = false;
+      where.amount = { gt: 0 };
+    } else {
+      // spending: expenses AND refunds (refunds offset expenses in the segment)
+      where.OR = [
+        { amount: { lt: 0 } },
+        { isRefund: true },
+      ];
+    }
+
+    const gid = groupId as string;
+
+    if ((groupBy as string) === 'category') {
+      where.categoryId = gid === '__uncategorized__' ? null : gid;
+    } else if ((groupBy as string) === 'merchant') {
+      where.merchantId = gid === '__unknown__' ? null : gid;
+    } else if ((groupBy as string) === 'account') {
+      where.accountId = gid;
+    } else {
+      // tag
+      if (gid === '__untagged__') {
+        where.tags = { none: {} };
+      } else {
+        where.tags = { some: { tag: { id: gid } } };
+      }
+    }
+
+    const transactions = await prisma.transaction.findMany({
+      where,
+      orderBy: { date: 'desc' },
+      include: {
+        category: { select: { id: true, name: true, emoji: true, type: true } },
+        merchant: { select: { id: true, displayName: true } },
+        account: { select: { id: true, name: true } },
+        tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+      },
+    });
+
+    // For income: post-filter by category type (consistent with income routes)
+    const filtered = (mode as string) === 'income'
+      ? transactions.filter(t => !t.categoryId || (t.category?.type ?? 'income') === 'income')
+      : transactions;
+
+    return res.json({
+      transactions: filtered.map(t => ({
+        id: t.id,
+        date: t.date.toISOString(),
+        description: t.description,
+        amount: t.amount,
+        isRefund: t.isRefund,
+        category: t.category
+          ? { id: t.category.id, name: t.category.name, emoji: t.category.emoji }
+          : null,
+        merchant: t.merchant
+          ? { id: t.merchant.id, name: t.merchant.displayName }
+          : null,
+        account: { id: t.account.id, name: t.account.name },
+        tags: t.tags.map(tt => ({
+          id: tt.tag.id,
+          name: tt.tag.name,
+          color: tt.tag.color,
+        })),
+      })),
+      total: filtered.length,
+    });
+  } catch (err) {
+    req.log.error({ err }, 'reports/drill');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
