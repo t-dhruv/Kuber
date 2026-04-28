@@ -235,4 +235,15 @@ router.post('/ai/proactive/trigger', triggerLimiter, async (req: AuthRequest, re
   }
 });
 
+router.post('/jobs/category-bucket-assign/trigger', triggerLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    const { runCategoryBucketJob } = await import('../lib/categoryBucketJob.js');
+    const { updated, skipped } = await runCategoryBucketJob();
+    return res.json({ message: 'Category bucket assignment triggered successfully', updated, skipped });
+  } catch (err) {
+    req.log.error({ err }, 'system/category-bucket-assign trigger');
+    return res.status(500).json({ error: 'Category bucket assignment failed' });
+  }
+});
+
 export default router;

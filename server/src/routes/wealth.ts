@@ -145,7 +145,7 @@ router.get('/category-buckets', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const categories = await prisma.category.findMany({
       where: { householdId },
-      select: { id: true, name: true, emoji: true, bucketType: true },
+      select: { id: true, name: true, icon: true, bucketType: true },
       orderBy: [{ bucketType: 'asc' }, { name: 'asc' }],
     });
     return res.json(categories);
@@ -178,7 +178,7 @@ router.put('/category-buckets', async (req: AuthRequest, res: Response) => {
     const updated = await prisma.category.update({
       where: { id: categoryId },
       data: { bucketType },
-      select: { id: true, name: true, emoji: true, bucketType: true },
+      select: { id: true, name: true, icon: true, bucketType: true },
     });
     return res.json(updated);
   } catch (err) {
@@ -252,7 +252,7 @@ router.get('/analysis', async (req: AuthRequest, res: Response) => {
       },
       include: {
         category: {
-          select: { id: true, name: true, emoji: true, bucketType: true },
+          select: { id: true, name: true, icon: true, bucketType: true },
         },
       },
     });

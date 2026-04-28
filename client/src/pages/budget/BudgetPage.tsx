@@ -296,7 +296,7 @@ function AddBudgetModal({
         {!preselectedCategoryId && (
           <CategoryCombobox
             label="Category"
-            categories={allCategories.map((c) => ({ id: c.id, name: c.name, emoji: c.icon }))}
+            categories={allCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon }))}
             value={selectedCategoryId}
             onChange={setSelectedCategoryId}
             placeholder="Select a category..."
@@ -401,7 +401,7 @@ function AddCategoryModal({
       <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="flex flex-col gap-4">
         <CategoryCombobox
           label="Category"
-          categories={availableCategories.map((c) => ({ id: c.id, name: c.name, emoji: c.icon }))}
+          categories={availableCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon }))}
           value={selectedCategoryId}
           onChange={setSelectedCategoryId}
           placeholder="Select a category..."

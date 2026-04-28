@@ -440,10 +440,12 @@ async function main() {
         data: {
           householdId: household.id,
           name: cd.name,
-          emoji: cd.icon,
+          icon: cd.icon,
           type: gd.type,
           groupId: group.id,
           sortOrder: ci,
+          bucketType: cd.bucketType,
+          isTaxDeductible: cd.isTaxDeductible ?? false,
         },
       });
       categoryMap.set(cd.name, cat.id);
@@ -2370,7 +2372,7 @@ async function main() {
   const holdingCount = await prisma.investmentHolding.count();
   const lotCount = await prisma.holdingLot.count();
 
-  // Advice library
+  // Advice library (also seeds bucket types — now redundant but kept as fallback)
   await seedAdviceTopics();
 
   console.log("\nSeed complete ✓");
@@ -2705,8 +2707,6 @@ async function seedAdviceTopics() {
     }
   }
 
-  // Seed 50/30/20 bucket types for all categories
-  await seedCategoryBuckets();
 }
 
 // ---------------------------------------------------------------------------

@@ -303,7 +303,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       orderBy: { date: 'desc' },
       take: 10,
       include: {
-        category: { select: { name: true, emoji: true } },
+        category: { select: { name: true, icon: true } },
         merchant: { select: { displayName: true } },
       },
     });
@@ -314,7 +314,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       merchantName: t.merchant?.displayName ?? t.description,
       amount: t.amount,
       categoryName: t.category?.name ?? null,
-      categoryIcon: t.category?.emoji ?? null,
+      categoryIcon: t.category?.icon ?? null,
     }));
 
     return res.json({
@@ -557,7 +557,7 @@ router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
         skip,
         take: limit,
         include: {
-          category: { select: { name: true, emoji: true } },
+          category: { select: { name: true, icon: true } },
           merchant: { select: { displayName: true } },
         },
       }),
@@ -570,7 +570,7 @@ router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
       merchantName: t.merchant?.displayName ?? t.description,
       amount: t.amount,
       categoryName: t.category?.name ?? null,
-      categoryIcon: t.category?.emoji ?? null,
+      categoryIcon: t.category?.icon ?? null,
       isRecurring: t.isRecurring,
       needsReview: t.needsReview,
       isPending: t.isPending,

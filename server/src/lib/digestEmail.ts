@@ -56,19 +56,19 @@ export async function sendDigestEmail(householdId: string): Promise<void> {
       amount: { lt: 0 },
       isHidden: false,
     },
-    include: { category: { select: { name: true, emoji: true } } },
+    include: { category: { select: { name: true, icon: true } } },
   });
 
-  const categoryMap = new Map<string, { name: string; emoji: string | null; total: number }>();
+  const categoryMap = new Map<string, { name: string; icon: string | null; total: number }>();
   for (const t of monthTransactions) {
     const key = t.categoryId ?? '__uncategorized__';
     const name = t.category?.name ?? 'Uncategorized';
-    const emoji = t.category?.emoji ?? null;
+    const icon = t.category?.icon ?? null;
     const existing = categoryMap.get(key);
     if (existing) {
       existing.total += Math.abs(t.amount);
     } else {
-      categoryMap.set(key, { name, emoji, total: Math.abs(t.amount) });
+      categoryMap.set(key, { name, icon, total: Math.abs(t.amount) });
     }
   }
   const topCategories = Array.from(categoryMap.values())
@@ -78,7 +78,7 @@ export async function sendDigestEmail(householdId: string): Promise<void> {
   // 3. Budget status
   const budgets = await prisma.budget.findMany({
     where: { householdId },
-    include: { category: { select: { id: true, name: true, emoji: true } } },
+    include: { category: { select: { id: true, name: true, icon: true } } },
   });
 
   const budgetRows = budgets.map((b) => {
@@ -86,7 +86,7 @@ export async function sendDigestEmail(householdId: string): Promise<void> {
     const actual = catSpending?.total ?? 0;
     const variance = b.amount - actual;
     const isOver = variance < 0;
-    return { name: b.category?.name ?? b.name ?? 'Uncategorized', emoji: b.category?.emoji ?? null, budgeted: b.amount, actual, variance, isOver };
+    return { name: b.category?.name ?? b.name ?? 'Uncategorized', icon: b.category?.icon ?? null, budgeted: b.amount, actual, variance, isOver };
   }).sort((a, b) => a.variance - b.variance); // most over budget first
 
   // 4. Upcoming recurring bills (next 7 days)
@@ -105,7 +105,7 @@ export async function sendDigestEmail(householdId: string): Promise<void> {
 
   const topCategoriesRows = topCategories.map((c) => `
     <tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${c.emoji ? c.emoji + ' ' : ''}${c.name}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${c.icon ? c.icon + ' ' : ''}${c.name}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${fmtCurrency(c.total)}</td>
     </tr>`).join('');
 
@@ -114,7 +114,7 @@ export async function sendDigestEmail(householdId: string): Promise<void> {
     const label = b.isOver ? 'Over' : 'Under';
     return `
     <tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${b.emoji ? b.emoji + ' ' : ''}${b.name}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${b.icon ? b.icon + ' ' : ''}${b.name}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right">${fmtCurrency(b.budgeted)}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right">${fmtCurrency(b.actual)}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right;color:${color};font-weight:600">${label} ${fmtCurrency(Math.abs(b.variance))}</td>

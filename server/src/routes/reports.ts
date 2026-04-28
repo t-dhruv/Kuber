@@ -37,7 +37,7 @@ async function fetchGroupedTransactions(
       ...(mode === 'income' ? { isRefund: false } : {}),
     },
     include: {
-      category: { select: { id: true, name: true, emoji: true, type: true } },
+      category: { select: { id: true, name: true, icon: true, type: true } },
       merchant: { select: { id: true, displayName: true } },
       account: { select: { id: true, name: true } },
       tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
@@ -62,7 +62,7 @@ async function fetchGroupedTransactions(
 
   for (const t of transactions) {
     if (groupBy === 'category') {
-      addToGroup(t.categoryId ?? '__uncategorized__', t.category?.name ?? 'Uncategorized', t.category?.emoji ?? null, t.amount);
+      addToGroup(t.categoryId ?? '__uncategorized__', t.category?.name ?? 'Uncategorized', t.category?.icon ?? null, t.amount);
     } else if (groupBy === 'merchant') {
       addToGroup(t.merchantId ?? '__unknown__', t.merchant?.displayName ?? t.description, null, t.amount);
     } else if (groupBy === 'account') {
@@ -107,7 +107,7 @@ async function fetchRefundsByGroup(
       isTransfer: false,
     },
     include: {
-      category: { select: { id: true, name: true, emoji: true } },
+      category: { select: { id: true, name: true, icon: true } },
       merchant: { select: { id: true, displayName: true } },
       account: { select: { id: true, name: true } },
       tags: { include: { tag: { select: { id: true, name: true } } } },
@@ -263,14 +263,14 @@ router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
         isTransfer: false,
       },
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
-        merchant: { select: { id: true, displayName: true } },
-        account: { select: { id: true, name: true } },
-        tags: { include: { tag: { select: { id: true, name: true } } } },
-      },
-    });
+      category: { select: { id: true, name: true, icon: true } },
+      merchant: { select: { id: true, displayName: true } },
+      account: { select: { id: true, name: true } },
+      tags: { include: { tag: { select: { id: true, name: true } } } },
+    },
+  });
 
-    // Build sorted month list in range
+  // Build sorted month list in range
     const monthSet = new Set<string>();
     const cur = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
     while (cur <= range.end) {
@@ -303,7 +303,7 @@ router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
       const abs = Math.abs(t.amount);
 
       if ((groupBy as string) === 'category') {
-        addToSeries(t.categoryId ?? '__uncategorized__', t.category?.name ?? 'Uncategorized', t.category?.emoji ?? null, monthKey, abs);
+        addToSeries(t.categoryId ?? '__uncategorized__', t.category?.name ?? 'Uncategorized', t.category?.icon ?? null, monthKey, abs);
       } else if ((groupBy as string) === 'merchant') {
         addToSeries(t.merchantId ?? '__unknown__', t.merchant?.displayName ?? t.description, null, monthKey, abs);
       } else if ((groupBy as string) === 'account') {
@@ -329,7 +329,7 @@ router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
         isTransfer: false,
       },
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, icon: true } },
         merchant: { select: { id: true, displayName: true } },
         account: { select: { id: true, name: true } },
         tags: { include: { tag: { select: { id: true, name: true } } } },
@@ -407,7 +407,7 @@ router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
         isRefund: false,
       },
       include: {
-        category: { select: { id: true, name: true, emoji: true, type: true } },
+        category: { select: { id: true, name: true, icon: true, type: true } },
         merchant: { select: { id: true, displayName: true } },
         account: { select: { id: true, name: true } },
         tags: { include: { tag: { select: { id: true, name: true } } } },
@@ -446,7 +446,7 @@ router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
       const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
       if ((groupBy as string) === 'category') {
-        addToSeries(t.categoryId ?? '__uncategorized__', t.category?.name ?? 'Uncategorized', t.category?.emoji ?? null, monthKey, t.amount);
+        addToSeries(t.categoryId ?? '__uncategorized__', t.category?.name ?? 'Uncategorized', t.category?.icon ?? null, monthKey, t.amount);
       } else if ((groupBy as string) === 'merchant') {
         addToSeries(t.merchantId ?? '__unknown__', t.merchant?.displayName ?? t.description, null, monthKey, t.amount);
       } else if ((groupBy as string) === 'account') {
@@ -512,7 +512,7 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
     const transactions = await prisma.transaction.findMany({
       where,
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, icon: true } },
         merchant: { select: { id: true, displayName: true } },
         account: { select: { id: true, name: true } },
         tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
@@ -549,7 +549,7 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
       if (groupBy === 'category') {
         id = t.categoryId ?? '__uncategorized__';
         name = t.category?.name ?? 'Uncategorized';
-        icon = t.category?.emoji ?? null;
+        icon = t.category?.icon ?? null;
       } else if (groupBy === 'merchant') {
         id = t.merchantId ?? '__unknown__';
         name = t.merchant?.displayName ?? t.description;
@@ -696,7 +696,7 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
     const rawTransactions = await prisma.transaction.findMany({
       where,
       include: {
-        category: { select: { id: true, name: true, emoji: true, type: true } },
+        category: { select: { id: true, name: true, icon: true, type: true } },
         merchant: { select: { id: true, displayName: true } },
         account: { select: { id: true, name: true } },
         tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
@@ -730,7 +730,7 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
       if (groupBy === 'category') {
         id = t.categoryId ?? '__uncategorized__';
         name = t.category?.name ?? 'Uncategorized';
-        icon = t.category?.emoji ?? null;
+        icon = t.category?.icon ?? null;
       } else if (groupBy === 'merchant') {
         id = t.merchantId ?? '__unknown__';
         name = t.merchant?.displayName ?? t.description;
@@ -1182,7 +1182,7 @@ router.get('/tax-summary', async (req: AuthRequest, res: Response) => {
         category: { isTaxDeductible: true },
       },
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, icon: true } },
       },
     });
 
@@ -1199,7 +1199,7 @@ router.get('/tax-summary', async (req: AuthRequest, res: Response) => {
         categoryMap.set(key, {
           id: t.category.id,
           name: t.category.name,
-          icon: t.category.emoji ?? null,
+          icon: t.category.icon ?? null,
           amount: Math.abs(t.amount),
           transactionCount: 1,
         });
@@ -1228,7 +1228,7 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
     // Fetch all budgets for household with their category
     const budgets = await prisma.budget.findMany({
       where: { householdId },
-      include: { category: { select: { id: true, name: true, emoji: true } } },
+      include: { category: { select: { id: true, name: true, icon: true } } },
     });
 
     // Fetch spending transactions in the date range grouped by category
@@ -1241,30 +1241,30 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
         isTransfer: false,
         isSplit: false,
       },
-      select: { categoryId: true, amount: true, category: { select: { id: true, name: true, emoji: true } } },
+      select: { categoryId: true, amount: true, category: { select: { id: true, name: true, icon: true } } },
     });
 
-    // Build spending map: categoryId -> { name, emoji, actual }
-    const spendingMap = new Map<string, { name: string; emoji: string | null; actual: number }>();
+    // Build spending map: categoryId -> { name, icon, actual }
+    const spendingMap = new Map<string, { name: string; icon: string | null; actual: number }>();
     for (const t of transactions) {
       const key = t.categoryId ?? '__uncategorized__';
       const name = t.category?.name ?? 'Uncategorized';
-      const emoji = t.category?.emoji ?? null;
+      const icon = t.category?.icon ?? null;
       const existing = spendingMap.get(key);
       if (existing) {
         existing.actual += Math.abs(t.amount);
       } else {
-        spendingMap.set(key, { name, emoji, actual: Math.abs(t.amount) });
+        spendingMap.set(key, { name, icon, actual: Math.abs(t.amount) });
       }
     }
 
     // Build budget map: categoryId -> budgeted amount
-    const budgetMap = new Map<string, { name: string; emoji: string | null; budgeted: number }>();
+    const budgetMap = new Map<string, { name: string; icon: string | null; budgeted: number }>();
     for (const b of budgets) {
       if (b.categoryId) {
         budgetMap.set(b.categoryId, {
           name: b.category?.name ?? 'Uncategorized',
-          emoji: b.category?.emoji ?? null,
+          icon: b.category?.icon ?? null,
           budgeted: b.amount,
         });
       }
@@ -1276,12 +1276,12 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
       const budget = budgetMap.get(catId);
       const spending = spendingMap.get(catId);
       const name = budget?.name ?? spending?.name ?? 'Uncategorized';
-      const emoji = budget?.emoji ?? spending?.emoji ?? null;
+      const icon = budget?.icon ?? spending?.icon ?? null;
       const budgeted = Math.round((budget?.budgeted ?? 0) * 100) / 100;
       const actual = Math.round((spending?.actual ?? 0) * 100) / 100;
       const variance = Math.round((budgeted - actual) * 100) / 100;
       const variancePct = budgeted !== 0 ? Math.round((variance / budgeted) * 10000) / 100 : 0;
-      return { categoryId: catId, name, emoji, budgeted, actual, variance, variancePct };
+      return { categoryId: catId, name, icon, budgeted, actual, variance, variancePct };
     }).sort((a, b) => Math.abs(b.actual) - Math.abs(a.actual));
 
     const totals = {
@@ -1569,7 +1569,7 @@ router.get('/drill', async (req: AuthRequest, res: Response) => {
       where,
       orderBy: { date: 'desc' },
       include: {
-        category: { select: { id: true, name: true, emoji: true, type: true } },
+        category: { select: { id: true, name: true, icon: true, type: true } },
         merchant: { select: { id: true, displayName: true } },
         account: { select: { id: true, name: true } },
         tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
@@ -1589,7 +1589,7 @@ router.get('/drill', async (req: AuthRequest, res: Response) => {
         amount: t.amount,
         isRefund: t.isRefund,
         category: t.category
-          ? { id: t.category.id, name: t.category.name, emoji: t.category.emoji }
+          ? { id: t.category.id, name: t.category.name, icon: t.category.icon }
           : null,
         merchant: t.merchant
           ? { id: t.merchant.id, name: t.merchant.displayName }

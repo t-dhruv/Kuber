@@ -136,7 +136,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const items = await prisma.recurringItem.findMany({
       where: where as any, // TODO: replace with proper Prisma where type once recurring filters are typed
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, icon: true } },
         account: { select: { id: true, name: true } },
       },
       orderBy: { nextDate: 'asc' },
@@ -150,7 +150,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       nextDate: item.nextDate.toISOString(),
       categoryId: item.categoryId ?? null,
       categoryName: item.category?.name ?? null,
-      categoryIcon: item.category?.emoji ?? null,
+      categoryIcon: item.category?.icon ?? null,
       accountId: item.accountId,
       accountName: item.account.name,
       isActive: item.isActive,
@@ -178,7 +178,7 @@ router.get('/monthly-summary', async (req: AuthRequest, res: Response) => {
     const items = await prisma.recurringItem.findMany({
       where: { householdId },
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, icon: true } },
         account: { select: { id: true, name: true } },
       },
     });
@@ -276,7 +276,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         categoryId: categoryId || null,
       },
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, icon: true } },
         account: { select: { id: true, name: true } },
       },
     });
@@ -289,7 +289,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       nextDate: item.nextDate.toISOString(),
       categoryId: item.categoryId ?? null,
       categoryName: item.category?.name ?? null,
-      categoryIcon: item.category?.emoji ?? null,
+      categoryIcon: item.category?.icon ?? null,
       accountId: item.accountId,
       accountName: item.account.name,
       isActive: item.isActive,
@@ -333,7 +333,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         ...(isActive !== undefined && { isActive }),
       },
       include: {
-        category: { select: { id: true, name: true, emoji: true } },
+        category: { select: { id: true, name: true, icon: true } },
         account: { select: { id: true, name: true } },
       },
     });
@@ -346,7 +346,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       nextDate: updated.nextDate.toISOString(),
       categoryId: updated.categoryId ?? null,
       categoryName: updated.category?.name ?? null,
-      categoryIcon: updated.category?.emoji ?? null,
+      categoryIcon: updated.category?.icon ?? null,
       accountId: updated.accountId,
       accountName: updated.account.name,
       isActive: updated.isActive,

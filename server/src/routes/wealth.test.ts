@@ -57,7 +57,7 @@ describe('bucketTransactions', () => {
     return {
       amount,
       categoryId,
-      category: { id: categoryId, name: catName, emoji: null, bucketType },
+      category: { id: categoryId, name: catName, icon: null, bucketType },
     };
   }
 

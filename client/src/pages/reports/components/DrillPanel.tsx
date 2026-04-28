@@ -18,7 +18,7 @@ interface DrillTransaction {
   description: string;
   amount: number;
   isRefund: boolean;
-  category: { id: string; name: string; emoji: string | null } | null;
+  category: { id: string; name: string; icon: string | null } | null;
   merchant: { id: string; name: string } | null;
   account: { id: string; name: string };
   tags: { id: string; name: string; color: string | null }[];

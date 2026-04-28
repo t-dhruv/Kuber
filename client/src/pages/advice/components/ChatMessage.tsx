@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Copy, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage as ChatMessageType } from '../hooks/useChatStream';
@@ -69,8 +70,17 @@ export function ChatMessage({ message }: Props) {
             onClick={handleCopy}
             className="opacity-0 group-hover:opacity-100 transition-opacity text-[0.6875rem] text-[var(--color-text-muted)] hover:text-[var(--color-text)] px-1.5 py-0.5 rounded border border-transparent hover:border-[var(--color-border)]"
             title="Copy message"
+            aria-label={copied ? 'Copied to clipboard' : 'Copy message to clipboard'}
           >
-            {copied ? '✓ Copied' : 'Copy'}
+            {copied ? (
+              <span className="flex items-center gap-1">
+                <Check size={12} /> <span>Copied</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <Copy size={12} /> <span>Copy</span>
+              </span>
+            )}
           </button>
         </div>
       </div>

@@ -58,6 +58,7 @@ import { runProactiveChecks } from './lib/proactiveAi';
 import { runImapCheckForAllHouseholds } from './lib/imapWatcher';
 import { processRecurringItems } from './lib/recurringJob';
 import { runLogoFetchJob } from './lib/logoFetchJob.js';
+import { runCategoryBucketJob } from './lib/categoryBucketJob';
 import { prisma } from './lib/prisma';
 import pinoHttp from 'pino-http';
 import { randomUUID } from 'crypto';
@@ -88,6 +89,9 @@ registerJob('recurring-autocreate', async () => {
   await processRecurringItems(prisma);
 });
 registerJob('logo-fetch', runLogoFetchJob);
+registerJob('category-bucket-assign', async () => {
+  await runCategoryBucketJob();
+});
 
 // ── Startup env validation ────────────────────────────────────────────────────
 const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'DATABASE_URL'] as const;
@@ -96,6 +100,11 @@ for (const key of REQUIRED_ENV) {
     logger.fatal({ key }, 'Missing required environment variable');
     process.exit(1);
   }
+}
+
+if (process.env.AI_ENCRYPTION_KEY && process.env.AI_ENCRYPTION_KEY.length !== 64) {
+  logger.fatal('AI_ENCRYPTION_KEY must be a 64-char hex string (32 bytes). Generate with: node -e "require(\'crypto\').randomBytes(32).toString(\'hex\')"');
+  process.exit(1);
 }
 
 if (process.env.NODE_ENV === 'production' && !process.env.CLIENT_URL) {
@@ -382,6 +391,22 @@ setInterval(async () => {
   } catch (err) {
     jobRunsTotal.inc({ job: 'logo-fetch', status: 'failure' });
     jobLog.error({ err }, 'Logo fetch job failed');
+  } finally {
+    end();
+  }
+}, 24 * 60 * 60 * 1000);
+
+// Daily category bucket assignment — runs every 24 hours to auto-assign bucket types
+setInterval(async () => {
+  const end = jobDurationSeconds.startTimer({ job: 'category-bucket-assign' });
+  try {
+    const { updated, skipped } = await runCategoryBucketJob();
+    jobRunsTotal.inc({ job: 'category-bucket-assign', status: 'success' });
+    jobLastRunTimestamp.set({ job: 'category-bucket-assign' }, Date.now() / 1000);
+    jobLog.info({ updated, skipped }, 'Category bucket assignment job complete');
+  } catch (err) {
+    jobRunsTotal.inc({ job: 'category-bucket-assign', status: 'failure' });
+    jobLog.error({ err }, 'Category bucket assignment job failed');
   } finally {
     end();
   }

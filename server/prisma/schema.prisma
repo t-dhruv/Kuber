@@ -277,7 +277,7 @@ model Category {
   id             String          @id @default(cuid())
   householdId    String
   name           String
-  emoji          String?
+  icon          String?
   type           String
   groupId        String?
   group          CategoryGroup?  @relation(fields: [groupId], references: [id])

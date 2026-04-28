@@ -53,7 +53,23 @@ export function Tooltip({ content, children, placement = 'top', delay = 300, dis
     setVisible(false);
   };
 
+  const toggle = () => {
+    if (visible) {
+      hide();
+    } else {
+      show();
+    }
+  };
+
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (mediaQuery.matches && timerRef.current) {
+      clearTimeout(timerRef.current);
+      setVisible(false);
+    }
+  }, []);
 
   const placementClasses: Record<TooltipPlacement, string> = {
     top: '-translate-x-1/2 -translate-y-full',
@@ -70,7 +86,12 @@ export function Tooltip({ content, children, placement = 'top', delay = 300, dis
         onMouseLeave={hide}
         onFocus={show}
         onBlur={hide}
+        onClick={toggle}
+        onTouchStart={toggle}
         className="inline-flex"
+        role="button"
+        aria-label={typeof content === 'string' ? content : undefined}
+        aria-expanded={visible}
       >
         {children}
       </div>

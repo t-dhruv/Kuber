@@ -200,7 +200,7 @@ export async function getCategorizeContext(
     where: { householdId },
     orderBy: [{ type: 'asc' }, { name: 'asc' }],
   });
-  return cats.map(c => ({ id: c.id, name: c.name, emoji: c.emoji, type: c.type }));
+  return cats.map(c => ({ id: c.id, name: c.name, emoji: c.icon, type: c.type }));
 }
 
 // ─── Investment Context ───────────────────────────────────────────────────────

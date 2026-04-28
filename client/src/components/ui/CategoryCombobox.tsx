@@ -4,7 +4,7 @@ import { ChevronDown, Search, Check } from 'lucide-react';
 export interface CategoryOption {
   id: string;
   name: string;
-  emoji?: string | null;
+  icon?: string | null;
   groupName?: string | null;
 }
 
@@ -79,7 +79,7 @@ export function CategoryCombobox({
           {selected ? (
             <>
               <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[0.625rem] shrink-0 text-white">
-                {selected.emoji ?? selected.name[0]}
+                {selected.icon ?? selected.name[0]}
               </span>
               <span className="flex-1 truncate text-[var(--color-text)]">{selected.name}</span>
             </>
@@ -130,7 +130,7 @@ export function CategoryCombobox({
                         }`}
                       >
                         <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[0.625rem] shrink-0 text-white">
-                          {cat.emoji ?? cat.name[0]}
+                          {cat.icon ?? cat.name[0]}
                         </span>
                         <span className={`flex-1 truncate ${cat.id === value ? 'font-semibold' : ''}`}>
                           {cat.name}

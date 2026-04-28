@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
+import { Check, PartyPopper } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Card, CardHeader, CardDivider, Skeleton, notify } from '@/components/ui';
 
@@ -262,7 +263,7 @@ function NetWorthWidget({
       ) : chartError || !chartData ? (
         <WidgetError />
       ) : (
-        <div role="img" aria-label="Net worth over time chart">
+        <div role="img" aria-label="Net worth over time chart" tabIndex={0} className="focus:outline-2 focus:outline-[var(--color-accent)] focus:outline-offset-2 rounded">
           <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={filtered} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
             <defs>
@@ -453,7 +454,7 @@ function ChecklistWidget() {
               border: item.done ? 'none' : '2px solid var(--color-border-strong)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              {item.done && <span style={{ color: '#fff', fontSize: '0.6875rem', fontWeight: 700 }}>✓</span>}
+              {item.done && <Check size={12} className="text-white font-bold" />}
             </div>
             <span style={{
               fontSize: '0.875rem',
@@ -497,7 +498,7 @@ function SpendingWidget({ data, isLoading, isError }: { data?: SpendingChart; is
       ) : isError || !data ? (
         <WidgetError />
       ) : (
-        <div role="img" aria-label="Spending comparison chart: this month vs last month">
+        <div role="img" aria-label="Spending comparison chart: this month vs last month" tabIndex={0} className="focus:outline-2 focus:outline-[var(--color-accent)] focus:outline-offset-2 rounded">
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={data.data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -632,7 +633,7 @@ function RecurringWidget({ data, isLoading, isError }: { data?: RecurringData; i
               {data.paid.map((item) => (
                 <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: 'var(--color-success)', fontSize: '0.875rem' }}>✓</span>
+                    <Check size={14} className="text-[var(--color-success)]" />
                     <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', textDecoration: 'line-through' }}>{item.name}</span>
                   </div>
                   <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>{fmtCurrency(item.amount)}</span>
@@ -852,7 +853,7 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
             </div>
             {data.upcoming.length === 0 ? (
               <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', padding: '0.5rem 0' }}>
-                No bills due in the next 7 days 🎉
+                No bills due in the next 7 days <PartyPopper size={16} className="inline" />
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>

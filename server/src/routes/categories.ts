@@ -6,7 +6,7 @@ import { AuthRequest } from '../middleware/auth';
 const categoryCreateSchema = z.object({
   name: z.string().min(1),
   type: z.string().min(1),
-  emoji: z.string().optional().nullable(),
+  icon: z.string().optional().nullable(),
   groupId: z.string().optional().nullable(),
   bucketType: z.string().optional(),
   isTaxDeductible: z.boolean().optional(),
@@ -29,7 +29,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const data = categories.map((c) => ({
       id: c.id,
       name: c.name,
-      emoji: c.emoji ?? null,
+      icon: c.icon ?? null,
       type: c.type,
       groupId: c.groupId ?? null,
       groupName: c.group?.name ?? null,
@@ -48,13 +48,13 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const parse = categoryCreateSchema.safeParse(req.body);
     if (!parse.success) return res.status(400).json({ error: parse.error.errors[0]?.message });
-    const { name, emoji, type, groupId, bucketType, isTaxDeductible } = parse.data;
+    const { name, icon, type, groupId, bucketType, isTaxDeductible } = parse.data;
 
     const category = await prisma.category.create({
       data: {
         householdId,
         name: name.trim(),
-        emoji: emoji ?? null,
+        icon: icon ?? null,
         type,
         groupId: groupId ?? null,
         bucketType: bucketType ?? 'uncategorized',
@@ -67,7 +67,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     return res.status(201).json({
       id: category.id,
       name: category.name,
-      emoji: category.emoji ?? null,
+      icon: category.icon ?? null,
       type: category.type,
       groupId: category.groupId ?? null,
       groupName: category.group?.name ?? null,

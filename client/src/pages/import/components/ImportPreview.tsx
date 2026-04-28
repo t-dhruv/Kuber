@@ -15,7 +15,7 @@ import type { ParseResult, ParsedRow } from '../ImportPage';
 interface Category {
   id: string;
   name: string;
-  emoji?: string | null;
+  icon?: string | null;
 }
 
 interface Props {
@@ -355,7 +355,7 @@ function RowTable({ rows, selected, categoryMap, categories, onToggle, onCategor
                     >
                       <option value="">— none —</option>
                       {categories.map((c) => (
-                        <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.name}</option>
+                        <option key={c.id} value={c.id}>{c.icon ? `${c.icon} ` : ''}{c.name}</option>
                       ))}
                     </select>
                     {isSuggested && (

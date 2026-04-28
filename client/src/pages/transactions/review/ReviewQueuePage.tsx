@@ -94,7 +94,7 @@ export default function ReviewQueuePage() {
       transactionId: string;
       action: 'approve' | 'reject' | 'skip';
       categoryId?: string;
-      createCategory?: { name: string; type: string; emoji?: string | null };
+      createCategory?: { name: string; type: string; icon?: string | null };
     }) => api.post('/auto-categorize/confirm', payload).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['auto-categorize-review'] });
@@ -111,7 +111,7 @@ export default function ReviewQueuePage() {
     transactionId: string,
     action: 'approve' | 'reject' | 'skip',
     categoryId?: string,
-    createCategory?: { name: string; type: string; emoji?: string | null }
+    createCategory?: { name: string; type: string; icon?: string | null }
   ) => {
     await confirmMutation.mutateAsync({ transactionId, action, categoryId, createCategory });
   };

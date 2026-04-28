@@ -54,10 +54,12 @@ interface HouseholdMember {
   joinedAt: string;
 }
 
+// ─── Category Types ─────────────────────────────────────────────────
+
 interface Category {
   id: string;
   name: string;
-  emoji: string | null;
+  icon: string | null;
   groupId: string | null;
   groupName: string | null;
   group?: { id: string; name: string } | null;
@@ -1324,7 +1326,7 @@ const BUCKET_COLORS: Record<BucketType, { bg: string; text: string; label: strin
 interface CategoryBucket {
   id: string;
   name: string;
-  emoji: string | null;
+  icon: string | null;
   bucketType: string;
 }
 
@@ -1333,18 +1335,31 @@ function CategoriesSection() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [modal, setModal] = useState<CategoryModalState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
+  const [deleteGroupTarget, setDeleteGroupTarget] = useState<{ id: string; name: string } | null>(null);
   // Track which category has the bucket dropdown open
   const [editingBucket, setEditingBucket] = useState<string | null>(null);
+  const [showGroupManager, setShowGroupManager] = useState(false);
 
   // Modal form state
   const [catName, setCatName] = useState('');
-  const [catEmoji, setCatEmoji] = useState('');
+  const [catIcon, setCatIcon] = useState('');
   const [catGroup, setCatGroup] = useState('');
   const [catError, setCatError] = useState('');
+  const [catType, setCatType] = useState<'expense' | 'income' | 'transfer'>('expense');
+
+  // Group manager state
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupType, setNewGroupType] = useState<'income' | 'expense' | 'transfer'>('expense');
 
   const { data: rawCategories, isLoading } = useQuery<Category[]>({
     queryKey: ['settings', 'categories'],
     queryFn: () => api.get('/settings/categories').then((r) => r.data),
+  });
+
+  // Fetch category groups
+  const { data: groups, isLoading: groupsLoading } = useQuery<{ id: string; name: string; type: string; categoryCount: number }[]>({
+    queryKey: ['settings', 'category-groups'],
+    queryFn: () => api.get('/settings/category-groups').then((r) => r.data),
   });
 
   // Fetch bucket assignments
@@ -1403,6 +1418,64 @@ function CategoriesSection() {
     onError: () => notify.error('Failed to reset buckets'),
   });
 
+  // Create category group
+  const createGroupMutation = useMutation({
+    mutationFn: () => api.post('/settings/category-groups', { name: newGroupName, type: newGroupType }),
+    onSuccess: () => {
+      notify.success('Group created');
+      setNewGroupName('');
+      queryClient.invalidateQueries({ queryKey: ['settings', 'category-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['settings', 'categories'] });
+    },
+    onError: () => notify.error('Failed to create group'),
+  });
+
+  // Delete category group
+  const deleteGroupMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/settings/category-groups/${id}`),
+    onSuccess: () => {
+      notify.success('Group deleted');
+      queryClient.invalidateQueries({ queryKey: ['settings', 'category-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['settings', 'categories'] });
+      setDeleteGroupTarget(null);
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error ?? 'Failed to delete group';
+      notify.error(msg);
+      setDeleteGroupTarget(null);
+    },
+  });
+
+  // Smart bucket type assignment based on category name and icon
+  function inferBucketType(name: string, icon: string): BucketType {
+    const lowerName = name.toLowerCase();
+    const text = `${lowerName} ${icon}`.toLowerCase();
+
+    // Needs keywords (essentials)
+    const needsKeywords = ['rent', 'mortgage', 'electric', 'water', 'gas', 'internet', 'phone', 'insurance',
+      'groceries', 'fuel', 'transit', 'medical', 'medicine', 'doctor', 'dentist', 'pharmacy',
+      'tax', 'property tax', 'maintenance', 'repair', 'minimum', 'payment', 'loan', 'debt',
+      'childcare', 'education', 'tuition', 'school', 'daycare'];
+
+    // Wants keywords (lifestyle)
+    const wantsKeywords = ['restaurant', 'coffee', 'bar', 'alcohol', 'entertainment', 'movie', 'game', 'hobby',
+      'shopping', 'clothing', 'fashion', 'travel', 'vacation', 'gift', 'subscription', 'streaming',
+      'netflix', 'spotify', 'hulu', 'disney', 'gym', 'fitness', 'dining', 'takeout', 'delivery',
+      'fast food', 'cable', 'tv', 'hobby', 'sport', 'concert', 'event'];
+
+    // Savings keywords
+    const savingsKeywords = ['saving', 'investment', 'retirement', '401k', 'ira', 'bond', 'stock',
+      'mutual fund', 'etf', 'crypto', 'bitcoin', 'emergency fund', 'college fund', 'down payment'];
+
+    if (savingsKeywords.some(k => text.includes(k))) return 'savings';
+    if (needsKeywords.some(k => text.includes(k))) return 'needs';
+    if (wantsKeywords.some(k => text.includes(k))) return 'wants';
+
+    // Default expense categorization
+    if (catType === 'income') return 'uncategorized';
+    return 'wants'; // Default to wants for new expense categories
+  }
+
   const data: { groups: CategoryGroup[] } | undefined = rawCategories
     ? {
         groups: rawCategories.reduce((acc, cat) => {
@@ -1421,7 +1494,7 @@ function CategoriesSection() {
 
   function openAdd(group?: string) {
     setCatName('');
-    setCatEmoji('');
+    setCatIcon('');
     setCatGroup(group ?? '');
     setCatError('');
     setModal({ mode: 'add' });
@@ -1429,7 +1502,7 @@ function CategoriesSection() {
 
   function openEdit(cat: Category) {
     setCatName(cat.name);
-    setCatEmoji(cat.emoji ?? '');
+    setCatIcon(cat.icon ?? '');
     setCatGroup(cat.group?.name ?? '');
     setCatError('');
     setModal({ mode: 'edit', category: cat });
@@ -1442,12 +1515,20 @@ function CategoriesSection() {
 
   const createMutation = useMutation({
     mutationFn: () => {
-      const resolvedGroupId = data?.groups.find((g) => g.name === catGroup)?.id ?? null;
-      return api.post('/settings/categories', { name: catName, emoji: catEmoji, groupId: resolvedGroupId });
+      const resolvedGroupId = groups?.find((g) => g.name === catGroup)?.id ?? null;
+      const inferredBucket = inferBucketType(catName, catIcon);
+      return api.post('/settings/categories', {
+        name: catName,
+        icon: catIcon,
+        groupId: resolvedGroupId,
+        type: catType,
+        bucketType: inferredBucket,
+      });
     },
     onSuccess: () => {
       notify.success('Category created');
       queryClient.invalidateQueries({ queryKey: ['settings', 'categories'] });
+      queryClient.invalidateQueries({ queryKey: ['wealth', 'category-buckets'] });
       closeModal();
     },
     onError: () => {
@@ -1457,8 +1538,13 @@ function CategoriesSection() {
 
   const updateMutation = useMutation({
     mutationFn: () => {
-      const resolvedGroupId = data?.groups.find((g) => g.name === catGroup)?.id ?? null;
-      return api.put(`/settings/categories/${modal?.category?.id}`, { name: catName, emoji: catEmoji, groupId: resolvedGroupId });
+      const resolvedGroupId = groups?.find((g) => g.name === catGroup)?.id ?? null;
+      return api.put(`/settings/categories/${modal?.category?.id}`, {
+        name: catName,
+        icon: catIcon,
+        groupId: resolvedGroupId,
+        type: catType,
+      });
     },
     onSuccess: () => {
       notify.success('Category updated');
@@ -1500,7 +1586,7 @@ function CategoriesSection() {
   }
 
   const groupOptions =
-    data?.groups.map((g) => ({ value: g.name, label: g.name })) ?? [];
+    groups?.map((g) => ({ value: g.name, label: g.name })) ?? [];
 
   if (isLoading) {
     return (
@@ -1519,17 +1605,82 @@ function CategoriesSection() {
           <Button
             variant="ghost"
             size="sm"
+            onClick={() => setShowGroupManager(!showGroupManager)}
+            className="text-[var(--color-text-muted)] text-[0.8125rem]"
+          >
+            {showGroupManager ? 'Hide' : 'Manage'} Groups
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => resetBucketsMutation.mutate()}
             loading={resetBucketsMutation.isPending}
             className="text-[var(--color-text-muted)] text-[0.8125rem]"
           >
-            Reset buckets to defaults
+            Reset buckets
           </Button>
           <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => openAdd()}>
             Add category
           </Button>
         </div>
       </div>
+
+      {/* Group Manager */}
+      {showGroupManager && (
+        <Card className="mb-4 p-4">
+          <h3 className="text-sm font-semibold text-[var(--color-text)] mb-3">Manage Category Groups</h3>
+          <div className="flex gap-2 mb-4">
+            <Input
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              placeholder="New group name..."
+              className="flex-1"
+            />
+            <Select
+              value={newGroupType}
+              onChange={(e) => setNewGroupType(e.target.value as any)}
+              options={[
+                { value: 'expense', label: 'Expense' },
+                { value: 'income', label: 'Income' },
+                { value: 'transfer', label: 'Transfer' },
+              ]}
+              className="w-32"
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => createGroupMutation.mutate()}
+              loading={createGroupMutation.isPending}
+              disabled={!newGroupName.trim()}
+            >
+              Add
+            </Button>
+          </div>
+          <div className="flex flex-col gap-1">
+            {(groups ?? []).map((g) => (
+              <div key={g.id} className="flex items-center justify-between py-2 px-3 rounded hover:bg-[var(--color-surface)]">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-[var(--color-text)]">{g.name}</span>
+                  <span className="text-xs text-[var(--color-text-muted)]">({g.type})</span>
+                  <span className="text-xs text-[var(--color-text-muted)]">· {g.categoryCount} categories</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Trash2 size={13} />}
+                  onClick={() => setDeleteGroupTarget({ id: g.id, name: g.name })}
+                  className="text-[var(--color-danger)]"
+                >
+                  Delete
+                </Button>
+              </div>
+            ))}
+            {(!groups || groups.length === 0) && (
+              <p className="text-sm text-[var(--color-text-muted)]">No groups yet.</p>
+            )}
+          </div>
+        </Card>
+      )}
 
       <div className="flex flex-col gap-2 mt-5">
         {(data?.groups ?? []).map((group) => {
@@ -1565,7 +1716,7 @@ function CategoriesSection() {
                       style={{ borderBottom: idx < group.categories.length - 1 ? '1px solid var(--color-border)' : 'none' }}
                     >
                       <span className="text-[1.625rem] leading-none w-7 text-center shrink-0">
-                        {cat.emoji || '·'}
+                        {cat.icon || '·'}
                       </span>
                       <span className="flex-1 text-sm text-[var(--color-text)]">
                         {cat.name}
@@ -1664,15 +1815,32 @@ function CategoriesSection() {
             onChange={(e) => setCatName(e.target.value)}
             placeholder="e.g. Groceries"
           />
-          <EmojiPicker value={catEmoji} onChange={setCatEmoji} />
-          <Input
+          <EmojiPicker value={catIcon} onChange={setCatIcon} />
+          <Select
             label="Group"
             value={catGroup}
             onChange={(e) => setCatGroup(e.target.value)}
-            placeholder="e.g. Food & Dining"
-            hint={groupOptions.length > 0 ? `Existing groups: ${groupOptions.map((g) => g.label).join(', ')}` : undefined}
+            options={[
+              { value: '', label: 'Select a group...', disabled: true },
+              ...groupOptions,
+            ]}
             error={catError || undefined}
           />
+          <Select
+            label="Type"
+            value={catType}
+            onChange={(e) => setCatType(e.target.value as any)}
+            options={[
+              { value: 'expense', label: 'Expense' },
+              { value: 'income', label: 'Income' },
+              { value: 'transfer', label: 'Transfer' },
+            ]}
+          />
+          {modal?.mode === 'add' && catName && (
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Bucket will be auto-assigned as: <strong>{inferBucketType(catName, catIcon)}</strong>
+            </p>
+          )}
           <ModalFooter>
             <Button variant="ghost" onClick={closeModal}>Cancel</Button>
             <Button
@@ -1694,7 +1862,7 @@ function CategoriesSection() {
         size="sm"
       >
         <p className="text-sm text-[var(--color-text)]">
-          Delete <strong>{deleteTarget?.emoji} {deleteTarget?.name}</strong>? This cannot be undone.
+          Delete <strong>{deleteTarget?.icon} {deleteTarget?.name}</strong>? This cannot be undone.
         </p>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
@@ -1702,6 +1870,29 @@ function CategoriesSection() {
             variant="danger"
             loading={deleteMutation.isPending}
             onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+          >
+            Delete
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Delete Group confirmation modal */}
+      <Modal
+        open={!!deleteGroupTarget}
+        onClose={() => setDeleteGroupTarget(null)}
+        title="Delete Group"
+        size="sm"
+      >
+        <p className="text-sm text-[var(--color-text)]">
+          Delete group <strong>{deleteGroupTarget?.name}</strong>? This cannot be undone.
+          Make sure to move or delete all categories in this group first.
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDeleteGroupTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={deleteGroupMutation.isPending}
+            onClick={() => deleteGroupTarget && deleteGroupMutation.mutate(deleteGroupTarget.id)}
           >
             Delete
           </Button>

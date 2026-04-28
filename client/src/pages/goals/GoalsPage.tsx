@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import {
   Card, Button, Input, Modal, ModalFooter, Skeleton, Select,
 } from '@/components/ui';
+import { LucideIcon } from '@/components/ui/LucideIcon';
 import { notify } from '@/components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -83,14 +84,14 @@ interface ContributeFormValues {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const GOAL_TYPES: { value: GoalType; label: string; emoji: string }[] = [
-  { value: 'savings', label: 'Savings', emoji: '💰' },
-  { value: 'vacation', label: 'Vacation', emoji: '🏖' },
-  { value: 'home', label: 'Home Down Payment', emoji: '🏠' },
-  { value: 'wedding', label: 'Wedding', emoji: '💍' },
-  { value: 'education', label: 'Education', emoji: '📚' },
-  { value: 'car', label: 'Car', emoji: '🚗' },
-  { value: 'other', label: 'Other', emoji: '🎯' },
+const GOAL_TYPES: { value: GoalType; label: string; icon: string }[] = [
+  { value: 'savings', label: 'Savings', icon: 'PiggyBank' },
+  { value: 'vacation', label: 'Vacation', icon: 'Plane' },
+  { value: 'home', label: 'Home Down Payment', icon: 'Home' },
+  { value: 'wedding', label: 'Wedding', icon: 'Gift' },
+  { value: 'education', label: 'Education', icon: 'GraduationCap' },
+  { value: 'car', label: 'Car', icon: 'Car' },
+  { value: 'other', label: 'Other', icon: 'Target' },
 ];
 
 const GOAL_GRADIENTS: Record<GoalType, string> = {
@@ -119,7 +120,7 @@ function goalStatusStyle(status: GoalStatus): { bg: string; color: string; label
     case 'at_risk':
       return { bg: 'var(--color-warning-light)', color: 'var(--color-warning)', label: 'At Risk' };
     case 'completed':
-      return { bg: 'var(--color-border)', color: 'var(--color-text-secondary)', label: 'Completed ✓' };
+      return { bg: 'var(--color-border)', color: 'var(--color-text-secondary)', label: 'Completed' };
   }
 }
 
@@ -208,7 +209,7 @@ function GoalCard({
         <div className="flex items-start justify-between gap-2 mb-3">
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-base">{typeInfo.emoji}</span>
+              <span className="text-base"><LucideIcon name={typeInfo.icon} size={16} /></span>
               <span className="text-[0.9375rem] font-semibold text-[var(--color-text)]">{goal.name}</span>
             </div>
           </div>
@@ -549,7 +550,7 @@ function AddGoalModal({
                     backgroundColor: form.type === gt.value ? 'var(--color-accent-light)' : 'var(--color-surface)',
                   }}
                 >
-                  <span className="text-xl">{gt.emoji}</span>
+                  <span className="text-xl"><LucideIcon name={gt.icon} size={20} /></span>
                   <span
                     className="text-[0.6875rem] font-medium text-center leading-[1.3]"
                     style={{ color: form.type === gt.value ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
