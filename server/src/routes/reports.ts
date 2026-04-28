@@ -79,7 +79,67 @@ async function fetchGroupedTransactions(
     }
   }
 
+  if (mode === 'spending') {
+    const refundMap = await fetchRefundsByGroup(householdId, start, end, groupBy);
+    for (const [key, refundAmt] of refundMap) {
+      const existing = groupMap.get(key);
+      if (existing) {
+        existing.amount = Math.max(0, existing.amount - refundAmt);
+      }
+    }
+  }
+
   return groupMap;
+}
+
+async function fetchRefundsByGroup(
+  householdId: string,
+  start: Date,
+  end: Date,
+  groupBy: string,
+): Promise<Map<string, number>> {
+  const refunds = await prisma.transaction.findMany({
+    where: {
+      householdId,
+      date: { gte: start, lte: end },
+      isRefund: true,
+      isHidden: false,
+      isTransfer: false,
+    },
+    include: {
+      category: { select: { id: true, name: true, emoji: true } },
+      merchant: { select: { id: true, displayName: true } },
+      account: { select: { id: true, name: true } },
+      tags: { include: { tag: { select: { id: true, name: true } } } },
+    },
+  });
+
+  const refundMap = new Map<string, number>();
+
+  for (const t of refunds) {
+    let key: string;
+    if (groupBy === 'category') {
+      key = t.categoryId ?? '__uncategorized__';
+    } else if (groupBy === 'merchant') {
+      key = t.merchantId ?? '__unknown__';
+    } else if (groupBy === 'account') {
+      key = t.accountId;
+    } else {
+      // tag
+      if (t.tags.length === 0) {
+        key = '__untagged__';
+        refundMap.set(key, (refundMap.get(key) ?? 0) + t.amount);
+        continue;
+      }
+      for (const tt of t.tags) {
+        refundMap.set(tt.tag.id, (refundMap.get(tt.tag.id) ?? 0) + t.amount);
+      }
+      continue;
+    }
+    refundMap.set(key, (refundMap.get(key) ?? 0) + t.amount);
+  }
+
+  return refundMap;
 }
 
 // GET /api/v1/reports/spending/compare
@@ -256,6 +316,56 @@ router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
             addToSeries(tt.tag.id, tt.tag.name, null, monthKey, abs);
           }
         }
+      }
+    }
+
+    // Net refunds into monthly series
+    const allRefunds = await prisma.transaction.findMany({
+      where: {
+        householdId,
+        date: { gte: range.start, lte: range.end },
+        isRefund: true,
+        isHidden: false,
+        isTransfer: false,
+      },
+      include: {
+        category: { select: { id: true, name: true, emoji: true } },
+        merchant: { select: { id: true, displayName: true } },
+        account: { select: { id: true, name: true } },
+        tags: { include: { tag: { select: { id: true, name: true } } } },
+      },
+    });
+
+    for (const t of allRefunds) {
+      const d = new Date(t.date);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      let key: string;
+
+      if ((groupBy as string) === 'category') {
+        key = t.categoryId ?? '__uncategorized__';
+      } else if ((groupBy as string) === 'merchant') {
+        key = t.merchantId ?? '__unknown__';
+      } else if ((groupBy as string) === 'account') {
+        key = t.accountId;
+      } else {
+        if (t.tags.length === 0) {
+          key = '__untagged__';
+        } else {
+          for (const tt of t.tags) {
+            const entry = seriesMap.get(tt.tag.id);
+            if (entry) {
+              const cur = entry.byMonth.get(monthKey) ?? 0;
+              entry.byMonth.set(monthKey, Math.max(0, cur - t.amount));
+            }
+          }
+          continue;
+        }
+      }
+
+      const entry = seriesMap.get(key);
+      if (entry) {
+        const cur = entry.byMonth.get(monthKey) ?? 0;
+        entry.byMonth.set(monthKey, Math.max(0, cur - t.amount));
       }
     }
 
@@ -486,17 +596,44 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Net refunds against expense categories
+    const refundMap = await fetchRefundsByGroup(householdId, range.start, range.end, groupBy as string);
+    const grossTotal = Math.round(total * 100) / 100;
+
+    // Capture gross amounts before netting
+    const grossAmountByGroup = new Map<string, number>();
+    for (const [key, entry] of groupMap) {
+      grossAmountByGroup.set(key, entry.amount);
+    }
+
+    for (const [key, refundAmt] of refundMap) {
+      const existing = groupMap.get(key);
+      if (existing) {
+        existing.amount = Math.max(0, existing.amount - refundAmt);
+      }
+    }
+
+    // Compute net total for correct percentages (after refund netting)
+    const netTotal = Array.from(groupMap.values()).reduce((s, g) => s + g.amount, 0);
+
     const items = Array.from(groupMap.values())
       .sort((a, b) => b.amount - a.amount)
-      .map(g => ({
-        id: g.id,
-        name: g.name,
-        icon: g.icon,
-        color: g.color,
-        amount: Math.round(g.amount * 100) / 100,
-        percent: total > 0 ? Math.round((g.amount / total) * 10000) / 100 : 0,
-        transactionCount: g.count,
-      }));
+      .map(g => {
+        const netAmount = Math.round(g.amount * 100) / 100;
+        const refundAmount = Math.round((refundMap.get(g.id) ?? 0) * 100) / 100;
+        const grossAmount = Math.round((grossAmountByGroup.get(g.id) ?? g.amount) * 100) / 100;
+        return {
+          id: g.id,
+          name: g.name,
+          icon: g.icon,
+          color: g.color,
+          amount: netAmount,
+          grossAmount,
+          refundAmount,
+          percent: netTotal > 0 ? Math.round((netAmount / netTotal) * 10000) / 100 : 0,
+          transactionCount: g.count,
+        };
+      });
 
     // First / last transaction dates for spending
     const spendingDates = transactions.map(t => t.date.getTime()).sort((a, b) => a - b);
@@ -505,6 +642,7 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
 
     return res.json({
       total: Math.round(total * 100) / 100,
+      grossTotal,
       startDate: range.start.toISOString(),
       endDate: range.end.toISOString(),
       groupBy,
