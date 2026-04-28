@@ -949,7 +949,7 @@ interface CategoryTabProps {
   startDate: string;
   endDate: string;
   extraParams?: string;
-  onDrillClick?: (id: string, name: string, icon: string | null | undefined, mode: "spending" | "income") => void;
+  onDrillClick?: (id: string, name: string, icon: string | null | undefined, mode: "spending" | "income", groupBy: string) => void;
 }
 
 function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick }: CategoryTabProps) {
@@ -1185,7 +1185,7 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick 
                 mode={mode}
                 monthlyGrouping={monthlyGrouping}
                 onMonthlyGroupingChange={setMonthlyGrouping}
-                onDrillClick={onDrillClick}
+                onDrillClick={onDrillClick ? (id, name, icon, m) => onDrillClick(id, name, icon, m, groupBy) : undefined}
               />
               {!compareLoading && compareData && compareData.items.length > 0 && (
                 <div style={{ marginTop: '1.25rem' }}>
@@ -1218,7 +1218,7 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick 
                 data={pieData}
                 total={total}
                 color={color}
-                onDrillClick={onDrillClick ? (id, name, icon) => onDrillClick(id, name, icon, mode) : undefined}
+                onDrillClick={onDrillClick ? (id, name, icon) => onDrillClick(id, name, icon, mode, groupBy) : undefined}
               />
 
               {/* Legend */}
@@ -2874,13 +2874,14 @@ export default function ReportsPage() {
     groupName: string,
     groupIcon: string | null | undefined,
     mode: "spending" | "income",
+    groupBy: string,
   ) {
     setDrillFilter({
       groupId,
       groupName,
       groupIcon,
       mode,
-      groupBy: "category",
+      groupBy,
       startDate,
       endDate,
     });

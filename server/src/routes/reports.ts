@@ -1543,11 +1543,9 @@ router.get('/drill', async (req: AuthRequest, res: Response) => {
       where.isRefund = false;
       where.amount = { gt: 0 };
     } else {
-      // spending: expenses AND refunds (refunds offset expenses in the segment)
-      where.OR = [
-        { amount: { lt: 0 } },
-        { isRefund: true },
-      ];
+      // spending: regular expenses only (refunds are netted at report level, not shown as line items)
+      where.amount = { lt: 0 };
+      where.isRefund = false;
     }
 
     const gid = groupId as string;
