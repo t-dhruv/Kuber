@@ -13,16 +13,45 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
-import { ReportsSankeyChart, type SankeyData } from "./components/ReportsSankeyChart";
+import {
+  ReportsSankeyChart,
+  type SankeyData,
+} from "./components/ReportsSankeyChart";
 import { DrillPanel } from "./components/DrillPanel";
 import { BudgetVarianceChart } from "./components/BudgetVarianceChart";
 import { CashFlowForecast } from "./components/CashFlowForecast";
-import { SlidersHorizontal, BookmarkPlus, ChevronDown, Trash2, Bookmark, X, BarChart2, GitMerge, Receipt } from "lucide-react";
+import { NetWorthSection } from "./components/NetWorthSection";
+import { AssetsLiabilitiesSection } from "./components/AssetsLiabilitiesSection";
+import { InvestmentPerformanceSection } from "./components/InvestmentPerformanceSection";
+import { AllocationDriftSection } from "./components/AllocationDriftSection";
+import { ContributionRoomSection } from "./components/ContributionRoomSection";
+import { DividendForecastSection } from "./components/DividendForecastSection";
+import { RetirementSimulationSection } from "./components/RetirementSimulationSection";
+import {
+  SlidersHorizontal,
+  BookmarkPlus,
+  ChevronDown,
+  Trash2,
+  Bookmark,
+  X,
+  BarChart2,
+  GitMerge,
+} from "lucide-react";
 import { ExportButtons } from "./components/ExportButtons";
 import { TaxSummaryTab } from "./components/TaxSummaryTab";
+import { OverviewSummary } from "./components/OverviewSummary";
 import { api } from "@/lib/api";
-import { Card, CardDivider, Skeleton, Modal, ModalFooter, Button, Input, notify } from "@/components/ui";
-import { InstitutionLogo } from "@/components/ui/InstitutionLogo";
+import {
+  Card,
+  CardDivider,
+  Skeleton,
+  Modal,
+  ModalFooter,
+  Button,
+  Input,
+  notify,
+  SegmentControl,
+} from "@/components/ui";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -50,9 +79,25 @@ const DATE_PRESETS = [
 ] as const;
 
 type DatePreset = (typeof DATE_PRESETS)[number]["value"];
-type ReportTab = "cashflow" | "spending" | "income" | "forecast" | "tax" | "variance" | "benchmarks";
+type ReportTab =
+  | "overview"
+  | "cashflow"
+  | "spending"
+  | "income"
+  | "forecast"
+  | "tax"
+  | "variance"
+  | "benchmarks"
+  | "networth"
+  | "assetsliabilities"
+  | "investmentperformance"
+  | "allocationdrift"
+  | "contributionroom"
+  | "dividendforecast"
+  | "retirementsimulation";
 type ChartType = "donut" | "pie" | "bar" | "line";
 type GroupBy = "category" | "merchant" | "account";
+type ReportTabGroup = "core" | "wealth" | "advanced";
 
 const MONTH_NAMES = [
   "Jan",
@@ -450,73 +495,218 @@ interface BenchmarkCategory {
   actualMonthlyAvg: number;
 }
 
-function SpendingBenchmarksTab({ startDate, endDate }: { startDate: string; endDate: string }) {
+function SpendingBenchmarksTab({
+  startDate,
+  endDate,
+}: {
+  startDate: string;
+  endDate: string;
+}) {
   const { data, isLoading, isError } = useQuery<{
     startDate: string;
     endDate: string;
     months: number;
     categories: BenchmarkCategory[];
   }>({
-    queryKey: ['reports', 'benchmarks', startDate, endDate],
+    queryKey: ["reports", "benchmarks", startDate, endDate],
     queryFn: () =>
-      api.get(`/reports/benchmarks?startDate=${startDate}&endDate=${endDate}`).then((r) => r.data),
+      api
+        .get(`/reports/benchmarks?startDate=${startDate}&endDate=${endDate}`)
+        .then((r) => r.data),
   });
 
   const fmtC = (n: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(n);
 
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1rem 0' }}>
-        {[1,2,3,4,5].map((i) => (
-          <div key={i} style={{ height: '3.5rem', borderRadius: 'var(--radius-md)', background: 'var(--color-surface-hover)', animation: 'pulse 1.5s infinite' }} />
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.75rem",
+          padding: "1rem 0",
+        }}
+      >
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div
+            key={i}
+            style={{
+              height: "3.5rem",
+              borderRadius: "var(--radius-md)",
+              background: "var(--color-surface-hover)",
+              animation: "pulse 1.5s infinite",
+            }}
+          />
         ))}
       </div>
     );
   }
 
   if (isError || !data) {
-    return <p style={{ color: 'var(--color-danger)', fontSize: '0.875rem', padding: '1rem 0' }}>Failed to load benchmarks.</p>;
+    return (
+      <p
+        style={{
+          color: "var(--color-danger)",
+          fontSize: "0.875rem",
+          padding: "1rem 0",
+        }}
+      >
+        Failed to load benchmarks.
+      </p>
+    );
   }
 
-  const maxMonthly = Math.max(...data.categories.map((c) => Math.max(c.blsMonthlyAvg, c.actualMonthlyAvg)), 1);
+  const maxMonthly = Math.max(
+    ...data.categories.map((c) =>
+      Math.max(c.blsMonthlyAvg, c.actualMonthlyAvg),
+    ),
+    1,
+  );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingTop: '1rem' }}>
-      <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--color-text-muted)' }}>
-        Comparing your monthly averages ({data.months} month{data.months !== 1 ? 's' : ''}) against BLS Consumer Expenditure Survey 2023 national averages.
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "1.5rem",
+        paddingTop: "1rem",
+      }}
+    >
+      <p
+        style={{
+          margin: 0,
+          fontSize: "0.8125rem",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        Comparing your monthly averages ({data.months} month
+        {data.months !== 1 ? "s" : ""}) against BLS Consumer Expenditure Survey
+        2023 national averages.
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
         {data.categories.map((cat) => {
           const overBudget = cat.actualMonthlyAvg > cat.blsMonthlyAvg;
-          const pct = cat.blsMonthlyAvg > 0 ? ((cat.actualMonthlyAvg - cat.blsMonthlyAvg) / cat.blsMonthlyAvg) * 100 : 0;
+          const pct =
+            cat.blsMonthlyAvg > 0
+              ? ((cat.actualMonthlyAvg - cat.blsMonthlyAvg) /
+                  cat.blsMonthlyAvg) *
+                100
+              : 0;
           return (
-            <div key={cat.key} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '0.875rem 1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
-                <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--color-text)' }}>{cat.label}</span>
-                <span style={{ fontSize: '0.75rem', color: overBudget ? 'var(--color-danger)' : 'var(--color-success)', fontWeight: 600 }}>
-                  {cat.actualMonthlyAvg === 0 ? 'No spending' : overBudget ? `+${Math.round(pct)}% vs avg` : `${Math.round(pct)}% vs avg`}
+            <div
+              key={cat.key}
+              style={{
+                background: "var(--color-surface)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-lg)",
+                padding: "0.875rem 1rem",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  marginBottom: "0.5rem",
+                }}
+              >
+                <span
+                  style={{
+                    fontWeight: 600,
+                    fontSize: "0.875rem",
+                    color: "var(--color-text)",
+                  }}
+                >
+                  {cat.label}
+                </span>
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    color: overBudget
+                      ? "var(--color-danger)"
+                      : "var(--color-success)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {cat.actualMonthlyAvg === 0
+                    ? "No spending"
+                    : overBudget
+                      ? `+${Math.round(pct)}% vs avg`
+                      : `${Math.round(pct)}% vs avg`}
                 </span>
               </div>
 
               {/* BLS bar */}
-              <div style={{ marginBottom: '0.4rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginBottom: '0.2rem' }}>
-                  <span>BLS avg</span><span>{fmtC(cat.blsMonthlyAvg)}/mo</span>
+              <div style={{ marginBottom: "0.4rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: "0.6875rem",
+                    color: "var(--color-text-muted)",
+                    marginBottom: "0.2rem",
+                  }}
+                >
+                  <span>BLS avg</span>
+                  <span>{fmtC(cat.blsMonthlyAvg)}/mo</span>
                 </div>
-                <div style={{ height: '6px', background: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${(cat.blsMonthlyAvg / maxMonthly) * 100}%`, background: 'var(--color-text-muted)', borderRadius: 'var(--radius-full)' }} />
+                <div
+                  style={{
+                    height: "6px",
+                    background: "var(--color-border)",
+                    borderRadius: "var(--radius-full)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${(cat.blsMonthlyAvg / maxMonthly) * 100}%`,
+                      background: "var(--color-text-muted)",
+                      borderRadius: "var(--radius-full)",
+                    }}
+                  />
                 </div>
               </div>
 
               {/* Actual bar */}
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--color-text-muted)', marginBottom: '0.2rem' }}>
-                  <span>You</span><span>{fmtC(cat.actualMonthlyAvg)}/mo</span>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: "0.6875rem",
+                    color: "var(--color-text-muted)",
+                    marginBottom: "0.2rem",
+                  }}
+                >
+                  <span>You</span>
+                  <span>{fmtC(cat.actualMonthlyAvg)}/mo</span>
                 </div>
-                <div style={{ height: '6px', background: 'var(--color-border)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${(cat.actualMonthlyAvg / maxMonthly) * 100}%`, background: overBudget ? 'var(--color-danger)' : 'var(--color-success)', borderRadius: 'var(--radius-full)' }} />
+                <div
+                  style={{
+                    height: "6px",
+                    background: "var(--color-border)",
+                    borderRadius: "var(--radius-full)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${(cat.actualMonthlyAvg / maxMonthly) * 100}%`,
+                      background: overBudget
+                        ? "var(--color-danger)"
+                        : "var(--color-success)",
+                      borderRadius: "var(--radius-full)",
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -524,14 +714,61 @@ function SpendingBenchmarksTab({ startDate, endDate }: { startDate: string; endD
         })}
       </div>
 
-      <p style={{ margin: 0, fontSize: '0.6875rem', color: 'var(--color-text-muted)' }}>
-        Source: U.S. Bureau of Labor Statistics, Consumer Expenditure Survey 2023. Averages based on all U.S. consumer units (~$80k avg income).
+      <p
+        style={{
+          margin: 0,
+          fontSize: "0.6875rem",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        Source: U.S. Bureau of Labor Statistics, Consumer Expenditure Survey
+        2023. Averages based on all U.S. consumer units (~$80k avg income).
       </p>
     </div>
   );
 }
 
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
+
+const TAB_GROUPS: {
+  id: ReportTabGroup;
+  label: string;
+  tabs: { value: ReportTab; label: string }[];
+}[] = [
+  {
+    id: "core",
+    label: "Core",
+    tabs: [
+      { value: "overview", label: "Overview" },
+      { value: "cashflow", label: "Cash Flow" },
+      { value: "spending", label: "Spending" },
+      { value: "income", label: "Income" },
+      { value: "variance", label: "Variance" },
+      { value: "forecast", label: "Forecast" },
+      { value: "tax", label: "Tax Summary" },
+      { value: "benchmarks", label: "Benchmarks" },
+    ],
+  },
+  {
+    id: "wealth",
+    label: "Wealth",
+    tabs: [
+      { value: "networth", label: "Net Worth" },
+      { value: "assetsliabilities", label: "Assets / Liabilities" },
+      { value: "investmentperformance", label: "Investment Performance" },
+    ],
+  },
+  {
+    id: "advanced",
+    label: "Advanced",
+    tabs: [
+      { value: "allocationdrift", label: "Allocation & Drift" },
+      { value: "contributionroom", label: "Contribution Room" },
+      { value: "dividendforecast", label: "Dividend Forecast" },
+      { value: "retirementsimulation", label: "Retirement Simulation" },
+    ],
+  },
+];
 
 function TabBar({
   tab,
@@ -540,50 +777,63 @@ function TabBar({
   tab: ReportTab;
   onChange: (t: ReportTab) => void;
 }) {
-  const TABS: { value: ReportTab; label: string }[] = [
-    { value: "cashflow", label: "Cash Flow" },
-    { value: "spending", label: "Spending" },
-    { value: "income", label: "Income" },
-    { value: "variance", label: "Variance" },
-    { value: "forecast", label: "Forecast" },
-    { value: "tax", label: "Tax Summary" },
-    { value: "benchmarks", label: "Benchmarks" },
-  ];
+  const [activeGroup, setActiveGroup] = useState<ReportTabGroup>(() => {
+    const found = TAB_GROUPS.find((g) => g.tabs.some((t) => t.value === tab));
+    return found?.id ?? "core";
+  });
+
+  // Sync activeGroup when tab changes externally (e.g. saved views)
+  useEffect(() => {
+    const group = TAB_GROUPS.find((g) => g.tabs.some((t) => t.value === tab));
+    if (group && group.id !== activeGroup) {
+      setActiveGroup(group.id);
+    }
+  }, [tab]);
+
+  // Switch to first tab of new group when group changes
+  useEffect(() => {
+    const group = TAB_GROUPS.find((g) => g.id === activeGroup);
+    if (group && !group.tabs.some((t) => t.value === tab)) {
+      onChange(group.tabs[0].value);
+    }
+  }, [activeGroup]);
+
+  const groupOptions = TAB_GROUPS.map((g) => ({
+    value: g.id,
+    label: g.label,
+  }));
+  const currentGroup = TAB_GROUPS.find((g) => g.id === activeGroup);
 
   return (
     <div
+      role="navigation"
+      aria-label="Reports sections navigation"
       style={{
         display: "flex",
-        gap: 0,
-        borderBottom: "1px solid var(--color-border)",
+        flexDirection: "column",
+        gap: "0.5rem",
       }}
     >
-      {TABS.map((t) => (
-        <button
-          key={t.value}
-          onClick={() => onChange(t.value)}
-          style={{
-            padding: "0.5rem 1rem",
-            fontSize: "0.875rem",
-            fontWeight: tab === t.value ? 600 : 400,
-            color:
-              tab === t.value
-                ? "var(--color-accent)"
-                : "var(--color-text-secondary)",
-            border: "none",
-            borderBottom:
-              tab === t.value
-                ? "2px solid var(--color-accent)"
-                : "2px solid transparent",
-            backgroundColor: "transparent",
-            cursor: "pointer",
-            marginBottom: "-1px",
-            transition: "color 0.15s",
-          }}
-        >
-          {t.label}
-        </button>
-      ))}
+      {/* Group selector */}
+      <SegmentControl
+        options={groupOptions}
+        value={activeGroup}
+        onChange={(v) => setActiveGroup(v as ReportTabGroup)}
+        size="sm"
+      />
+
+      {/* Tab selector for active group */}
+      {currentGroup && (
+        <SegmentControl
+          options={currentGroup.tabs.map((t) => ({
+            value: t.value,
+            label: t.label,
+          }))}
+          value={tab}
+          onChange={onChange}
+          size="md"
+        />
+      )}
     </div>
   );
 }
@@ -659,7 +909,9 @@ function CashFlowTab({
     queryKey: ["reports-cashflow", startDate, endDate, extraParams],
     queryFn: () =>
       api
-        .get(`/reports/cashflow?startDate=${startDate}&endDate=${endDate}${extraParams}`)
+        .get(
+          `/reports/cashflow?startDate=${startDate}&endDate=${endDate}${extraParams}`,
+        )
         .then((r) => r.data),
   });
 
@@ -667,7 +919,9 @@ function CashFlowTab({
     queryKey: ["reports-sankey", startDate, endDate, extraParams],
     queryFn: () =>
       api
-        .get(`/cashflow/sankey?startDate=${startDate}&endDate=${endDate}${extraParams}`)
+        .get(
+          `/cashflow/sankey?startDate=${startDate}&endDate=${endDate}${extraParams}`,
+        )
         .then((r) => r.data),
   });
 
@@ -699,7 +953,7 @@ function CashFlowTab({
     if (!data?.monthly) return [];
     return data.monthly.map((m) => ({
       month: m.month.split(" ")[0], // e.g. "Jan"
-      fullMonth: m.month,           // e.g. "Jan 2025"
+      fullMonth: m.month, // e.g. "Jan 2025"
       income: m.income,
       expenses: m.expenses,
       net: m.net,
@@ -710,7 +964,11 @@ function CashFlowTab({
   const [cfChartView, setCfChartView] = useState<"bar" | "sankey">("bar");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+    <div
+      id="reports-content"
+      style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+      aria-label="Reports dashboard"
+    >
       <KpiCards cards={kpiCards} isLoading={isLoading} />
 
       {/* Combined chart card with view toggle */}
@@ -825,8 +1083,8 @@ function CashFlowTab({
             </div>
 
             {/* Bar chart view */}
-            {cfChartView === "bar" && (
-              chartData.length > 0 ? (
+            {cfChartView === "bar" &&
+              (chartData.length > 0 ? (
                 <div role="img" aria-label="Cash flow overview chart">
                   <ResponsiveContainer width="100%" height={260}>
                     <ComposedChart
@@ -835,70 +1093,75 @@ function CashFlowTab({
                       barCategoryGap="20%"
                       barGap={4}
                     >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="var(--color-border)"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="month"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
-                      tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
-                      width={42}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "var(--color-surface)",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: "var(--radius-md)",
-                        fontSize: "0.8125rem",
-                      }}
-                      labelFormatter={(label: string, payload: { payload?: { fullMonth?: string } }[]) => {
-                        const full = payload?.[0]?.payload?.fullMonth;
-                        return full ?? label;
-                      }}
-                      formatter={(value: number, name: string) => [
-                        fmtCurrencySigned(value),
-                        name === "income"
-                          ? "Income"
-                          : name === "expenses"
-                            ? "Expenses"
-                            : "Net",
-                      ]}
-                    />
-                    <Bar
-                      dataKey="income"
-                      name="income"
-                      fill="#2f9e44"
-                      radius={[3, 3, 0, 0]}
-                      maxBarSize={26}
-                      opacity={0.88}
-                    />
-                    <Bar
-                      dataKey="expenses"
-                      name="expenses"
-                      fill="#E5622A"
-                      radius={[3, 3, 0, 0]}
-                      maxBarSize={26}
-                      opacity={0.88}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="net"
-                      name="net"
-                      stroke="#1971c2"
-                      strokeWidth={2}
-                      strokeDasharray="5 3"
-                      dot={{ r: 3, fill: "#1971c2", strokeWidth: 0 }}
-                    />
-                  </ComposedChart>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--color-border)"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="month"
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+                        tickFormatter={(v: number) =>
+                          `$${(v / 1000).toFixed(0)}k`
+                        }
+                        width={42}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "var(--color-surface)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: "var(--radius-md)",
+                          fontSize: "0.8125rem",
+                        }}
+                        labelFormatter={(
+                          label: string,
+                          payload: { payload?: { fullMonth?: string } }[],
+                        ) => {
+                          const full = payload?.[0]?.payload?.fullMonth;
+                          return full ?? label;
+                        }}
+                        formatter={(value: number, name: string) => [
+                          fmtCurrencySigned(value),
+                          name === "income"
+                            ? "Income"
+                            : name === "expenses"
+                              ? "Expenses"
+                              : "Net",
+                        ]}
+                      />
+                      <Bar
+                        dataKey="income"
+                        name="income"
+                        fill="#2f9e44"
+                        radius={[3, 3, 0, 0]}
+                        maxBarSize={26}
+                        opacity={0.88}
+                      />
+                      <Bar
+                        dataKey="expenses"
+                        name="expenses"
+                        fill="#E5622A"
+                        radius={[3, 3, 0, 0]}
+                        maxBarSize={26}
+                        opacity={0.88}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="net"
+                        name="net"
+                        stroke="#1971c2"
+                        strokeWidth={2}
+                        strokeDasharray="5 3"
+                        dot={{ r: 3, fill: "#1971c2", strokeWidth: 0 }}
+                      />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
@@ -914,8 +1177,7 @@ function CashFlowTab({
                 >
                   No cash flow data for this period.
                 </div>
-              )
-            )}
+              ))}
 
             {/* Sankey view */}
             {cfChartView === "sankey" && sankeyData && (
@@ -949,16 +1211,29 @@ interface CategoryTabProps {
   startDate: string;
   endDate: string;
   extraParams?: string;
-  onDrillClick?: (id: string, name: string, icon: string | null | undefined, mode: "spending" | "income", groupBy: string) => void;
+  onDrillClick?: (
+    id: string,
+    name: string,
+    icon: string | null | undefined,
+    mode: "spending" | "income",
+    groupBy: string,
+  ) => void;
 }
 
-function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick }: CategoryTabProps) {
+function CategoryTab({
+  mode,
+  startDate,
+  endDate,
+  extraParams = "",
+  onDrillClick,
+}: CategoryTabProps) {
   const [groupBy, setGroupBy] = useState<GroupBy>("category");
   const [chartType, setChartType] = useState<ChartType>("donut");
   const [showAll, setShowAll] = useState(false);
   const [txPage, setTxPage] = useState(1);
-  const [viewMode, setViewMode] = useState<'totals' | 'change'>('totals');
-  const [monthlyGrouping, setMonthlyGrouping] = useState<MonthlyGrouping>('monthly');
+  const [viewMode, setViewMode] = useState<"totals" | "change">("totals");
+  const [monthlyGrouping, setMonthlyGrouping] =
+    useState<MonthlyGrouping>("monthly");
 
   const { data: reportData, isLoading: reportLoading } = useQuery<
     SpendingReport | IncomeReport
@@ -975,10 +1250,17 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick 
 
   const { data: txData, isLoading: txLoading } = useQuery<TransactionsResponse>(
     {
-      queryKey: [`reports-${mode}-transactions`, startDate, endDate, txPage, extraParams],
+      queryKey: [
+        `reports-${mode}-transactions`,
+        startDate,
+        endDate,
+        txPage,
+        extraParams,
+      ],
       queryFn: () => {
         // Filter by sign: spending = negative amounts, income = positive amounts
-        const amountFilter = mode === "spending" ? "&maxAmount=-0.01" : "&minAmount=0.01";
+        const amountFilter =
+          mode === "spending" ? "&maxAmount=-0.01" : "&minAmount=0.01";
         return api
           .get(
             `/transactions?startDate=${startDate}&endDate=${endDate}${amountFilter}&page=${txPage}&pageSize=20${extraParams}`,
@@ -988,23 +1270,41 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick 
     },
   );
 
-  const { data: compareData, isLoading: compareLoading } = useQuery<CompareReport>({
-    queryKey: [`reports-${mode}-compare`, startDate, endDate, groupBy, extraParams],
-    queryFn: () =>
-      api
-        .get(`/reports/${mode}/compare?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}${extraParams}`)
-        .then((r) => r.data),
-    enabled: viewMode === 'change',
-  });
+  const { data: compareData, isLoading: compareLoading } =
+    useQuery<CompareReport>({
+      queryKey: [
+        `reports-${mode}-compare`,
+        startDate,
+        endDate,
+        groupBy,
+        extraParams,
+      ],
+      queryFn: () =>
+        api
+          .get(
+            `/reports/${mode}/compare?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}${extraParams}`,
+          )
+          .then((r) => r.data),
+      enabled: viewMode === "change",
+    });
 
-  const { data: monthlyData, isLoading: monthlyLoading } = useQuery<MonthlyReport>({
-    queryKey: [`reports-${mode}-monthly`, startDate, endDate, groupBy, extraParams],
-    queryFn: () =>
-      api
-        .get(`/reports/${mode}/monthly?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}${extraParams}`)
-        .then((r) => r.data),
-    enabled: viewMode === 'change',
-  });
+  const { data: monthlyData, isLoading: monthlyLoading } =
+    useQuery<MonthlyReport>({
+      queryKey: [
+        `reports-${mode}-monthly`,
+        startDate,
+        endDate,
+        groupBy,
+        extraParams,
+      ],
+      queryFn: () =>
+        api
+          .get(
+            `/reports/${mode}/monthly?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}${extraParams}`,
+          )
+          .then((r) => r.data),
+      enabled: viewMode === "change",
+    });
 
   const categories = reportData?.items ?? [];
   const displayedCategories = showAll ? categories : categories.slice(0, 8);
@@ -1097,31 +1397,35 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick 
           {/* Totals / Change toggle */}
           <div
             style={{
-              display: 'flex',
-              backgroundColor: 'var(--color-surface-hover)',
-              borderRadius: 'var(--radius-md)',
-              padding: '0.125rem',
+              display: "flex",
+              backgroundColor: "var(--color-surface-hover)",
+              borderRadius: "var(--radius-md)",
+              padding: "0.125rem",
             }}
           >
-            {(['totals', 'change'] as Array<'totals' | 'change'>).map((vm) => (
+            {(["totals", "change"] as Array<"totals" | "change">).map((vm) => (
               <button
                 key={vm}
                 onClick={() => setViewMode(vm)}
                 style={{
-                  padding: '0.25rem 0.625rem',
-                  borderRadius: 'calc(var(--radius-md) - 2px)',
-                  fontSize: '0.75rem',
+                  padding: "0.25rem 0.625rem",
+                  borderRadius: "calc(var(--radius-md) - 2px)",
+                  fontSize: "0.75rem",
                   fontWeight: 500,
-                  border: 'none',
-                  cursor: 'pointer',
-                  backgroundColor: viewMode === vm ? 'var(--color-surface)' : 'transparent',
-                  color: viewMode === vm ? 'var(--color-text)' : 'var(--color-text-secondary)',
-                  boxShadow: viewMode === vm ? 'var(--shadow-sm)' : 'none',
-                  transition: 'all 0.15s',
-                  textTransform: 'capitalize',
+                  border: "none",
+                  cursor: "pointer",
+                  backgroundColor:
+                    viewMode === vm ? "var(--color-surface)" : "transparent",
+                  color:
+                    viewMode === vm
+                      ? "var(--color-text)"
+                      : "var(--color-text-secondary)",
+                  boxShadow: viewMode === vm ? "var(--shadow-sm)" : "none",
+                  transition: "all 0.15s",
+                  textTransform: "capitalize",
                 }}
               >
-                {vm === 'totals' ? 'Totals' : 'Change'}
+                {vm === "totals" ? "Totals" : "Change"}
               </button>
             ))}
           </div>
@@ -1177,7 +1481,7 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick 
       <div className="grid grid-cols-1 lg:grid-cols-[55fr_45fr] gap-4 items-start">
         {/* Left: chart */}
         <Card padding="lg">
-          {viewMode === 'change' ? (
+          {viewMode === "change" ? (
             <>
               <CompareView
                 data={compareData}
@@ -1185,16 +1489,36 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick 
                 mode={mode}
                 monthlyGrouping={monthlyGrouping}
                 onMonthlyGroupingChange={setMonthlyGrouping}
-                onDrillClick={onDrillClick ? (id, name, icon, m) => onDrillClick(id, name, icon, m, groupBy) : undefined}
+                onDrillClick={
+                  onDrillClick
+                    ? (id, name, icon, m) =>
+                        onDrillClick(id, name, icon, m, groupBy)
+                    : undefined
+                }
               />
-              {!compareLoading && compareData && compareData.items.length > 0 && (
-                <div style={{ marginTop: '1.25rem' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.75rem' }}>
-                    Monthly Breakdown
+              {!compareLoading &&
+                compareData &&
+                compareData.items.length > 0 && (
+                  <div style={{ marginTop: "1.25rem" }}>
+                    <div
+                      style={{
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        color: "var(--color-text-secondary)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      Monthly Breakdown
+                    </div>
+                    <MonthlyView
+                      data={monthlyData}
+                      isLoading={monthlyLoading}
+                      grouping={monthlyGrouping}
+                    />
                   </div>
-                  <MonthlyView data={monthlyData} isLoading={monthlyLoading} grouping={monthlyGrouping} />
-                </div>
-              )}
+                )}
             </>
           ) : reportLoading ? (
             <Skeleton height={320} width="100%" />
@@ -1218,7 +1542,12 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick 
                 data={pieData}
                 total={total}
                 color={color}
-                onDrillClick={onDrillClick ? (id, name, icon) => onDrillClick(id, name, icon, mode, groupBy) : undefined}
+                onDrillClick={
+                  onDrillClick
+                    ? (id, name, icon) =>
+                        onDrillClick(id, name, icon, mode, groupBy)
+                    : undefined
+                }
               />
 
               {/* Legend */}
@@ -1347,7 +1676,9 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick 
                   }}
                 >
                   <SummaryRow
-                    label={mode === "spending" ? "Total spending" : "Total income"}
+                    label={
+                      mode === "spending" ? "Total spending" : "Total income"
+                    }
                     value={fmtCurrency(reportData?.total ?? 0)}
                   />
                   <SummaryRow
@@ -1367,13 +1698,19 @@ function CategoryTab({ mode, startDate, endDate, extraParams = "", onDrillClick 
                   {reportData?.firstDate && (
                     <SummaryRow
                       label="First transaction"
-                      value={new Date(reportData.firstDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      value={new Date(reportData.firstDate).toLocaleDateString(
+                        "en-US",
+                        { month: "short", day: "numeric", year: "numeric" },
+                      )}
                     />
                   )}
                   {reportData?.lastDate && (
                     <SummaryRow
                       label="Last transaction"
-                      value={new Date(reportData.lastDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      value={new Date(reportData.lastDate).toLocaleDateString(
+                        "en-US",
+                        { month: "short", day: "numeric", year: "numeric" },
+                      )}
                     />
                   )}
                 </div>
@@ -1594,7 +1931,11 @@ function ChartView({
     const innerRadius = type === "donut" ? 80 : 0;
 
     return (
-      <div role="img" aria-label="Spending breakdown chart" style={{ position: "relative" }}>
+      <div
+        role="img"
+        aria-label="Spending breakdown chart"
+        style={{ position: "relative" }}
+      >
         <ResponsiveContainer width="100%" height={240}>
           <PieChart>
             <Pie
@@ -1670,26 +2011,77 @@ function ChartView({
             data={data}
             layout="vertical"
             margin={{ top: 0, right: 8, bottom: 0, left: 8 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="var(--color-border)"
+              horizontal={false}
+            />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10, fill: "var(--color-text-muted)" }}
+              tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+              width={90}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "var(--color-surface)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-md)",
+                fontSize: "0.8125rem",
+              }}
+              formatter={(value: number) => [fmtCurrency(value), "Amount"]}
+            />
+            <Bar
+              dataKey="value"
+              radius={[0, 3, 3, 0]}
+              maxBarSize={20}
+              animationDuration={600}
+            >
+              {data.map((entry, i) => (
+                <Cell key={`cell-${i}`} fill={entry.color} />
+              ))}
+            </Bar>
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
+  // Line chart
+  return (
+    <div role="img" aria-label="Spending breakdown chart">
+      <ResponsiveContainer width="100%" height={240}>
+        <ComposedChart
+          data={data}
+          margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
         >
           <CartesianGrid
             strokeDasharray="3 3"
             stroke="var(--color-border)"
-            horizontal={false}
+            vertical={false}
           />
           <XAxis
-            type="number"
+            dataKey="name"
+            tickLine={false}
+            axisLine={false}
+            tick={{ fontSize: 10, fill: "var(--color-text-muted)" }}
+          />
+          <YAxis
             tickLine={false}
             axisLine={false}
             tick={{ fontSize: 10, fill: "var(--color-text-muted)" }}
             tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
-          />
-          <YAxis
-            type="category"
-            dataKey="name"
-            tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
-            width={90}
+            width={42}
           />
           <Tooltip
             contentStyle={{
@@ -1700,75 +2092,23 @@ function ChartView({
             }}
             formatter={(value: number) => [fmtCurrency(value), "Amount"]}
           />
-          <Bar
+          <Line
+            type="monotone"
             dataKey="value"
-            radius={[0, 3, 3, 0]}
-            maxBarSize={20}
+            stroke={color}
+            strokeWidth={2}
+            dot={{ r: 4, fill: color }}
             animationDuration={600}
-          >
-            {data.map((entry, i) => (
-              <Cell key={`cell-${i}`} fill={entry.color} />
-            ))}
-          </Bar>
+          />
         </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-    );
-  }
-
-  // Line chart
-  return (
-    <div role="img" aria-label="Spending breakdown chart">
-      <ResponsiveContainer width="100%" height={240}>
-      <ComposedChart
-        data={data}
-        margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
-      >
-        <CartesianGrid
-          strokeDasharray="3 3"
-          stroke="var(--color-border)"
-          vertical={false}
-        />
-        <XAxis
-          dataKey="name"
-          tickLine={false}
-          axisLine={false}
-          tick={{ fontSize: 10, fill: "var(--color-text-muted)" }}
-        />
-        <YAxis
-          tickLine={false}
-          axisLine={false}
-          tick={{ fontSize: 10, fill: "var(--color-text-muted)" }}
-          tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
-          width={42}
-        />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: "var(--color-surface)",
-            border: "1px solid var(--color-border)",
-            borderRadius: "var(--radius-md)",
-            fontSize: "0.8125rem",
-          }}
-          formatter={(value: number) => [fmtCurrency(value), "Amount"]}
-        />
-        <Line
-          type="monotone"
-          dataKey="value"
-          stroke={color}
-          strokeWidth={2}
-          dot={{ r: 4, fill: color }}
-          animationDuration={600}
-        />
-      </ComposedChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-
 // ─── CompareView ──────────────────────────────────────────────────────────────
 
-type MonthlyGrouping = 'monthly' | 'quarterly';
+type MonthlyGrouping = "monthly" | "quarterly";
 
 function CompareView({
   data,
@@ -1780,41 +2120,91 @@ function CompareView({
 }: {
   data: CompareReport | undefined;
   isLoading: boolean;
-  mode: 'spending' | 'income';
+  mode: "spending" | "income";
   monthlyGrouping: MonthlyGrouping;
   onMonthlyGroupingChange: (v: MonthlyGrouping) => void;
-  onDrillClick?: (id: string, name: string, icon: string | null | undefined, mode: "spending" | "income") => void;
+  onDrillClick?: (
+    id: string,
+    name: string,
+    icon: string | null | undefined,
+    mode: "spending" | "income",
+  ) => void;
 }) {
   if (isLoading) return <Skeleton height={320} width="100%" />;
   if (!data || data.items.length === 0) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 240, color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: 240,
+          color: "var(--color-text-muted)",
+          fontSize: "0.875rem",
+        }}
+      >
         No data for this period.
       </div>
     );
   }
 
   const top10 = data.items.slice(0, 10);
-  const isSpending = mode === 'spending';
+  const isSpending = mode === "spending";
 
   function deltaColor(delta: number): string {
     const good = isSpending ? delta <= 0 : delta >= 0;
-    return good ? 'var(--color-success)' : 'var(--color-danger)';
+    return good ? "var(--color-success)" : "var(--color-danger)";
   }
 
-  function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; dataKey: string }>; label?: string }) {
+  function CustomTooltip({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: Array<{ name: string; value: number; dataKey: string }>;
+    label?: string;
+  }) {
     if (!active || !payload?.length) return null;
-    const curVal = payload.find((p) => p.dataKey === 'current')?.value ?? 0;
-    const priVal = payload.find((p) => p.dataKey === 'prior')?.value ?? 0;
+    const curVal = payload.find((p) => p.dataKey === "current")?.value ?? 0;
+    const priVal = payload.find((p) => p.dataKey === "prior")?.value ?? 0;
     const delta = curVal - priVal;
     const pct = priVal !== 0 ? Math.round((delta / priVal) * 100) : 0;
     return (
-      <div style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '0.625rem 0.875rem', fontSize: '0.8125rem' }}>
-        <div style={{ fontWeight: 600, marginBottom: '0.375rem', color: 'var(--color-text)' }}>{label}</div>
-        <div style={{ color: '#1971c2' }}>This period: {fmtCurrency(curVal)}</div>
-        <div style={{ color: 'var(--color-text-muted)' }}>Prior period: {fmtCurrency(priVal)}</div>
-        <div style={{ color: deltaColor(delta), fontWeight: 600, marginTop: '0.25rem' }}>
-          {delta >= 0 ? '+' : ''}{fmtCurrencySigned(delta)} ({delta >= 0 ? '+' : ''}{pct}%)
+      <div
+        style={{
+          backgroundColor: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius-md)",
+          padding: "0.625rem 0.875rem",
+          fontSize: "0.8125rem",
+        }}
+      >
+        <div
+          style={{
+            fontWeight: 600,
+            marginBottom: "0.375rem",
+            color: "var(--color-text)",
+          }}
+        >
+          {label}
+        </div>
+        <div style={{ color: "#1971c2" }}>
+          This period: {fmtCurrency(curVal)}
+        </div>
+        <div style={{ color: "var(--color-text-muted)" }}>
+          Prior period: {fmtCurrency(priVal)}
+        </div>
+        <div
+          style={{
+            color: deltaColor(delta),
+            fontWeight: 600,
+            marginTop: "0.25rem",
+          }}
+        >
+          {delta >= 0 ? "+" : ""}
+          {fmtCurrencySigned(delta)} ({delta >= 0 ? "+" : ""}
+          {pct}%)
         </div>
       </div>
     );
@@ -1823,62 +2213,171 @@ function CompareView({
   const totalDeltaColor = deltaColor(data.totalDelta);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "0.5rem",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <LegendDot color="#1971c2" label="This period" />
           <LegendDot color="var(--color-border)" label="Prior period" />
-          <span style={{ fontSize: '0.8125rem', color: totalDeltaColor, fontWeight: 600 }}>
-            Total: {data.totalDelta >= 0 ? '+' : ''}{fmtCurrencySigned(data.totalDelta)}
+          <span
+            style={{
+              fontSize: "0.8125rem",
+              color: totalDeltaColor,
+              fontWeight: 600,
+            }}
+          >
+            Total: {data.totalDelta >= 0 ? "+" : ""}
+            {fmtCurrencySigned(data.totalDelta)}
           </span>
         </div>
-        <div style={{ display: 'flex', backgroundColor: 'var(--color-surface-hover)', borderRadius: 'var(--radius-md)', padding: '0.125rem' }}>
-          {(['monthly', 'quarterly'] as MonthlyGrouping[]).map((g) => (
+        <div
+          style={{
+            display: "flex",
+            backgroundColor: "var(--color-surface-hover)",
+            borderRadius: "var(--radius-md)",
+            padding: "0.125rem",
+          }}
+        >
+          {(["monthly", "quarterly"] as MonthlyGrouping[]).map((g) => (
             <button
               key={g}
               onClick={() => onMonthlyGroupingChange(g)}
               style={{
-                padding: '0.25rem 0.625rem',
-                borderRadius: 'calc(var(--radius-md) - 2px)',
-                fontSize: '0.75rem',
+                padding: "0.25rem 0.625rem",
+                borderRadius: "calc(var(--radius-md) - 2px)",
+                fontSize: "0.75rem",
                 fontWeight: 500,
-                border: 'none',
-                cursor: 'pointer',
-                backgroundColor: monthlyGrouping === g ? 'var(--color-surface)' : 'transparent',
-                color: monthlyGrouping === g ? 'var(--color-text)' : 'var(--color-text-secondary)',
-                boxShadow: monthlyGrouping === g ? 'var(--shadow-sm)' : 'none',
-                transition: 'all 0.15s',
-                textTransform: 'capitalize',
+                border: "none",
+                cursor: "pointer",
+                backgroundColor:
+                  monthlyGrouping === g
+                    ? "var(--color-surface)"
+                    : "transparent",
+                color:
+                  monthlyGrouping === g
+                    ? "var(--color-text)"
+                    : "var(--color-text-secondary)",
+                boxShadow: monthlyGrouping === g ? "var(--shadow-sm)" : "none",
+                transition: "all 0.15s",
+                textTransform: "capitalize",
               }}
             >
-              {g === 'monthly' ? 'Monthly' : 'Quarterly'}
+              {g === "monthly" ? "Monthly" : "Quarterly"}
             </button>
           ))}
         </div>
       </div>
       <div role="img" aria-label="Spending comparison chart">
         <ResponsiveContainer width="100%" height={280}>
-          <ComposedChart data={top10} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
-          <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-          <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} width={90} />
-          <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="current" name="current" fill="#1971c2" radius={[0, 3, 3, 0]} maxBarSize={14} opacity={0.9} onClick={(entry: CompareItem) => { if (entry?.id && onDrillClick) { onDrillClick(entry.id, entry.name, entry.icon, mode); } }} style={{ cursor: onDrillClick ? "pointer" : undefined }} />
-          <Bar dataKey="prior" name="prior" fill="var(--color-border)" radius={[0, 3, 3, 0]} maxBarSize={14} opacity={0.7} />
-        </ComposedChart>
+          <ComposedChart
+            data={top10}
+            layout="vertical"
+            margin={{ top: 0, right: 8, bottom: 0, left: 8 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="var(--color-border)"
+              horizontal={false}
+            />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10, fill: "var(--color-text-muted)" }}
+              tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+              width={90}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Bar
+              dataKey="current"
+              name="current"
+              fill="#1971c2"
+              radius={[0, 3, 3, 0]}
+              maxBarSize={14}
+              opacity={0.9}
+              onClick={(entry: CompareItem) => {
+                if (entry?.id && onDrillClick) {
+                  onDrillClick(entry.id, entry.name, entry.icon, mode);
+                }
+              }}
+              style={{ cursor: onDrillClick ? "pointer" : undefined }}
+            />
+            <Bar
+              dataKey="prior"
+              name="prior"
+              fill="var(--color-border)"
+              radius={[0, 3, 3, 0]}
+              maxBarSize={14}
+              opacity={0.7}
+            />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+      <div
+        style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}
+      >
         {top10.map((item) => (
-          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8125rem' }}>
-            <span style={{ flex: 1, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {item.icon ? item.icon + ' ' : ''}{item.name}
+          <div
+            key={item.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              fontSize: "0.8125rem",
+            }}
+          >
+            <span
+              style={{
+                flex: 1,
+                color: "var(--color-text)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {item.icon ? item.icon + " " : ""}
+              {item.name}
             </span>
-            <span style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{fmtCurrency(item.prior)}</span>
-            <span style={{ color: 'var(--color-text-secondary)' }}>&rarr;</span>
-            <span style={{ fontWeight: 600, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>{fmtCurrency(item.current)}</span>
-            <span style={{ fontWeight: 600, color: deltaColor(item.delta), whiteSpace: 'nowrap', minWidth: 64, textAlign: 'right' }}>
-              {item.delta >= 0 ? '+' : ''}{fmtCurrencySigned(item.delta)}
+            <span
+              style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap" }}
+            >
+              {fmtCurrency(item.prior)}
+            </span>
+            <span style={{ color: "var(--color-text-secondary)" }}>&rarr;</span>
+            <span
+              style={{
+                fontWeight: 600,
+                color: "var(--color-text)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {fmtCurrency(item.current)}
+            </span>
+            <span
+              style={{
+                fontWeight: 600,
+                color: deltaColor(item.delta),
+                whiteSpace: "nowrap",
+                minWidth: 64,
+                textAlign: "right",
+              }}
+            >
+              {item.delta >= 0 ? "+" : ""}
+              {fmtCurrencySigned(item.delta)}
             </span>
           </div>
         ))}
@@ -1889,68 +2388,142 @@ function CompareView({
 
 // ─── MonthlyView ──────────────────────────────────────────────────────────────
 
-function MonthlyView({ data, isLoading, grouping }: { data: MonthlyReport | undefined; isLoading: boolean; grouping: MonthlyGrouping }) {
+function MonthlyView({
+  data,
+  isLoading,
+  grouping,
+}: {
+  data: MonthlyReport | undefined;
+  isLoading: boolean;
+  grouping: MonthlyGrouping;
+}) {
   if (isLoading) return <Skeleton height={280} width="100%" />;
   if (!data || data.series.length === 0 || data.months.length === 0) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 240, color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: 240,
+          color: "var(--color-text-muted)",
+          fontSize: "0.875rem",
+        }}
+      >
         No monthly data for this period.
       </div>
     );
   }
 
-  interface ChartPoint { label: string; [key: string]: number | string }
+  interface ChartPoint {
+    label: string;
+    [key: string]: number | string;
+  }
   let chartData: ChartPoint[];
 
-  if (grouping === 'monthly') {
+  if (grouping === "monthly") {
     chartData = data.months.map((m, mi) => {
       const point: ChartPoint = { label: m };
-      data.series.forEach((s) => { point[s.id] = s.data[mi] ?? 0; });
+      data.series.forEach((s) => {
+        point[s.id] = s.data[mi] ?? 0;
+      });
       return point;
     });
   } else {
     const qMap = new Map<string, ChartPoint>();
     data.months.forEach((m, mi) => {
-      const parts = m.split(' ');
+      const parts = m.split(" ");
       const year = parts[1];
       const monthIdx = MONTH_NAMES.indexOf(parts[0]);
       const quarter = Math.floor(monthIdx / 3) + 1;
       const qKey = `Q${quarter} ${year}`;
       if (!qMap.has(qKey)) {
         const p: ChartPoint = { label: qKey };
-        data.series.forEach((s) => { p[s.id] = 0; });
+        data.series.forEach((s) => {
+          p[s.id] = 0;
+        });
         qMap.set(qKey, p);
       }
       const p = qMap.get(qKey)!;
-      data.series.forEach((s) => { (p[s.id] as number) += s.data[mi] ?? 0; });
+      data.series.forEach((s) => {
+        (p[s.id] as number) += s.data[mi] ?? 0;
+      });
     });
     chartData = Array.from(qMap.values()).map((p) => {
       const rounded: ChartPoint = { label: p.label };
-      data.series.forEach((s) => { rounded[s.id] = Math.round((p[s.id] as number) * 100) / 100; });
+      data.series.forEach((s) => {
+        rounded[s.id] = Math.round((p[s.id] as number) * 100) / 100;
+      });
       return rounded;
     });
   }
 
   const top8 = data.series.slice(0, 8);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.25rem' }}>
-        {top8.map((s, i) => <LegendDot key={s.id} color={CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length]} label={s.name} />)}
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.75rem",
+          marginBottom: "0.25rem",
+        }}
+      >
+        {top8.map((s, i) => (
+          <LegendDot
+            key={s.id}
+            color={CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length]}
+            label={s.name}
+          />
+        ))}
       </div>
       <div role="img" aria-label="Monthly spending breakdown chart">
         <ResponsiveContainer width="100%" height={240}>
-          <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} />
-          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} width={42} />
-          <Tooltip
-            contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem' }}
-            formatter={(value: number, name: string) => { const s = data.series.find((x) => x.id === name); return [fmtCurrency(value), s?.name ?? name]; }}
-          />
-          {top8.map((s, i) => (
-            <Bar key={s.id} dataKey={s.id} stackId="stack" fill={CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length]} maxBarSize={32} radius={i === top8.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]} />
-          ))}
-        </ComposedChart>
+          <ComposedChart
+            data={chartData}
+            margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="var(--color-border)"
+              vertical={false}
+            />
+            <XAxis
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10, fill: "var(--color-text-muted)" }}
+            />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 10, fill: "var(--color-text-muted)" }}
+              tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
+              width={42}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "var(--color-surface)",
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-md)",
+                fontSize: "0.8125rem",
+              }}
+              formatter={(value: number, name: string) => {
+                const s = data.series.find((x) => x.id === name);
+                return [fmtCurrency(value), s?.name ?? name];
+              }}
+            />
+            {top8.map((s, i) => (
+              <Bar
+                key={s.id}
+                dataKey={s.id}
+                stackId="stack"
+                fill={CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length]}
+                maxBarSize={32}
+                radius={i === top8.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+              />
+            ))}
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
@@ -2284,13 +2857,19 @@ function FiltersPanel({
 
   const { data: categoriesData = [] } = useQuery<FilterOption[]>({
     queryKey: ["categories"],
-    queryFn: () => api.get("/categories").then((r) => r.data),
+    queryFn: () => api.get("/settings/categories").then((r) => r.data),
     enabled: open,
   });
 
   const { data: accountsData = [] } = useQuery<FilterOption[]>({
     queryKey: ["accounts"],
-    queryFn: () => api.get("/accounts").then((r) => r.data),
+    queryFn: () =>
+      api.get("/accounts").then((r) => {
+        const groups: Array<{
+          accounts: Array<{ id: string; name: string; type?: string | null }>;
+        }> = r.data.groups ?? [];
+        return groups.flatMap((g) => g.accounts);
+      }),
     enabled: open,
   });
 
@@ -2319,7 +2898,11 @@ function FiltersPanel({
 
   if (!open) return null;
 
-  function toggleId(ids: string[], id: string, onChange: (ids: string[]) => void) {
+  function toggleId(
+    ids: string[],
+    id: string,
+    onChange: (ids: string[]) => void,
+  ) {
     if (ids.includes(id)) {
       onChange(ids.filter((x) => x !== id));
     } else {
@@ -2353,7 +2936,7 @@ function FiltersPanel({
         position: "absolute",
         top: "calc(100% + 6px)",
         right: 0,
-        zIndex: 50,
+        zIndex: 100,
         width: 420,
         backgroundColor: "var(--color-surface)",
         border: "1px solid var(--color-border)",
@@ -2374,7 +2957,13 @@ function FiltersPanel({
           borderBottom: "1px solid var(--color-border)",
         }}
       >
-        <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text)" }}>
+        <span
+          style={{
+            fontSize: "0.875rem",
+            fontWeight: 600,
+            color: "var(--color-text)",
+          }}
+        >
           Filters
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -2429,8 +3018,14 @@ function FiltersPanel({
                 padding: "0.5rem 0.875rem",
                 fontSize: "0.8125rem",
                 fontWeight: section === item.value ? 600 : 400,
-                color: section === item.value ? "var(--color-accent)" : "var(--color-text-secondary)",
-                backgroundColor: section === item.value ? "var(--color-accent-light)" : "transparent",
+                color:
+                  section === item.value
+                    ? "var(--color-accent)"
+                    : "var(--color-text-secondary)",
+                backgroundColor:
+                  section === item.value
+                    ? "var(--color-accent-light)"
+                    : "transparent",
                 border: "none",
                 textAlign: "left",
                 cursor: "pointer",
@@ -2453,9 +3048,15 @@ function FiltersPanel({
             gap: "0.125rem",
           }}
         >
-          {section === "categories" && (
-            categoriesData.length === 0 ? (
-              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", padding: "0.5rem" }}>
+          {section === "categories" &&
+            (categoriesData.length === 0 ? (
+              <span
+                style={{
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-muted)",
+                  padding: "0.5rem",
+                }}
+              >
                 No categories
               </span>
             ) : (
@@ -2467,21 +3068,37 @@ function FiltersPanel({
                   <input
                     type="checkbox"
                     checked={categoryIds.includes(cat.id)}
-                    onChange={() => toggleId(categoryIds, cat.id, onCategoryChange)}
+                    onChange={() =>
+                      toggleId(categoryIds, cat.id, onCategoryChange)
+                    }
                     style={{ accentColor: "var(--color-accent)" }}
                   />
-                  {cat.icon && <span style={{ fontSize: "1.125rem", lineHeight: 1 }}>{cat.icon}</span>}
-                  <span style={{ fontSize: "0.8125rem", color: "var(--color-text)" }}>
+                  {cat.icon && (
+                    <span style={{ fontSize: "1.125rem", lineHeight: 1 }}>
+                      {cat.icon}
+                    </span>
+                  )}
+                  <span
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text)",
+                    }}
+                  >
                     {cat.name}
                   </span>
                 </label>
               ))
-            )
-          )}
+            ))}
 
-          {section === "accounts" && (
-            accountsData.length === 0 ? (
-              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", padding: "0.5rem" }}>
+          {section === "accounts" &&
+            (accountsData.length === 0 ? (
+              <span
+                style={{
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-muted)",
+                  padding: "0.5rem",
+                }}
+              >
                 No accounts
               </span>
             ) : (
@@ -2493,27 +3110,47 @@ function FiltersPanel({
                   <input
                     type="checkbox"
                     checked={accountIds.includes(acc.id)}
-                    onChange={() => toggleId(accountIds, acc.id, onAccountChange)}
+                    onChange={() =>
+                      toggleId(accountIds, acc.id, onAccountChange)
+                    }
                     style={{ accentColor: "var(--color-accent)" }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "0.8125rem", color: "var(--color-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: "var(--color-text)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
                       {acc.name}
                     </div>
                     {acc.type && (
-                      <div style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)" }}>
+                      <div
+                        style={{
+                          fontSize: "0.6875rem",
+                          color: "var(--color-text-muted)",
+                        }}
+                      >
                         {acc.type}
                       </div>
                     )}
                   </div>
                 </label>
               ))
-            )
-          )}
+            ))}
 
-          {section === "tags" && (
-            tagsData.length === 0 ? (
-              <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", padding: "0.5rem" }}>
+          {section === "tags" &&
+            (tagsData.length === 0 ? (
+              <span
+                style={{
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-muted)",
+                  padding: "0.5rem",
+                }}
+              >
                 No tags
               </span>
             ) : (
@@ -2537,16 +3174,27 @@ function FiltersPanel({
                       flexShrink: 0,
                     }}
                   />
-                  <span style={{ fontSize: "0.8125rem", color: "var(--color-text)" }}>
+                  <span
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text)",
+                    }}
+                  >
                     {tag.name}
                   </span>
                 </label>
               ))
-            )
-          )}
+            ))}
 
           {section === "amount" && (
-            <div style={{ padding: "0.5rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <div
+              style={{
+                padding: "0.5rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.75rem",
+              }}
+            >
               <div>
                 <label
                   style={{
@@ -2791,7 +3439,10 @@ function SaveViewModal({
   return (
     <Modal
       open={open}
-      onClose={() => { setName(""); onClose(); }}
+      onClose={() => {
+        setName("");
+        onClose();
+      }}
       title="Save Report View"
       description="Save the current filters as a named view you can quickly reload."
       size="sm"
@@ -2802,10 +3453,20 @@ function SaveViewModal({
         onChange={(e) => setName(e.target.value)}
         placeholder="e.g. Q1 Spending"
         autoFocus
-        onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleSave();
+        }}
       />
       <ModalFooter>
-        <Button variant="ghost" onClick={() => { setName(""); onClose(); }}>Cancel</Button>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setName("");
+            onClose();
+          }}
+        >
+          Cancel
+        </Button>
         <Button
           variant="primary"
           onClick={handleSave}
@@ -2819,7 +3480,7 @@ function SaveViewModal({
 }
 
 export default function ReportsPage() {
-  const [tab, setTab] = useState<ReportTab>("cashflow");
+  const [tab, setTab] = useState<ReportTab>("overview");
   const [datePreset, setDatePreset] = useState<DatePreset>("last3months");
   const [saveModalOpen, setSaveModalOpen] = useState(false);
 
@@ -2862,7 +3523,12 @@ export default function ReportsPage() {
     [datePreset],
   );
 
-  const currentFilters: SavedReport["filters"] = { tab, datePreset, startDate, endDate };
+  const currentFilters: SavedReport["filters"] = {
+    tab,
+    datePreset,
+    startDate,
+    endDate,
+  };
 
   function loadSavedView(filters: SavedReport["filters"]) {
     if (filters.tab) setTab(filters.tab);
@@ -2894,181 +3560,226 @@ export default function ReportsPage() {
   // Build extra filter query params string for passing to child tabs
   const extraFilterParams = useMemo(() => {
     const parts: string[] = [];
-    if (filterCategoryIds.length) parts.push(`categoryIds=${filterCategoryIds.join(",")}`);
-    if (filterAccountIds.length) parts.push(`accountIds=${filterAccountIds.join(",")}`);
+    if (filterCategoryIds.length)
+      parts.push(`categoryIds=${filterCategoryIds.join(",")}`);
+    if (filterAccountIds.length)
+      parts.push(`accountIds=${filterAccountIds.join(",")}`);
     if (filterTagIds.length) parts.push(`tagIds=${filterTagIds.join(",")}`);
     if (filterMinAmount) parts.push(`minAmount=${filterMinAmount}`);
     if (filterMaxAmount) parts.push(`maxAmount=${filterMaxAmount}`);
     return parts.length ? `&${parts.join("&")}` : "";
-  }, [filterCategoryIds, filterAccountIds, filterTagIds, filterMinAmount, filterMaxAmount]);
+  }, [
+    filterCategoryIds,
+    filterAccountIds,
+    filterTagIds,
+    filterMinAmount,
+    filterMaxAmount,
+  ]);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full">
       <div className="flex-1 overflow-y-auto min-w-0">
-    <div
-      style={{
-        padding: "1rem 0",
-        display: "flex",
-        flexDirection: "column",
-        gap: "1rem",
-      }}
-    >
-      {/* Page header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: "0.75rem",
-        }}
-      >
-        <h1
-          style={{
-            fontSize: "1.375rem",
-            fontWeight: 700,
-            color: "var(--color-text)",
-            margin: 0,
-          }}
-        >
-          Reports
-        </h1>
-
         <div
           style={{
+            padding: "1rem 0",
             display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            flexWrap: "wrap",
+            flexDirection: "column",
+            gap: "1rem",
           }}
         >
-          <DatePresetDropdown value={datePreset} onChange={setDatePreset} />
-
-          {/* Filters button with dropdown panel */}
-          <div style={{ position: "relative" }}>
-            <button
-              ref={filterButtonRef}
-              onClick={() => setShowFilters((s) => !s)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.375rem",
-                padding: "0.3125rem 0.75rem",
-                borderRadius: "var(--radius-md)",
-                fontSize: "0.8125rem",
-                fontWeight: 500,
-                border: activeFilterCount > 0
-                  ? "1px solid var(--color-accent)"
-                  : "1px solid var(--color-border)",
-                backgroundColor: activeFilterCount > 0
-                  ? "var(--color-accent-light)"
-                  : "var(--color-surface)",
-                color: activeFilterCount > 0
-                  ? "var(--color-accent)"
-                  : "var(--color-text-secondary)",
-                cursor: "pointer",
-              }}
-            >
-              <SlidersHorizontal size={14} />
-              Filters
-              {activeFilterCount > 0 && (
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    minWidth: 18,
-                    height: 18,
-                    borderRadius: 9,
-                    backgroundColor: "var(--color-accent)",
-                    color: "#fff",
-                    fontSize: "0.6875rem",
-                    fontWeight: 700,
-                    padding: "0 4px",
-                  }}
-                >
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-
-            <FiltersPanel
-              open={showFilters}
-              onClose={() => setShowFilters(false)}
-              anchorRef={filterButtonRef}
-              categoryIds={filterCategoryIds}
-              accountIds={filterAccountIds}
-              tagIds={filterTagIds}
-              minAmount={filterMinAmount}
-              maxAmount={filterMaxAmount}
-              onCategoryChange={setFilterCategoryIds}
-              onAccountChange={setFilterAccountIds}
-              onTagChange={setFilterTagIds}
-              onMinAmountChange={setFilterMinAmount}
-              onMaxAmountChange={setFilterMaxAmount}
-              onClearAll={clearAllFilters}
-            />
-          </div>
-
-          <SavedViewsDropdown onLoad={loadSavedView} />
-
-          <button
-            onClick={() => setSaveModalOpen(true)}
+          {/* Page header */}
+          <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "0.375rem",
-              padding: "0.3125rem 0.75rem",
-              borderRadius: "var(--radius-md)",
-              fontSize: "0.8125rem",
-              fontWeight: 500,
-              border: "1px solid var(--color-border)",
-              backgroundColor: "var(--color-surface)",
-              color: "var(--color-text-secondary)",
-              cursor: "pointer",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "0.75rem",
             }}
           >
-            <BookmarkPlus size={14} />
-            Save
-          </button>
-        </div>
-      </div>
+            <h1
+              style={{
+                fontSize: "1.375rem",
+                fontWeight: 700,
+                color: "var(--color-text)",
+                margin: 0,
+              }}
+            >
+              Reports
+            </h1>
 
-      {/* Tab bar */}
-      <TabBar tab={tab} onChange={setTab} />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                flexWrap: "wrap",
+              }}
+            >
+              <DatePresetDropdown value={datePreset} onChange={setDatePreset} />
 
-      {/* Export toolbar — shown for data tabs (not forecast/tax which have their own export) */}
-      {(tab === "cashflow" || tab === "spending" || tab === "income") && (
-        <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "0.25rem" }}>
-          <ExportButtons
-            type={tab === "cashflow" ? "cashflow" : "spending"}
-            from={startDate}
-            to={endDate}
+              {/* Filters button with dropdown panel */}
+              <div style={{ position: "relative" }}>
+                <button
+                  ref={filterButtonRef}
+                  onClick={() => setShowFilters((s) => !s)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    padding: "0.3125rem 0.75rem",
+                    borderRadius: "var(--radius-md)",
+                    fontSize: "0.8125rem",
+                    fontWeight: 500,
+                    border:
+                      activeFilterCount > 0
+                        ? "1px solid var(--color-accent)"
+                        : "1px solid var(--color-border)",
+                    backgroundColor:
+                      activeFilterCount > 0
+                        ? "var(--color-accent-light)"
+                        : "var(--color-surface)",
+                    color:
+                      activeFilterCount > 0
+                        ? "var(--color-accent)"
+                        : "var(--color-text-secondary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <SlidersHorizontal size={14} />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minWidth: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        backgroundColor: "var(--color-accent)",
+                        color: "#fff",
+                        fontSize: "0.6875rem",
+                        fontWeight: 700,
+                        padding: "0 4px",
+                      }}
+                    >
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+
+                <FiltersPanel
+                  open={showFilters}
+                  onClose={() => setShowFilters(false)}
+                  anchorRef={filterButtonRef}
+                  categoryIds={filterCategoryIds}
+                  accountIds={filterAccountIds}
+                  tagIds={filterTagIds}
+                  minAmount={filterMinAmount}
+                  maxAmount={filterMaxAmount}
+                  onCategoryChange={setFilterCategoryIds}
+                  onAccountChange={setFilterAccountIds}
+                  onTagChange={setFilterTagIds}
+                  onMinAmountChange={setFilterMinAmount}
+                  onMaxAmountChange={setFilterMaxAmount}
+                  onClearAll={clearAllFilters}
+                />
+              </div>
+
+              <SavedViewsDropdown onLoad={loadSavedView} />
+
+              <button
+                onClick={() => setSaveModalOpen(true)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  padding: "0.3125rem 0.75rem",
+                  borderRadius: "var(--radius-md)",
+                  fontSize: "0.8125rem",
+                  fontWeight: 500,
+                  border: "1px solid var(--color-border)",
+                  backgroundColor: "var(--color-surface)",
+                  color: "var(--color-text-secondary)",
+                  cursor: "pointer",
+                }}
+              >
+                <BookmarkPlus size={14} />
+                Save
+              </button>
+            </div>
+          </div>
+
+          {/* Tab bar */}
+          <TabBar tab={tab} onChange={setTab} />
+
+          {/* Export toolbar — shown for data tabs (not forecast/tax which have their own export) */}
+          {(tab === "cashflow" || tab === "spending" || tab === "income") && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                paddingTop: "0.25rem",
+              }}
+            >
+              <ExportButtons
+                type={tab === "cashflow" ? "cashflow" : "spending"}
+                from={startDate}
+                to={endDate}
+              />
+            </div>
+          )}
+
+          {/* Tab content */}
+          {tab === "overview" && <OverviewSummary />}
+          {tab === "cashflow" && (
+            <CashFlowTab
+              startDate={startDate}
+              endDate={endDate}
+              extraParams={extraFilterParams}
+            />
+          )}
+          {tab === "spending" && (
+            <CategoryTab
+              mode="spending"
+              startDate={startDate}
+              endDate={endDate}
+              extraParams={extraFilterParams}
+              onDrillClick={handleDrillClick}
+            />
+          )}
+          {tab === "income" && (
+            <CategoryTab
+              mode="income"
+              startDate={startDate}
+              endDate={endDate}
+              extraParams={extraFilterParams}
+              onDrillClick={handleDrillClick}
+            />
+          )}
+          {tab === "variance" && (
+            <BudgetVarianceChart from={startDate} to={endDate} />
+          )}
+          {tab === "forecast" && <CashFlowForecast />}
+          {tab === "tax" && <TaxSummaryTab />}
+          {tab === "benchmarks" && (
+            <SpendingBenchmarksTab startDate={startDate} endDate={endDate} />
+          )}
+          {tab === "networth" && <NetWorthSection />}
+          {tab === "assetsliabilities" && <AssetsLiabilitiesSection />}
+          {tab === "investmentperformance" && <InvestmentPerformanceSection />}
+          {tab === "allocationdrift" && <AllocationDriftSection />}
+          {tab === "contributionroom" && <ContributionRoomSection />}
+          {tab === "dividendforecast" && <DividendForecastSection />}
+          {tab === "retirementsimulation" && <RetirementSimulationSection />}
+
+          <SaveViewModal
+            open={saveModalOpen}
+            onClose={() => setSaveModalOpen(false)}
+            filters={currentFilters}
           />
         </div>
-      )}
-
-      {/* Tab content */}
-      {tab === "cashflow" && (
-        <CashFlowTab startDate={startDate} endDate={endDate} extraParams={extraFilterParams} />
-      )}
-      {tab === "spending" && (
-        <CategoryTab mode="spending" startDate={startDate} endDate={endDate} extraParams={extraFilterParams} onDrillClick={handleDrillClick} />
-      )}
-      {tab === "income" && (
-        <CategoryTab mode="income" startDate={startDate} endDate={endDate} extraParams={extraFilterParams} onDrillClick={handleDrillClick} />
-      )}
-      {tab === "variance" && <BudgetVarianceChart from={startDate} to={endDate} />}
-      {tab === "forecast" && <CashFlowForecast />}
-      {tab === "tax" && <TaxSummaryTab />}
-      {tab === "benchmarks" && <SpendingBenchmarksTab startDate={startDate} endDate={endDate} />}
-
-      <SaveViewModal
-        open={saveModalOpen}
-        onClose={() => setSaveModalOpen(false)}
-        filters={currentFilters}
-      />
-    </div>
       </div>
       {drillFilter && (
         <div className="w-80 shrink-0 overflow-hidden">

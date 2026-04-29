@@ -61,6 +61,7 @@ export function ExportButtons({ type, from, to, year }: ExportButtonsProps) {
     <div className="flex gap-2 items-center">
       <button
         className={btnClass}
+        aria-label="Export report as PDF"
         style={{ opacity: pdfLoading ? 0.6 : 1 }}
         onClick={() => handleDownload('pdf', setPdfLoading)}
         disabled={pdfLoading}
@@ -71,6 +72,7 @@ export function ExportButtons({ type, from, to, year }: ExportButtonsProps) {
       </button>
       <button
         className={btnClass}
+        aria-label="Export report as Excel"
         style={{ opacity: excelLoading ? 0.6 : 1 }}
         onClick={() => handleDownload('excel', setExcelLoading)}
         disabled={excelLoading}

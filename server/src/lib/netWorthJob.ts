@@ -1,4 +1,6 @@
 import { prisma } from './prisma';
+import { upsertDailySnapshot } from './reporting/snapshots';
+import { buildMonthlyRollupKey, upsertMonthlyRollup } from './reporting/rollups';
 
 // Take a daily snapshot of net worth for all households (or one specific household).
 export async function takeNetWorthSnapshot(householdId?: string): Promise<void> {
@@ -29,6 +31,22 @@ export async function takeNetWorthSnapshot(householdId?: string): Promise<void> 
       where: { householdId_date: { householdId: household.id, date: today } },
       update: { assets, liabilities, netWorth },
       create: { householdId: household.id, date: today, assets, liabilities, netWorth },
+    });
+
+    await upsertDailySnapshot({
+      householdId: household.id,
+      kind: 'net_worth',
+      date: today,
+      payload: { assets, liabilities, netWorth },
+      source: 'live',
+    });
+
+    await upsertMonthlyRollup({
+      householdId: household.id,
+      kind: 'net_worth',
+      periodKey: buildMonthlyRollupKey(today),
+      payload: { assets, liabilities, netWorth },
+      source: 'daily_snapshots',
     });
   }
 }

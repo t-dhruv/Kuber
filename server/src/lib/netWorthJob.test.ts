@@ -4,10 +4,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // vi.mock is hoisted to the top of the file, so we use vi.hoisted() for fns
 // that need to be referenced inside the factory.
 
-const { mockHouseholdFindMany, mockAccountFindMany, mockNetWorthSnapshotUpsert } = vi.hoisted(() => ({
+const { mockHouseholdFindMany, mockAccountFindMany, mockNetWorthSnapshotUpsert, mockReportingSnapshotUpsert, mockReportingRollupUpsert } = vi.hoisted(() => ({
   mockHouseholdFindMany: vi.fn(),
   mockAccountFindMany: vi.fn(),
   mockNetWorthSnapshotUpsert: vi.fn(),
+  mockReportingSnapshotUpsert: vi.fn(),
+  mockReportingRollupUpsert: vi.fn(),
 }));
 
 vi.mock('./prisma', () => ({
@@ -16,6 +18,17 @@ vi.mock('./prisma', () => ({
     account: { findMany: mockAccountFindMany },
     netWorthSnapshot: { upsert: mockNetWorthSnapshotUpsert },
   },
+}));
+
+vi.mock('./reporting/snapshots', () => ({
+  upsertDailySnapshot: mockReportingSnapshotUpsert,
+  chooseSnapshotSource: vi.fn(),
+  listSnapshotDates: vi.fn(),
+}));
+
+vi.mock('./reporting/rollups', () => ({
+  upsertMonthlyRollup: mockReportingRollupUpsert,
+  buildMonthlyRollupKey: vi.fn(() => '2026-04'),
 }));
 
 import { takeNetWorthSnapshot } from './netWorthJob';
@@ -52,6 +65,8 @@ describe('takeNetWorthSnapshot', () => {
     expect(call.create.assets).toBe(15_000);
     expect(call.create.liabilities).toBe(5_000); // Math.abs(-2000) + Math.abs(-3000)
     expect(call.create.netWorth).toBe(10_000);   // 15000 - 5000
+    expect(mockReportingSnapshotUpsert).toHaveBeenCalledTimes(1);
+    expect(mockReportingRollupUpsert).toHaveBeenCalledTimes(1);
   });
 
   it('calls prisma.netWorthSnapshot.upsert with the correct shape', async () => {

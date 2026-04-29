@@ -143,7 +143,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             >
               <Bell size={18} />
               {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--color-danger)] text-[10px] font-bold text-white leading-none">
+                <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-[var(--color-danger)] text-[10px] font-bold text-[var(--color-danger)] leading-none">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}

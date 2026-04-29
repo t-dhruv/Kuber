@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { takeNetWorthSnapshot } from '../lib/netWorthJob';
+import { summarizeNetWorth } from '../lib/reporting';
 
 const router = Router();
 
@@ -44,18 +45,9 @@ router.get('/history', async (req: AuthRequest, res: Response) => {
     // Compute current net worth from live account balances
     const accounts = await prisma.account.findMany({
       where: { householdId, isHidden: false, excludeFromNetWorth: false },
-      select: { balance: true, type: true },
+      select: { balance: true, type: true, excludeFromNetWorth: true },
     });
-
-    const currentAssets = accounts
-      .filter((a) => !['CREDIT_CARD', 'LOAN'].includes(a.type))
-      .reduce((sum, a) => sum + a.balance, 0);
-
-    const currentLiabilities = accounts
-      .filter((a) => ['CREDIT_CARD', 'LOAN'].includes(a.type))
-      .reduce((sum, a) => sum + Math.abs(a.balance), 0);
-
-    const currentNetWorth = currentAssets - currentLiabilities;
+    const current = summarizeNetWorth(accounts);
 
     // Build history array — ISO date strings (YYYY-MM-DD)
     const history = snapshots.map((s) => ({
@@ -69,10 +61,10 @@ router.get('/history', async (req: AuthRequest, res: Response) => {
     const oldest = snapshots[0];
     const change = oldest
       ? {
-          amount: currentNetWorth - oldest.netWorth,
+          amount: current.netWorth - oldest.netWorth,
           percent:
             oldest.netWorth !== 0
-              ? ((currentNetWorth - oldest.netWorth) / Math.abs(oldest.netWorth)) * 100
+              ? ((current.netWorth - oldest.netWorth) / Math.abs(oldest.netWorth)) * 100
               : 0,
           since: oldest.date.toISOString().split('T')[0],
         }
@@ -80,9 +72,9 @@ router.get('/history', async (req: AuthRequest, res: Response) => {
 
     res.json({
       current: {
-        assets: currentAssets,
-        liabilities: currentLiabilities,
-        netWorth: currentNetWorth,
+        assets: current.assets,
+        liabilities: current.liabilities,
+        netWorth: current.netWorth,
       },
       history,
       change,
