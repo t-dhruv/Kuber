@@ -56,6 +56,8 @@ model Household {
   conversations           Conversation[]
   netWorthSnapshots       NetWorthSnapshot[]
   accountBalanceSnapshots AccountBalanceSnapshot[]
+  reportingSnapshots      ReportingSnapshot[]
+  reportingRollups        ReportingRollup[]
   savedReports            SavedReport[]
   wealthAiCache           WealthAiCache?
   duplicateDismissals     DuplicateDismissal[]
@@ -870,6 +872,41 @@ model AccountBalanceSnapshot {
   @@unique([accountId, date])
   @@index([householdId, date])
   @@map("account_balance_snapshots")
+}
+
+model ReportingSnapshot {
+  id          String   @id @default(cuid())
+  householdId String
+  kind        String
+  snapshotDate DateTime @db.Date
+  periodKey   String
+  subjectId   String?
+  payload     Json
+  source      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, kind, snapshotDate, subjectId])
+  @@index([householdId, kind, snapshotDate])
+  @@map("reporting_snapshots")
+}
+
+model ReportingRollup {
+  id          String   @id @default(cuid())
+  householdId String
+  kind        String
+  periodKey   String
+  subjectId   String?
+  payload     Json
+  source      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, kind, periodKey, subjectId])
+  @@index([householdId, kind, periodKey])
+  @@map("reporting_rollups")
 }
 
 model ReportSchedule {

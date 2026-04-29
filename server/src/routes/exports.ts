@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { buildCashFlowSummary } from '../lib/reportCashFlow';
 
 const router = Router();
 
@@ -58,17 +59,10 @@ async function getCashFlowData(householdId: string, start: Date, end: Date) {
   const transactions = await prisma.transaction.findMany({
     where: { householdId, date: { gte: start, lte: end }, isHidden: false },
   });
-
-  let income = 0;
-  let expenses = 0;
-  for (const t of transactions) {
-    if (t.amount > 0) income += t.amount;
-    else expenses += Math.abs(t.amount);
-  }
-
-  const net = income - expenses;
-  const savingsRate = income > 0 ? Math.round(((income - expenses) / income) * 100) : 0;
-  return { income, expenses, net, savingsRate };
+  const summary = buildCashFlowSummary(transactions.map((t) => ({ amount: t.amount, type: t.amount >= 0 ? 'income' : 'expense' })));
+  const net = summary.income - summary.expense;
+  const savingsRate = summary.income > 0 ? Math.round((net / summary.income) * 100) : 0;
+  return { income: summary.income, expenses: summary.expense, net, savingsRate };
 }
 
 async function getTaxData(householdId: string, year: number) {

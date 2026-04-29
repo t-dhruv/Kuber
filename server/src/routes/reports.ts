@@ -1,10 +1,103 @@
+import { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
+import { buildReportOverview } from '../lib/reportOverview';
+import { buildDiagnosticsSummary } from '../lib/reportDiagnostics';
+import { buildCashFlowSummary } from '../lib/reportCashFlow';
+import { summarizeNetWorth, summarizePortfolio } from '../lib/reporting';
 
 const router = Router();
+
+// ─── GET /api/v1/reports/overview ────────────────────────────────────────────
+
+router.get('/overview', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const [accounts, holdings, txns] = await Promise.all([
+      prisma.account.findMany({
+        where: { householdId, isHidden: false },
+        select: { id: true, type: true, balance: true, excludeFromNetWorth: true },
+      }),
+      prisma.investmentHolding.findMany({
+        where: {
+          account: { householdId, isHidden: false, type: 'investment' },
+        },
+        select: { currentPrice: true, shares: true },
+      }),
+      prisma.transaction.findMany({
+        where: {
+          householdId,
+          date: { gte: monthStart, lte: monthEnd },
+          isHidden: false,
+        },
+        select: {
+          amount: true,
+          isTransfer: true,
+          transferGroupId: true,
+          account: { select: { type: true } },
+          category: { select: { type: true } },
+        },
+      }),
+    ]);
+
+    const cashFlowEvents = txns.map((t) => ({
+      amount: t.amount,
+      type:
+        t.isTransfer
+          ? 'transfer'
+          : t.amount < 0 && (t.account.type === 'investment' || t.category?.type === 'investment')
+            ? 'investment_buy'
+            : t.amount >= 0
+              ? 'income'
+              : 'expense',
+      isTransfer: t.isTransfer,
+    }));
+
+    const diagnosticsInput = {
+      unmatchedTransferGroupIds: txns.filter((t) => t.isTransfer && !t.transferGroupId).map((_, idx) => `unmatched-${idx}`),
+      holdingsWithMissingPrices: holdings.filter((h) => h.currentPrice == null).length,
+      duplicateTransactions: 0,
+    };
+
+    const overview = buildReportOverview({
+      accounts,
+      holdings,
+      cashFlowEvents,
+      diagnostics: diagnosticsInput,
+    });
+    const diagnostics = buildDiagnosticsSummary(diagnosticsInput);
+    const netWorth = summarizeNetWorth(accounts);
+    const portfolio = summarizePortfolio(holdings);
+
+    return res.json({
+      cashFlow: {
+        income: overview.income,
+        expense: overview.expense,
+        transferTotal: overview.transferTotal,
+        savingsRate: overview.currentMonthSavingsRate,
+      },
+      netWorth: { total: netWorth.netWorth },
+      investments: { portfolioValue: portfolio.portfolioValue },
+      taxes: { realizedGains: 0, taxDrag: 0 },
+      goals: { savingsRate: overview.currentMonthSavingsRate },
+      diagnostics: {
+        unmatchedTransfers: diagnostics.unmatchedTransfers,
+        missingPrices: diagnostics.missingPrices,
+        duplicateTransactions: diagnostics.duplicateTransactions,
+      },
+    });
+  } catch (err) {
+    req.log.error({ err }, 'reports/overview');
+    return res.status(500).json({ error: 'Failed to fetch report overview' });
+  }
+});
 
 function parseDateRange(startDate: unknown, endDate: unknown): { start: Date; end: Date } | null {
   if (typeof startDate !== 'string' || typeof endDate !== 'string') return null;
@@ -848,11 +941,14 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
       select: { amount: true, date: true },
     });
 
-    let income = 0;
-    let expenses = 0;
-
     // byMonth map: "YYYY-MM" -> { year, month, income, expenses }
     const monthMap = new Map<string, { year: number; month: number; income: number; expenses: number }>();
+    const cashFlow = buildCashFlowSummary(
+      transactions.map((t) => ({
+        amount: t.amount,
+        type: t.amount >= 0 ? 'income' : 'expense',
+      })),
+    );
 
     for (const t of transactions) {
       const d = new Date(t.date);
@@ -866,16 +962,14 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
       const entry = monthMap.get(key)!;
 
       if (t.amount > 0) {
-        income += t.amount;
         entry.income += t.amount;
       } else {
-        expenses += Math.abs(t.amount);
         entry.expenses += Math.abs(t.amount);
       }
     }
 
-    const net = income - expenses;
-    const savingsRate = income > 0 ? Math.min(100, Math.max(0, (net / income) * 100)) : 0;
+    const net = cashFlow.income - cashFlow.expense;
+    const savingsRate = cashFlow.income > 0 ? Math.min(100, Math.max(0, (net / cashFlow.income) * 100)) : 0;
 
     const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -900,8 +994,8 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
     return res.json({
       startDate: range.start.toISOString(),
       endDate: range.end.toISOString(),
-      income: Math.round(income * 100) / 100,
-      expenses: Math.round(expenses * 100) / 100,
+      income: Math.round(cashFlow.income * 100) / 100,
+      expenses: Math.round(cashFlow.expense * 100) / 100,
       net: Math.round(net * 100) / 100,
       savingsRate: Math.round(savingsRate * 100) / 100,
       byMonth,
@@ -930,7 +1024,7 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
     const start = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-    const whereClause: Record<string, unknown> = {
+    const whereClause: Prisma.TransactionWhereInput = {
       householdId,
       date: { gte: start, lt: end },
       amount: { lt: 0 },
@@ -943,7 +1037,7 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
     }
 
     const transactions = await prisma.transaction.findMany({
-      where: whereClause as any,
+      where: whereClause,
       select: { amount: true, date: true },
     });
 

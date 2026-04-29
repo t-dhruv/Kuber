@@ -8,6 +8,9 @@ test.describe('Reports', () => {
 
   test('reports page loads', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /reports/i })).toBeVisible();
+    await expect(page.getByText(/^core$/i)).toBeVisible();
+    await expect(page.getByText(/^wealth$/i)).toBeVisible();
+    await expect(page.getByText(/^advanced$/i)).toBeVisible();
   });
 
   test('spending report shows category data from prior transactions', async ({ page }) => {

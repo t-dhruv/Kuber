@@ -252,6 +252,260 @@ Track how your investments are doing over time:
 
 ---
 
+## Modern Reporting Design
+
+Kuber's reporting model should answer different financial questions without mixing unrelated activity together. The cleanest way to do that is to treat reports as separate layers built from a normalized financial-event model.
+
+### The Reporting Layers
+
+1. **Cash Flow**  
+   Answers: "What did I earn and spend?"
+2. **Net Worth**  
+   Answers: "What do I own and owe?"
+3. **Investments**  
+   Answers: "How is my portfolio performing?"
+4. **Taxes**  
+   Answers: "What taxable events happened?"
+5. **Goals and Forecasts**  
+   Answers: "Am I on track?"
+6. **Diagnostics**  
+   Answers: "What needs review?"
+
+### Report Pages
+
+#### Overview
+
+The overview page should show the most important numbers at a glance:
+- Net worth headline
+- Month-to-date cash flow
+- Portfolio value
+- Savings rate
+- Investment return summary
+- Alerts for unusual spending, transfer mismatches, and missing prices
+
+#### Cash Flow
+
+Cash flow reports should include:
+- Income vs expense by month, quarter, year, and custom range
+- Category, merchant, tag, and account breakdowns
+- Recurring vs one-off spending
+- Fixed vs variable spending
+- Payday-cycle analysis
+- Burn rate and runway
+- Budget variance
+- Subscription creep
+- Inflation-adjusted trends
+- Outlier detection
+- Month-end forecast
+
+#### Net Worth
+
+Net worth reports should include:
+- Total net worth over time
+- Asset vs liability split
+- Account balances over time
+- Asset-class mix
+- Liquidity ladder
+- Debt payoff trajectory
+- Waterfall view of period-over-period change
+
+#### Investments
+
+Investment reports should include:
+- Portfolio value over time
+- Contribution vs market gain
+- Holdings table
+- Allocation by asset class, sector, region, and account
+- Cost basis
+- Unrealized and realized gain/loss
+- Time-weighted return and money-weighted return
+- Dividend income
+- Cash drag
+- Rebalancing drift
+- Benchmark comparison
+
+#### Taxes
+
+Tax reports should include:
+- Taxable income from investments
+- Realized gains
+- Dividend and interest income
+- Withholding tax
+- Registered vs taxable account breakdown
+- Tax drag estimate
+- Year-over-year tax impact
+
+#### Goals
+
+Goal and forecast reports should include:
+- Emergency fund progress
+- Debt payoff timeline
+- Retirement projection
+- Savings target progress
+- Scenario simulation
+
+#### Diagnostics
+
+Diagnostics should expose data quality issues instead of hiding them:
+- Unmatched transfers
+- Transfer mismatches
+- Orphaned investment cash movements
+- Missing price history
+- Duplicate transactions
+- Large uncategorized transactions
+- Data quality score
+
+### Normalized Event Model
+
+Reports should not read raw transactions directly in every place. Raw records should first be normalized into financial events with a clear meaning.
+
+Core event types:
+- `income`
+- `expense`
+- `transfer`
+- `investment_buy`
+- `investment_sell`
+- `dividend`
+- `interest`
+- `fee`
+- `tax`
+- `refund`
+- `reimbursement`
+- `corporate_action`
+- `price_adjustment`
+
+Useful event metadata:
+- `accountId`
+- `relatedAccountId`
+- `securityId`
+- `transferGroupId`
+- `lotId`
+- `currency`
+- `date`
+- `settlementDate`
+- `amount`
+- `quantity`
+- `price`
+- `fees`
+- `taxWithheld`
+- `direction`
+- `status` (`pending`, `posted`, `reconciled`, `needs_review`)
+
+### Transfer Handling
+
+Transfers should be modeled as linked pairs, not as standalone income or expense records.
+
+Example:
+- cash leaves checking
+- cash arrives in savings
+- both legs share the same `transferGroupId`
+
+Reporting rules:
+- Exclude internal transfer legs from income and expense totals
+- Include them in account balance history
+- Optionally surface them in a separate money-movement view
+- Flag missing or mismatched legs as diagnostics
+
+Important edge cases:
+- Transfers to brokerage accounts are not spending
+- Transfers from brokerage accounts are not income
+- Transfers that are only partially matched should remain visible for cleanup
+
+### Investment Handling
+
+Investments need a subledger, not just holdings. A serious portfolio model should track:
+- Accounts
+- Securities
+- Lots
+- Trades
+- Dividends
+- Fees
+- Splits
+- Mergers and spin-offs
+- Price history
+
+Recommended behavior:
+- A buy reduces cash and increases a security position
+- A sell reduces the security position and increases cash
+- Dividends increase cash or reinvest into a lot
+- DRIP should create both a dividend event and a buy event
+- Splits should adjust share count and basis
+- Realized gains should come from lot accounting, not naive trade math
+
+### Report Inclusion Rules
+
+Each report type should define what it includes and excludes.
+
+Cash flow includes:
+- income
+- expenses
+- interest
+- dividends
+- fees
+- taxes
+- reimbursements
+
+Cash flow excludes:
+- internal transfers
+- investment purchases
+- investment sales as income
+- balance-only adjustments
+
+Net worth includes:
+- all assets
+- all liabilities
+- cash balances
+- investment account market value
+- property values if tracked
+
+Investments include:
+- contributions
+- buys and sells
+- dividends
+- fees
+- realized and unrealized gains
+- corporate actions
+
+Taxes include:
+- taxable dividends
+- interest
+- realized gains
+- withholding tax
+- deductible fees where applicable
+
+### User Controls
+
+Users should be able to correct classifications without destroying history:
+- Mark as transfer
+- Link two transactions
+- Mark as investment contribution
+- Mark as investment trade
+- Mark as dividend
+- Split transaction
+- Mark as reimbursement
+- Mark as refund
+- Exclude from cash flow
+- Exclude from net worth
+- Include in tax view
+
+### Recommended Build Order
+
+If this reporting system is built in phases, the order should be:
+
+1. Normalize event types and transfer links
+2. Build the report rule engine
+3. Implement net worth time series
+4. Implement transfer-correct cash flow
+5. Implement investment subledger and performance
+6. Add tax-aware views
+7. Add scenarios, forecasts, and diagnostics
+
+### Product Rule
+
+If an event merely moves money you already own, it should not look like income or expense. If an event changes what you own, the reporting layer must show that change in the correct place.
+
+---
+
 ## Summary: Kuber's Design Principles
 
 | Principle | What It Means |
