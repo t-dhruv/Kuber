@@ -26,10 +26,8 @@ export function ChatMessage({ message }: Props) {
 
   return (
     <div className={`flex gap-3 px-4 py-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} items-start group`}>
-      {/* Avatar */}
-      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0 mt-0.5 shadow-sm ${
-        isUser ? 'bg-[var(--color-surface-hover)]' : 'bg-gradient-to-br from-[var(--color-accent)] to-purple-500'
-      }`}>
+       {/* Avatar */}
+       <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0 mt-0.5 border border-[var(--color-border)] bg-[var(--color-surface)]`}>
         {isUser ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--color-text-muted)]">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />

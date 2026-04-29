@@ -29,17 +29,14 @@ const SEVERITY_STYLES = {
   alert: {
     icon: <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />,
     border: 'border-l-2 border-red-400',
-    bg: 'bg-red-50 dark:bg-red-950/20',
   },
   warning: {
     icon: <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />,
     border: 'border-l-2 border-amber-400',
-    bg: 'bg-amber-50 dark:bg-amber-950/20',
   },
   info: {
     icon: <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />,
     border: 'border-l-2 border-blue-400',
-    bg: 'bg-blue-50 dark:bg-blue-950/20',
   },
 };
 
@@ -117,7 +114,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
             <Bell size={18} />
             <h2 className="font-semibold">Notifications</h2>
             {(data?.unreadCount ?? 0) > 0 && (
-              <span className="text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold">
+              <span className="text-xs border border-red-500 text-red-500 rounded-full px-1.5 py-0.5 font-bold">
                 {data!.unreadCount}
               </span>
             )}
@@ -178,7 +175,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
               <div
                 key={n.id}
                 className={`flex gap-3 px-4 py-3 border-b border-[var(--color-border)] cursor-pointer transition-colors
-                  ${n.read ? 'opacity-60' : style.bg}
+                  ${n.read ? 'opacity-60' : ''}
                   ${!n.read ? style.border : ''}
                   hover:bg-[var(--color-surface-hover)]`}
                 onClick={() => { if (!n.read) markRead.mutate(n.id); }}
@@ -189,7 +186,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
                   <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{n.body}</p>
                   <p className="text-xs text-[var(--color-text-muted)] mt-1">{timeAgo(n.createdAt)}</p>
                 </div>
-                {!n.read && <div className="w-2 h-2 bg-blue-500 rounded-full shrink-0 mt-1.5" />}
+                {!n.read && <div className="w-2 h-2 rounded-full shrink-0 mt-1.5 border border-[var(--color-info)]" />}
               </div>
             );
           })}
