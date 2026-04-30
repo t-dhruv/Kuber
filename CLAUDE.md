@@ -4,18 +4,6 @@
 > Stack: React 18 + TypeScript + Vite | Express + Prisma + PostgreSQL | Docker + Nginx
 
 ---
-
-## graphify
-
-This project has a graphify knowledge graph at graphify-out/.
-
-- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md
-- For cross-module questions, prefer `graphify query "<question>"` over grep
-- Use `graphify path "<A>" "<B>"` for dependency tracing
-- After modifying files, `graphify update .` runs automatically via hook
-
----
-
 ## Approach
 
 - Think before acting. Read existing files before writing code.

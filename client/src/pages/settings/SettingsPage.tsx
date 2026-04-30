@@ -65,6 +65,7 @@ interface Category {
   groupName: string | null;
   group?: { id: string; name: string } | null;
   isTaxDeductible?: boolean;
+  excludeFromReports?: boolean;
 }
 
 interface CategoryGroup {
@@ -1298,6 +1299,18 @@ function CategoriesSection() {
     },
   });
 
+  // Toggle exclude from reports on a category
+  const toggleExcludeMutation = useMutation({
+    mutationFn: ({ categoryId, excludeFromReports }: { categoryId: string; excludeFromReports: boolean }) =>
+      api.put(`/settings/categories/${categoryId}`, { excludeFromReports }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'categories'] });
+    },
+    onError: () => {
+      notify.error('Failed to update report exclusion');
+    },
+  });
+
   // Toggle tax deductible on a category
   const toggleTaxMutation = useMutation({
     mutationFn: ({ categoryId, isTaxDeductible }: { categoryId: string; isTaxDeductible: boolean }) =>
@@ -1667,6 +1680,21 @@ function CategoriesSection() {
                       >
                         <Receipt size={10} />
                         Tax
+                      </button>
+                      {/* Exclude from reports toggle */}
+                      <button
+                        onClick={() => toggleExcludeMutation.mutate({ categoryId: cat.id, excludeFromReports: !cat.excludeFromReports })}
+                        title={cat.excludeFromReports ? 'Excluded from reports (click to include)' : 'Include in reports (click to exclude)'}
+                        className="flex items-center gap-1 py-[0.1875rem] px-[0.4375rem] rounded-full text-[0.6875rem] font-semibold border cursor-pointer shrink-0"
+                        style={{
+                          borderColor: cat.excludeFromReports ? 'var(--color-danger)' : 'var(--color-border)',
+                          background: cat.excludeFromReports ? 'color-mix(in srgb, var(--color-danger) 12%, transparent)' : 'transparent',
+                          color: cat.excludeFromReports ? 'var(--color-danger)' : 'var(--color-text-secondary)',
+                          opacity: toggleExcludeMutation.isPending ? 0.5 : 1,
+                        }}
+                      >
+                        <EyeOff size={10} />
+                        {cat.excludeFromReports ? 'Excluded' : 'Reports'}
                       </button>
                       <Button
                         variant="ghost"

@@ -22,8 +22,8 @@ router.get('/overview', async (req: AuthRequest, res: Response) => {
 
     const [accounts, holdings, txns] = await Promise.all([
       prisma.account.findMany({
-        where: { householdId, isHidden: false },
-        select: { id: true, type: true, balance: true, excludeFromNetWorth: true },
+        where: { householdId, isHidden: false, excludeFromReports: false },
+        select: { id: true, type: true, balance: true, excludeFromNetWorth: true, excludeFromReports: true },
       }),
       prisma.investmentHolding.findMany({
         where: {
@@ -117,6 +117,8 @@ async function fetchGroupedTransactions(
   end: Date,
   groupBy: string,
   mode: GroupMode,
+  excludeCategoryIds?: string[],
+  excludeAccountIds?: string[],
 ) {
   const amountWhere = mode === 'spending' ? { lt: 0 } : { gt: 0 };
 
@@ -127,8 +129,18 @@ async function fetchGroupedTransactions(
       amount: amountWhere,
       isHidden: false,
       isTransfer: false,
-      NOT: [{ category: { type: 'investment' } }],
-      ...(mode === 'income' ? { isRefund: false } : {}),
+      NOT: [
+        { category: { type: 'investment' } },
+        { category: { name: 'Internal Transfer' } },
+        { category: { excludeFromReports: true } },
+        { account: { excludeFromReports: true } },
+      ],
+      ...(excludeCategoryIds && excludeCategoryIds.length > 0
+        ? { categoryId: { notIn: excludeCategoryIds } }
+        : {}),
+      ...(excludeAccountIds && excludeAccountIds.length > 0
+        ? { accountId: { notIn: excludeAccountIds } }
+        : {}),
     },
     include: {
       category: { select: { id: true, name: true, icon: true, type: true } },
@@ -240,7 +252,7 @@ async function fetchRefundsByGroup(
 router.get('/spending/compare', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { startDate, endDate, groupBy = 'category' } = req.query;
+    const { startDate, endDate, groupBy = 'category', excludeCategoryIds: excCatStr, excludeAccountIds: excAcctStr } = req.query as Record<string, string | undefined>;
 
     const range = parseDateRange(startDate, endDate);
     if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
@@ -250,14 +262,16 @@ router.get('/spending/compare', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
     }
 
-    // Compute prior period of same duration
-    const durationMs = range.end.getTime() - range.start.getTime() + 86400000; // +1 day
+    const excludeCategoryIds = excCatStr ? excCatStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const excludeAccountIds = excAcctStr ? excAcctStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+    const durationMs = range.end.getTime() - range.start.getTime() + 86400000;
     const priorEnd = new Date(range.start.getTime() - 86400000);
     const priorStart = new Date(priorEnd.getTime() - durationMs + 86400000);
 
     const [currentMap, priorMap] = await Promise.all([
-      fetchGroupedTransactions(householdId, range.start, range.end, groupBy as string, 'spending'),
-      fetchGroupedTransactions(householdId, priorStart, priorEnd, groupBy as string, 'spending'),
+      fetchGroupedTransactions(householdId, range.start, range.end, groupBy as string, 'spending', excludeCategoryIds, excludeAccountIds),
+      fetchGroupedTransactions(householdId, priorStart, priorEnd, groupBy as string, 'spending', excludeCategoryIds, excludeAccountIds),
     ]);
 
     // Merge keys from both periods
@@ -290,7 +304,7 @@ router.get('/spending/compare', async (req: AuthRequest, res: Response) => {
 router.get('/income/compare', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { startDate, endDate, groupBy = 'category' } = req.query;
+    const { startDate, endDate, groupBy = 'category', excludeCategoryIds: excCatStr, excludeAccountIds: excAcctStr } = req.query as Record<string, string | undefined>;
 
     const range = parseDateRange(startDate, endDate);
     if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
@@ -300,13 +314,16 @@ router.get('/income/compare', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
     }
 
+    const excludeCategoryIds = excCatStr ? excCatStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const excludeAccountIds = excAcctStr ? excAcctStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
     const durationMs = range.end.getTime() - range.start.getTime() + 86400000;
     const priorEnd = new Date(range.start.getTime() - 86400000);
     const priorStart = new Date(priorEnd.getTime() - durationMs + 86400000);
 
     const [currentMap, priorMap] = await Promise.all([
-      fetchGroupedTransactions(householdId, range.start, range.end, groupBy as string, 'income'),
-      fetchGroupedTransactions(householdId, priorStart, priorEnd, groupBy as string, 'income'),
+      fetchGroupedTransactions(householdId, range.start, range.end, groupBy as string, 'income', excludeCategoryIds, excludeAccountIds),
+      fetchGroupedTransactions(householdId, priorStart, priorEnd, groupBy as string, 'income', excludeCategoryIds, excludeAccountIds),
     ]);
 
     const allKeys = new Set([...currentMap.keys(), ...priorMap.keys()]);
@@ -338,7 +355,7 @@ router.get('/income/compare', async (req: AuthRequest, res: Response) => {
 router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { startDate, endDate, groupBy = 'category' } = req.query;
+    const { startDate, endDate, groupBy = 'category', excludeCategoryIds: excCatStr, excludeAccountIds: excAcctStr } = req.query as Record<string, string | undefined>;
 
     const range = parseDateRange(startDate, endDate);
     if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
@@ -348,15 +365,26 @@ router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
     }
 
+    const excludeCategoryIds = excCatStr ? excCatStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const excludeAccountIds = excAcctStr ? excAcctStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+    const whereClause: Record<string, any> = {
+      householdId,
+      date: { gte: range.start, lte: range.end },
+      amount: { lt: 0 },
+      isHidden: false,
+      isTransfer: false,
+      NOT: [
+        { category: { type: 'investment' } },
+        { category: { excludeFromReports: true } },
+        { account: { excludeFromReports: true } },
+      ],
+    };
+    if (excludeCategoryIds.length > 0) whereClause.categoryId = { notIn: excludeCategoryIds };
+    if (excludeAccountIds.length > 0) whereClause.accountId = { notIn: excludeAccountIds };
+
     const transactions = await prisma.transaction.findMany({
-      where: {
-        householdId,
-        date: { gte: range.start, lte: range.end },
-        amount: { lt: 0 },
-        isHidden: false,
-        isTransfer: false,
-        NOT: [{ category: { type: 'investment' } }],
-      },
+      where: whereClause,
       include: {
         category: { select: { id: true, name: true, icon: true } },
         merchant: { select: { id: true, displayName: true } },
@@ -482,7 +510,7 @@ router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
 router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { startDate, endDate, groupBy = 'category' } = req.query;
+    const { startDate, endDate, groupBy = 'category', excludeCategoryIds: excCatStr, excludeAccountIds: excAcctStr } = req.query as Record<string, string | undefined>;
 
     const range = parseDateRange(startDate, endDate);
     if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
@@ -492,15 +520,26 @@ router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
     }
 
+    const excludeCategoryIds = excCatStr ? excCatStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const excludeAccountIds = excAcctStr ? excAcctStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+    const whereClause: Record<string, any> = {
+      householdId,
+      date: { gte: range.start, lte: range.end },
+      amount: { gt: 0 },
+      isHidden: false,
+      isTransfer: false,
+      isRefund: false,
+      NOT: [
+        { category: { excludeFromReports: true } },
+        { account: { excludeFromReports: true } },
+      ],
+    };
+    if (excludeCategoryIds.length > 0) whereClause.categoryId = { notIn: excludeCategoryIds };
+    if (excludeAccountIds.length > 0) whereClause.accountId = { notIn: excludeAccountIds };
+
     const rawTransactions = await prisma.transaction.findMany({
-      where: {
-        householdId,
-        date: { gte: range.start, lte: range.end },
-        amount: { gt: 0 },
-        isHidden: false,
-        isTransfer: false,
-        isRefund: false,
-      },
+      where: whereClause,
       include: {
         category: { select: { id: true, name: true, icon: true, type: true } },
         merchant: { select: { id: true, displayName: true } },
@@ -575,7 +614,7 @@ router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
 router.get('/spending', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { startDate, endDate, groupBy = 'category', categoryIds, accountIds, tagIds, minAmount, maxAmount } = req.query;
+    const { startDate, endDate, groupBy = 'category', categoryIds, accountIds, tagIds, minAmount, maxAmount, excludeCategoryIds, excludeAccountIds } = req.query;
 
     const range = parseDateRange(startDate, endDate);
     if (!range) {
@@ -602,11 +641,15 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
       NOT: [
         { category: { type: 'investment' } },
         { category: { name: 'Internal Transfer' } },
+        { category: { excludeFromReports: true } },
+        { account: { excludeFromReports: true } },
       ],
     };
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
     if (tagIds) where.tags = { some: { tag: { id: { in: (tagIds as string).split(',') } } } };
+    if (excludeCategoryIds) where.categoryId = { notIn: (excludeCategoryIds as string).split(',') };
+    if (excludeAccountIds) where.accountId = { notIn: (excludeAccountIds as string).split(',') };
 
     const transactions = await prisma.transaction.findMany({
       where,
@@ -762,7 +805,7 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
 router.get('/income', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { startDate, endDate, groupBy = 'category', categoryIds, accountIds, tagIds, minAmount, maxAmount } = req.query;
+    const { startDate, endDate, groupBy = 'category', categoryIds, accountIds, tagIds, minAmount, maxAmount, excludeCategoryIds, excludeAccountIds } = req.query;
 
     const range = parseDateRange(startDate, endDate);
     if (!range) {
@@ -788,11 +831,15 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
       isTransfer: false,
       NOT: [
         { category: { name: 'Internal Transfer' } },
+        { category: { excludeFromReports: true } },
+        { account: { excludeFromReports: true } },
       ],
     };
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
     if (tagIds) where.tags = { some: { tag: { id: { in: (tagIds as string).split(',') } } } };
+    if (excludeCategoryIds) where.categoryId = { notIn: (excludeCategoryIds as string).split(',') };
+    if (excludeAccountIds) where.accountId = { notIn: (excludeAccountIds as string).split(',') };
     where.isRefund = false;
 
     const rawTransactions = await prisma.transaction.findMany({
@@ -914,7 +961,7 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
 router.get('/cashflow', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { startDate, endDate, categoryIds, accountIds, tagIds, minAmount, maxAmount } = req.query;
+    const { startDate, endDate, categoryIds, accountIds, tagIds, minAmount, maxAmount, excludeCategoryIds, excludeAccountIds } = req.query;
 
     const range = parseDateRange(startDate, endDate);
     if (!range) {
@@ -927,8 +974,14 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
       date: { gte: range.start, lte: range.end },
       isHidden: false,
       isTransfer: false,
-      NOT: [{ category: { type: 'investment' } }],
+      NOT: [
+        { category: { type: 'investment' } },
+        { category: { excludeFromReports: true } },
+        { account: { excludeFromReports: true } },
+      ],
     };
+    if (excludeCategoryIds) where.categoryId = { notIn: excludeCategoryIds };
+    if (excludeAccountIds) where.accountId = { notIn: excludeAccountIds };
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
     if (tagIds) where.tags = { some: { tag: { id: { in: (tagIds as string).split(',') } } } };
@@ -1019,6 +1072,7 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const monthsParam = req.query.months;
     const categoryId = req.query.categoryId as string | undefined;
+    const { excludeCategoryIds: excCatStr, excludeAccountIds: excAcctStr } = req.query as Record<string, string | undefined>;
 
     const months = monthsParam ? parseInt(monthsParam as string, 10) : 6;
     if (isNaN(months) || months < 1 || months > 36) {
@@ -1030,14 +1084,23 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
     const start = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
+    const excludeCategoryIds = excCatStr ? excCatStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const excludeAccountIds = excAcctStr ? excAcctStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
     const whereClause: Prisma.TransactionWhereInput = {
       householdId,
       date: { gte: start, lt: end },
       amount: { lt: 0 },
       isHidden: false,
       isTransfer: false,
-      NOT: [{ category: { type: 'investment' } }],
+      NOT: [
+        { category: { type: 'investment' } },
+        { category: { excludeFromReports: true } },
+        { account: { excludeFromReports: true } },
+      ],
     };
+    if (excludeCategoryIds.length > 0) whereClause.categoryId = { notIn: excludeCategoryIds };
+    if (excludeAccountIds.length > 0) whereClause.accountId = { notIn: excludeAccountIds };
     if (categoryId) {
       whereClause.categoryId = categoryId;
     }
@@ -1092,12 +1155,12 @@ router.get('/trends', async (req: AuthRequest, res: Response) => {
 
 // ---------------------------------------------------------------------------
 // GET /api/v1/reports/export/csv
-// Query params: type (spending|income|cashflow), startDate, endDate
+// Query params: type (spending|income|cashflow), startDate, endDate, excludeCategoryIds, excludeAccountIds
 // ---------------------------------------------------------------------------
 router.get('/export/csv', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { type, startDate, endDate } = req.query as Record<string, string | undefined>;
+    const { type, startDate, endDate, excludeCategoryIds: excCatStr, excludeAccountIds: excAcctStr } = req.query as Record<string, string | undefined>;
 
     const validTypes = ['spending', 'income', 'cashflow'];
     if (!type || !validTypes.includes(type)) {
@@ -1109,18 +1172,29 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
     }
 
+    const excludeCategoryIds = excCatStr ? excCatStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const excludeAccountIds = excAcctStr ? excAcctStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
     const filename = `report-${type}-${new Date().toISOString().slice(0, 10)}.csv`;
     setCsvHeaders(res, filename);
 
     if (type === 'cashflow') {
+      const cashflowWhere: Record<string, any> = {
+        householdId,
+        date: { gte: range.start, lte: range.end },
+        isHidden: false,
+        isTransfer: false,
+        NOT: [
+          { category: { type: 'investment' } },
+          { category: { excludeFromReports: true } },
+          { account: { excludeFromReports: true } },
+        ],
+      };
+      if (excludeCategoryIds.length > 0) cashflowWhere.categoryId = { notIn: excludeCategoryIds };
+      if (excludeAccountIds.length > 0) cashflowWhere.accountId = { notIn: excludeAccountIds };
+
       const transactions = await prisma.transaction.findMany({
-        where: {
-          householdId,
-          date: { gte: range.start, lte: range.end },
-          isHidden: false,
-          isTransfer: false,
-          NOT: [{ category: { type: 'investment' } }],
-        },
+        where: cashflowWhere,
         select: { amount: true, date: true },
       });
 
@@ -1157,15 +1231,23 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
     // spending or income
     const amountFilter = type === 'spending' ? { lt: 0 } : { gt: 0 };
 
+    const spendingWhere: Record<string, any> = {
+      householdId,
+      date: { gte: range.start, lte: range.end },
+      amount: amountFilter,
+      isHidden: false,
+      isTransfer: false,
+      NOT: [
+        { category: { type: 'investment' } },
+        { category: { excludeFromReports: true } },
+        { account: { excludeFromReports: true } },
+      ],
+    };
+    if (excludeCategoryIds.length > 0) spendingWhere.categoryId = { notIn: excludeCategoryIds };
+    if (excludeAccountIds.length > 0) spendingWhere.accountId = { notIn: excludeAccountIds };
+
     const transactions = await prisma.transaction.findMany({
-      where: {
-        householdId,
-        date: { gte: range.start, lte: range.end },
-        amount: amountFilter,
-        isHidden: false,
-        isTransfer: false,
-        NOT: [{ category: { type: 'investment' } }],
-      },
+      where: spendingWhere,
       include: {
         category: { select: { name: true } },
       },
@@ -1214,6 +1296,8 @@ const SavedReportSchema = z.object({
     datePreset: z.string().optional(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
+    excludeCategoryIds: z.array(z.string()).optional(),
+    excludeAccountIds: z.array(z.string()).optional(),
   }),
 });
 
@@ -1266,28 +1350,38 @@ router.delete('/saved/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/v1/reports/tax-summary?year=2025
+// GET /api/v1/reports/tax-summary?year=2025&excludeCategoryIds=&excludeAccountIds=
 router.get('/tax-summary', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const yearParam = req.query.year;
+    const { excludeCategoryIds: excCatStr, excludeAccountIds: excAcctStr } = req.query as Record<string, string | undefined>;
+
     const year = yearParam ? parseInt(yearParam as string, 10) : new Date().getFullYear();
 
     if (isNaN(year) || year < 2000 || year > 2100) {
       return res.status(400).json({ error: 'year must be a valid 4-digit year' });
     }
 
+    const excludeCategoryIds = excCatStr ? excCatStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const excludeAccountIds = excAcctStr ? excAcctStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
     const start = new Date(year, 0, 1);
     const end = new Date(year, 11, 31, 23, 59, 59);
 
+    const taxWhere: Record<string, any> = {
+      householdId,
+      isHidden: false,
+      isTransfer: false,
+      date: { gte: start, lte: end },
+      category: { isTaxDeductible: true, excludeFromReports: false },
+      NOT: [{ account: { excludeFromReports: true } }],
+    };
+    if (excludeCategoryIds.length > 0) taxWhere.categoryId = { notIn: excludeCategoryIds };
+    if (excludeAccountIds.length > 0) taxWhere.accountId = { notIn: excludeAccountIds };
+
     const transactions = await prisma.transaction.findMany({
-      where: {
-        householdId,
-        isHidden: false,
-        isTransfer: false,
-        date: { gte: start, lte: end },
-        category: { isTaxDeductible: true },
-      },
+      where: taxWhere,
       include: {
         category: { select: { id: true, name: true, icon: true } },
       },
@@ -1347,7 +1441,11 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
         isHidden: false,
         isTransfer: false,
         isSplit: false,
-        NOT: [{ category: { type: 'investment' } }],
+        NOT: [
+          { category: { type: 'investment' } },
+          { category: { excludeFromReports: true } },
+          { account: { excludeFromReports: true } },
+        ],
       },
       select: { categoryId: true, amount: true, category: { select: { id: true, name: true, icon: true } } },
     });
@@ -1472,6 +1570,8 @@ router.get('/benchmarks', async (req: AuthRequest, res: Response) => {
         NOT: [
           { category: { type: 'investment' } },
           { category: { name: 'Internal Transfer' } },
+          { category: { excludeFromReports: true } },
+          { account: { excludeFromReports: true } },
         ],
       },
       _sum: { amount: true },
@@ -1510,17 +1610,21 @@ router.get('/benchmarks', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/v1/reports/tags?start=YYYY-MM-DD&end=YYYY-MM-DD
+// GET /api/v1/reports/tags?start=YYYY-MM-DD&end=YYYY-MM-DD&excludeCategoryIds=&excludeAccountIds=
 // Returns income/expense totals grouped by tag for the given period.
 router.get('/tags', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const start = req.query.start as string | undefined;
     const end   = req.query.end   as string | undefined;
+    const { excludeCategoryIds: excCatStr, excludeAccountIds: excAcctStr } = req.query as Record<string, string | undefined>;
 
     const dateFilter = start && end
       ? { gte: new Date(start), lte: new Date(end) }
       : undefined;
+
+    const excludeCategoryIds = excCatStr ? excCatStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const excludeAccountIds = excAcctStr ? excAcctStr.split(',').map(s => s.trim()).filter(Boolean) : [];
 
     const tags = await prisma.tag.findMany({
       where:   { householdId },
@@ -1529,35 +1633,29 @@ router.get('/tags', async (req: AuthRequest, res: Response) => {
 
     const results = await Promise.all(
       tags.map(async (tag) => {
+        const baseWhere: Record<string, any> = {
+          householdId,
+          isHidden: false,
+          tags:     { some: { tagId: tag.id } },
+          ...(dateFilter ? { date: dateFilter } : {}),
+          NOT: [
+            { category: { excludeFromReports: true } },
+            { account: { excludeFromReports: true } },
+          ],
+        };
+        if (excludeCategoryIds.length > 0) baseWhere.categoryId = { notIn: excludeCategoryIds };
+        if (excludeAccountIds.length > 0) baseWhere.accountId = { notIn: excludeAccountIds };
+
         const [incomeAgg, expenseAgg, count] = await Promise.all([
           prisma.transaction.aggregate({
-            where: {
-              householdId,
-              isHidden: false,
-              amount:   { gt: 0 },
-              tags:     { some: { tagId: tag.id } },
-              ...(dateFilter ? { date: dateFilter } : {}),
-            },
+            where: { ...baseWhere, amount: { gt: 0 } },
             _sum: { amount: true },
           }),
           prisma.transaction.aggregate({
-            where: {
-              householdId,
-              isHidden: false,
-              amount:   { lt: 0 },
-              tags:     { some: { tagId: tag.id } },
-              ...(dateFilter ? { date: dateFilter } : {}),
-            },
+            where: { ...baseWhere, amount: { lt: 0 } },
             _sum: { amount: true },
           }),
-          prisma.transaction.count({
-            where: {
-              householdId,
-              isHidden: false,
-              tags:     { some: { tagId: tag.id } },
-              ...(dateFilter ? { date: dateFilter } : {}),
-            },
-          }),
+          prisma.transaction.count({ where: baseWhere }),
         ]);
 
         return {
@@ -1578,7 +1676,7 @@ router.get('/tags', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/v1/reports/no-category?start=YYYY-MM-DD&end=YYYY-MM-DD&limit=50&cursor=
+// GET /api/v1/reports/no-category?start=YYYY-MM-DD&end=YYYY-MM-DD&limit=50&cursor=&excludeAccountIds=
 // Returns paginated transactions that have no category assigned.
 router.get('/no-category', async (req: AuthRequest, res: Response) => {
   try {
@@ -1587,17 +1685,22 @@ router.get('/no-category', async (req: AuthRequest, res: Response) => {
     const end    = req.query.end    as string | undefined;
     const limit  = Math.min(parseInt((req.query.limit as string) ?? '50', 10), 200);
     const cursor = req.query.cursor as string | undefined;
+    const { excludeAccountIds: excAcctStr } = req.query as Record<string, string | undefined>;
 
     const dateFilter = start && end
       ? { gte: new Date(start), lte: new Date(end) }
       : undefined;
 
-    const baseWhere = {
+    const excludeAccountIds = excAcctStr ? excAcctStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+    const baseWhere: Record<string, any> = {
       householdId,
       isHidden:   false,
       categoryId: null,
       ...(dateFilter ? { date: dateFilter } : {}),
+      NOT: [{ account: { excludeFromReports: true } }],
     };
+    if (excludeAccountIds.length > 0) baseWhere.accountId = { notIn: excludeAccountIds };
 
     const [transactions, total] = await Promise.all([
       prisma.transaction.findMany({
@@ -1633,7 +1736,7 @@ router.get('/no-category', async (req: AuthRequest, res: Response) => {
 router.get('/drill', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { startDate, endDate, groupBy = 'category', groupId, mode = 'spending' } = req.query;
+    const { startDate, endDate, groupBy = 'category', groupId, mode = 'spending', excludeCategoryIds: excCatStr, excludeAccountIds: excAcctStr } = req.query as Record<string, string | undefined>;
 
     const range = parseDateRange(startDate, endDate);
     if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
@@ -1643,13 +1746,22 @@ router.get('/drill', async (req: AuthRequest, res: Response) => {
     if (!['category', 'merchant', 'account', 'tag'].includes(groupBy as string))
       return res.status(400).json({ error: 'groupBy must be category, merchant, account, or tag' });
 
+    const excludeCategoryIds = excCatStr ? excCatStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const excludeAccountIds = excAcctStr ? excAcctStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: Record<string, any> = {
       householdId,
       date: { gte: range.start, lte: range.end },
       isHidden: false,
       isTransfer: false,
+      NOT: [
+        { category: { excludeFromReports: true } },
+        { account: { excludeFromReports: true } },
+      ],
     };
+    if (excludeCategoryIds.length > 0) where.categoryId = { notIn: excludeCategoryIds };
+    if (excludeAccountIds.length > 0) where.accountId = { notIn: excludeAccountIds };
 
     if ((mode as string) === 'income') {
       where.isRefund = false;

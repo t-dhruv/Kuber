@@ -2824,17 +2824,21 @@ interface FiltersPanelProps {
   categoryIds: string[];
   accountIds: string[];
   tagIds: string[];
+  excludeCategoryIds: string[];
+  excludeAccountIds: string[];
   minAmount: string;
   maxAmount: string;
   onCategoryChange: (ids: string[]) => void;
   onAccountChange: (ids: string[]) => void;
   onTagChange: (ids: string[]) => void;
+  onExcludeCategoryChange: (ids: string[]) => void;
+  onExcludeAccountChange: (ids: string[]) => void;
   onMinAmountChange: (v: string) => void;
   onMaxAmountChange: (v: string) => void;
   onClearAll: () => void;
 }
 
-type FilterSection = "categories" | "accounts" | "tags" | "amount";
+type FilterSection = "categories" | "accounts" | "tags" | "exclusions" | "amount";
 
 function FiltersPanel({
   open,
@@ -2843,11 +2847,15 @@ function FiltersPanel({
   categoryIds,
   accountIds,
   tagIds,
+  excludeCategoryIds,
+  excludeAccountIds,
   minAmount,
   maxAmount,
   onCategoryChange,
   onAccountChange,
   onTagChange,
+  onExcludeCategoryChange,
+  onExcludeAccountChange,
   onMinAmountChange,
   onMaxAmountChange,
   onClearAll,
@@ -2914,6 +2922,7 @@ function FiltersPanel({
     { value: "categories", label: "Categories" },
     { value: "accounts", label: "Accounts" },
     { value: "tags", label: "Tags" },
+    { value: "exclusions", label: "Exclusions" },
     { value: "amount", label: "Amount" },
   ];
 
@@ -3162,7 +3171,9 @@ function FiltersPanel({
                   <input
                     type="checkbox"
                     checked={tagIds.includes(tag.id)}
-                    onChange={() => toggleId(tagIds, tag.id, onTagChange)}
+                    onChange={() =>
+                      toggleId(tagIds, tag.id, onTagChange)
+                    }
                     style={{ accentColor: "var(--color-accent)" }}
                   />
                   <div
@@ -3185,6 +3196,111 @@ function FiltersPanel({
                 </label>
               ))
             ))}
+
+          {section === "exclusions" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 600,
+                  color: "var(--color-text-muted)",
+                  textTransform: "uppercase" as const,
+                  letterSpacing: "0.05em",
+                  padding: "0.25rem 0.5rem",
+                }}
+              >
+                Exclude categories
+              </div>
+              {categoriesData.length === 0 ? (
+                <span
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: "var(--color-text-muted)",
+                    padding: "0.5rem",
+                  }}
+                >
+                  No categories
+                </span>
+              ) : (
+                categoriesData.map((cat) => (
+                  <label
+                    key={cat.id}
+                    style={checkboxStyle(excludeCategoryIds.includes(cat.id))}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={excludeCategoryIds.includes(cat.id)}
+                      onChange={() =>
+                        toggleId(excludeCategoryIds, cat.id, onExcludeCategoryChange)
+                      }
+                      style={{ accentColor: "var(--color-danger)" }}
+                    />
+                    {cat.icon && (
+                      <span style={{ fontSize: "1.125rem", lineHeight: 1 }}>
+                        {cat.icon}
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: "var(--color-text)",
+                      }}
+                    >
+                      {cat.name}
+                    </span>
+                  </label>
+                ))
+              )}
+              <div
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 600,
+                  color: "var(--color-text-muted)",
+                  textTransform: "uppercase" as const,
+                  letterSpacing: "0.05em",
+                  padding: "0.25rem 0.5rem",
+                  marginTop: "0.5rem",
+                }}
+              >
+                Exclude accounts
+              </div>
+              {accountsData.length === 0 ? (
+                <span
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: "var(--color-text-muted)",
+                    padding: "0.5rem",
+                  }}
+                >
+                  No accounts
+                </span>
+              ) : (
+                accountsData.map((acc) => (
+                  <label
+                    key={acc.id}
+                    style={checkboxStyle(excludeAccountIds.includes(acc.id))}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={excludeAccountIds.includes(acc.id)}
+                      onChange={() =>
+                        toggleId(excludeAccountIds, acc.id, onExcludeAccountChange)
+                      }
+                      style={{ accentColor: "var(--color-danger)" }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: "var(--color-text)",
+                      }}
+                    >
+                      {acc.name}
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
+          )}
 
           {section === "amount" && (
             <div
@@ -3277,6 +3393,8 @@ interface SavedReport {
     datePreset?: DatePreset;
     startDate?: string;
     endDate?: string;
+    excludeCategoryIds?: string[];
+    excludeAccountIds?: string[];
   };
   createdAt: string;
 }
@@ -3490,6 +3608,8 @@ export default function ReportsPage() {
   const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
   const [filterMinAmount, setFilterMinAmount] = useState<string>("");
   const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
+  const [excludeCategoryIds, setExcludeCategoryIds] = useState<string[]>([]);
+  const [excludeAccountIds, setExcludeAccountIds] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -3507,6 +3627,8 @@ export default function ReportsPage() {
     filterCategoryIds.length +
     filterAccountIds.length +
     filterTagIds.length +
+    excludeCategoryIds.length +
+    excludeAccountIds.length +
     (filterMinAmount ? 1 : 0) +
     (filterMaxAmount ? 1 : 0);
 
@@ -3516,6 +3638,8 @@ export default function ReportsPage() {
     setFilterTagIds([]);
     setFilterMinAmount("");
     setFilterMaxAmount("");
+    setExcludeCategoryIds([]);
+    setExcludeAccountIds([]);
   }
 
   const { startDate, endDate } = useMemo(
@@ -3528,11 +3652,15 @@ export default function ReportsPage() {
     datePreset,
     startDate,
     endDate,
+    excludeCategoryIds: excludeCategoryIds.length > 0 ? excludeCategoryIds : undefined,
+    excludeAccountIds: excludeAccountIds.length > 0 ? excludeAccountIds : undefined,
   };
 
   function loadSavedView(filters: SavedReport["filters"]) {
     if (filters.tab) setTab(filters.tab);
     if (filters.datePreset) setDatePreset(filters.datePreset as DatePreset);
+    if (filters.excludeCategoryIds) setExcludeCategoryIds(filters.excludeCategoryIds);
+    if (filters.excludeAccountIds) setExcludeAccountIds(filters.excludeAccountIds);
   }
 
   function handleDrillClick(
@@ -3567,6 +3695,10 @@ export default function ReportsPage() {
     if (filterTagIds.length) parts.push(`tagIds=${filterTagIds.join(",")}`);
     if (filterMinAmount) parts.push(`minAmount=${filterMinAmount}`);
     if (filterMaxAmount) parts.push(`maxAmount=${filterMaxAmount}`);
+    if (excludeCategoryIds.length)
+      parts.push(`excludeCategoryIds=${excludeCategoryIds.join(",")}`);
+    if (excludeAccountIds.length)
+      parts.push(`excludeAccountIds=${excludeAccountIds.join(",")}`);
     return parts.length ? `&${parts.join("&")}` : "";
   }, [
     filterCategoryIds,
@@ -3574,6 +3706,8 @@ export default function ReportsPage() {
     filterTagIds,
     filterMinAmount,
     filterMaxAmount,
+    excludeCategoryIds,
+    excludeAccountIds,
   ]);
 
   return (
@@ -3676,11 +3810,15 @@ export default function ReportsPage() {
                   categoryIds={filterCategoryIds}
                   accountIds={filterAccountIds}
                   tagIds={filterTagIds}
+                  excludeCategoryIds={excludeCategoryIds}
+                  excludeAccountIds={excludeAccountIds}
                   minAmount={filterMinAmount}
                   maxAmount={filterMaxAmount}
                   onCategoryChange={setFilterCategoryIds}
                   onAccountChange={setFilterAccountIds}
                   onTagChange={setFilterTagIds}
+                  onExcludeCategoryChange={setExcludeCategoryIds}
+                  onExcludeAccountChange={setExcludeAccountIds}
                   onMinAmountChange={setFilterMinAmount}
                   onMaxAmountChange={setFilterMaxAmount}
                   onClearAll={clearAllFilters}
