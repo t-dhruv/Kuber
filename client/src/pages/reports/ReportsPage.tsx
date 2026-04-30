@@ -3481,7 +3481,7 @@ function SaveViewModal({
 
 export default function ReportsPage() {
   const [tab, setTab] = useState<ReportTab>("overview");
-  const [datePreset, setDatePreset] = useState<DatePreset>("last3months");
+  const [datePreset, setDatePreset] = useState<DatePreset>("thisMonth");
   const [saveModalOpen, setSaveModalOpen] = useState(false);
 
   // Filter state

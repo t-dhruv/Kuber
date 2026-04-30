@@ -8,7 +8,10 @@ import {
 import { api } from '@/lib/api';
 import { Card, CardDivider, Skeleton } from '@/components/ui';
 
-// ─── Formatters ───────────────────────────────────────────────────────────────
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: CURRENT_YEAR - 2019 }, (_, i) => CURRENT_YEAR - i);
+
+// ─── Formatters ───────────────────────────────────────────────────────
 
 const fmtCurrency = (amount: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -17,7 +20,7 @@ const fmtPct = (value: number) => `${Math.round(value)}%`;
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────
 
 interface MonthSummary {
   month: number;
@@ -48,23 +51,20 @@ interface IncomeCategory {
   percent: number;
 }
 
-// Matches items in expenses.byGroup[].categories from GET /api/v1/cashflow/month
+// Matches items in expenses.byGroup from GET /api/v1/cashflow/month
+interface ExpenseGroup {
+  groupName: string;
+  amount: number;
+  percent: number;
+  categories: ExpenseCategoryItem[];
+}
+
 interface ExpenseCategoryItem {
   categoryId: string;
   categoryName: string;
   categoryIcon: string | null;
   amount: number;
-  percent: number;       // percent of total expenses
-  groupName: string;
-  groupId: string;
-}
-
-// Matches items in expenses.byGroup from GET /api/v1/cashflow/month
-interface ExpenseGroup {
-  groupName: string;
-  amount: number;
-  percent: number;       // percent of total expenses
-  categories: ExpenseCategoryItem[];
+  percent: number;
 }
 
 // Matches items in income.byMerchant / expenses.byMerchant from GET /api/v1/cashflow/month
@@ -97,7 +97,7 @@ interface MonthData {
   dailyFlow: Array<{ day: number; income: number; expenses: number }>;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────
 
 function savingsColor(pct: number): string {
   if (pct >= 20) return 'var(--color-success)';
@@ -109,7 +109,7 @@ function netColor(net: number): string {
   return net >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Sub-components ─────────────────────────────────────────────────────────
 
 function PageHeader({
   year,
@@ -117,12 +117,16 @@ function PageHeader({
   onPrevYear,
   onNextYear,
   onPeriodChange,
+  onFilterToggle,
+  filterOpen,
 }: {
   year: number;
   period: 'Monthly' | 'Quarterly' | 'Yearly';
   onPrevYear: () => void;
   onNextYear: () => void;
   onPeriodChange: (p: 'Monthly' | 'Quarterly' | 'Yearly') => void;
+  onFilterToggle: () => void;
+  filterOpen: boolean;
 }) {
   const PERIODS = ['Monthly', 'Quarterly', 'Yearly'] as const;
 
@@ -169,19 +173,50 @@ function PageHeader({
           ))}
         </div>
 
-        {/* Filters placeholder */}
-        <button style={{
-          padding: '0.3125rem 0.875rem',
-          borderRadius: 'var(--radius-md)',
-          fontSize: '0.8125rem',
-          fontWeight: 500,
-          border: '1px solid var(--color-border)',
-          cursor: 'pointer',
-          backgroundColor: 'var(--color-surface)',
-          color: 'var(--color-text-secondary)',
-        }}>
-          Filters
-        </button>
+        {/* Filters dropdown */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={onFilterToggle}
+            style={{
+              padding: '0.3125rem 0.875rem',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.8125rem',
+              fontWeight: 500,
+              border: '1px solid var(--color-border)',
+              cursor: 'pointer',
+              backgroundColor: filterOpen ? 'var(--color-accent-light)' : 'var(--color-surface)',
+              color: filterOpen ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+            }}
+          >
+            Filters
+          </button>
+
+          {filterOpen && (
+            <>
+              <div
+                style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+                onClick={onFilterToggle}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 4px)',
+                  right: 0,
+                  zIndex: 41,
+                  backgroundColor: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'var(--shadow-md)',
+                  padding: '0.5rem 0',
+                  minWidth: 180,
+                  overflow: 'hidden',
+                }}
+              >
+                <FilterContent />
+              </div>
+            </>
+          )}
+        </div>
 
         {/* Year nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -212,6 +247,43 @@ function PageHeader({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Filter dropdown content — defined inside module scope but uses props passed from CashFlowPage
+function FilterContent() {
+  // These will be injected via props — see CashFlowPage for state
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, fontSize: '0.8125rem' }}>
+      <div style={{ padding: '0.375rem 0.75rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' as any, letterSpacing: '0.04em' }}>
+        Quick select
+      </div>
+      {[
+        { label: 'This Year', action: () => console.log('This Year') },
+        { label: 'Last Year', action: () => console.log('Last Year') },
+        { label: 'This Month', action: () => console.log('This Month') },
+      ].map((f) => (
+        <button
+          key={f.label}
+          onClick={f.action}
+          style={{
+            padding: '0.375rem 0.75rem',
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            textAlign: 'left',
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+            color: 'var(--color-text)',
+            width: '100%',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+        >
+          {f.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -262,7 +334,7 @@ function YearOverviewChart({
   if (!hasData) {
     return (
       <Card padding="lg">
-        <div className="flex flex-col items-center justify-center py-12 text-[var(--color-text-muted)] text-sm">
+        <div className="flex flex-col items-center justify-center py-12 text-[color:var(--color-text-muted)] text-sm">
           No transactions yet — add income or expenses to see your cash flow.
         </div>
       </Card>
@@ -285,66 +357,66 @@ function YearOverviewChart({
       <div role="img" aria-label="Cash flow year overview chart">
         <ResponsiveContainer width="100%" height={220}>
           <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
-          onClick={(e) => {
-            if (e?.activePayload?.[0]) {
-              const point = e.activePayload[0].payload as ChartPoint;
-              onSelectMonth(point.monthIndex);
-            }
-          }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-          <XAxis
-            dataKey="month"
-            tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-          />
-          <YAxis
-            tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-            tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
-            width={42}
-          />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: '0.8125rem',
+            onClick={(e) => {
+              if (e?.activePayload?.[0]) {
+                const point = e.activePayload[0].payload as ChartPoint;
+                onSelectMonth(point.monthIndex);
+              }
             }}
-            formatter={(value: number, name: string) => [
-              fmtCurrency(value),
-              name === 'income' ? 'Income' : name === 'expenses' ? 'Expenses' : 'Net',
-            ]}
-          />
-          <Bar dataKey="income" name="income" radius={[3, 3, 0, 0]} maxBarSize={28}>
-            {chartData.map((entry) => (
-              <Cell
-                key={entry.monthIndex}
-                fill="var(--color-success)"
-                opacity={entry.monthIndex === selectedMonth ? 1 : 0.65}
-              />
-            ))}
-          </Bar>
-          <Bar dataKey="expenses" name="expenses" radius={[3, 3, 0, 0]} maxBarSize={28}>
-            {chartData.map((entry) => (
-              <Cell
-                key={entry.monthIndex}
-                fill="var(--color-danger)"
-                opacity={entry.monthIndex === selectedMonth ? 1 : 0.65}
-              />
-            ))}
-          </Bar>
-          <Line
-            type="monotone"
-            dataKey="net"
-            name="net"
-            stroke="var(--color-text-muted)"
-            strokeWidth={2}
-            dot={false}
-          />
-        </ComposedChart>
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+            <XAxis
+              dataKey="month"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+            />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+              tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
+              width={42}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.8125rem',
+              }}
+              formatter={(value: number, name: string) => [
+                fmtCurrency(value),
+                name === 'income' ? 'Income' : name === 'expenses' ? 'Expenses' : 'Net',
+              ]}
+            />
+            <Bar dataKey="income" name="income" radius={[3, 3, 0, 0]} maxBarSize={28}>
+              {chartData.map((entry) => (
+                <Cell
+                  key={entry.monthIndex}
+                  fill="var(--color-success)"
+                  opacity={entry.monthIndex === selectedMonth ? 1 : 0.65}
+                />
+              ))}
+            </Bar>
+            <Bar dataKey="expenses" name="expenses" radius={[3, 3, 0, 0]} maxBarSize={28}>
+              {chartData.map((entry) => (
+                <Cell
+                  key={entry.monthIndex}
+                  fill="var(--color-danger)"
+                  opacity={entry.monthIndex === selectedMonth ? 1 : 0.65}
+                />
+              ))}
+            </Bar>
+            <Line
+              type="monotone"
+              dataKey="net"
+              name="net"
+              stroke="var(--color-text-muted)"
+              strokeWidth={2}
+              dot={false}
+            />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </Card>
@@ -402,15 +474,15 @@ function KpiCards({ data, isLoading }: { data?: MonthData; isLoading: boolean })
         <Card key={card.label} padding="lg">
           {isLoading ? (
             <>
-              <Skeleton height={12} width="70%" style={{ marginBottom: '0.625rem' }} />
-              <Skeleton height={28} width="85%" />
+              <Skeleton height={11} width="60%" style={{ marginBottom: '0.375rem' }} />
+              <Skeleton height={20} width="75%" />
             </>
           ) : (
             <>
-              <div style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-text-secondary)', marginBottom: '0.375rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem', whiteSpace: 'nowrap' }}>
                 {card.label}
               </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: card.color, lineHeight: 1.1 }}>
+              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: card.color }}>
                 {card.format(card.value)}
               </div>
             </>
@@ -512,7 +584,6 @@ function SankeyChart({ data, year, month }: { data?: MonthData; year: number; mo
     );
   }
 
-  // Build nodes: income categories → "Cash Flow" → expense groups [+ Savings]
   const incomeNodes = data.income.byCategory.map((c) => ({ name: c.categoryName, amount: c.amount }));
   const cfIndex = incomeNodes.length;
   const expenseNodes = data.expenses.byGroup.map((g) => ({ name: g.groupName, amount: g.amount }));
@@ -525,13 +596,11 @@ function SankeyChart({ data, year, month }: { data?: MonthData; year: number; mo
     ...(hasSavings ? [{ name: 'Savings', amount: net }] : []),
   ];
 
-  // Build a click action per node index
   function handleNodeClick(index: number) {
     const node = nodes[index];
-    if (index === cfIndex) return; // Cash Flow node — no action
-    if (hasSavings && index === nodes.length - 1) return; // Savings node
+    if (index === cfIndex) return;
+    if (hasSavings && index === nodes.length - 1) return;
 
-    // Date range for selected month
     const from = `${year}-${String(month).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month, 0).getDate();
     const to = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
@@ -748,7 +817,6 @@ function BarChartView({
                 {!collapsed && (
                   <div style={{ paddingLeft: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.125rem', marginBottom: '0.25rem' }}>
                     {group.categories.map((cat) => {
-                      // percent here is cat's share of total expenses; compute share within group
                       const groupPct = group.percent > 0
                         ? (cat.amount / group.amount) * 100
                         : 0;
@@ -918,6 +986,7 @@ export default function CashFlowPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [period, setPeriod] = useState<'Monthly' | 'Quarterly' | 'Yearly'>('Monthly');
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const { data: yearData, isLoading: yearLoading, isError: yearError } = useQuery<YearData>({
     queryKey: ['cashflow', year],
@@ -928,6 +997,22 @@ export default function CashFlowPage() {
     queryKey: ['cashflow-month', year, selectedMonth],
     queryFn: () => api.get(`/cashflow/month?year=${year}&month=${selectedMonth}`).then((r) => r.data),
   });
+
+  // Quick filter actions
+  const quickFilters = [
+    {
+      label: 'This Year',
+      action: () => { setYear(CURRENT_YEAR); setSelectedMonth(new Date().getMonth() + 1); setFilterOpen(false); },
+    },
+    {
+      label: 'Last Year',
+      action: () => { setYear(CURRENT_YEAR - 1); setFilterOpen(false); },
+    },
+    {
+      label: 'This Month',
+      action: () => { setYear(CURRENT_YEAR); setSelectedMonth(new Date().getMonth() + 1); setFilterOpen(false); },
+    },
+  ];
 
   if (yearError || monthError) {
     return (
@@ -945,7 +1030,108 @@ export default function CashFlowPage() {
         onPrevYear={() => setYear((y) => y - 1)}
         onNextYear={() => setYear((y) => y + 1)}
         onPeriodChange={setPeriod}
+        onFilterToggle={() => setFilterOpen((o) => !o)}
+        filterOpen={filterOpen}
       />
+
+      {/* Filter dropdown — rendered inline */}
+      {filterOpen && (
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+            onClick={() => setFilterOpen(false)}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              top: 80,
+              right: 24,
+              zIndex: 41,
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-md)',
+              padding: '0.5rem 0',
+              minWidth: 200,
+            }}
+          >
+            <div style={{ padding: '0.25rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' as any, letterSpacing: '0.04em' }}>
+              Quick select
+            </div>
+            {quickFilters.map((f) => (
+              <button
+                key={f.label}
+                onClick={f.action}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '0.375rem 0.75rem',
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  color: 'var(--color-text)',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              >
+                {f.label}
+              </button>
+            ))}
+
+            <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '0.25rem 0' }} />
+
+            <div style={{ padding: '0.25rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' as any, letterSpacing: '0.04em' }}>
+              Year
+            </div>
+            <select
+              value={year}
+              onChange={(e) => { setYear(parseInt(e.target.value)); setFilterOpen(false); }}
+              style={{
+                margin: '0 0.5rem',
+                padding: '0.375rem 0.5rem',
+                borderRadius: 'calc(var(--radius-md) - 2px)',
+                fontSize: '0.8125rem',
+                border: '1px solid var(--color-border)',
+                backgroundColor: 'var(--color-surface)',
+                color: 'var(--color-text)',
+                cursor: 'pointer',
+                width: 'calc(100% - 1rem)',
+              }}
+            >
+              {YEAR_OPTIONS.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+
+            <div style={{ padding: '0.25rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' as any, letterSpacing: '0.04em', marginTop: '0.25rem' }}>
+              Month (detail view)
+            </div>
+            <select
+              value={selectedMonth}
+              onChange={(e) => { setSelectedMonth(parseInt(e.target.value)); setFilterOpen(false); }}
+              style={{
+                margin: '0 0.5rem',
+                padding: '0.375rem 0.5rem',
+                borderRadius: 'calc(var(--radius-md) - 2px)',
+                fontSize: '0.8125rem',
+                border: '1px solid var(--color-border)',
+                backgroundColor: 'var(--color-surface)',
+                color: 'var(--color-text)',
+                cursor: 'pointer',
+                width: 'calc(100% - 1rem)',
+              }}
+            >
+              <option value={0}>-- Year overview --</option>
+              {MONTH_NAMES.map((m, i) => (
+                <option key={i} value={i + 1}>{m}</option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
 
       {/* Section 1: Year overview chart */}
       <YearOverviewChart
