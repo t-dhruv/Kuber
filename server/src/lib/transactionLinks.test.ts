@@ -1,27 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-vi.mock('../lib/prisma', async () => {
-  const actual = await vi.importActual('../lib/prisma');
-  return {
-    ...actual,
-    prisma: {
-      transactionLink: {
-        create: vi.fn(),
-        findMany: vi.fn(),
-        delete: vi.fn(),
-        findFirst: vi.fn(),
-      },
-      transactionLinkType: {
-        findMany: vi.fn(),
-      },
-      transaction: {
-        findFirst: vi.fn(),
-      },
-    },
-  };
-});
-
 import { prisma } from '../lib/prisma';
+
+vi.mock('../lib/prisma', () => ({
+  prisma: {
+    transactionLink: {
+      create: vi.fn(),
+      findMany: vi.fn(),
+      delete: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    transactionLinkType: {
+      findMany: vi.fn(),
+    },
+    transaction: {
+      findFirst: vi.fn(),
+    },
+  },
+}));
 import { listLinkTypes, createLink, deleteLink, getLinksForTransaction } from './transactionLinks';
 
 describe('listLinkTypes', () => {
