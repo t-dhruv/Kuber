@@ -599,7 +599,10 @@ router.get('/spending', async (req: AuthRequest, res: Response) => {
       amount: amountWhere,
       isHidden: false,
       isTransfer: false,
-      NOT: [{ category: { type: 'investment' } }],
+      NOT: [
+        { category: { type: 'investment' } },
+        { category: { name: 'Internal Transfer' } },
+      ],
     };
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
@@ -782,7 +785,10 @@ router.get('/income', async (req: AuthRequest, res: Response) => {
       date: { gte: range.start, lte: range.end },
       amount: amountWhere,
       isHidden: false,
-        isTransfer: false,
+      isTransfer: false,
+      NOT: [
+        { category: { name: 'Internal Transfer' } },
+      ],
     };
     if (categoryIds) where.categoryId = { in: (categoryIds as string).split(',') };
     if (accountIds) where.accountId = { in: (accountIds as string).split(',') };
@@ -1463,7 +1469,10 @@ router.get('/benchmarks', async (req: AuthRequest, res: Response) => {
         isHidden: false,
         isTransfer: false,
         date: { gte: new Date(startDate), lte: new Date(endDate) },
-        NOT: [{ category: { type: 'investment' } }],
+        NOT: [
+          { category: { type: 'investment' } },
+          { category: { name: 'Internal Transfer' } },
+        ],
       },
       _sum: { amount: true },
     });

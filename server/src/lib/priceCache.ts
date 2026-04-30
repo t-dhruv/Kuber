@@ -30,6 +30,7 @@ export interface CachedQuote {
   dayChangePercent: number;
   currency: string;
   shortName: string;
+  dividendYield: number; // e.g. 0.025 for 2.5%
   fetchedAt: number;
 }
 
@@ -46,6 +47,7 @@ async function fetchFromYahoo(symbol: string): Promise<CachedQuote> {
     dayChangePercent: Math.round((q.regularMarketChangePercent ?? 0) * 100) / 100,
     currency: q.currency ?? 'USD',
     shortName: q.shortName ?? symbol,
+    dividendYield: (q as any).dividendYield ?? (q as any).trailingAnnualDividendYield ?? 0,
     fetchedAt: Date.now(),
   };
 }
