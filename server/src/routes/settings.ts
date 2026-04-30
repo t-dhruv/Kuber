@@ -342,6 +342,7 @@ const categoryUpdateSchema = z.object({
   icon: z.string().optional(),
   groupId: z.string().optional().nullable(),
   isTaxDeductible: z.boolean().optional(),
+  excludeFromReports: z.boolean().optional(),
   bucketType: z.enum(['needs', 'wants', 'savings', 'uncategorized']).optional(),
   type: z.enum(['income', 'expense', 'transfer']).optional(),
 });
@@ -356,7 +357,7 @@ router.put('/categories/:id', async (req: AuthRequest, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
     }
-    const { name, icon, groupId, isTaxDeductible, bucketType, type } = parsed.data;
+    const { name, icon, groupId, isTaxDeductible, excludeFromReports, bucketType, type } = parsed.data;
 
     const existing = await prisma.category.findFirst({
       where: { id, householdId },
@@ -370,6 +371,7 @@ router.put('/categories/:id', async (req: AuthRequest, res: Response) => {
     if (icon !== undefined) updateData.icon = icon;
     if (groupId !== undefined) updateData.groupId = groupId;
     if (isTaxDeductible !== undefined) updateData.isTaxDeductible = isTaxDeductible;
+    if (excludeFromReports !== undefined) updateData.excludeFromReports = excludeFromReports;
     if (bucketType !== undefined) updateData.bucketType = bucketType;
     if (type !== undefined) updateData.type = type;
 

@@ -198,6 +198,7 @@ model Account {
   providerConnectionId  String?
   isHidden              Boolean                  @default(false)
   excludeFromNetWorth   Boolean                  @default(false)
+  excludeFromReports   Boolean                  @default(false)
   lastSynced            DateTime?
   objectGroupId        String?
   createdAt             DateTime                 @default(now())
@@ -288,6 +289,7 @@ model Category {
   isSystem          Boolean         @default(false)
   bucketType        String          @default("uncategorized") // needs | wants | savings | uncategorized
   isTaxDeductible   Boolean         @default(false)
+  excludeFromReports   Boolean         @default(false)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
