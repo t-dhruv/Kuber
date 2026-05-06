@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { backfillLegacyTransactionJournals } from "../src/lib/transactionJournalService";
 
 const prisma = new PrismaClient();
 
@@ -71,6 +72,14 @@ async function main() {
   console.log("Clearing existing data…");
 
   await prisma.goalAllocation.deleteMany();
+  await prisma.ruleExecutionLog.deleteMany();
+  await prisma.ruleActionRecord.deleteMany();
+  await prisma.ruleTrigger.deleteMany();
+  await prisma.journalTag.deleteMany();
+  await prisma.transactionJournalMeta.deleteMany();
+  await prisma.transactionEntry.deleteMany();
+  await prisma.transactionJournal.deleteMany();
+  await prisma.transactionGroup.deleteMany();
   await prisma.transactionTag.deleteMany();
   await prisma.holdingLot.deleteMany();
   await prisma.recurringInvestment.deleteMany();
@@ -80,6 +89,7 @@ async function main() {
   await prisma.recurringItem.deleteMany();
   await prisma.goal.deleteMany();
   await prisma.rule.deleteMany();
+  await prisma.ruleGroup.deleteMany();
   await prisma.tag.deleteMany();
   await prisma.merchant.deleteMany();
   await prisma.category.deleteMany();
@@ -1178,6 +1188,11 @@ async function main() {
   );
 
   console.log(`Created ${createdTransactions.length} transactions.`);
+  const journalBackfill = await backfillLegacyTransactionJournals(
+    { householdId: household.id, limit: 5000 },
+    prisma,
+  );
+  console.log(`Created ${journalBackfill.created} transaction journals (${journalBackfill.skipped} skipped).`);
 
   // -------------------------------------------------------------------------
   // Investment Holdings + Lots (TFSA — Canadian-heavy, RRSP, US brokerage)
@@ -1920,63 +1935,60 @@ async function main() {
   // Rules
   // -------------------------------------------------------------------------
 
-  await prisma.rule.createMany({
-    data: [
-      {
+  const demoRuleGroup = await prisma.ruleGroup.create({
+    data: {
+      householdId: household.id,
+      name: "Demo categorization",
+      sortOrder: 0,
+      stopProcessing: false,
+      isActive: true,
+    },
+  });
+
+  const ruleDefs = [
+    { name: "Coffee shops", trigger: "Tim Hortons", action: "setCategory", value: catId("Coffee Shops") },
+    { name: "Amazon shopping", trigger: "Amazon", action: "setCategory", value: catId("Online Shopping") },
+    { name: "Groceries", trigger: "Loblaws", action: "setCategory", value: catId("Groceries") },
+    { name: "Fuel", trigger: "Petro-Canada", action: "setCategory", value: catId("Fuel & Gas") },
+    { name: "Pharmacy", trigger: "Shoppers", action: "setCategory", value: catId("Pharmacy & Medications") },
+  ];
+
+  for (const [index, rule] of ruleDefs.entries()) {
+    const triggers = [{ field: "description", operator: "contains", value: rule.trigger }];
+    const actions = [{ type: rule.action, value: rule.value }];
+    await prisma.rule.create({
+      data: {
         householdId: household.id,
-        conditions: [
-          { field: "merchant", operator: "contains", value: "Tim Hortons" },
-        ],
-        actions: [{ type: "set_category", categoryId: catId("Coffee Shops") }],
-        sortOrder: 0,
+        ruleGroupId: demoRuleGroup.id,
+        name: rule.name,
+        conditions: triggers,
+        actions,
+        strict: true,
+        stopProcessing: false,
+        sortOrder: index,
         isActive: true,
+        triggers: { create: triggers.map((trigger, sortOrder) => ({ ...trigger, sortOrder })) },
+        ruleActions: { create: actions.map((action, sortOrder) => ({ ...action, sortOrder, stopProcessing: false })) },
       },
-      {
-        householdId: household.id,
-        conditions: [
-          { field: "merchant", operator: "contains", value: "Amazon" },
-        ],
-        actions: [{ type: "set_category", categoryId: catId("Online Shopping") }],
-        sortOrder: 1,
-        isActive: true,
-      },
-      {
-        householdId: household.id,
-        conditions: [
-          { field: "merchant", operator: "contains", value: "Loblaws" },
-        ],
-        actions: [{ type: "set_category", categoryId: catId("Groceries") }],
-        sortOrder: 2,
-        isActive: true,
-      },
-      {
-        householdId: household.id,
-        conditions: [
-          { field: "merchant", operator: "contains", value: "Petro-Canada" },
-        ],
-        actions: [{ type: "set_category", categoryId: catId("Fuel & Gas") }],
-        sortOrder: 3,
-        isActive: true,
-      },
-      {
-        householdId: household.id,
-        conditions: [
-          { field: "merchant", operator: "contains", value: "Shoppers" },
-        ],
-        actions: [{ type: "set_category", categoryId: catId("Pharmacy & Medications") }],
-        sortOrder: 4,
-        isActive: true,
-      },
-      {
-        householdId: household.id,
-        conditions: [
-          { field: "amount", operator: "greater_than", value: "500" },
-        ],
-        actions: [{ type: "flag_review" }],
-        sortOrder: 5,
-        isActive: true,
-      },
-    ],
+    });
+  }
+
+  const reviewTriggers = [{ field: "amount", operator: "gt", value: "500" }];
+  const reviewActions = [{ type: "flagForReview" }];
+  await prisma.rule.create({
+    data: {
+      householdId: household.id,
+      ruleGroupId: demoRuleGroup.id,
+      name: "Large transaction review",
+      conditions: reviewTriggers,
+      actions: reviewActions,
+      strict: true,
+      stopProcessing: false,
+      sortOrder: ruleDefs.length,
+      isActive: true,
+      triggers: { create: reviewTriggers.map((trigger, sortOrder) => ({ ...trigger, sortOrder })) },
+      ruleActions: { create: reviewActions.map((action, sortOrder) => ({ ...action, sortOrder, stopProcessing: false })) },
+    },
   });
 
   // -------------------------------------------------------------------------

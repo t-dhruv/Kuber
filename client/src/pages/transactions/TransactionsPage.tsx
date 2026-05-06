@@ -286,16 +286,18 @@ function RefundTransactionPicker({
 interface DrawerProps {
   transaction: Transaction | null;
   categories: Category[];
+  accounts: Account[];
   onClose: () => void;
   onSaved: () => void;
 }
 
-function TransactionDrawer({ transaction, categories, onClose, onSaved }: DrawerProps) {
+function TransactionDrawer({ transaction, categories, accounts, onClose, onSaved }: DrawerProps) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<Partial<Transaction> & { tagInput?: string }>({});
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [txType, setTxType] = useState<TxType>('expense');
+  const [transferAccounts, setTransferAccounts] = useState({ fromAccountId: '', toAccountId: '' });
 
   // Sync form when transaction changes
   useEffect(() => {
@@ -310,29 +312,48 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
       } else {
         setTxType('expense');
       }
+      setTransferAccounts({
+        fromAccountId: transaction.amount < 0 ? transaction.accountId : '',
+        toAccountId: transaction.amount >= 0 ? transaction.accountId : '',
+      });
     }
   }, [transaction?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const accountOptions = accounts.map((a) => ({
+    value: a.id,
+    label: `${a.name}${a.lastFour ? ` ••${a.lastFour}` : ''}`,
+  }));
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       // 1. Save core fields
       const rawAmount = form.amount ?? 0;
-      await api.put(`/transactions/${transaction!.id}`, {
-        merchantName: form.merchantName,
-        date: form.date,
-        amount: form.isTransfer
-          ? form.amount
-          : txType === 'expense'
-            ? -Math.abs(rawAmount)
-            : Math.abs(rawAmount),
-        categoryId: form.categoryId,
-        notes: form.notes,
-        needsReview: form.needsReview,
-        isRecurring: form.isRecurring,
-        isHidden: form.isHidden,
-        isRefund: form.isRefund ?? false,
-        refundedTransactionId: form.refundedTransactionId ?? null,
-      });
+      if (txType === 'transfer' && !transaction!.isTransfer) {
+        await api.post(`/transactions/${transaction!.id}/convert-transfer`, {
+          fromAccountId: transferAccounts.fromAccountId,
+          toAccountId: transferAccounts.toAccountId,
+          amount: Math.abs(Number(rawAmount)),
+          date: form.date,
+          notes: form.notes ?? undefined,
+        });
+      } else {
+        await api.put(`/transactions/${transaction!.id}`, {
+          merchantName: form.merchantName,
+          date: form.date,
+          amount: form.isTransfer
+            ? form.amount
+            : txType === 'expense'
+              ? -Math.abs(rawAmount)
+              : Math.abs(rawAmount),
+          categoryId: form.categoryId,
+          notes: form.notes,
+          needsReview: form.needsReview,
+          isRecurring: form.isRecurring,
+          isHidden: form.isHidden,
+          isRefund: form.isRefund ?? false,
+          refundedTransactionId: form.refundedTransactionId ?? null,
+        });
+      }
 
       // 2. Sync tags
       const originalTagIds = new Set((transaction!.tags ?? []).map((t) => t.id));
@@ -404,6 +425,13 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
   }
 
   const open = !!transaction;
+  const convertingToTransfer = txType === 'transfer' && !transaction?.isTransfer;
+  const transferSelectionInvalid =
+    convertingToTransfer &&
+    (!transferAccounts.fromAccountId ||
+      !transferAccounts.toAccountId ||
+      transferAccounts.fromAccountId === transferAccounts.toAccountId ||
+      Math.abs(Number(form.amount ?? 0)) <= 0);
 
   return (
     <>
@@ -417,7 +445,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
 
       {/* Drawer */}
       <div
-        className="fixed top-0 right-0 bottom-0 w-full sm:w-[380px] z-50 bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[var(--shadow-lg)] flex flex-col overflow-y-auto transition-transform duration-[250ms] ease-[ease]"
+        className="fixed top-0 right-0 bottom-0 w-full sm:w-[500px] z-50 bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[var(--shadow-lg)] flex flex-col overflow-y-auto transition-transform duration-[250ms] ease-[ease]"
         style={{ transform: open ? 'translateX(0)' : 'translateX(100%)' }}
       >
         {/* Header */}
@@ -478,43 +506,68 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
               </div>
             </div>
 
-            {/* Category */}
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
-                Category
-              </label>
-              <button
-                onClick={() => setShowCategoryPicker((v) => !v)}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] cursor-pointer text-left"
-              >
-                {selectedCategory ? (
-                  <>
-                    {selectedCategory.icon ? (
-                      <span className="text-base shrink-0 leading-none">{selectedCategory.icon}</span>
-                    ) : (
-                      <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0 text-white">{selectedCategory.name[0]}</span>
-                    )}
-                    <span className="text-sm text-[var(--color-text)] flex-1">{selectedCategory.name}</span>
-                  </>
-                ) : (
-                  <span className="text-sm text-[var(--color-text-muted)] flex-1">Select category...</span>
-                )}
-                <ChevronRightIcon
-                  size={14}
-                  className="text-[var(--color-text-muted)] transition-transform duration-[150ms]"
-                  style={{ transform: showCategoryPicker ? 'rotate(90deg)' : 'none' }}
+            {txType === 'transfer' && !form.isTransfer && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Select
+                  label="From Account"
+                  options={accountOptions}
+                  placeholder="Select account..."
+                  value={transferAccounts.fromAccountId}
+                  onChange={(e) =>
+                    setTransferAccounts((prev) => ({ ...prev, fromAccountId: e.target.value }))
+                  }
                 />
-              </button>
-              {showCategoryPicker && (
-                <div className="mt-2 border border-[var(--color-border)] rounded-[var(--radius-md)] p-2">
-                  <CategoryPicker
-                    categories={categories}
-                    selectedId={form.categoryId ?? ''}
-                    onSelect={(id) => { setForm((f) => ({ ...f, categoryId: id })); setShowCategoryPicker(false); }}
+                <Select
+                  label="To Account"
+                  options={accountOptions}
+                  placeholder="Select account..."
+                  value={transferAccounts.toAccountId}
+                  onChange={(e) =>
+                    setTransferAccounts((prev) => ({ ...prev, toAccountId: e.target.value }))
+                  }
+                />
+              </div>
+            )}
+
+            {/* Category */}
+            {txType !== 'transfer' && (
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text)] mb-1.5">
+                  Category
+                </label>
+                <button
+                  onClick={() => setShowCategoryPicker((v) => !v)}
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] cursor-pointer text-left"
+                >
+                  {selectedCategory ? (
+                    <>
+                      {selectedCategory.icon ? (
+                        <span className="text-base shrink-0 leading-none">{selectedCategory.icon}</span>
+                      ) : (
+                        <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0 text-white">{selectedCategory.name[0]}</span>
+                      )}
+                      <span className="text-sm text-[var(--color-text)] flex-1">{selectedCategory.name}</span>
+                    </>
+                  ) : (
+                    <span className="text-sm text-[var(--color-text-muted)] flex-1">Select category...</span>
+                  )}
+                  <ChevronRightIcon
+                    size={14}
+                    className="text-[var(--color-text-muted)] transition-transform duration-[150ms]"
+                    style={{ transform: showCategoryPicker ? 'rotate(90deg)' : 'none' }}
                   />
-                </div>
-              )}
-            </div>
+                </button>
+                {showCategoryPicker && (
+                  <div className="mt-2 border border-[var(--color-border)] rounded-[var(--radius-md)] p-2">
+                    <CategoryPicker
+                      categories={categories}
+                      selectedId={form.categoryId ?? ''}
+                      onSelect={(id) => { setForm((f) => ({ ...f, categoryId: id })); setShowCategoryPicker(false); }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Account (read-only) */}
             <div>
@@ -660,6 +713,7 @@ function TransactionDrawer({ transaction, categories, onClose, onSaved }: Drawer
             <Button
               variant="primary"
               loading={saveMutation.isPending}
+              disabled={transferSelectionInvalid}
               onClick={() => saveMutation.mutate()}
               className="flex-1"
             >
@@ -1639,13 +1693,14 @@ export default function TransactionsPage() {
             placeholder="Search..."
             value={search}
             onChange={(e) => setParam('search', e.target.value)}
+            className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
             leftIcon={<Search size={14} />}
           />
         </div>
 
         {/* Date range — hidden on mobile, shown on sm+ */}
-        <div className="hidden sm:flex items-center gap-1.5">
-          <label className="flex flex-col gap-0.5 text-xs text-[var(--color-text-secondary)]">
+        <div className="hidden sm:flex items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
             From
             <input
               type="date"
@@ -1654,8 +1709,8 @@ export default function TransactionsPage() {
               className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
             />
           </label>
-          <span className="text-[var(--color-text-muted)] text-[0.8125rem]">–</span>
-          <label className="flex flex-col gap-0.5 text-xs text-[var(--color-text-secondary)]">
+          
+          <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
             To
             <input
               type="date"
@@ -1688,6 +1743,7 @@ export default function TransactionsPage() {
         <Button
           variant="secondary"
           icon={<Sparkles size={14} />}
+          className="flex items-center gap-1.5 py-[0.4rem] px-[0.875rem] rounded-[var(--radius-md)] border border-[var(--color-border)] cursor-pointer text-sm font-medium"
           onClick={async () => {
             setShowAutoCatPanel(true);
             await refetchAutoCatStatus();
@@ -1700,6 +1756,7 @@ export default function TransactionsPage() {
         <Button
           variant="secondary"
           icon={<Camera size={14} />}
+          className="flex items-center gap-1.5 py-[0.4rem] px-[0.875rem] rounded-[var(--radius-md)] border border-[var(--color-border)] cursor-pointer text-sm font-medium"
           onClick={() => setShowReceiptModal(true)}
         >
           Scan Receipt
@@ -1709,6 +1766,7 @@ export default function TransactionsPage() {
         <Button
           variant="secondary"
           icon={<Upload size={14} />}
+          className="flex items-center gap-1.5 py-[0.4rem] px-[0.875rem] rounded-[var(--radius-md)] border border-[var(--color-border)] cursor-pointer text-sm font-medium"
           onClick={() => setShowImportModal(true)}
         >
           Import CSV
@@ -1717,6 +1775,7 @@ export default function TransactionsPage() {
         {/* Add button */}
         <Button
           variant="primary"
+          className="flex items-center gap-1.5 py-[0.4rem] px-[0.875rem] rounded-[var(--radius-md)] border border-[var(--color-border)] cursor-pointer text-sm font-medium"
           icon={<Plus size={14} />}
           onClick={() => setShowAddModal(true)}
         >
@@ -1982,6 +2041,7 @@ export default function TransactionsPage() {
       <TransactionDrawer
         transaction={drawerTxn}
         categories={categories}
+        accounts={accounts}
         onClose={() => setDrawerTxn(null)}
         onSaved={() => setDrawerTxn(null)}
       />

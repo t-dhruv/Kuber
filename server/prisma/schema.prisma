@@ -74,6 +74,9 @@ model Household {
   webhooks                Webhook[]
   providerConnections     ProviderConnection[]
   transferGroups          TransferGroup[]
+  transactionGroups       TransactionGroup[]
+  transactionJournals     TransactionJournal[]
+  ruleExecutionLogs       RuleExecutionLog[]
   categoryLearningExamples CategoryLearningExample[]
   ruleGroups              RuleGroup[]
   reconciliations         Reconciliation[]
@@ -207,6 +210,7 @@ model Account {
   providerConnection    ProviderConnection?      @relation(fields: [providerConnectionId], references: [id], onDelete: SetNull)
   objectGroup           ObjectGroup?             @relation(fields: [objectGroupId], references: [id], onDelete: SetNull)
   transactions          Transaction[]
+  transactionEntries    TransactionEntry[]
   recurringItems        RecurringItem[]
   goals                 Goal[]
   investmentHoldings    InvestmentHolding[]
@@ -276,6 +280,78 @@ model Transaction {
   @@map("transactions")
 }
 
+model TransactionGroup {
+  id          String               @id @default(cuid())
+  householdId String
+  title       String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  household   Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  journals    TransactionJournal[]
+
+  @@index([householdId, createdAt])
+  @@map("transaction_groups")
+}
+
+model TransactionJournal {
+  id              String                   @id @default(cuid())
+  householdId     String
+  groupId         String
+  transactionType String
+  date            DateTime
+  description     String
+  amountDecimal   Decimal                  @db.Decimal(19, 4)
+  currencyCode    String                   @default("USD")
+  categoryId      String?
+  notes           String?
+  isPending       Boolean                  @default(false)
+  isReconciled    Boolean                  @default(false)
+  reconciledAt    DateTime?
+  order           Int                      @default(0)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  household       Household                @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  group           TransactionGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  category        Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  entries         TransactionEntry[]
+  tags            JournalTag[]
+  meta            TransactionJournalMeta[]
+  ruleExecutionLogs RuleExecutionLog[]
+
+  @@index([householdId, date])
+  @@index([householdId, transactionType, date])
+  @@index([groupId])
+  @@index([categoryId])
+  @@map("transaction_journals")
+}
+
+model TransactionEntry {
+  id            String             @id @default(cuid())
+  journalId     String
+  accountId     String
+  amountDecimal Decimal            @db.Decimal(19, 4)
+  currencyCode  String             @default("USD")
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  journal       TransactionJournal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  account       Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([journalId])
+  @@index([accountId])
+  @@map("transaction_entries")
+}
+
+model TransactionJournalMeta {
+  id        String             @id @default(cuid())
+  journalId String
+  name      String
+  value     String
+  journal   TransactionJournal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  @@unique([journalId, name])
+  @@map("transaction_journal_meta")
+}
+
 model Category {
   id             String          @id @default(cuid())
   householdId    String
@@ -295,6 +371,7 @@ model Category {
   household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
   objectGroup     ObjectGroup?       @relation(fields: [objectGroupId], references: [id], onDelete: SetNull)
   transactions        Transaction[]
+  transactionJournals TransactionJournal[]
   budgets             Budget[]
   recurringItems      RecurringItem[]
   transactionSplits   TransactionSplit[]
@@ -665,6 +742,7 @@ model Tag {
   createdAt       DateTime         @default(now())
   household       Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
   transactionTags TransactionTag[]
+  journalTags     JournalTag[]
 
   @@map("tags")
 }
@@ -677,6 +755,16 @@ model TransactionTag {
 
   @@id([transactionId, tagId])
   @@map("transaction_tags")
+}
+
+model JournalTag {
+  journalId String
+  tagId     String
+  journal   TransactionJournal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  tag       Tag                @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([journalId, tagId])
+  @@map("journal_tags")
 }
 
 model RuleGroup {
@@ -698,8 +786,11 @@ model RuleGroup {
 model Rule {
   id          String     @id @default(cuid())
   householdId String
+  name        String?
   conditions  Json
   actions     Json
+  strict      Boolean    @default(true)
+  stopProcessing Boolean @default(false)
   sortOrder   Int        @default(0)
   isActive    Boolean    @default(true)
   ruleGroupId String?
@@ -707,8 +798,62 @@ model Rule {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   household   Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  triggers    RuleTrigger[]
+  ruleActions RuleActionRecord[]
+  executionLogs RuleExecutionLog[]
 
+  @@index([householdId, isActive, sortOrder])
+  @@index([ruleGroupId])
   @@map("rules")
+}
+
+model RuleTrigger {
+  id        String   @id @default(cuid())
+  ruleId    String
+  field     String
+  operator  String
+  value     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  rule      Rule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, sortOrder])
+  @@map("rule_triggers")
+}
+
+model RuleActionRecord {
+  id             String   @id @default(cuid())
+  ruleId         String
+  type           String
+  value          String?
+  sortOrder      Int      @default(0)
+  stopProcessing Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  rule           Rule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, sortOrder])
+  @@map("rule_actions")
+}
+
+model RuleExecutionLog {
+  id             String              @id @default(cuid())
+  householdId    String
+  ruleId         String
+  journalId      String
+  status         String              @default("applied")
+  actionsApplied Int                 @default(0)
+  message        String?
+  createdAt      DateTime            @default(now())
+  household      Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  rule           Rule                @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  journal        TransactionJournal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, createdAt])
+  @@index([ruleId, createdAt])
+  @@index([journalId, createdAt])
+  @@map("rule_execution_logs")
 }
 
 model CategoryLearningExample {

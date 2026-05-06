@@ -3,69 +3,281 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
-import { createCheckpoint } from '../lib/checkpoint.js';
 import {
-  applyActionsToTransaction,
-  ruleMatches,
-  type RuleAction as Action,
-  type RuleCondition as Condition,
+  applyActionsToJournal,
+  normalizeRuleActions,
+  normalizeRuleTriggers,
+  ruleMatchesMode,
+  type NormalizedRuleAction,
+  type NormalizedRuleTrigger,
+  type RuleMatchInput,
 } from '../lib/ruleEngine';
+import { buildRuleMatchInputFromJournal } from '../lib/transactionJournalService';
 
 const router = Router();
 
-// ─── Zod schemas ──────────────────────────────────────────────────────────────
+const triggerFieldSchema = z.enum(['merchantName', 'description', 'amount', 'categoryId', 'accountId', 'notes']);
+const triggerOperatorSchema = z.enum(['contains', 'notContains', 'startsWith', 'endsWith', 'equals', 'notEquals', 'gt', 'gte', 'lt', 'lte']);
 
-const conditionSchema = z.object({
-  field: z.enum(['merchantName', 'description', 'amount']),
-  operator: z.enum(['contains', 'equals', 'startsWith', 'endsWith', 'gt', 'lt', 'gte', 'lte']),
+const triggerSchema = z.object({
+  field: triggerFieldSchema,
+  operator: triggerOperatorSchema,
   value: z.union([z.string(), z.number()]),
-});
-
-type SanitizedCondition = { field: 'merchantName' | 'description' | 'amount'; operator: 'contains' | 'equals' | 'startsWith' | 'endsWith' | 'gt' | 'lt' | 'gte' | 'lte'; value: string | number };
-
-function sanitizeCondition(c: { field?: string; operator?: string; value?: string | number }): SanitizedCondition {
-  const field = c.field === 'merchant' ? 'merchantName' : c.field as SanitizedCondition['field'];
-  return { ...c, field } as SanitizedCondition;
-}
-
-const actionSchema = z.object({
-  type: z.enum(['setCategory', 'addTag', 'hide', 'markReviewed']),
-  value: z.string().optional(), // categoryId or tagId
-});
-
-const ruleBodySchema = z.object({
-  conditions: z.array(conditionSchema).min(1),
-  actions: z.array(actionSchema).min(1),
-  isActive: z.boolean().optional().default(true),
   sortOrder: z.number().int().optional(),
 });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const actionSchema = z.object({
+  type: z.enum([
+    'setCategory',
+    'clearCategory',
+    'addTag',
+    'removeTag',
+    'hide',
+    'unhide',
+    'markReviewed',
+    'flagForReview',
+    'setDescription',
+    'setNotes',
+    'appendNotes',
+    'setSourceAccount',
+    'setDestinationAccount',
+  ]),
+  value: z.string().optional(),
+  sortOrder: z.number().int().optional(),
+  stopProcessing: z.boolean().optional().default(false),
+});
 
-// ─── GET /api/v1/rules ────────────────────────────────────────────────────────
+const ruleBodyBaseSchema = z.object({
+  name: z.string().min(1).optional(),
+  conditions: z.array(triggerSchema).optional(),
+  triggers: z.array(triggerSchema).optional(),
+  actions: z.array(actionSchema).optional(),
+  ruleActions: z.array(actionSchema).optional(),
+  strict: z.boolean().optional().default(true),
+  stopProcessing: z.boolean().optional().default(false),
+  isActive: z.boolean().optional().default(true),
+  sortOrder: z.number().int().optional(),
+  ruleGroupId: z.string().nullable().optional(),
+});
+
+const ruleBodySchema = ruleBodyBaseSchema.refine((body) => (body.conditions?.length ?? body.triggers?.length ?? 0) > 0, {
+  message: 'At least one trigger is required',
+}).refine((body) => (body.actions?.length ?? body.ruleActions?.length ?? 0) > 0, {
+  message: 'At least one action is required',
+});
+
+const partialRuleBodySchema = ruleBodyBaseSchema.partial().refine((body) => {
+  const triggers = body.triggers ?? body.conditions;
+  const actions = body.ruleActions ?? body.actions;
+  if (triggers !== undefined && triggers.length === 0) return false;
+  if (actions !== undefined && actions.length === 0) return false;
+  return true;
+}, { message: 'Trigger/action arrays cannot be empty' });
+
+const testBodySchema = z.object({
+  journalId: z.string().optional(),
+  matchInput: z.object({
+    merchantName: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
+    amount: z.number().nullable().optional(),
+    categoryId: z.string().nullable().optional(),
+    accountId: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
+  }).optional(),
+}).refine((body) => body.journalId || body.matchInput, {
+  message: 'journalId or matchInput is required',
+});
+
+type RuleWithNormalizedRows = {
+  id: string;
+  conditions: unknown;
+  actions: unknown;
+  strict?: boolean | null;
+  triggers?: unknown;
+  ruleActions?: unknown;
+  [key: string]: unknown;
+};
+
+function sanitizeTrigger(input: { field?: string; operator?: string; value?: string | number; sortOrder?: number }) {
+  return {
+    ...input,
+    field: input.field === 'merchant' ? 'merchantName' : input.field,
+  };
+}
+
+function valueToString(value: string | number) {
+  return typeof value === 'number' ? String(value) : value;
+}
+
+function asLegacyTrigger(trigger: NormalizedRuleTrigger) {
+  return {
+    field: trigger.field,
+    operator: trigger.operator,
+    value: trigger.value,
+  };
+}
+
+function asPublicTrigger(trigger: NormalizedRuleTrigger) {
+  return {
+    field: trigger.field,
+    operator: trigger.operator,
+    value: trigger.value,
+    sortOrder: trigger.sortOrder,
+  };
+}
+
+function asLegacyAction(action: NormalizedRuleAction) {
+  return action.value === undefined
+    ? { type: action.type }
+    : { type: action.type, value: action.value };
+}
+
+function asPublicAction(action: NormalizedRuleAction) {
+  return {
+    type: action.type,
+    value: action.value,
+    sortOrder: action.sortOrder,
+    stopProcessing: action.stopProcessing ?? false,
+  };
+}
+
+function formatRule(rule: RuleWithNormalizedRows) {
+  const triggers = normalizeRuleTriggers(rule);
+  const ruleActions = normalizeRuleActions(rule);
+
+  return {
+    ...rule,
+    triggers: triggers.map(asPublicTrigger),
+    ruleActions: ruleActions.map(asPublicAction),
+    conditions: Array.isArray(rule.conditions) && (rule.conditions as unknown[]).length > 0
+      ? rule.conditions
+      : triggers.map(asLegacyTrigger),
+    actions: Array.isArray(rule.actions) && (rule.actions as unknown[]).length > 0
+      ? rule.actions
+      : ruleActions.map(asLegacyAction),
+  };
+}
+
+function buildRuleWriteData(parsed: z.infer<typeof ruleBodySchema> | z.infer<typeof partialRuleBodySchema>, householdId: string, sortOrder?: number) {
+  const triggers = (parsed.triggers ?? parsed.conditions ?? []).map((trigger, index) => ({
+    field: trigger.field,
+    operator: trigger.operator,
+    value: valueToString(trigger.value),
+    sortOrder: trigger.sortOrder ?? index + 1,
+  }));
+  const ruleActions = (parsed.ruleActions ?? parsed.actions ?? []).map((action, index) => ({
+    type: action.type,
+    value: action.value,
+    sortOrder: action.sortOrder ?? index + 1,
+    stopProcessing: action.stopProcessing ?? false,
+  }));
+
+  return {
+    ...(sortOrder !== undefined ? { sortOrder } : {}),
+    ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+    ...(parsed.strict !== undefined ? { strict: parsed.strict } : {}),
+    ...(parsed.stopProcessing !== undefined ? { stopProcessing: parsed.stopProcessing } : {}),
+    ...(parsed.isActive !== undefined ? { isActive: parsed.isActive } : {}),
+    ...(parsed.ruleGroupId !== undefined ? { ruleGroupId: parsed.ruleGroupId } : {}),
+    ...(triggers.length > 0 ? {
+      conditions: triggers.map(({ field, operator, value }) => ({ field, operator, value })),
+      triggers: { create: triggers },
+    } : {}),
+    ...(ruleActions.length > 0 ? {
+      actions: ruleActions.map(({ type, value }) => value === undefined ? { type } : { type, value }),
+      ruleActions: { create: ruleActions },
+    } : {}),
+    householdId,
+  };
+}
+
+const JOURNAL_INCLUDE = {
+  entries: true,
+  tags: { include: { tag: true } },
+  meta: true,
+  category: true,
+};
+
+async function getRule(ruleId: string, householdId: string) {
+  return prisma.rule.findFirst({
+    where: { id: ruleId, householdId },
+    include: { triggers: true, ruleActions: true },
+  });
+}
+
+async function getMatchInputFromTestBody(body: z.infer<typeof testBodySchema>, householdId: string): Promise<RuleMatchInput> {
+  if (body.matchInput) return body.matchInput;
+
+  const journal = await prisma.transactionJournal.findFirst({
+    where: { id: body.journalId!, householdId },
+    include: JOURNAL_INCLUDE,
+  });
+  if (!journal) throw new Error('Transaction journal not found');
+
+  return buildRuleMatchInputFromJournal(journal);
+}
+
+async function listJournalRuleCandidates(householdId: string) {
+  return prisma.transactionJournal.findMany({
+    where: { householdId },
+    include: JOURNAL_INCLUDE,
+    orderBy: [{ date: 'asc' }, { id: 'asc' }],
+  });
+}
+
+router.get('/execution-logs', async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const logs = await prisma.ruleExecutionLog.findMany({
+      where: { householdId: req.householdId! },
+      include: {
+        rule: { select: { id: true, name: true } },
+        journal: { select: { id: true, description: true, date: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    return res.json({
+      items: logs.map((log: any) => ({
+        id: log.id,
+        householdId: log.householdId,
+        ruleId: log.ruleId,
+        ruleName: log.rule?.name ?? null,
+        journalId: log.journalId,
+        journalDescription: log.journal?.description ?? null,
+        journalDate: log.journal?.date?.toISOString?.() ?? null,
+        status: log.status,
+        actionsApplied: log.actionsApplied,
+        message: log.message,
+        createdAt: log.createdAt.toISOString(),
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err }, 'rules/executionLogs');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const rules = await prisma.rule.findMany({
       where: { householdId: req.householdId! },
+      include: { triggers: true, ruleActions: true },
       orderBy: { sortOrder: 'asc' },
     });
-    return res.json(rules);
+    return res.json(rules.map(formatRule));
   } catch (err) {
     req.log.error({ err }, 'rules/list');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ─── POST /api/v1/rules ───────────────────────────────────────────────────────
-
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    // Sanitize before validation
     const body = { ...req.body };
-    if (body.conditions) {
-      body.conditions = body.conditions.map(sanitizeCondition);
-    }
+    if (body.conditions) body.conditions = body.conditions.map(sanitizeTrigger);
+    if (body.triggers) body.triggers = body.triggers.map(sanitizeTrigger);
 
     const parsed = ruleBodySchema.safeParse(body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
@@ -76,78 +288,21 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     });
 
     const rule = await prisma.rule.create({
-      data: {
-        householdId: req.householdId!,
-        conditions: parsed.data.conditions,
-        actions: parsed.data.actions,
-        isActive: parsed.data.isActive,
-        sortOrder: parsed.data.sortOrder ?? (maxOrder._max.sortOrder ?? 0) + 1,
-      },
+      data: buildRuleWriteData(
+        parsed.data,
+        req.householdId!,
+        parsed.data.sortOrder ?? (maxOrder._max.sortOrder ?? 0) + 1,
+      ) as any,
+      include: { triggers: true, ruleActions: true },
     });
 
     logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'CREATE', entity: 'RULE', entityId: rule.id, after: rule as any });
-    return res.status(201).json(rule);
+    return res.status(201).json(formatRule(rule));
   } catch (err) {
     req.log.error({ err }, 'rules/create');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
-
-// ─── PUT /api/v1/rules/:id ────────────────────────────────────────────────────
-
-router.put('/:id', async (req: AuthRequest, res: Response) => {
-  try {
-    const existing = await prisma.rule.findFirst({
-      where: { id: req.params.id, householdId: req.householdId! },
-    });
-    if (!existing) return res.status(404).json({ error: 'Rule not found' });
-
-    // Sanitize before validation
-    const body = req.body;
-    if (body.conditions) {
-      body.conditions = body.conditions.map(sanitizeCondition);
-    }
-
-    const parsed = ruleBodySchema.partial().safeParse(body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-
-    const rule = await prisma.rule.update({
-      where: { id: req.params.id },
-      data: {
-        ...(parsed.data.conditions && { conditions: parsed.data.conditions }),
-        ...(parsed.data.actions && { actions: parsed.data.actions }),
-        ...(parsed.data.isActive !== undefined && { isActive: parsed.data.isActive }),
-        ...(parsed.data.sortOrder !== undefined && { sortOrder: parsed.data.sortOrder }),
-      },
-    });
-
-    logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'UPDATE', entity: 'RULE', entityId: rule.id, before: existing as any, after: rule as any });
-    return res.json(rule);
-  } catch (err) {
-    req.log.error({ err }, 'rules/update');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── DELETE /api/v1/rules/:id ─────────────────────────────────────────────────
-
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
-  try {
-    const existing = await prisma.rule.findFirst({
-      where: { id: req.params.id, householdId: req.householdId! },
-    });
-    if (!existing) return res.status(404).json({ error: 'Rule not found' });
-
-    await prisma.rule.delete({ where: { id: req.params.id } });
-    logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'DELETE', entity: 'RULE', entityId: req.params.id, before: existing as any });
-    return res.json({ message: 'Rule deleted' });
-  } catch (err) {
-    req.log.error({ err }, 'rules/delete');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── PUT /api/v1/rules/reorder ────────────────────────────────────────────────
 
 router.put('/reorder', async (req: AuthRequest, res: Response) => {
   try {
@@ -170,114 +325,167 @@ router.put('/reorder', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ─── POST /api/v1/rules/:id/apply ────────────────────────────────────────────
+router.put('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await getRule(req.params.id, req.householdId!);
+    if (!existing) return res.status(404).json({ error: 'Rule not found' });
+
+    const body = { ...req.body };
+    if (body.conditions) body.conditions = body.conditions.map(sanitizeTrigger);
+    if (body.triggers) body.triggers = body.triggers.map(sanitizeTrigger);
+
+    const parsed = partialRuleBodySchema.safeParse(body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+
+    const hasTriggers = parsed.data.conditions !== undefined || parsed.data.triggers !== undefined;
+    const hasActions = parsed.data.actions !== undefined || parsed.data.ruleActions !== undefined;
+    const data = buildRuleWriteData(parsed.data, req.householdId!);
+    delete (data as any).householdId;
+
+    const rule = await prisma.$transaction(async (tx: any) => {
+      if (hasTriggers) await tx.ruleTrigger.deleteMany({ where: { ruleId: req.params.id } });
+      if (hasActions) await tx.ruleActionRecord.deleteMany({ where: { ruleId: req.params.id } });
+      return tx.rule.update({
+        where: { id: req.params.id },
+        data: data as any,
+        include: { triggers: true, ruleActions: true },
+      });
+    });
+
+    logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'UPDATE', entity: 'RULE', entityId: rule.id, before: existing as any, after: rule as any });
+    return res.json(formatRule(rule));
+  } catch (err) {
+    req.log.error({ err }, 'rules/update');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await getRule(req.params.id, req.householdId!);
+    if (!existing) return res.status(404).json({ error: 'Rule not found' });
+
+    await prisma.rule.delete({ where: { id: req.params.id } });
+    logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'DELETE', entity: 'RULE', entityId: req.params.id, before: existing as any });
+    return res.json({ message: 'Rule deleted' });
+  } catch (err) {
+    req.log.error({ err }, 'rules/delete');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:id/test', async (req: AuthRequest, res: Response) => {
+  try {
+    const rule = await getRule(req.params.id, req.householdId!);
+    if (!rule) return res.status(404).json({ error: 'Rule not found' });
+
+    const parsed = testBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+
+    let matchInput: RuleMatchInput;
+    try {
+      matchInput = await getMatchInputFromTestBody(parsed.data, req.householdId!);
+    } catch (err: any) {
+      return res.status(404).json({ error: err.message });
+    }
+
+    const triggers = normalizeRuleTriggers(rule);
+    const actions = normalizeRuleActions(rule);
+    return res.json({
+      ruleId: rule.id,
+      matched: ruleMatchesMode(triggers, matchInput, rule.strict ?? true),
+      actions: actions.map(asPublicAction),
+    });
+  } catch (err) {
+    req.log.error({ err }, 'rules/test');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 router.post('/:id/apply', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const rule = await prisma.rule.findFirst({
-      where: { id: req.params.id, householdId },
-    });
+    const rule = await getRule(req.params.id, householdId);
     if (!rule) return res.status(404).json({ error: 'Rule not found' });
 
-    const conditions = rule.conditions as Condition[];
-    const actions = rule.actions as Action[];
+    const triggers = normalizeRuleTriggers(rule);
+    const actions = normalizeRuleActions(rule);
+    const journals = await listJournalRuleCandidates(householdId);
+    const journalsMatched: string[] = [];
 
-    const transactions = await prisma.transaction.findMany({
-      where: { householdId, isHidden: false },
-      include: { merchant: { select: { displayName: true, name: true } } },
-    });
+    for (const journal of journals) {
+      const matchInput = buildRuleMatchInputFromJournal(journal);
+      if (!ruleMatchesMode(triggers, matchInput, rule.strict ?? true)) continue;
 
-    // Snapshot affected transactions before mutating
-    const affectedIds = transactions
-      .filter((tx) => {
-        const merchantName = tx.merchant?.displayName ?? tx.merchant?.name ?? tx.description;
-        return ruleMatches(conditions, { description: tx.description, merchantName, amount: tx.amount });
-      })
-      .map((tx) => tx.id);
-
-    const checkpointId = await createCheckpoint(
-      prisma,
-      householdId,
-      'rule-apply-all',
-      `Rule applied to ${affectedIds.length} transaction${affectedIds.length !== 1 ? 's' : ''}`,
-      affectedIds,
-    );
-
-    let matched = 0;
-    for (const tx of transactions) {
-      const merchantName = tx.merchant?.displayName ?? tx.merchant?.name ?? tx.description;
-      if (ruleMatches(conditions, { description: tx.description, merchantName, amount: tx.amount })) {
-        await applyActionsToTransaction(prisma, tx.id, actions, householdId);
-        matched++;
-      }
+      await applyActionsToJournal(prisma, {
+        journalId: journal.id,
+        householdId,
+        ruleId: rule.id,
+        actions,
+      });
+      journalsMatched.push(journal.id);
+      if (rule.stopProcessing) break;
     }
 
-    return res.json({ matched, checkpointId, message: `Rule applied to ${matched} transaction(s)` });
+    return res.json({
+      matched: journalsMatched.length,
+      journalsMatched,
+      checkpointId: '',
+      message: `Rule applied to ${journalsMatched.length} journal(s)`,
+    });
   } catch (err) {
     req.log.error({ err }, 'rules/apply');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ─── POST /api/v1/rules/apply-all ────────────────────────────────────────────
-
 router.post('/apply-all', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-
-    const rules = await prisma.rule.findMany({
+    const groups = await prisma.ruleGroup.findMany({
       where: { householdId, isActive: true },
+      include: {
+        rules: {
+          where: { isActive: true },
+          include: { triggers: true, ruleActions: true },
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
       orderBy: { sortOrder: 'asc' },
     });
-
-    const transactions = await prisma.transaction.findMany({
-      where: { householdId, isHidden: false },
-      include: { merchant: { select: { displayName: true, name: true } } },
-    });
-
-    // Determine which transactions will be affected before mutating
-    const affectedIds: string[] = [];
-    for (const rule of rules) {
-      const conditions = rule.conditions as Condition[];
-      for (const tx of transactions) {
-        const merchantName = tx.merchant?.displayName ?? tx.merchant?.name ?? tx.description;
-        if (ruleMatches(conditions, { description: tx.description, merchantName, amount: tx.amount })) {
-          if (!affectedIds.includes(tx.id)) affectedIds.push(tx.id);
-        }
-      }
-    }
-
-    // Snapshot affected transactions before any mutations
-    const checkpointId = await createCheckpoint(
-      prisma,
-      householdId,
-      'rule-apply-all',
-      `Rule run — ${rules.length} rule${rules.length !== 1 ? 's' : ''} across ${affectedIds.length} transaction${affectedIds.length !== 1 ? 's' : ''}`,
-      affectedIds,
-    );
-
+    const journals = await listJournalRuleCandidates(householdId);
     let totalMatched = 0;
-    for (const rule of rules) {
-      const conditions = rule.conditions as Condition[];
-      const actions = rule.actions as Action[];
-      for (const tx of transactions) {
-        const merchantName = tx.merchant?.displayName ?? tx.merchant?.name ?? tx.description;
-        if (ruleMatches(conditions, { description: tx.description, merchantName, amount: tx.amount })) {
-          await applyActionsToTransaction(prisma, tx.id, actions, householdId);
+    const firedRules = new Set<string>();
+
+    for (const journal of journals) {
+      const matchInput = buildRuleMatchInputFromJournal(journal);
+      for (const group of groups) {
+        let groupFired = false;
+        for (const rule of group.rules) {
+          const triggers = normalizeRuleTriggers(rule);
+          if (!ruleMatchesMode(triggers, matchInput, rule.strict ?? true)) continue;
+
+          await applyActionsToJournal(prisma, {
+            journalId: journal.id,
+            householdId,
+            ruleId: rule.id,
+            actions: normalizeRuleActions(rule),
+          });
           totalMatched++;
+          firedRules.add(rule.id);
+          groupFired = true;
+          if (rule.stopProcessing) break;
         }
+        if (groupFired && group.stopProcessing) break;
       }
     }
 
-    return res.json({ matched: totalMatched, rulesRun: rules.length, checkpointId });
+    return res.json({ matched: totalMatched, rulesRun: firedRules.size, checkpointId: '' });
   } catch (err) {
     req.log.error({ err }, 'rules/apply-all');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
-
-// ─── Rule Groups ─────────────────────────────────────────────────────────────
 
 const groupBodySchema = z.object({
   name: z.string().min(1),
@@ -290,10 +498,13 @@ router.get('/groups', async (req: AuthRequest, res: Response) => {
   try {
     const groups = await prisma.ruleGroup.findMany({
       where: { householdId: req.householdId! },
-      include: { rules: { orderBy: { sortOrder: 'asc' } } },
+      include: { rules: { include: { triggers: true, ruleActions: true }, orderBy: { sortOrder: 'asc' } } },
       orderBy: { sortOrder: 'asc' },
     });
-    return res.json(groups);
+    return res.json(groups.map((group: any) => ({
+      ...group,
+      rules: group.rules.map(formatRule),
+    })));
   } catch (err) {
     req.log.error({ err }, 'ruleGroups/list');
     return res.status(500).json({ error: 'Internal server error' });
@@ -312,11 +523,11 @@ router.post('/groups', async (req: AuthRequest, res: Response) => {
 
     const group = await prisma.ruleGroup.create({
       data: {
-        householdId:    req.householdId!,
-        name:           parsed.data.name,
+        householdId: req.householdId!,
+        name: parsed.data.name,
         stopProcessing: parsed.data.stopProcessing,
-        isActive:       parsed.data.isActive,
-        sortOrder:      parsed.data.sortOrder ?? (maxOrder._max.sortOrder ?? 0) + 1,
+        isActive: parsed.data.isActive,
+        sortOrder: parsed.data.sortOrder ?? (maxOrder._max.sortOrder ?? 0) + 1,
       },
     });
     logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'CREATE', entity: 'RULE_GROUP', entityId: group.id, after: group as any });
@@ -339,7 +550,7 @@ router.put('/groups/:id', async (req: AuthRequest, res: Response) => {
 
     const group = await prisma.ruleGroup.update({
       where: { id: req.params.id },
-      data:  parsed.data,
+      data: parsed.data,
     });
     return res.json(group);
   } catch (err) {
@@ -357,7 +568,7 @@ router.delete('/groups/:id', async (req: AuthRequest, res: Response) => {
 
     await prisma.rule.updateMany({
       where: { ruleGroupId: req.params.id },
-      data:  { ruleGroupId: null },
+      data: { ruleGroupId: null },
     });
     await prisma.ruleGroup.delete({ where: { id: req.params.id } });
     return res.json({ message: 'Deleted' });

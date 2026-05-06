@@ -1,25 +1,23 @@
 import { prisma } from './prisma';
-import { applyActiveRulesToTransaction } from './ruleEngine';
+import { applyActiveRulesToJournal } from './ruleEngine';
+import { buildRuleMatchInputFromJournal } from './transactionJournalService';
 
 const LOOKBACK_HOURS = 24;
 
 /**
- * Applies all active household rules to transactions created in the last LOOKBACK_HOURS.
- * Runs on a schedule; skips transactions that already have a categoryId when the
- * matching rule would only set category (non-destructive — other rule actions still fire).
+ * Applies all active household rules to journals created in the last lookback.
+ * Phase 2 intentionally runs on transaction journals, not legacy flat rows.
  */
 export async function runRuleExecutionJob(): Promise<{ processed: number; matched: number }> {
   const since = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000);
 
-  const transactions = await prisma.transaction.findMany({
+  const journals = await prisma.transactionJournal.findMany({
     where: { createdAt: { gte: since } },
-    select: {
-      id: true,
-      householdId: true,
-      description: true,
-      amount: true,
-      amountDecimal: true,
-      merchant: { select: { name: true } },
+    include: {
+      entries: true,
+      tags: { include: { tag: true } },
+      meta: true,
+      category: true,
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -27,14 +25,12 @@ export async function runRuleExecutionJob(): Promise<{ processed: number; matche
   let processed = 0;
   let matched = 0;
 
-  for (const tx of transactions) {
-    const txContext = {
-      description: tx.description ?? '',
-      merchantName: tx.merchant?.name ?? '',
-      amount: tx.amountDecimal ? Number(tx.amountDecimal) : tx.amount,
-    };
-
-    const fired: string[] = await applyActiveRulesToTransaction(prisma, tx.id, tx.householdId, txContext);
+  for (const journal of journals) {
+    const fired = await applyActiveRulesToJournal(prisma, {
+      journalId: journal.id,
+      householdId: journal.householdId,
+      matchInput: buildRuleMatchInputFromJournal(journal),
+    });
     processed++;
     matched += fired.length;
   }
