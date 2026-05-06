@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildJournalAuditReport,
   buildJournalCashflowReport,
@@ -6,6 +6,7 @@ import {
   buildJournalReportCatalog,
   buildJournalReportDrilldown,
   classifyReportPeriod,
+  fetchJournalReportRows,
   type JournalReportRow,
 } from './journalReportingCore';
 
@@ -155,5 +156,69 @@ describe('journal reporting core', () => {
     expect(audit.unbalancedJournals).toBe(1);
     expect(audit.noCategoryJournals).toBe(2);
     expect(audit.transferJournals).toBe(1);
+  });
+
+  it('includes unlinked legacy transactions so report charts do not go blank before backfill', async () => {
+    const prisma = {
+      transactionJournal: { findMany: vi.fn().mockResolvedValue([]) },
+      transactionJournalMeta: { findMany: vi.fn().mockResolvedValue([]) },
+      transaction: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'legacy-food',
+            householdId: 'hh-1',
+            accountId: 'acct-checking',
+            amount: -42,
+            amountDecimal: null,
+            date: new Date('2026-01-10T00:00:00.000Z'),
+            description: 'Groceries',
+            isHidden: false,
+            isTransfer: false,
+            transferId: null,
+            category: { id: 'cat-food', name: 'Food', icon: 'cart', type: 'expense', isTaxDeductible: false, excludeFromReports: false },
+            account: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false },
+            tags: [{ tag: { id: 'tag-home', name: 'Home', color: '#111111' } }],
+          },
+          {
+            id: 'legacy-payroll',
+            householdId: 'hh-1',
+            accountId: 'acct-checking',
+            amount: 500,
+            amountDecimal: null,
+            date: new Date('2026-01-15T00:00:00.000Z'),
+            description: 'Payroll',
+            isHidden: false,
+            isTransfer: false,
+            transferId: null,
+            category: { id: 'cat-pay', name: 'Salary', icon: null, type: 'income', isTaxDeductible: false, excludeFromReports: false },
+            account: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false },
+            tags: [],
+          },
+        ]),
+      },
+    };
+
+    const reportRows = await fetchJournalReportRows(
+      {
+        householdId: 'hh-1',
+        start: new Date('2026-01-01'),
+        end: new Date('2026-01-31'),
+      },
+      prisma as any,
+    );
+
+    expect(reportRows).toHaveLength(2);
+    expect(buildJournalGroupedReport(reportRows, {
+      mode: 'spending',
+      groupBy: 'category',
+      start: new Date('2026-01-01'),
+      end: new Date('2026-01-31'),
+    }).items).toEqual([
+      expect.objectContaining({ id: 'cat-food', name: 'Food', amount: 42, transactionCount: 1 }),
+    ]);
+    expect(buildJournalCashflowReport(reportRows, {
+      start: new Date('2026-01-01'),
+      end: new Date('2026-01-31'),
+    })).toMatchObject({ income: 500, expenses: 42, net: 458 });
   });
 });

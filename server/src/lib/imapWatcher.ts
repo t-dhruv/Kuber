@@ -20,111 +20,105 @@ export interface ImapConfig {
 
 /**
  * Fetch and parse recent receipt emails for a household.
- * Uses dynamic import of imap-simple (optional dependency).
+ * Uses dynamic import of ImapFlow so the email connector stays optional at runtime.
  * Returns parsed transactions ready for import.
  */
 export async function fetchReceiptEmails(
   config: ImapConfig
 ): Promise<Array<{ description: string; amount: number; date: string; reference?: string; source: string }>> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let imapSimple: any = null;
-   
+  let ImapFlow: typeof import('imapflow').ImapFlow;
   let simpleParser: ((source: string | Buffer) => Promise<{ text?: string; html?: string }>) | null = null;
 
   try {
-    // Dynamic imports so the server starts even if packages are not yet installed
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    imapSimple = await import(/* @vite-ignore */ 'imap-simple' as string) as any;
+    ({ ImapFlow } = await import(/* @vite-ignore */ 'imapflow' as string));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mailparser = await import(/* @vite-ignore */ 'mailparser' as string) as any;
     simpleParser = mailparser.simpleParser as (source: string | Buffer) => Promise<{ text?: string; html?: string }>;
   } catch {
-    throw new Error('imap-simple or mailparser not installed. Run: npm install imap-simple mailparser');
+    throw new Error('imapflow or mailparser not installed. Run: npm install imapflow mailparser');
   }
 
-  const connection = await imapSimple.connect({
-    imap: {
+  const client = new ImapFlow({
+    host: config.host,
+    port: config.port,
+    secure: config.tls,
+    auth: {
       user: config.user,
-      password: config.password,
-      host: config.host,
-      port: config.port,
-      tls: config.tls,
-      authTimeout: 10000,
+      pass: config.password,
     },
+    logger: false,
   });
 
-  await connection.openBox('INBOX');
+  await client.connect();
 
-  // Search for unread emails from Amazon/PayPal in the last 30 days
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const searchCriteria = [
-    'UNSEEN',
-    ['SINCE', thirtyDaysAgo.toDateString()],
-    ['OR',
-      ['FROM', 'amazon.com'],
-      ['FROM', 'paypal.com'],
-    ],
-  ];
+  const lock = await client.getMailboxLock('INBOX');
+  try {
+    // Search for unread receipt emails in the last 30 days.
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const messages = client.fetch(
+      { seen: false, since: thirtyDaysAgo },
+      { envelope: true, source: true }
+    );
 
-  const fetchOptions = { bodies: ['HEADER.FIELDS (FROM SUBJECT DATE)', 'TEXT', ''], struct: true };
+    const results: Array<{ description: string; amount: number; date: string; reference?: string; source: string }> = [];
 
-  const messages = await connection.search(searchCriteria, fetchOptions);
-  const results: Array<{ description: string; amount: number; date: string; reference?: string; source: string }> = [];
+    for await (const message of messages) {
+      try {
+        const from = message.envelope?.from?.map((sender) => sender.address ?? sender.name ?? '').join(', ') ?? '';
+        if (!/amazon\.com|paypal\.com/i.test(from)) continue;
 
-  for (const message of messages) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const headerPart = message.parts.find((p: any) => p.which === 'HEADER.FIELDS (FROM SUBJECT DATE)');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bodyPart = message.parts.find((p: any) => p.which === 'TEXT');
+        const subject = message.envelope?.subject ?? '';
+        const rawBody = message.source ?? Buffer.from('');
+        const parsed: { text?: string; html?: string } = simpleParser
+          ? await simpleParser(rawBody)
+          : { text: rawBody.toString('utf8'), html: '' };
 
-      const from = headerPart?.body?.from?.[0] ?? '';
-      const subject = headerPart?.body?.subject?.[0] ?? '';
-      const rawBody = bodyPart?.body ?? '';
+        const txn = parseReceiptEmail(from, subject, parsed.text ?? '', parsed.html ?? '');
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parseFn = simpleParser as any;
-      const parsed: { text?: string; html?: string } = parseFn
-        ? await parseFn(rawBody)
-        : { text: rawBody, html: '' };
-      const txn = parseReceiptEmail(from, subject, parsed.text ?? '', parsed.html ?? '');
-
-      if (txn) results.push(txn);
-    } catch {
-      // Skip malformed messages
+        if (txn) results.push(txn);
+      } catch {
+        // Skip malformed messages
+      }
     }
-  }
 
-  connection.end();
-  return results;
+    return results;
+  } finally {
+    lock.release();
+    await client.logout();
+  }
 }
 
 /**
  * Test an IMAP connection with the given credentials.
- * Uses dynamic import of imap-simple (optional dependency).
+ * Uses dynamic import of ImapFlow (optional dependency).
  */
 export async function testImapConnection(cfg: { host: string; port: number; user: string; pass: string }): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let imapSimple: any = null;
+  let ImapFlow: typeof import('imapflow').ImapFlow;
   try {
-    imapSimple = await import('imap-simple');
+    ({ ImapFlow } = await import('imapflow'));
   } catch {
-    throw new Error('imap-simple package not installed');
+    throw new Error('imapflow package not installed');
   }
+
+  const client = new ImapFlow({
+    host: cfg.host,
+    port: cfg.port,
+    secure: true,
+    auth: {
+      user: cfg.user,
+      pass: cfg.pass,
+    },
+    logger: false,
+  });
+
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error('Connection timed out')), 10_000)
   );
-  const connect = imapSimple.connect({
-    imap: {
-      user: cfg.user,
-      password: cfg.pass,
-      host: cfg.host,
-      port: cfg.port,
-      tls: true,
-      authTimeout: 5000,
-    },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  }).then((connection: any) => connection.end());
+  const connect = client.connect().finally(async () => {
+    if (client.usable) {
+      await client.logout();
+    }
+  });
 
   await Promise.race([connect, timeout]);
 }
