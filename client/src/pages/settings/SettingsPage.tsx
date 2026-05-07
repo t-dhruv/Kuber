@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Button, Input, Select, Checkbox, Avatar, Card, CardDivider, Modal, ModalFooter, notify, Skeleton,
+  Button, Input, Select, Checkbox, Avatar, Card, CardDivider, Modal, ModalFooter, notify, Skeleton, ConfirmDialog,
 } from '@/components/ui';
 import { EmojiPicker } from '@/components/ui/EmojiPicker';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -124,6 +124,7 @@ type NavSection =
   | 'report-digest'
   | 'data'
   | 'billing'
+  | 'audit'
   | 'tax-accounts'
   | 'automation'
   | 'webhooks';
@@ -141,6 +142,7 @@ const NAV_ITEMS: { id: NavSection; label: string; icon: React.ReactNode }[] = [
   { id: 'report-digest', label: 'Report Digest', icon: <Receipt size={16} /> },
   { id: 'data', label: 'Data', icon: <Database size={16} /> },
   { id: 'billing', label: 'Billing', icon: <CreditCard size={16} /> },
+  { id: 'audit', label: 'Audit Log', icon: <ShieldCheck size={16} /> },
   { id: 'tax-accounts', label: 'Tax Accounts', icon: <Receipt size={16} /> },
   { id: 'automation', label: 'Automation', icon: <Zap size={16} /> },
   { id: 'webhooks', label: 'Webhooks', icon: <Globe size={16} /> },
@@ -367,6 +369,7 @@ const DEFAULT_NOTIF_PREFS: NotificationPrefs = {
 function PushSubscriptionButton() {
   const [status, setStatus] = useState<'unknown' | 'subscribed' | 'unsubscribed' | 'unsupported'>('unknown');
   const [loading, setLoading] = useState(false);
+  const [confirmUnsubscribe, setConfirmUnsubscribe] = useState(false);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -412,6 +415,7 @@ function PushSubscriptionButton() {
         await sub.unsubscribe();
       }
       setStatus('unsubscribed');
+      setConfirmUnsubscribe(false);
       notify.success('Push notifications disabled');
     } catch {
       notify.error('Failed to unsubscribe');
@@ -424,22 +428,33 @@ function PushSubscriptionButton() {
   if (status === 'unknown') return null;
 
   return (
-    <div className="flex items-center justify-between px-3 py-3 border border-[var(--color-border)] rounded-[var(--radius-lg)] bg-[var(--color-surface)]">
-      <div>
-        <div className="text-sm font-medium text-[var(--color-text)]">Browser push notifications</div>
-        <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
-          {status === 'subscribed' ? 'This browser will receive push notifications.' : 'Subscribe to receive push alerts on this device.'}
+    <>
+      <div className="flex items-center justify-between px-3 py-3 border border-[var(--color-border)] rounded-[var(--radius-lg)] bg-[var(--color-surface)]">
+        <div>
+          <div className="text-sm font-medium text-[var(--color-text)]">Browser push notifications</div>
+          <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
+            {status === 'subscribed' ? 'This browser will receive push notifications.' : 'Subscribe to receive push alerts on this device.'}
+          </div>
         </div>
+        <Button
+          variant={status === 'subscribed' ? 'secondary' : 'primary'}
+          size="sm"
+          loading={loading}
+          onClick={status === 'subscribed' ? () => setConfirmUnsubscribe(true) : subscribe}
+        >
+          {status === 'subscribed' ? 'Unsubscribe' : 'Enable'}
+        </Button>
       </div>
-      <Button
-        variant={status === 'subscribed' ? 'secondary' : 'primary'}
-        size="sm"
+      <ConfirmDialog
+        open={confirmUnsubscribe}
+        onClose={() => setConfirmUnsubscribe(false)}
+        onConfirm={unsubscribe}
+        title="Unsubscribe Browser"
+        message="Remove this browser's push notification subscription?"
+        confirmLabel="Unsubscribe"
         loading={loading}
-        onClick={status === 'subscribed' ? unsubscribe : subscribe}
-      >
-        {status === 'subscribed' ? 'Unsubscribe' : 'Enable'}
-      </Button>
-    </div>
+      />
+    </>
   );
 }
 
@@ -2428,6 +2443,11 @@ function AiAdvisorCard() {
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder={provider === 'ollama' ? 'http://localhost:11434/v1' : provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://your-api.example.com/v1'}
             />
+            {provider === 'custom' && (
+              <p className="mt-1.5 text-xs text-[var(--color-warning)]">
+                Custom endpoints receive your AI prompt and financial context. Kuber blocks private and reserved network targets, but only use endpoints you operate or trust.
+              </p>
+            )}
           </div>
         )}
 
@@ -2908,7 +2928,76 @@ function DataSection() {
   );
 }
 
-// ─── Section: Billing ─────────────────────────────────────────────────────────
+// ─── Section: Audit Log ───────────────────────────────────────────────────────
+
+interface AuditLogItem {
+  id: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  changes?: unknown;
+  createdAt: string;
+  user: string;
+}
+
+function AuditLogSection() {
+  const { data: logs = [], isLoading } = useQuery<AuditLogItem[]>({
+    queryKey: ['audit-log'],
+    queryFn: () => api.get('/audit?limit=100').then((r) => r.data),
+  });
+
+  return (
+    <div>
+      <SectionHeader
+        title="Audit Log"
+        description="Review recent financial record changes in this household."
+      />
+
+      <Card padding="lg">
+        {isLoading ? (
+          <div className="flex flex-col gap-2">
+            {[1, 2, 3].map((i) => <Skeleton key={i} height={48} />)}
+          </div>
+        ) : logs.length === 0 ? (
+          <p className="text-sm text-[var(--color-text-muted)]">No audit activity yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--color-border)] text-left text-xs uppercase tracking-[0.06em] text-[var(--color-text-muted)]">
+                  <th className="py-2 pr-3 font-semibold">Time</th>
+                  <th className="py-2 pr-3 font-semibold">User</th>
+                  <th className="py-2 pr-3 font-semibold">Action</th>
+                  <th className="py-2 pr-3 font-semibold">Entity</th>
+                  <th className="py-2 font-semibold">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log) => (
+                  <tr key={log.id} className="border-b border-[var(--color-border)] last:border-b-0">
+                    <td className="py-2 pr-3 whitespace-nowrap text-[var(--color-text-secondary)]">
+                      {new Date(log.createdAt).toLocaleString()}
+                    </td>
+                    <td className="py-2 pr-3 text-[var(--color-text)]">{log.user || 'Unknown'}</td>
+                    <td className="py-2 pr-3">
+                      <span className="rounded-full bg-[var(--color-surface-hover)] px-2 py-0.5 text-xs font-semibold text-[var(--color-text-secondary)]">
+                        {log.action}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 text-[var(--color-text)]">{log.entity}</td>
+                    <td className="py-2 text-xs text-[var(--color-text-muted)]">
+                      <code>{log.entityId}</code>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
 
 // ─── Section: Webhooks ────────────────────────────────────────────────────────
 
@@ -2927,7 +3016,7 @@ interface WebhookItem {
   name: string;
   url: string;
   events: WebhookEventType[];
-  secret?: string | null;
+  secretSet?: boolean;
   isActive: boolean;
   createdAt: string;
 }
@@ -2941,6 +3030,7 @@ function WebhooksSection() {
   const [form, setForm] = useState(emptyWebhookForm);
   const [showSecret, setShowSecret] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WebhookItem | null>(null);
 
   const { data: webhooks = [], isLoading } = useQuery<WebhookItem[]>({
     queryKey: ['webhooks'],
@@ -2948,10 +3038,18 @@ function WebhooksSection() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: (data: typeof emptyWebhookForm) =>
-      editing
-        ? api.put(`/webhooks/${editing.id}`, data).then((r) => r.data)
-        : api.post('/webhooks', data).then((r) => r.data),
+    mutationFn: (data: typeof emptyWebhookForm) => {
+      const payload: Partial<typeof emptyWebhookForm> = {
+        ...data,
+        secret: data.secret.trim() || undefined,
+      };
+      if (editing && !data.secret.trim()) {
+        delete payload.secret;
+      }
+      return editing
+        ? api.put(`/webhooks/${editing.id}`, payload).then((r) => r.data)
+        : api.post('/webhooks', payload).then((r) => r.data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] });
       setShowModal(false);
@@ -2966,6 +3064,7 @@ function WebhooksSection() {
     mutationFn: (id: string) => api.delete(`/webhooks/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] });
+      setDeleteTarget(null);
       notify.success('Webhook deleted');
     },
   });
@@ -2991,7 +3090,7 @@ function WebhooksSection() {
 
   function openEdit(hook: WebhookItem) {
     setEditing(hook);
-    setForm({ name: hook.name, url: hook.url, events: hook.events, secret: hook.secret ?? '', isActive: hook.isActive });
+    setForm({ name: hook.name, url: hook.url, events: hook.events, secret: '', isActive: hook.isActive });
     setShowSecret(false);
     setShowModal(true);
   }
@@ -3031,6 +3130,9 @@ function WebhooksSection() {
                     </span>
                   </div>
                   <span className="text-xs text-[var(--color-text-muted)] truncate">{hook.url}</span>
+                  {hook.secretSet ? (
+                    <span className="text-[0.6875rem] text-[var(--color-text-muted)]">Signing secret configured</span>
+                  ) : null}
                   <div className="flex flex-wrap gap-1 mt-1">
                     {hook.events.map((ev) => (
                       <span key={ev} className="text-[0.6875rem] px-1.5 py-0.5 rounded bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] border border-[var(--color-border)]">{ev}</span>
@@ -3040,7 +3142,7 @@ function WebhooksSection() {
                 <div className="flex items-center gap-1 shrink-0">
                   <Button variant="ghost" size="sm" onClick={() => testWebhook(hook.id)} loading={testingId === hook.id}>Test</Button>
                   <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => openEdit(hook)} />
-                  <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => deleteMutation.mutate(hook.id)} />
+                  <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => setDeleteTarget(hook)} />
                 </div>
               </div>
             </Card>
@@ -3079,7 +3181,7 @@ function WebhooksSection() {
                 type={showSecret ? 'text' : 'password'}
                 value={form.secret}
                 onChange={(e) => setForm((f) => ({ ...f, secret: e.target.value }))}
-                placeholder="Leave blank to skip signature"
+                placeholder={editing?.secretSet ? 'Leave blank to keep current secret' : 'Leave blank to skip signature'}
               />
               <button
                 type="button"
@@ -3102,9 +3204,20 @@ function WebhooksSection() {
           </ModalFooter>
         </form>
       </Modal>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title="Delete Webhook"
+        message={<>Delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.</>}
+        confirmLabel="Delete webhook"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }
+
+// ─── Section: Billing ─────────────────────────────────────────────────────────
 
 function BillingSection() {
   return (
@@ -3179,6 +3292,7 @@ export default function SettingsPage() {
       case 'report-digest': return <ReportDigestSection />;
       case 'data': return <DataSection />;
       case 'billing': return <BillingSection />;
+      case 'audit': return <AuditLogSection />;
       case 'tax-accounts': return <TaxAccountsSection />;
       case 'automation': return <AutomationSection />;
       case 'webhooks': return <WebhooksSection />;

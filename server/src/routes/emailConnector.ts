@@ -6,10 +6,12 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { AuthRequest } from '../middleware/auth.js';
+import { AuthRequest, requireHouseholdRole } from '../middleware/auth.js';
 import { fetchReceiptEmails } from '../lib/imapWatcher.js';
+import { decryptImapConfig, encryptImapConfig } from '../lib/imapConfig.js';
 
 const router = Router();
+const requireHouseholdAdmin = requireHouseholdRole(['owner', 'admin']);
 
 const ImapConfigSchema = z.object({
   host: z.string().min(1),
@@ -21,7 +23,7 @@ const ImapConfigSchema = z.object({
 });
 
 // GET /api/v1/email-connector/config — get current config (password masked)
-router.get('/config', async (req: AuthRequest, res: Response) => {
+router.get('/config', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const pref = await prisma.userPreference.findFirst({
       where: { userId: req.userId!, key: 'imap_config' },
@@ -44,7 +46,7 @@ router.get('/config', async (req: AuthRequest, res: Response) => {
 });
 
 // PUT /api/v1/email-connector/config — save IMAP config
-router.put('/config', async (req: AuthRequest, res: Response) => {
+router.put('/config', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const parse = ImapConfigSchema.safeParse(req.body);
     if (!parse.success) return res.status(400).json({ error: parse.error.flatten() });
@@ -53,7 +55,7 @@ router.put('/config', async (req: AuthRequest, res: Response) => {
     const member = await prisma.householdMember.findFirst({ where: { userId: req.userId! } });
     if (!member) return res.status(400).json({ error: 'No household found' });
 
-    const configValue = JSON.stringify({ ...parse.data, householdId: member.householdId });
+    const configValue = JSON.stringify(encryptImapConfig({ ...parse.data, householdId: member.householdId }));
 
     await prisma.userPreference.upsert({
       where: { userId_key: { userId: req.userId!, key: 'imap_config' } },
@@ -68,7 +70,7 @@ router.put('/config', async (req: AuthRequest, res: Response) => {
 });
 
 // DELETE /api/v1/email-connector/config — remove config
-router.delete('/config', async (req: AuthRequest, res: Response) => {
+router.delete('/config', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     await prisma.userPreference.deleteMany({ where: { userId: req.userId!, key: 'imap_config' } });
     return res.json({ message: 'Email connector removed' });
@@ -78,7 +80,7 @@ router.delete('/config', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/v1/email-connector/test — test connection + fetch preview
-router.post('/test', async (req: AuthRequest, res: Response) => {
+router.post('/test', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const parse = ImapConfigSchema.safeParse(req.body);
     if (!parse.success) return res.status(400).json({ error: parse.error.flatten() });
@@ -95,14 +97,14 @@ router.post('/test', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/v1/email-connector/sync — manually trigger fetch + import
-router.post('/sync', async (req: AuthRequest, res: Response) => {
+router.post('/sync', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const pref = await prisma.userPreference.findFirst({
       where: { userId: req.userId!, key: 'imap_config' },
     });
     if (!pref) return res.status(400).json({ error: 'Email connector not configured' });
 
-    const config = JSON.parse(pref.value);
+    const config = decryptImapConfig(JSON.parse(pref.value));
     const txns = await fetchReceiptEmails(config);
 
     let imported = 0;

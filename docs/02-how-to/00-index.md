@@ -28,4 +28,4 @@ Each guide = goal → steps → confirmation.
 - [Configure AI Advisor](ai-advisor.md)
 - [Investment Tracking](investments.md)
 
-> **Missing?** Open [GitHub Discussion](https://github.com/yourusername/kuber/discussions) or check [Reference](03-reference.md).
+> **Missing?** Open [GitHub Discussion](https://github.com/yourusername/kuber/discussions) or check [Reference](../03-reference.md).

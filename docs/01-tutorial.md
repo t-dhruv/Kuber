@@ -80,7 +80,7 @@ Click **Create Account** and fill in:
 - Email address
 - Password (at least 8 characters)
 
-> **Note:** The first person to register becomes the **household owner** — they can invite others to join the household later.
+> **Note:** The first person to register becomes the **household owner**. Owner/admin member management exists in Settings; emailed invite redemption is planned future work.
 
 ---
 

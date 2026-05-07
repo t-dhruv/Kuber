@@ -1,7 +1,7 @@
 # How-to: Manage Household Members
 
 ## Goal
-Invite family members to share finances. Each person has own login + 2FA.
+Manage household members and roles for shared finances. Each person has their own login and 2FA.
 
 ---
 
@@ -10,8 +10,8 @@ Invite family members to share finances. Each person has own login + 2FA.
 First person to register → becomes **household owner**.
 
 Owner can:
-- Invite/remove members
-- View audit log
+- Create invite records and remove members
+- View financial audit activity when the audit UI/API is available
 - Manage household settings
 
 ---
@@ -25,7 +25,7 @@ Owner can:
    - **Role:** Member (or Admin)
 4. Click **Send Invite**
 
-Invitee gets email → clicks link → creates account → joins household.
+Current limitation: Kuber records the invite request, but emailed invite-link redemption is not complete yet. Until that flow ships, operators should create users directly or manage membership through trusted administrative processes.
 
 ---
 
@@ -33,9 +33,9 @@ Invitee gets email → clicks link → creates account → joins household.
 
 | Role | Can Do |
 |------|--------|
-| **Owner** | Everything + invite/remove members, view audit log |
-| **Admin** | Manage accounts, txns, budgets + invite members |
-| **Member** | View + edit own txns, view shared accounts |
+| **Owner** | Household settings, integrations, member removal, shared finance data |
+| **Admin** | Household settings, integrations, invite records, shared finance data |
+| **Member** | Shared finance data; household-wide settings are restricted |
 
 ---
 
@@ -60,15 +60,14 @@ Their txns stay (scoped to household). Account access removed.
 
 ## Confirmation
 
-- New member appears in **Household** list
-- They can log in + see shared accounts
-- Audit log shows invite + join events
+- Invite request is accepted by the app
+- Members listed in **Household** can log in and see shared household data
 
 ## Troubleshooting
 
 | Problem | Solution |
 |----------|----------|
-| **Invite email not received** | Check spam. Resend from **Household** settings. SMTP must be configured. |
-| **Invite link expired** | Send new invite. Links expire after 7 days. |
+| **Invite email not received** | Email invite delivery is not complete yet. Verify member access through your administrative process. |
+| **Invite link expired** | Emailed invite links are planned future work. |
 | **Member can't see data** | Ensure they're in same household. Check **Household** settings. |
 | **Can't remove member** | Only owner can remove. Ask household owner. |

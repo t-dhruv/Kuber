@@ -31,9 +31,9 @@ Kuber is a full-featured personal finance web app you run on your own server. Tr
 - JWT access tokens (15 min) + httpOnly refresh cookie (7 days)
 - Two-factor authentication (TOTP — works with any authenticator app)
 - Account lockout after failed login attempts
-- Full audit log of sensitive actions
+- Audit log for financial record changes
 - Household-scoped data — multi-user households supported
-- All financial records soft-deleted, never permanently erased
+- Export and deletion controls for self-hosted data ownership
 
 ### AI Advisor
 - Chat with an AI financial advisor that has context about your accounts and spending
@@ -59,7 +59,7 @@ Kuber comes with full documentation for self-hosted users and contributors:
 | [📋 Reference](docs/03-reference.md) | Env vars, Docker services, API endpoints, CSV format |
 | [💡 Explanations](docs/04-explanation.md) | Why self-hosting, data model, security, 50/30/20 rule |
 
-**Contributors:** See [Development Setup](#development-setup) and [docs/dev/](docs/dev/) for QA reports, regression tests, and sprint plans.
+**Contributors:** See [Development Setup](#development-setup), [DEV.md](DEV.md), and [docs/audits/](docs/audits/) for QA reports, regression tests, and audit plans.
 
 ---
 
@@ -67,7 +67,7 @@ Kuber comes with full documentation for self-hosted users and contributors:
 
 Kuber is built to run on your own hardware. The full deployment guide covers quick start, environment variables, HTTPS with Let's Encrypt, backups, updates, and troubleshooting:
 
-**[docs/01-tutorial.md](docs/01-tutorial.md)**
+**[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**
 
 ### Quick Start
 
@@ -77,14 +77,14 @@ Kuber is built to run on your own hardware. The full deployment guide covers qui
 git clone https://github.com/yourusername/kuber.git
 cd kuber
 cp .env.example .env
-# Edit .env — set JWT_SECRET, JWT_REFRESH_SECRET, and POSTGRES_PASSWORD
+# Edit .env — set JWT_SECRET, JWT_REFRESH_SECRET, AI_ENCRYPTION_KEY, and POSTGRES_PASSWORD
 docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
 ```
 
 Visit **http://localhost** and create your account on first run.
 
-> At minimum, set `JWT_SECRET` and `JWT_REFRESH_SECRET` to long random strings before going live. Generate them with `openssl rand -base64 64`. See the [full self-hosting guide](docs/SELF_HOSTING.md) for all configuration options, HTTPS setup, and backup instructions.
+> At minimum, set `JWT_SECRET`, `JWT_REFRESH_SECRET`, `AI_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` before going live. Generate JWT secrets with `openssl rand -base64 64` and the encryption key with `openssl rand -hex 32`. See the [full self-hosting guide](docs/SELF_HOSTING.md) for all configuration options, HTTPS setup, and backup instructions.
 
 ---
 
@@ -98,14 +98,14 @@ git clone https://github.com/yourusername/kuber.git
 cd kuber
 npm install
 cp .env.example .env   # fill in values
-make dev-server       # starts backend on localhost:4000
-make dev-client      # starts frontend on localhost:3000
+make dev-server       # starts backend on localhost:9002
+make dev-client      # starts frontend on localhost:9001
 ```
 
 | URL | Service |
 |-----|---------|
-| http://localhost:3000 | Frontend |
-| http://localhost:4000 | Backend API |
+| http://localhost:9001 | Frontend |
+| http://localhost:9002 | Backend API |
 | http://localhost:5555 | Prisma Studio (run `make db-studio`) |
 
 Demo credentials after seeding (`make db-seed`): `demo@kuber.app` / `password123`
@@ -157,13 +157,18 @@ kuber/
 
 ## Roadmap
 
+Shipped or partially shipped:
+
+- **CSV import/export** — CSV transaction import and data export are available
+- **Webhooks** — Owner/admin-managed webhook delivery is available
+- **Multiple currencies** — Currency fields and FX routes exist; deeper reporting polish remains in progress
+- **Mobile PWA** — Installable shell exists; offline acceptance coverage remains in progress
+
 Planned for future releases:
 
-- **Bank sync** — Read-only import via Plaid or MX (no manual entry required)
-- **Mobile PWA** — Installable progressive web app with offline support
-- **CSV import/export** — Bulk import from bank exports
-- **Webhooks** — Trigger external automations on financial events
-- **Multiple currencies** — Per-account currency with live exchange rates
+- **Bank sync** — Read-only import via Plaid or MX
+- **Household invite redemption** — emailed invite links and join flow
+- **2FA administrator recovery** — owner-assisted recovery without database access
 
 Contributions toward any of these are welcome. Open an issue to discuss before starting large work.
 

@@ -6,6 +6,7 @@
 import { PrismaClient } from '@prisma/client';
 import { parseReceiptEmail } from './emailParser.js';
 import { createModuleLogger } from './logger.js';
+import { decryptImapConfig } from './imapConfig.js';
 const log = createModuleLogger('imap');
 
 export interface ImapConfig {
@@ -135,7 +136,7 @@ export async function runImapCheckForAllHouseholds(prisma: PrismaClient): Promis
 
   for (const pref of configs) {
     try {
-      const config = JSON.parse(pref.value) as ImapConfig;
+      const config = decryptImapConfig(JSON.parse(pref.value) as ImapConfig & { passwordEncrypted?: boolean });
       if (!config.host || !config.user || !config.password) continue;
 
       const txns = await fetchReceiptEmails(config);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -18,6 +18,13 @@ export function AppShell() {
 
   // Mobile drawer state — hidden by default on small screens
   const [mobileOpen, setMobileOpen] = useState(false);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const setMobileDrawerOpen = (open: boolean) => {
+    if (open) lastFocusedRef.current = document.activeElement as HTMLElement | null;
+    setMobileOpen(open);
+  };
 
   // Keep in sync when sidebar toggles itself (via its own button)
   useEffect(() => {
@@ -40,11 +47,62 @@ export function AppShell() {
   // Close mobile drawer on resize to desktop
   useEffect(() => {
     const handler = () => {
-      if (window.innerWidth >= 768) setMobileOpen(false);
+      if (window.innerWidth >= 768) setMobileDrawerOpen(false);
     };
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!mobileOpen) {
+      document.body.style.overflow = '';
+      content?.removeAttribute('inert');
+      lastFocusedRef.current?.focus?.();
+      return;
+    }
+
+    document.body.style.overflow = 'hidden';
+    content?.setAttribute('inert', '');
+
+    const drawer = document.getElementById('mobile-sidebar');
+    const getFocusable = () =>
+      Array.from(
+        drawer?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((el) => el.offsetParent !== null);
+
+    requestAnimationFrame(() => getFocusable()[0]?.focus());
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      content?.removeAttribute('inert');
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mobileOpen]);
 
   // On desktop, sidebar is always visible and offset is applied via padding
   // On mobile, sidebar is hidden by default and shown as a drawer
@@ -64,7 +122,7 @@ export function AppShell() {
       {mobileOpen && (
         <div
           className="fixed inset-0 bg-black/40 z-20 md:hidden"
-          onClick={() => setMobileOpen(false)}
+          onClick={() => setMobileDrawerOpen(false)}
           aria-hidden="true"
         />
       )}
@@ -72,15 +130,19 @@ export function AppShell() {
       {/* Sidebar — always visible on desktop, drawer on mobile */}
       <Sidebar
         mobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
+        onMobileClose={() => setMobileDrawerOpen(false)}
       />
 
-      <div className={`flex flex-col min-h-screen transition-all duration-200 ${sidebarWidth}`}>
+      <div
+        ref={contentRef}
+        className={`flex flex-col min-h-screen transition-all duration-200 ${sidebarWidth}`}
+        aria-hidden={mobileOpen ? true : undefined}
+      >
         <Header
           onToggleSidebar={() => {
             // On mobile: toggle drawer; on desktop: toggle collapse
             if (window.innerWidth < 768) {
-              setMobileOpen((v) => !v);
+              setMobileDrawerOpen(!mobileOpen);
             } else {
               const next = !collapsed;
               setCollapsed(next);
@@ -97,7 +159,7 @@ export function AppShell() {
         </main>
       </div>
 
-      <BottomNav onOpenSidebar={() => setMobileOpen(true)} />
+      <BottomNav onOpenSidebar={() => setMobileDrawerOpen(true)} />
       <FloatingChat />
     </div>
   );

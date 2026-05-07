@@ -56,6 +56,7 @@
 
 /* Dark mode */
 [data-theme="dark"] {
+  color-scheme: dark;
   --color-bg: #0d0f10;
   --color-surface: #1a1d1e;
   --color-surface-elevated: #25282a;
@@ -77,6 +78,7 @@
 
 body {
   font-family: var(--font-sans);
+  color-scheme: light;
   background-color: var(--color-bg);
   color: var(--color-text);
   margin: 0;

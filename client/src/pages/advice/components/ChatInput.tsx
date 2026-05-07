@@ -40,6 +40,7 @@ export function ChatInput({ onSend, disabled, placeholder = 'Ask me anything abo
     <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] p-4">
       <div className="flex gap-3 items-end max-w-4xl mx-auto">
         <textarea
+          aria-label="Message to AI financial advisor"
           ref={textareaRef}
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -55,6 +56,7 @@ export function ChatInput({ onSend, disabled, placeholder = 'Ask me anything abo
           disabled={disabled || !value.trim()}
           className="flex-shrink-0 h-11 w-11 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[#7c3aed] text-white flex items-center justify-center hover:opacity-90 hover:shadow-lg hover:shadow-[var(--color-accent)]/25 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           title="Send (Enter)"
+          aria-label="Send message"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="22" y1="2" x2="11" y2="13" />

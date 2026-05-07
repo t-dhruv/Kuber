@@ -1,5 +1,6 @@
 # Kuber — Production Compose
-# Self-contained: only this file + .env needed on the server. No repo clone required.
+# Run from the repository root. This file mounts nginx, observability, and
+# n8n-workflows config directories that must be present beside it.
 #
 # Usage:
 #   docker compose -f docker-compose.prod.yml pull
@@ -14,7 +15,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: kuber
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: kuber_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -32,7 +33,7 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://kuber:${POSTGRES_PASSWORD:-CHANGE_ME}@postgres:5432/kuber_db
+      DATABASE_URL: postgresql://kuber:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/kuber_db
       LOKI_URL: http://loki:3100
     depends_on:
       postgres:
@@ -142,8 +143,8 @@ services:
     ports:
       - "9003:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -163,8 +164,8 @@ services:
       - "9006:5678"
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
+      - N8N_BASIC_AUTH_USER=${N8N_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
       - WEBHOOK_URL=http://localhost:9006/

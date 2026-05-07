@@ -52,6 +52,7 @@ import {
   Input,
   notify,
   SegmentControl,
+  ConfirmDialog,
 } from "@/components/ui";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -72,6 +73,7 @@ const CATEGORICAL_COLORS = [
 type ReportTab =
   | "overview"
   | "cashflow"
+  | "savings"
   | "spending"
   | "income"
   | "forecast"
@@ -165,6 +167,10 @@ interface CashFlowMonthly {
   income: number;
   expenses: number;
   net: number;
+}
+
+interface SavingsMonthly extends CashFlowMonthly {
+  savingsRate: number;
 }
 
 interface CashFlowReport {
@@ -671,6 +677,7 @@ const TAB_GROUPS: {
     tabs: [
       { value: "overview", label: "Overview" },
       { value: "cashflow", label: "Cash Flow" },
+      { value: "savings", label: "Savings" },
       { value: "spending", label: "Spending" },
       { value: "income", label: "Income" },
       { value: "variance", label: "Variance" },
@@ -1833,6 +1840,248 @@ function CategoryTab({
   );
 }
 
+// ─── Savings Tab ──────────────────────────────────────────────────────────────
+
+function SavingsTab({
+  startDate,
+  endDate,
+  extraParams = "",
+}: {
+  startDate: string;
+  endDate: string;
+  extraParams?: string;
+}) {
+  const { data, isLoading } = useQuery<CashFlowReport>({
+    queryKey: ["reports-savings", startDate, endDate, extraParams],
+    queryFn: () =>
+      api
+        .get(
+          `/reports/cashflow?startDate=${startDate}&endDate=${endDate}${extraParams}`,
+        )
+        .then((r) => r.data),
+  });
+
+  const monthlySavings = useMemo<SavingsMonthly[]>(() => {
+    return (data?.monthly ?? []).map((month) => ({
+      ...month,
+      savingsRate:
+        month.income > 0
+          ? Math.round(
+              Math.min(100, Math.max(0, (month.net / month.income) * 100)) *
+                100,
+            ) / 100
+          : 0,
+    }));
+  }, [data]);
+
+  const positiveMonths = monthlySavings.filter((month) => month.net > 0).length;
+  const averageMonthlySavings =
+    monthlySavings.length > 0
+      ? monthlySavings.reduce((sum, month) => sum + month.net, 0) /
+        monthlySavings.length
+      : 0;
+  const bestMonth = monthlySavings.reduce<SavingsMonthly | null>(
+    (best, month) => (!best || month.net > best.net ? month : best),
+    null,
+  );
+
+  const kpiCards = [
+    {
+      label: "Total Saved",
+      value: fmtCurrencySigned(data?.net ?? 0),
+      color: netColor(data?.net ?? 0),
+    },
+    {
+      label: "Savings Rate",
+      value: fmtPct(data?.savingsRate ?? 0),
+      color: savingsColor(data?.savingsRate ?? 0),
+    },
+    {
+      label: "Avg Monthly",
+      value: fmtCurrencySigned(averageMonthlySavings),
+      color: netColor(averageMonthlySavings),
+    },
+    {
+      label: "Positive Months",
+      value: `${positiveMonths}/${monthlySavings.length}`,
+      color: "var(--color-text)",
+    },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      <KpiCards cards={kpiCards} isLoading={isLoading} />
+
+      <Card padding="lg">
+        {isLoading ? (
+          <Skeleton height={300} width="100%" />
+        ) : monthlySavings.length === 0 ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: 260,
+              color: "var(--color-text-muted)",
+              fontSize: "0.875rem",
+            }}
+          >
+            No savings data for this period.
+          </div>
+        ) : (
+          <>
+            <div
+              style={{
+                marginBottom: "0.75rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "1rem",
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  color: "var(--color-text-secondary)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                Savings Trend
+              </span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "1rem",
+                  marginLeft: "auto",
+                }}
+              >
+                <LegendDot color="#0c8599" label="Saved" />
+                <LegendDot color="#1971c2" label="Savings rate" line />
+              </div>
+            </div>
+
+            <div role="img" aria-label="Monthly savings trend chart">
+              <ResponsiveContainer width="100%" height={280}>
+                <ComposedChart
+                  data={monthlySavings.map((month) => ({
+                    ...month,
+                    shortMonth: month.month.split(" ")[0],
+                  }))}
+                  margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--color-border)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="shortMonth"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+                  />
+                  <YAxis
+                    yAxisId="money"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+                    tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
+                    width={42}
+                  />
+                  <YAxis
+                    yAxisId="rate"
+                    orientation="right"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+                    tickFormatter={(v: number) => `${v}%`}
+                    width={36}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "var(--color-surface)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "var(--radius-md)",
+                      fontSize: "0.8125rem",
+                    }}
+                    labelFormatter={(
+                      label: string,
+                      payload: { payload?: { month?: string } }[],
+                    ) => payload?.[0]?.payload?.month ?? label}
+                    formatter={(value: number, name: string) => [
+                      name === "savingsRate"
+                        ? fmtPct(value)
+                        : fmtCurrencySigned(value),
+                      name === "savingsRate" ? "Savings rate" : "Saved",
+                    ]}
+                  />
+                  <Bar
+                    yAxisId="money"
+                    dataKey="net"
+                    name="saved"
+                    fill="#0c8599"
+                    radius={[3, 3, 0, 0]}
+                    maxBarSize={28}
+                  />
+                  <Line
+                    yAxisId="rate"
+                    type="monotone"
+                    dataKey="savingsRate"
+                    name="savingsRate"
+                    stroke="#1971c2"
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: "#1971c2", strokeWidth: 0 }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        )}
+      </Card>
+
+      <Card padding="lg">
+        {isLoading ? (
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
+          >
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} height={22} width="100%" />
+            ))}
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.625rem",
+            }}
+          >
+            <SummaryRow
+              label="Income"
+              value={fmtCurrencySigned(data?.income ?? 0)}
+            />
+            <SummaryRow
+              label="Expenses"
+              value={fmtCurrencySigned(data?.expenses ?? 0)}
+            />
+            <SummaryRow
+              label="Best month"
+              value={
+                bestMonth
+                  ? `${bestMonth.month} - ${fmtCurrencySigned(bestMonth.net)}`
+                  : "-"
+              }
+            />
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 // ─── ChartView ────────────────────────────────────────────────────────────────
 
 interface PieEntry {
@@ -2768,7 +3017,12 @@ interface FiltersPanelProps {
   onClearAll: () => void;
 }
 
-type FilterSection = "categories" | "accounts" | "tags" | "exclusions" | "amount";
+type FilterSection =
+  | "categories"
+  | "accounts"
+  | "tags"
+  | "exclusions"
+  | "amount";
 
 function FiltersPanel({
   open,
@@ -3101,9 +3355,7 @@ function FiltersPanel({
                   <input
                     type="checkbox"
                     checked={tagIds.includes(tag.id)}
-                    onChange={() =>
-                      toggleId(tagIds, tag.id, onTagChange)
-                    }
+                    onChange={() => toggleId(tagIds, tag.id, onTagChange)}
                     style={{ accentColor: "var(--color-accent)" }}
                   />
                   <div
@@ -3128,7 +3380,13 @@ function FiltersPanel({
             ))}
 
           {section === "exclusions" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
+              }}
+            >
               <div
                 style={{
                   fontSize: "0.6875rem",
@@ -3161,7 +3419,11 @@ function FiltersPanel({
                       type="checkbox"
                       checked={excludeCategoryIds.includes(cat.id)}
                       onChange={() =>
-                        toggleId(excludeCategoryIds, cat.id, onExcludeCategoryChange)
+                        toggleId(
+                          excludeCategoryIds,
+                          cat.id,
+                          onExcludeCategoryChange,
+                        )
                       }
                       style={{ accentColor: "var(--color-danger)" }}
                     />
@@ -3214,7 +3476,11 @@ function FiltersPanel({
                       type="checkbox"
                       checked={excludeAccountIds.includes(acc.id)}
                       onChange={() =>
-                        toggleId(excludeAccountIds, acc.id, onExcludeAccountChange)
+                        toggleId(
+                          excludeAccountIds,
+                          acc.id,
+                          onExcludeAccountChange,
+                        )
                       }
                       style={{ accentColor: "var(--color-danger)" }}
                     />
@@ -3335,6 +3601,7 @@ function SavedViewsDropdown({
   onLoad: (filters: SavedReport["filters"]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<SavedReport | null>(null);
   const queryClient = useQueryClient();
 
   const { data: saved = [] } = useQuery<SavedReport[]>({
@@ -3346,6 +3613,7 @@ function SavedViewsDropdown({
     mutationFn: (id: string) => api.delete(`/reports/saved/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reports", "saved"] });
+      setDeleteTarget(null);
     },
     onError: () => notify.error("Failed to delete saved view"),
   });
@@ -3429,7 +3697,7 @@ function SavedViewsDropdown({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    deleteMutation.mutate(sv.id);
+                    setDeleteTarget(sv);
                   }}
                   style={{
                     background: "none",
@@ -3449,6 +3717,19 @@ function SavedViewsDropdown({
           </div>
         </>
       )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title="Delete Saved View"
+        message={
+          <>
+            Delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete view"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }
@@ -3530,9 +3811,13 @@ function SaveViewModal({
 export default function ReportsPage() {
   const [tab, setTab] = useState<ReportTab>("overview");
   const [datePreset, setDatePreset] = useState<DatePreset>("thisMonth");
-  const defaultCustomRange = useMemo(() => computeDateRange("custom"), []);
-  const [customStartDate, setCustomStartDate] = useState(defaultCustomRange.startDate);
-  const [customEndDate, setCustomEndDate] = useState(defaultCustomRange.endDate);
+  const defaultCustomRange = useMemo(() => computeDateRange("last3months"), []);
+  const [customStartDate, setCustomStartDate] = useState(
+    defaultCustomRange.startDate,
+  );
+  const [customEndDate, setCustomEndDate] = useState(
+    defaultCustomRange.endDate,
+  );
   const [saveModalOpen, setSaveModalOpen] = useState(false);
 
   // Filter state
@@ -3575,22 +3860,25 @@ export default function ReportsPage() {
     setExcludeAccountIds([]);
   }
 
-  const { startDate, endDate } = useMemo(
-    () =>
-      computeDateRange(datePreset, {
-        startDate: customStartDate,
-        endDate: customEndDate,
-      }),
-    [datePreset, customStartDate, customEndDate],
-  );
+  const { startDate, endDate } = useMemo(() => {
+    if (datePreset === "custom") {
+      return {
+        startDate: customStartDate || defaultCustomRange.startDate,
+        endDate: customEndDate || defaultCustomRange.endDate,
+      };
+    }
+    return computeDateRange(datePreset);
+  }, [datePreset, customStartDate, customEndDate, defaultCustomRange]);
 
   const currentFilters: SavedReport["filters"] = {
     tab,
     datePreset,
     startDate,
     endDate,
-    excludeCategoryIds: excludeCategoryIds.length > 0 ? excludeCategoryIds : undefined,
-    excludeAccountIds: excludeAccountIds.length > 0 ? excludeAccountIds : undefined,
+    excludeCategoryIds:
+      excludeCategoryIds.length > 0 ? excludeCategoryIds : undefined,
+    excludeAccountIds:
+      excludeAccountIds.length > 0 ? excludeAccountIds : undefined,
   };
 
   function loadSavedView(filters: SavedReport["filters"]) {
@@ -3598,8 +3886,10 @@ export default function ReportsPage() {
     if (filters.datePreset) setDatePreset(filters.datePreset as DatePreset);
     if (filters.startDate) setCustomStartDate(filters.startDate);
     if (filters.endDate) setCustomEndDate(filters.endDate);
-    if (filters.excludeCategoryIds) setExcludeCategoryIds(filters.excludeCategoryIds);
-    if (filters.excludeAccountIds) setExcludeAccountIds(filters.excludeAccountIds);
+    if (filters.excludeCategoryIds)
+      setExcludeCategoryIds(filters.excludeCategoryIds);
+    if (filters.excludeAccountIds)
+      setExcludeAccountIds(filters.excludeAccountIds);
   }
 
   function handleDrillClick(
@@ -3691,20 +3981,37 @@ export default function ReportsPage() {
             >
               <DatePresetDropdown value={datePreset} onChange={setDatePreset} />
               {datePreset === "custom" && (
-                <>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    flexWrap: "wrap",
+                  }}
+                >
                   <Input
                     type="date"
+                    aria-label="Custom report start date"
                     value={customStartDate}
                     onChange={(e) => setCustomStartDate(e.target.value)}
-                    aria-label="Report start date"
+                    style={{ width: 138 }}
                   />
+                  <span
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "var(--color-text-muted)",
+                    }}
+                  >
+                    to
+                  </span>
                   <Input
                     type="date"
+                    aria-label="Custom report end date"
                     value={customEndDate}
                     onChange={(e) => setCustomEndDate(e.target.value)}
-                    aria-label="Report end date"
+                    style={{ width: 138 }}
                   />
-                </>
+                </div>
               )}
 
               {/* Filters button with dropdown panel */}
@@ -3828,6 +4135,13 @@ export default function ReportsPage() {
           {tab === "overview" && <OverviewSummary />}
           {tab === "cashflow" && (
             <CashFlowTab
+              startDate={startDate}
+              endDate={endDate}
+              extraParams={extraFilterParams}
+            />
+          )}
+          {tab === "savings" && (
+            <SavingsTab
               startDate={startDate}
               endDate={endDate}
               extraParams={extraFilterParams}

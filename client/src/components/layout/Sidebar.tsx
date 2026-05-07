@@ -107,8 +107,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
   return (
     <aside
+      id="mobile-sidebar"
       className={`fixed left-0 top-0 h-full ${width} flex flex-col bg-[var(--color-surface)] border-r border-[var(--color-border)] transition-all duration-200 z-30 ${mobileVisibility}`}
       aria-label="Main navigation"
+      role={mobileOpen ? 'dialog' : undefined}
+      aria-modal={mobileOpen ? true : undefined}
     >
       {/* Logo */}
       <div className="flex items-center h-14 px-4 border-b border-[var(--color-border)] flex-shrink-0">

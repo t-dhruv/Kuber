@@ -74,7 +74,7 @@ Use one of your **backup codes**:
 
 1. Go to **Settings → Security → Two-Factor Authentication**
 2. Click **Disable**
-3. Confirm — you'll need to enter your current 2FA code to disable
+3. Confirm with your account password
 
 ---
 
@@ -90,5 +90,5 @@ Use one of your **backup codes**:
 |----------|----------|
 | **QR code won't scan** | Try typing the secret key manually in your authenticator app (click "Show Secret Key" in Kuber). |
 | **"Invalid code" error** | Ensure your phone's time is correct (authenticator codes depend on accurate time). Enable "Set Automatically" in phone Date & Time settings. |
-| **Lost phone + no backup codes** | You'll need the household owner to disable 2FA for your account from the admin settings, or restore from a backup. |
+| **Lost phone + no backup codes** | Restore from a backup or disable 2FA directly in the database. Owner-assisted recovery is planned future work. |
 | **Backup codes not showing** | Ensure you completed the verification step. Backup codes only appear after successful verification. |

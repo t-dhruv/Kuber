@@ -83,6 +83,7 @@ ollama pull mistral         # Fast and efficient
 - Your API key is stored **encrypted** in the Kuber database
 - The key is **never logged** or transmitted anywhere except to your chosen provider
 - Ollama runs **entirely on your server** — no data leaves your machine
+- Custom API endpoints receive your prompt and financial context. Kuber blocks private/reserved network targets server-side, but you should only configure endpoints you operate or trust.
 - You can **disable or delete** the AI Advisor configuration at any time
 
 ---

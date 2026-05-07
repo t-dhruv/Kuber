@@ -10,6 +10,9 @@ vi.mock('../lib/prisma', () => ({
       findUnique: vi.fn(),
       upsert: vi.fn(),
     },
+    householdMember: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -18,7 +21,8 @@ vi.mock('../lib/encryption', () => ({
   decrypt: (v: string) => v,
 }));
 
-function makeApp(householdId = 'hh1', userId = 'u1') {
+function makeApp(householdId = 'hh1', userId = 'u1', role = 'owner') {
+  vi.mocked(prisma.householdMember.findUnique).mockResolvedValue({ role } as any);
   const app = express();
   app.use(express.json());
   app.use((req: any, _res: any, next: any) => {
@@ -54,6 +58,13 @@ describe('GET /system/automation', () => {
 
 describe('PUT /system/automation', () => {
   beforeEach(() => { vi.clearAllMocks(); });
+
+  it('rejects regular members before saving config', async () => {
+    const body = { ruleEngineEnabled: false, billMatcherEnabled: true, billMatcherConfidence: 70, autoCategorizeEnabled: true };
+    const res = await request(makeApp('hh1', 'u1', 'member')).put('/system/automation').send(body);
+    expect(res.status).toBe(403);
+    expect(prisma.userPreference.upsert).not.toHaveBeenCalled();
+  });
 
   it('saves valid config and returns it', async () => {
     vi.mocked(prisma.userPreference.upsert).mockResolvedValue({} as any);
