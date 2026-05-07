@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { prisma } from '../lib/prisma';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, requireHouseholdRole } from '../middleware/auth';
 import { encrypt, decrypt } from '../lib/encryption';
 
 const triggerLimiter = rateLimit({
@@ -14,6 +14,8 @@ const triggerLimiter = rateLimit({
 });
 
 const router = Router();
+const requireHouseholdAdmin = requireHouseholdRole(['owner', 'admin']);
+router.use(requireHouseholdAdmin);
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 

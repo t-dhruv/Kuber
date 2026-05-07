@@ -102,7 +102,7 @@ When recording a transaction, if the category doesn't exist:
 - **Edit:** Click the transaction → update fields in the drawer → Save
 - **Delete:** Click the transaction → click **Delete** → confirm
 
-> **Note:** Deleted transactions are soft-deleted (hidden but recoverable).
+> **Note:** Deleted transactions are removed from active app data. Export or back up first if you may need recovery.
 
 ---
 

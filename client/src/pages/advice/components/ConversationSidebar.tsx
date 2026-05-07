@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { ConfirmDialog } from '@/components/ui';
 
 interface Conversation {
   id: string;
@@ -44,7 +45,7 @@ function groupConversations(convs: Conversation[]): Array<{ label: string; items
 
 export function ConversationSidebar({ activeConversationId, onSelect, onNewChat }: Props) {
   const queryClient = useQueryClient();
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
 
   const { data: conversations, isLoading } = useQuery<Conversation[]>({
     queryKey: ['advisor', 'conversations'],
@@ -55,18 +56,14 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
     mutationFn: (id: string) => api.delete(`/advisor/conversations/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['advisor', 'conversations'] });
+      setDeleteTarget(null);
     },
   });
 
-  function handleDelete(id: string) {
-    if (confirmDelete === id) {
-      deleteMutation.mutate(id);
-      setConfirmDelete(null);
-      if (activeConversationId === id) onNewChat();
-    } else {
-      setConfirmDelete(id);
-      setTimeout(() => setConfirmDelete(null), 3000);
-    }
+  function confirmDeleteConversation() {
+    if (!deleteTarget) return;
+    deleteMutation.mutate(deleteTarget.id);
+    if (activeConversationId === deleteTarget.id) onNewChat();
   }
 
   const groups = groupConversations(conversations ?? []);
@@ -89,7 +86,7 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto py-2">
         {isLoading && (
-          <div className="px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">Loading...</div>
+          <div className="px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">Loading</div>
         )}
         {!isLoading && groups.length === 0 && (
           <div className="px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">No conversations yet</div>
@@ -104,40 +101,38 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
               return (
                 <div
                   key={conv.id}
-                  className={`group relative flex items-start gap-2 mx-1 px-2 py-2 rounded-lg cursor-pointer transition-colors ${
+                  className={`group relative flex items-start gap-2 mx-1 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-[var(--color-accent-light)] text-[var(--color-accent)]'
                       : 'hover:bg-[var(--color-surface-hover)]'
                   }`}
-                  onClick={() => onSelect(conv.id)}
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-medium truncate ${isActive ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'}`}>
-                      {conv.title || 'Untitled'}
-                    </div>
-                    {conv.lastMessage && (
-                      <div className="text-[0.6875rem] text-[var(--color-text-muted)] truncate mt-0.5">
-                        {conv.lastMessage}
-                      </div>
-                    )}
-                  </div>
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(conv.id); }}
-                    className={`flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--color-danger-light,#fee2e2)] ${
-                      confirmDelete === conv.id ? 'opacity-100 text-red-500' : 'text-[var(--color-text-muted)]'
-                    }`}
-                    title={confirmDelete === conv.id ? 'Click again to confirm delete' : 'Delete conversation'}
-                    aria-label={confirmDelete === conv.id ? 'Confirm delete conversation' : 'Delete conversation'}
+                    type="button"
+                    className="flex-1 min-w-0 px-2 py-2 text-left rounded-lg focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+                    onClick={() => onSelect(conv.id)}
+                    aria-current={isActive ? 'page' : undefined}
                   >
-                    {confirmDelete === conv.id ? (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    ) : (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                      </svg>
-                    )}
+                    <div className="min-w-0">
+                      <div className={`text-sm font-medium truncate ${isActive ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'}`}>
+                        {conv.title || 'Untitled'}
+                      </div>
+                      {conv.lastMessage && (
+                        <div className="text-[0.6875rem] text-[var(--color-text-muted)] truncate mt-0.5">
+                          {conv.lastMessage}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(conv)}
+                    className="mr-2 mt-2 flex-shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity p-1 rounded hover:bg-[var(--color-danger-light,#fee2e2)] text-[var(--color-text-muted)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+                    title="Delete conversation"
+                    aria-label="Delete conversation"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                    </svg>
                   </button>
                 </div>
               );
@@ -145,6 +140,15 @@ export function ConversationSidebar({ activeConversationId, onSelect, onNewChat 
           </div>
         ))}
       </div>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDeleteConversation}
+        title="Delete Conversation"
+        message={<>Delete <strong>{deleteTarget?.title || 'Untitled'}</strong>? This cannot be undone.</>}
+        confirmLabel="Delete conversation"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Copy, Check, Trash2, Plus, ExternalLink, Key, Zap, Globe } from 'lucide-react';
 import { api } from '@/lib/api';
-import { Button, Input, Card, Modal, ModalFooter, notify } from '@/components/ui';
+import { Button, Input, Card, Modal, ModalFooter, notify, ConfirmDialog } from '@/components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,6 +58,7 @@ function ApiTokensSection() {
   const [tokenName, setTokenName] = useState('');
   const [newToken, setNewToken] = useState<CreatedToken | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [revokeTarget, setRevokeTarget] = useState<ApiToken | null>(null);
 
   const { data: tokens = [], isLoading } = useQuery<ApiToken[]>({
     queryKey: ['settings', 'api-tokens'],
@@ -79,6 +80,7 @@ function ApiTokensSection() {
     mutationFn: (id: string) => api.delete(`/settings/api-tokens/${id}`),
     onSuccess: () => {
       notify.success('Token revoked');
+      setRevokeTarget(null);
       queryClient.invalidateQueries({ queryKey: ['settings', 'api-tokens'] });
     },
     onError: () => notify.error('Failed to revoke token'),
@@ -143,7 +145,7 @@ function ApiTokensSection() {
                 </div>
               </div>
               <button
-                onClick={() => revokeMutation.mutate(token.id)}
+                onClick={() => setRevokeTarget(token)}
                 disabled={revokeMutation.isPending}
                 title="Revoke token"
                 className="flex items-center p-1 border-none bg-transparent cursor-pointer text-[var(--color-danger)] rounded-[var(--radius-sm)]"
@@ -178,6 +180,15 @@ function ApiTokensSection() {
           </ModalFooter>
         </Modal>
       )}
+      <ConfirmDialog
+        open={revokeTarget !== null}
+        onClose={() => setRevokeTarget(null)}
+        onConfirm={() => revokeTarget && revokeMutation.mutate(revokeTarget.id)}
+        title="Revoke API Token"
+        message={<>Revoke <strong>{revokeTarget?.name}</strong>? Automations using this token will stop working.</>}
+        confirmLabel="Revoke token"
+        loading={revokeMutation.isPending}
+      />
     </Card>
   );
 }

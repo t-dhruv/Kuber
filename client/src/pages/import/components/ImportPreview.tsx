@@ -298,8 +298,8 @@ function RowTable({ rows, selected, categoryMap, categories, onToggle, onCategor
   const hasInvestmentData = rows.some((r) => r.investmentType);
 
   return (
-    <div className={`rounded-lg border border-[color:var(--color-border)] overflow-hidden ${dimmed ? 'opacity-60' : ''}`}>
-      <table className="w-full text-sm">
+    <div className={`rounded-lg border border-[color:var(--color-border)] overflow-x-auto ${dimmed ? 'opacity-60' : ''}`}>
+      <table className="w-full min-w-[760px] text-sm">
         <thead>
           <tr className="bg-[color:var(--color-surface-hover)] text-[color:var(--color-text-secondary)] text-xs uppercase tracking-wide">
             <th className="px-3 py-2 w-8" />

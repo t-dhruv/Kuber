@@ -18,7 +18,36 @@ api.interceptors.request.use((config) => {
 });
 
 let isRefreshing = false;
-let refreshQueue: Array<(token: string) => void> = [];
+let refreshQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = [];
+
+export async function refreshAccessToken(): Promise<string> {
+  if (isRefreshing) {
+    return new Promise((resolve, reject) => {
+      refreshQueue.push({ resolve, reject });
+    });
+  }
+
+  isRefreshing = true;
+  try {
+    const { data } = await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true });
+    const { accessToken } = data;
+    useAuthStore.getState().setToken(accessToken);
+    refreshQueue.forEach(({ resolve }) => resolve(accessToken));
+    refreshQueue = [];
+    return accessToken;
+  } catch (err) {
+    refreshQueue.forEach(({ reject }) => reject(err));
+    refreshQueue = [];
+    useAuthStore.getState().clearAuth();
+    throw err;
+  } finally {
+    isRefreshing = false;
+  }
+}
+
+export async function getAccessToken(): Promise<string> {
+  return useAuthStore.getState().accessToken ?? refreshAccessToken();
+}
 
 api.interceptors.response.use(
   (res) => res,
@@ -26,25 +55,23 @@ api.interceptors.response.use(
     const original = error.config;
     if (error.response?.status === 401 && !original._retry && !original.url?.includes('/auth/')) {
       if (isRefreshing) {
-        return new Promise((resolve) => {
-          refreshQueue.push((token) => { original.headers.Authorization = `Bearer ${token}`; resolve(api(original)); });
+        return new Promise((resolve, reject) => {
+          refreshQueue.push({
+            resolve: (token) => {
+              original.headers.Authorization = `Bearer ${token}`;
+              resolve(api(original));
+            },
+            reject,
+          });
         });
       }
       original._retry = true;
-      isRefreshing = true;
       try {
-        const { data } = await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true });
-        const { accessToken } = data;
-        useAuthStore.getState().setToken(accessToken);
-        refreshQueue.forEach((cb) => cb(accessToken));
-        refreshQueue = [];
+        const accessToken = await refreshAccessToken();
         original.headers.Authorization = `Bearer ${accessToken}`;
         return api(original);
       } catch {
-        useAuthStore.getState().clearAuth();
         window.location.href = '/login';
-      } finally {
-        isRefreshing = false;
       }
     }
     return Promise.reject(error);

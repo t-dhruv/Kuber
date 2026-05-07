@@ -108,11 +108,14 @@ export default function DropZone({ accounts, onParsed, onSmartDetect }: Props) {
   }
 
   const canParse = !!file && !!accountId && !loading;
+  const fileInputId = 'import-file-input';
+  const accountSelectId = 'import-account-select';
 
   return (
     <div className="space-y-6 max-w-2xl">
       {/* Drop area */}
-      <div
+      <label
+        htmlFor={fileInputId}
         className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
           isDragging
             ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/5'
@@ -121,13 +124,22 @@ export default function DropZone({ accounts, onParsed, onSmartDetect }: Props) {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        tabIndex={0}
+        role="button"
+        aria-label={file ? `Selected file ${file.name}. Press Enter to choose a different file.` : 'Choose a CSV or PDF bank statement file'}
       >
         <input
+          id={fileInputId}
           ref={inputRef}
           type="file"
           accept=".csv,.pdf,text/csv,application/pdf"
-          className="hidden"
+          className="sr-only"
           onChange={handleFileChange}
         />
         {file ? (
@@ -156,12 +168,13 @@ export default function DropZone({ accounts, onParsed, onSmartDetect }: Props) {
             <p className="text-xs text-[color:var(--color-text-secondary)]">or click to browse</p>
           </div>
         )}
-      </div>
+      </label>
 
       {/* Account selector */}
       <div>
-        <label className="block text-sm font-medium mb-1.5">Import into account</label>
+        <label htmlFor={accountSelectId} className="block text-sm font-medium mb-1.5">Import into account</label>
         <select
+          id={accountSelectId}
           value={accountId}
           onChange={(e) => setAccountId(e.target.value)}
           className="w-full rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary)]/40"

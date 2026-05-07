@@ -198,6 +198,8 @@ export default function MappingConfirmStep({ result, onConfirm, onCancel }: Prop
 
               <div className="flex-1">
                 <Select
+                  id={`mapping-${field}`}
+                  label={`Map ${FIELD_LABELS[field]} column`}
                   value={value}
                   onChange={(e) => setCols((prev) => ({ ...prev, [field]: e.target.value }))}
                   options={headerOptions}

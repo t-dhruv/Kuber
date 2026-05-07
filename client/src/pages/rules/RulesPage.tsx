@@ -21,6 +21,7 @@ import {
   notify,
   CategoryCombobox,
   SegmentControl,
+  ConfirmDialog,
 } from "@/components/ui";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -473,6 +474,7 @@ export default function RulesPage() {
   }, []);
   const [applyTarget, setApplyTarget] = useState<Rule | null>(null);
   const [applyAllConfirm, setApplyAllConfirm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Rule | null>(null);
 
   const { data: rules = [], isLoading } = useQuery<Rule[]>({
     queryKey: ["rules"],
@@ -510,6 +512,7 @@ export default function RulesPage() {
     mutationFn: (id: string) => api.delete(`/rules/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rules"] });
+      setDeleteTarget(null);
       notify.success("Rule deleted");
     },
     onError: () => notify.error("Failed to delete rule"),
@@ -760,7 +763,7 @@ export default function RulesPage() {
                     size="sm"
                     icon={<Trash2 size={13} />}
                     className="text-[var(--color-danger)]"
-                    onClick={() => deleteMutation.mutate(rule.id)}
+                    onClick={() => setDeleteTarget(rule)}
                     loading={
                       deleteMutation.isPending &&
                       deleteMutation.variables === rule.id
@@ -845,6 +848,15 @@ export default function RulesPage() {
           </Button>
         </ModalFooter>
       </Modal>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+        title="Delete Rule"
+        message={<>Delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.</>}
+        confirmLabel="Delete rule"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

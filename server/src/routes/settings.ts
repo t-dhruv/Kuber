@@ -2,13 +2,15 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, requireHouseholdRole } from '../middleware/auth';
 import { sendTestEmail } from '../lib/email';
 import { encrypt } from '../lib/encryption';
 import { getAiClient, invalidateAiCache } from '../lib/ai';
+import { assertSafeOutboundUrl } from '../lib/safeOutboundUrl';
 import ExcelJS from 'exceljs';
 
 const router = Router();
+const requireHouseholdAdmin = requireHouseholdRole(['owner', 'admin']);
 
 const DEFAULT_NOTIFICATION_PREFERENCES: Record<string, Record<string, boolean>> = {
   accountDisconnected: { inApp: true, email: true, push: false },
@@ -897,7 +899,7 @@ function formatAiConfigResponse(config: {
 }
 
 // GET /api/v1/settings/ai-config
-router.get('/ai-config', async (req: AuthRequest, res: Response) => {
+router.get('/ai-config', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const config = await prisma.aiConfig.findUnique({ where: { householdId } });
@@ -909,7 +911,7 @@ router.get('/ai-config', async (req: AuthRequest, res: Response) => {
 });
 
 // PUT /api/v1/settings/ai-config
-router.put('/ai-config', async (req: AuthRequest, res: Response) => {
+router.put('/ai-config', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const parsed = aiConfigSchema.safeParse(req.body);
@@ -917,6 +919,15 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
     }
     const { provider, model, apiKey, baseUrl, headers } = parsed.data;
+    let safeBaseUrl = baseUrl?.trim() || null;
+
+    if (safeBaseUrl && provider !== 'ollama') {
+      try {
+        safeBaseUrl = await assertSafeOutboundUrl(safeBaseUrl);
+      } catch (err) {
+        return res.status(400).json({ error: err instanceof Error ? err.message : 'Unsafe AI base URL' });
+      }
+    }
 
     // Determine encrypted key: if a new apiKey is provided, encrypt it; otherwise keep existing
     let encryptedApiKey: string | undefined;
@@ -941,7 +952,7 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
         provider,
         model: model ?? '',
         ...(encryptedApiKey !== undefined ? { encryptedApiKey } : { encryptedApiKey: existing?.encryptedApiKey ?? '' }),
-        baseUrl: baseUrl ?? null,
+        baseUrl: safeBaseUrl,
         headers: headers?.trim() || null,
       },
       create: {
@@ -949,7 +960,7 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
         provider,
         model: model ?? '',
         encryptedApiKey: encryptedApiKey ?? '',
-        baseUrl: baseUrl ?? null,
+        baseUrl: safeBaseUrl,
         headers: headers?.trim() || null,
       },
     });
@@ -963,7 +974,7 @@ router.put('/ai-config', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/v1/settings/ai-config/test
-router.post('/ai-config/test', async (req: AuthRequest, res: Response) => {
+router.post('/ai-config/test', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const config = await prisma.aiConfig.findUnique({ where: { householdId } });
@@ -1179,7 +1190,7 @@ router.get('/export', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/v1/settings/email/test
-router.post('/email/test', async (req: AuthRequest, res: Response) => {
+router.post('/email/test', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
@@ -1206,7 +1217,7 @@ const emailConfigSchema = z.object({
 });
 
 // GET /api/v1/settings/email-config
-router.get('/email-config', async (req: AuthRequest, res: Response) => {
+router.get('/email-config', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const cfg = await prisma.emailConfig.findUnique({ where: { id: 'singleton' } });
     if (!cfg) {
@@ -1229,7 +1240,7 @@ router.get('/email-config', async (req: AuthRequest, res: Response) => {
 });
 
 // PUT /api/v1/settings/email-config
-router.put('/email-config', async (req: AuthRequest, res: Response) => {
+router.put('/email-config', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const parsed = emailConfigSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });

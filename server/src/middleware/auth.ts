@@ -51,3 +51,32 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
+
+export function requireHouseholdRole(allowedRoles: string[]) {
+  const normalizedRoles = allowedRoles.map(role => role.toLowerCase());
+
+  return async function householdRoleMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+    const userId = req.userId;
+    const householdId = req.householdId;
+
+    if (!userId || !householdId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    try {
+      const membership = await prisma.householdMember.findUnique({
+        where: { userId_householdId: { userId, householdId } },
+        select: { role: true },
+      });
+
+      if (!membership || !normalizedRoles.includes(membership.role.toLowerCase())) {
+        return res.status(403).json({ error: 'Insufficient household permissions' });
+      }
+
+      return next();
+    } catch (err) {
+      req.log?.error({ err }, 'household role authorization failed');
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  };
+}

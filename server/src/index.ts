@@ -98,7 +98,7 @@ registerJob('icon-assignment', async () => {
 });
 
 // ── Startup env validation ────────────────────────────────────────────────────
-const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'DATABASE_URL'] as const;
+const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'DATABASE_URL', 'AI_ENCRYPTION_KEY'] as const;
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
     logger.fatal({ key }, 'Missing required environment variable');

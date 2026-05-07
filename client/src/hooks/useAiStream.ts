@@ -9,7 +9,7 @@
  */
 
 import { useState, useRef, useCallback } from 'react';
-import { useAuthStore } from '@/stores/authStore';
+import { getAccessToken } from '@/lib/api';
 
 interface UseAiStreamOptions {
   /** API path relative to /api/v1 — must accept POST and respond with SSE */
@@ -36,7 +36,6 @@ export function useAiStream({ endpoint }: UseAiStreamOptions): UseAiStreamResult
   const [content, setContent] = useState('');
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const { accessToken } = useAuthStore();
 
   const cancel = useCallback(() => {
     abortRef.current?.abort();
@@ -62,6 +61,7 @@ export function useAiStream({ endpoint }: UseAiStreamOptions): UseAiStreamResult
       setError(null);
 
       try {
+        const accessToken = await getAccessToken();
         const response = await fetch(`/api/v1${endpoint}`, {
           method: 'POST',
           headers: {
@@ -134,7 +134,7 @@ export function useAiStream({ endpoint }: UseAiStreamOptions): UseAiStreamResult
         setStreaming(false);
       }
     },
-    [endpoint, accessToken]
+    [endpoint]
   );
 
   return { streaming, content, error, ask, cancel, reset };

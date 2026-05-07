@@ -1422,6 +1422,7 @@ export default function TransactionsPage() {
   const queryClient = useQueryClient();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [drawerTxn, setDrawerTxn] = useState<Transaction | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -1639,6 +1640,7 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       queryClient.invalidateQueries({ queryKey: ['networth'] });
       setSelectedIds(new Set());
+      setConfirmBulkDelete(false);
     },
     onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
   });
@@ -1871,10 +1873,20 @@ export default function TransactionsPage() {
           onRecategorize={(id) => bulkRecategorizeMutation.mutate(id)}
           onMarkReviewed={() => bulkMarkReviewedMutation.mutate()}
           onHide={() => bulkHideMutation.mutate()}
-          onDelete={() => bulkDeleteMutation.mutate()}
+          onDelete={() => setConfirmBulkDelete(true)}
           onClear={() => setSelectedIds(new Set())}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={() => bulkDeleteMutation.mutate()}
+        title="Delete Selected Transactions"
+        message={`Delete ${selectedIds.size} selected transaction${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`}
+        confirmLabel="Delete selected"
+        loading={bulkDeleteMutation.isPending}
+      />
 
       {/* Duplicate transactions warning banner */}
       {duplicateCount > 0 && (

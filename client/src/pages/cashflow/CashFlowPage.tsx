@@ -190,32 +190,6 @@ function PageHeader({
           >
             Filters
           </button>
-
-          {filterOpen && (
-            <>
-              <div
-                style={{ position: 'fixed', inset: 0, zIndex: 40 }}
-                onClick={onFilterToggle}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 4px)',
-                  right: 0,
-                  zIndex: 41,
-                  backgroundColor: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: 'var(--shadow-md)',
-                  padding: '0.5rem 0',
-                  minWidth: 180,
-                  overflow: 'hidden',
-                }}
-              >
-                <FilterContent />
-              </div>
-            </>
-          )}
         </div>
 
         {/* Year nav */}
@@ -247,43 +221,6 @@ function PageHeader({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// Filter dropdown content — defined inside module scope but uses props passed from CashFlowPage
-function FilterContent() {
-  // These will be injected via props — see CashFlowPage for state
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, fontSize: '0.8125rem' }}>
-      <div style={{ padding: '0.375rem 0.75rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' as any, letterSpacing: '0.04em' }}>
-        Quick select
-      </div>
-      {[
-        { label: 'This Year', action: () => console.log('This Year') },
-        { label: 'Last Year', action: () => console.log('Last Year') },
-        { label: 'This Month', action: () => console.log('This Month') },
-      ].map((f) => (
-        <button
-          key={f.label}
-          onClick={f.action}
-          style={{
-            padding: '0.375rem 0.75rem',
-            border: 'none',
-            background: 'none',
-            cursor: 'pointer',
-            textAlign: 'left',
-            fontSize: '0.8125rem',
-            fontWeight: 500,
-            color: 'var(--color-text)',
-            width: '100%',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-        >
-          {f.label}
-        </button>
-      ))}
     </div>
   );
 }

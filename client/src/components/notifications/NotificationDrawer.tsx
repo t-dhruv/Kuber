@@ -2,10 +2,11 @@
  * NotificationDrawer.tsx
  * Slide-in drawer showing proactive AI insights: anomalies, subscriptions, missed payments.
  */
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, X, CheckCheck, Trash2, RefreshCw, Loader2, AlertTriangle, Info, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
-import { Button } from '@/components/ui';
+import { Button, ConfirmDialog } from '@/components/ui';
 import { notify } from '@/components/ui';
 
 interface Notification {
@@ -56,6 +57,7 @@ interface Props {
 
 export function NotificationDrawer({ open, onClose }: Props) {
   const queryClient = useQueryClient();
+  const [confirmClearRead, setConfirmClearRead] = useState(false);
 
   const { data, isLoading } = useQuery<NotificationsResponse>({
     queryKey: ['notifications'],
@@ -82,6 +84,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
     mutationFn: () => api.delete('/notifications/clear'),
     onSuccess: () => {
       notify.success('Read notifications cleared');
+      setConfirmClearRead(false);
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
     onError: () => notify.error('Failed to clear notifications'),
@@ -146,7 +149,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
           </Button>
           <Button
             variant="secondary"
-            onClick={() => clearRead.mutate()}
+            onClick={() => setConfirmClearRead(true)}
             disabled={items.every((n) => !n.read)}
             className="text-xs h-7 px-2"
           >
@@ -191,7 +194,17 @@ export function NotificationDrawer({ open, onClose }: Props) {
             );
           })}
         </div>
-      </div>
-    </>
-  );
-}
+        </div>
+
+        <ConfirmDialog
+          open={confirmClearRead}
+          onClose={() => setConfirmClearRead(false)}
+          onConfirm={() => clearRead.mutate()}
+          title="Clear Read Notifications"
+          message="Delete all read notifications? This cannot be undone."
+          confirmLabel="Clear read"
+          loading={clearRead.isPending}
+        />
+      </>
+    );
+  }

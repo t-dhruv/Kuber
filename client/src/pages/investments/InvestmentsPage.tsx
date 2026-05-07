@@ -7,7 +7,7 @@ import {
 import { Plus, ChevronRight, ChevronDown, Trash2, RefreshCw, Newspaper, Loader2, Upload } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Card, Skeleton, Button, Modal, ModalFooter, Input, Select, notify,
+  Card, Skeleton, Button, Modal, ModalFooter, Input, Select, notify, ConfirmDialog,
 } from '@/components/ui';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -643,6 +643,8 @@ function ExpandedHolding({
 }) {
   const [showNews, setShowNews] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [lotDeleteTarget, setLotDeleteTarget] = useState<HoldingLot | null>(null);
+  const [scheduleDeleteTarget, setScheduleDeleteTarget] = useState<RecurringSchedule | null>(null);
   const queryClient = useQueryClient();
 
   const deleteHoldingMutation = useMutation({
@@ -661,6 +663,7 @@ function ExpandedHolding({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
       queryClient.invalidateQueries({ queryKey: ['investments-allocation'] });
+      setLotDeleteTarget(null);
       notify.success('Lot deleted');
     },
     onError: () => notify.error('Failed to delete lot'),
@@ -687,6 +690,7 @@ function ExpandedHolding({
       api.delete(`/investments/recurring/${id}`).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['investments-recurring', holding.id] });
+      setScheduleDeleteTarget(null);
       notify.success('Schedule deleted');
     },
     onError: () => notify.error('Failed to delete schedule'),
@@ -747,7 +751,7 @@ function ExpandedHolding({
                   </td>
                   <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right' }}>
                     <button
-                      onClick={() => deleteLotMutation.mutate(lot.id)}
+                      onClick={() => setLotDeleteTarget(lot)}
                       disabled={deleteLotMutation.isPending}
                       title="Delete lot"
                       style={{
@@ -876,7 +880,7 @@ function ExpandedHolding({
                   {s.status === 'active' ? 'Pause' : 'Resume'}
                 </button>
                 <button
-                  onClick={() => deleteScheduleMutation.mutate(s.id)}
+                  onClick={() => setScheduleDeleteTarget(s)}
                   style={{
                     padding: '0.2rem',
                     borderRadius: 'var(--radius-sm)',
@@ -912,6 +916,24 @@ function ExpandedHolding({
           <HoldingNewsPanel ticker={holding.ticker} />
         </div>
       )}
+      <ConfirmDialog
+        open={lotDeleteTarget !== null}
+        onClose={() => setLotDeleteTarget(null)}
+        onConfirm={() => lotDeleteTarget && deleteLotMutation.mutate(lotDeleteTarget.id)}
+        title="Delete Purchase Lot"
+        message={<>Delete the {lotDeleteTarget ? fmtDateFull(lotDeleteTarget.date) : ''} purchase lot for {holding.ticker}? This cannot be undone.</>}
+        confirmLabel="Delete lot"
+        loading={deleteLotMutation.isPending}
+      />
+      <ConfirmDialog
+        open={scheduleDeleteTarget !== null}
+        onClose={() => setScheduleDeleteTarget(null)}
+        onConfirm={() => scheduleDeleteTarget && deleteScheduleMutation.mutate(scheduleDeleteTarget.id)}
+        title="Delete Recurring Schedule"
+        message={<>Delete the {scheduleDeleteTarget ? `${fmtCurrency(scheduleDeleteTarget.amount)}/${scheduleDeleteTarget.frequency}` : ''} recurring buy for {holding.ticker}? This cannot be undone.</>}
+        confirmLabel="Delete schedule"
+        loading={deleteScheduleMutation.isPending}
+      />
     </div>
   );
 }
@@ -1558,6 +1580,7 @@ function RecurringModal({
   const queryClient = useQueryClient();
   const [form, setForm] = useState<RecurringForm>({ amount: '', frequency: 'monthly', dayOfMonth: '1' });
   const [errors, setErrors] = useState<Partial<RecurringForm>>({});
+  const [scheduleDeleteTarget, setScheduleDeleteTarget] = useState<RecurringSchedule | null>(null);
 
   const { data: schedules, isLoading: schedulesLoading } = useQuery<RecurringSchedule[]>({
     queryKey: ['investments-recurring', holding.id],
@@ -1582,6 +1605,7 @@ function RecurringModal({
       api.delete(`/investments/recurring/${id}`).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['investments-recurring', holding.id] });
+      setScheduleDeleteTarget(null);
       notify.success('Schedule deleted');
     },
     onError: () => notify.error('Failed to delete schedule'),
@@ -1617,6 +1641,7 @@ function RecurringModal({
   const showDayOfMonth = ['monthly', 'quarterly'].includes(form.frequency);
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title={`Recurring Buys — ${holding.ticker}`} size="md">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {/* Existing schedules */}
@@ -1663,7 +1688,7 @@ function RecurringModal({
                     {s.status === 'active' ? 'Pause' : 'Resume'}
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(s.id)}
+                    onClick={() => setScheduleDeleteTarget(s)}
                     style={{ padding: '0.2rem', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', backgroundColor: 'transparent', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}
                   >
                     <Trash2 size={13} />
@@ -1721,6 +1746,16 @@ function RecurringModal({
         <Button onClick={handleCreate} loading={createMutation.isPending}>Create Schedule</Button>
       </ModalFooter>
     </Modal>
+    <ConfirmDialog
+      open={scheduleDeleteTarget !== null}
+      onClose={() => setScheduleDeleteTarget(null)}
+      onConfirm={() => scheduleDeleteTarget && deleteMutation.mutate(scheduleDeleteTarget.id)}
+      title="Delete Recurring Schedule"
+      message={<>Delete the {scheduleDeleteTarget ? `${fmtCurrency(scheduleDeleteTarget.amount)}/${scheduleDeleteTarget.frequency}` : ''} recurring buy for {holding.ticker}? This cannot be undone.</>}
+      confirmLabel="Delete schedule"
+      loading={deleteMutation.isPending}
+    />
+    </>
   );
 }
 

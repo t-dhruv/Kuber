@@ -8,7 +8,7 @@ import {
 import { ChevronDown, ChevronRight, RefreshCw, Plus, MoreHorizontal, Pencil, EyeOff, MinusCircle, Trash2, X, ExternalLink, Upload } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
-  Card, Button, Input, Select, Modal, ModalFooter, Skeleton, InstitutionLogo,
+  Card, Button, Input, Select, Modal, ModalFooter, Skeleton, InstitutionLogo, ConfirmDialog,
 } from '@/components/ui';
 import { notify } from '@/components/ui';
 import { LiabilityDetailPanel } from './components/LiabilityDetailPanel';
@@ -1352,6 +1352,8 @@ function AssetsLiabilitiesTab() {
   const [editAsset, setEditAsset] = useState<ManualAsset | null>(null);
   const [editLiab, setEditLiab] = useState<ManualLiability | null>(null);
   const [selectedLiab, setSelectedLiab] = useState<ManualLiability | null>(null);
+  const [assetDeleteTarget, setAssetDeleteTarget] = useState<ManualAsset | null>(null);
+  const [liabDeleteTarget, setLiabDeleteTarget] = useState<ManualLiability | null>(null);
   const [showAmortFields, setShowAmortFields] = useState(false);
 
   const [assetForm, setAssetForm] = useState({ name: '', type: 'other', currentValue: '', purchaseValue: '', notes: '' });
@@ -1381,7 +1383,7 @@ function AssetsLiabilitiesTab() {
 
   const deleteAsset = useMutation({
     mutationFn: (id: string) => api.delete(`/assets/${id}`).then((r) => r.data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); qc.invalidateQueries({ queryKey: ['networth'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); notify.success('Asset deleted'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-assets'] }); qc.invalidateQueries({ queryKey: ['networth'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); setAssetDeleteTarget(null); notify.success('Asset deleted'); },
     onError: () => notify.error('Failed to delete asset'),
   });
 
@@ -1399,7 +1401,7 @@ function AssetsLiabilitiesTab() {
 
   const deleteLiab = useMutation({
     mutationFn: (id: string) => api.delete(`/liabilities/${id}`).then((r) => r.data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); qc.invalidateQueries({ queryKey: ['networth'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); notify.success('Liability deleted'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['manual-liabilities'] }); qc.invalidateQueries({ queryKey: ['networth'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); setLiabDeleteTarget(null); notify.success('Liability deleted'); },
     onError: () => notify.error('Failed to delete liability'),
   });
 
@@ -1505,7 +1507,7 @@ function AssetsLiabilitiesTab() {
               <span className="font-semibold text-[var(--color-success)]">{fmtCurrency(a.currentValue)}</span>
               <div className="flex gap-1">
                 <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => openEditAsset(a)} />
-                <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => deleteAsset.mutate(a.id)} />
+                <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => setAssetDeleteTarget(a)} />
               </div>
             </div>
           </div>
@@ -1541,7 +1543,7 @@ function AssetsLiabilitiesTab() {
                 <span className="font-semibold text-[var(--color-danger)]">{fmtCurrency(l.currentBalance)}</span>
                 <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => openEditLiab(l)} />
-                  <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => deleteLiab.mutate(l.id)} />
+                  <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => setLiabDeleteTarget(l)} />
                 </div>
               </div>
             </div>
@@ -1665,6 +1667,24 @@ function AssetsLiabilitiesTab() {
           </ModalFooter>
         </Modal>
       )}
+      <ConfirmDialog
+        open={assetDeleteTarget !== null}
+        onClose={() => setAssetDeleteTarget(null)}
+        onConfirm={() => assetDeleteTarget && deleteAsset.mutate(assetDeleteTarget.id)}
+        title="Delete Asset"
+        message={<>Delete <strong>{assetDeleteTarget?.name}</strong>? This cannot be undone.</>}
+        confirmLabel="Delete asset"
+        loading={deleteAsset.isPending}
+      />
+      <ConfirmDialog
+        open={liabDeleteTarget !== null}
+        onClose={() => setLiabDeleteTarget(null)}
+        onConfirm={() => liabDeleteTarget && deleteLiab.mutate(liabDeleteTarget.id)}
+        title="Delete Liability"
+        message={<>Delete <strong>{liabDeleteTarget?.name}</strong>? This cannot be undone.</>}
+        confirmLabel="Delete liability"
+        loading={deleteLiab.isPending}
+      />
     </div>
   );
 }

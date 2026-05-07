@@ -55,7 +55,7 @@ A **transaction** represents money moving in or out:
 - Each transaction belongs to **one account**
 - Each transaction can have **one category** and multiple **tags**
 
-Transactions are **soft-deleted** — they're hidden but never permanently erased. This protects your history.
+Transactions deleted through the app are removed from active application data. Keep exports and database backups if you need recovery.
 
 ### Categories
 
@@ -84,7 +84,7 @@ Tags are not hierarchical like categories — use them for cross-cutting concern
 Kuber supports **households** — multiple people sharing finances:
 
 - The **first person to register** becomes the **household owner**
-- The owner can **invite members** from Settings → Household
+- The owner/admin can create household invite records from Settings → Household; emailed invite redemption is planned future work
 - All data is **scoped to the household** — you only see your household's accounts and transactions
 - Each member has their own **login, 2FA, and preferences**
 
@@ -184,38 +184,34 @@ After too many failed login attempts, your account is temporarily locked — thi
 
 ### Audit Log
 
-Sensitive actions (login, password change, 2FA toggle, budget changes) are logged in an **audit log**. Only household owners can view it.
+Financial record changes are written to an **audit log**. Additional auth, 2FA, and integration audit coverage remains future work.
 
-### Soft Deletes
+### Deletion And Retention
 
-Financial records are **never permanently deleted**:
-- "Deleted" transactions are marked `isDeleted: true`
-- They're hidden from the UI but remain in the database
-- This preserves your history and prevents accidental data loss
+Kuber currently favors self-host operator control and data minimization:
+- User-requested delete actions may permanently remove records from the application database
+- Backups, exports, logs, and audit tables can retain copies until the operator purges them
+- Export important data before deleting records if you may need it later
 
 ---
 
-## Soft Deletes — Why Data Never Truly Dies
+## Deletion And Backups
 
-When you "delete" a transaction, account, or budget in Kuber, it's not really gone:
+When you delete data in Kuber, treat it as removed from the app's active dataset:
 
-1. The record is marked `isDeleted: true` in the database
-2. It disappears from the UI (soft-deleted)
-3. It remains in the database for audit/history purposes
-4. Only a database admin (you) can permanently erase it
+1. Export data first if you need a copy
+2. Back up Postgres before major cleanup or upgrades
+3. Remember that old database backups may still contain deleted data
 
 ### Why This Matters
 
-- **Undo accidents:** If you accidentally delete a transaction, a database restore can bring it back
-- **Audit trail:** Your financial history is never lost
-- **Legal compliance:** Some jurisdictions require financial records to be kept for years
+- **Self-host control:** You decide backup retention and purge policy
+- **Data minimization:** You can remove records from the active database
+- **Compliance:** Some jurisdictions require financial records to be retained outside the app
 
-### Restoring Soft-Deleted Data
+### Restoring Deleted Data
 
-If you need to restore a soft-deleted item:
-1. Access the database directly: `docker compose exec postgres psql -U kuber kuber_db`
-2. Find the record: `SELECT * FROM transactions WHERE "isDeleted" = true;`
-3. Un-delete it: `UPDATE transactions SET "isDeleted" = false WHERE id = '...';`
+If you need to restore deleted data, restore from a database backup or re-import from an export.
 
 > **Tip:** In practice, you should rarely need to do this. Be careful with deletions!
 
@@ -512,7 +508,7 @@ If an event merely moves money you already own, it should not look like income o
 |-----------|----------------|
 | **Data ownership** | Your financial data stays on your server |
 | **Privacy first** | No third-party bank connections, no data mining |
-| **Soft deletes** | Financial history is never permanently lost |
+| **Export/delete controls** | Self-host operators control active data and backup retention |
 | **Household scope** | Multi-user, but data is isolated per household |
 | **Open source** | Audit the code, modify it, contribute back |
 | **Self-hosted** | No subscriptions, no vendor lock-in |

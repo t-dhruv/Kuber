@@ -47,6 +47,18 @@ export function FilterBar({
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDropdownOpen(false);
+        setActiveOptionId(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [dropdownOpen]);
+
   const activeCount = activeFilters.length;
 
   return (
@@ -57,7 +69,8 @@ export function FilterBar({
           onClick={() => setDropdownOpen((v) => !v)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
           aria-expanded={dropdownOpen}
-          aria-haspopup="listbox"
+          aria-haspopup="menu"
+          aria-controls="filter-menu"
         >
           <SlidersHorizontal size={13} />
           Filter
@@ -70,7 +83,8 @@ export function FilterBar({
         {dropdownOpen && filterOptions.length > 0 && (
           <div
             className="absolute left-0 top-full mt-1 z-20 min-w-44 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-md)] py-1"
-            role="listbox"
+            id="filter-menu"
+            role="menu"
           >
             {filterOptions.map((opt) => (
               <div key={opt.id}>
@@ -84,8 +98,8 @@ export function FilterBar({
                       setDropdownOpen(false);
                     }
                   }}
-                  role="option"
-                  aria-selected={activeOptionId === opt.id}
+                  role="menuitem"
+                  aria-expanded={opt.options ? activeOptionId === opt.id : undefined}
                 >
                   <span>{opt.label}</span>
                   {opt.options && (
@@ -98,6 +112,7 @@ export function FilterBar({
                       <button
                         key={sub.value}
                         className="w-full px-6 py-1.5 text-sm text-left text-[var(--color-text)] hover:bg-[var(--color-surface)] transition-colors"
+                        role="menuitem"
                         onClick={() => {
                           opt.onSelect?.(sub.value);
                           setDropdownOpen(false);

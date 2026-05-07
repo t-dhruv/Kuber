@@ -201,8 +201,8 @@ Expected columns in your CSV file:
 
 | What You Want to Change | Where to Look |
 |------------------------|---------------|
-| Change the site title / branding | `client/index.html` and `client/src/components/Layout/Sidebar.tsx` |
-| Change color scheme | `client/src/index.css` (CSS custom properties) |
+| Change the site title / branding | `client/index.html` and `client/src/components/layout/Sidebar.tsx` |
+| Change color scheme | `client/src/app.css` (CSS custom properties) |
 | Add a new page | `client/src/pages/` (create new folder + component) |
 | Add a new API endpoint | `server/src/routes/` (create new route file) |
 | Change database schema | `server/prisma/schema.prisma` then run `npx prisma migrate dev` |

@@ -64,7 +64,7 @@ Then track individual holdings under **Investments** in the sidebar.
 - **Edit:** Click the pencil icon next to an account → update details → Save
 - **Delete:** Click the trash icon → confirm deletion
 
-> **Note:** Deleting an account soft-deletes it (it's hidden but not permanently erased). This protects your historical data.
+> **Note:** Deleting an account removes it from active app data. Export or back up first if you may need recovery.
 
 ---
 
@@ -92,4 +92,4 @@ These contribute to your **Net Worth** calculation.
 |----------|----------|
 | **Balance not updating** | Refresh the page. Kuber shows the balance you entered — it doesn't sync with your bank automatically. |
 | **Can't find account type** | Select "Custom" and type the account type in the Name field. |
-| **Deleted wrong account** | Contact your admin (or yourself) — soft-deleted accounts can be restored from the database if needed. |
+| **Deleted wrong account** | Restore from a database backup or re-create the account manually. |

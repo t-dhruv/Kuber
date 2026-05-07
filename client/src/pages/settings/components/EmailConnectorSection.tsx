@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Mail, Eye, EyeOff, CheckCircle2, XCircle, Info } from 'lucide-react';
 import { api } from '@/lib/api';
-import { Button, Input, Select, Checkbox, Card, notify } from '@/components/ui';
+import { Button, Input, Select, Checkbox, Card, notify, ConfirmDialog } from '@/components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +55,7 @@ export function EmailConnectorSection() {
   const [accountId, setAccountId] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   // Result state
   const [testResult, setTestResult] = useState<TestResult | null>(null);
@@ -164,6 +165,7 @@ export function EmailConnectorSection() {
       setTestResult(null);
       setSyncResult(null);
       setInitialized(false);
+      setConfirmRemove(false);
       notify.success('Email connector removed');
     },
     onError: (err: { response?: { data?: { error?: string } } }) =>
@@ -387,7 +389,7 @@ export function EmailConnectorSection() {
               variant="ghost"
               size="sm"
               loading={removeMutation.isPending}
-              onClick={() => removeMutation.mutate()}
+              onClick={() => setConfirmRemove(true)}
               className="ml-auto text-[var(--color-danger,#ef4444)]"
             >
               Remove
@@ -395,6 +397,15 @@ export function EmailConnectorSection() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmRemove}
+        onClose={() => setConfirmRemove(false)}
+        onConfirm={() => removeMutation.mutate()}
+        title="Remove Email Connector"
+        message="Remove this IMAP connector configuration? Automatic email imports will stop."
+        confirmLabel="Remove connector"
+        loading={removeMutation.isPending}
+      />
     </Card>
   );
 }

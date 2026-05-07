@@ -123,17 +123,23 @@ export function DataTable<T>({
             {columns.map((col) => (
               <th
                 key={String(col.key)}
-                className={`px-4 py-3 text-left font-medium text-[var(--color-text-secondary)] whitespace-nowrap ${col.sortable ? 'cursor-pointer select-none hover:text-[var(--color-text)]' : ''}`}
+                className="px-4 py-3 text-left font-medium text-[var(--color-text-secondary)] whitespace-nowrap"
                 style={col.width ? { width: col.width } : undefined}
-                onClick={col.sortable ? () => handleSort(String(col.key)) : undefined}
                 aria-sort={col.sortable && sortKey === String(col.key) ? (sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : 'none') : undefined}
               >
-                <span className="inline-flex items-center gap-1">
-                  {col.header}
-                  {col.sortable && (
+                {col.sortable ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSort(String(col.key))}
+                    className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+                    aria-label={`Sort by ${col.header}`}
+                  >
+                    {col.header}
                     <SortIcon dir={sortKey === String(col.key) ? sortDir : null} />
-                  )}
-                </span>
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1">{col.header}</span>
+                )}
               </th>
             ))}
           </tr>

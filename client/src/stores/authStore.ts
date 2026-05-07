@@ -11,6 +11,18 @@ interface AuthState {
   setToken: (token: string) => void;
 }
 
+type PersistedAuthState = Pick<AuthState, 'user' | 'isAuthenticated'> & {
+  accessToken?: unknown;
+};
+
+function sanitizePersistedAuthState(state: unknown): Pick<AuthState, 'user' | 'isAuthenticated'> {
+  const persisted = (state ?? {}) as Partial<PersistedAuthState>;
+  return {
+    user: persisted.user ?? null,
+    isAuthenticated: persisted.isAuthenticated ?? false,
+  };
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -24,6 +36,14 @@ export const useAuthStore = create<AuthState>()(
       },
       setToken: (accessToken) => set({ accessToken }),
     }),
-    { name: 'kuber-auth', partialize: (s) => ({ user: s.user, accessToken: s.accessToken, isAuthenticated: s.isAuthenticated }) }
+    {
+      name: 'kuber-auth',
+      partialize: (s) => ({ user: s.user, isAuthenticated: s.isAuthenticated }),
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...sanitizePersistedAuthState(persistedState),
+        accessToken: null,
+      }),
+    }
   )
 );

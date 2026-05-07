@@ -1,6 +1,8 @@
 import { createHmac } from 'crypto';
 import { prisma } from './prisma';
 import { createModuleLogger } from './logger.js';
+import { assertSafeOutboundUrl } from './safeOutboundUrl';
+import { decryptWebhookSecret } from './webhookSecret';
 const logger = createModuleLogger('webhook');
 
 const MAX_ATTEMPTS = 3;
@@ -31,8 +33,9 @@ async function fireOne(
   payload: Record<string, unknown>,
 ): Promise<void> {
   const body = JSON.stringify({ event, data: payload });
-  const signature = webhook.secret
-    ? createHmac('sha256', webhook.secret).update(body).digest('hex')
+  const secret = decryptWebhookSecret(webhook.secret);
+  const signature = secret
+    ? createHmac('sha256', secret).update(body).digest('hex')
     : undefined;
 
   const delivery = await prisma.webhookDelivery.create({
@@ -48,7 +51,8 @@ async function fireOne(
     if (attempt > 1) await sleep(RETRY_DELAYS_MS[attempt - 1]);
 
     try {
-      const resp = await fetch(webhook.url, {
+      const safeUrl = await assertSafeOutboundUrl(webhook.url);
+      const resp = await fetch(safeUrl, {
         method:  'POST',
         headers: {
           'Content-Type':   'application/json',
@@ -56,6 +60,7 @@ async function fireOne(
           ...(signature ? { 'X-Kuber-Signature': `sha256=${signature}` } : {}),
         },
         body,
+        redirect: 'error',
         signal: AbortSignal.timeout(10_000),
       });
 

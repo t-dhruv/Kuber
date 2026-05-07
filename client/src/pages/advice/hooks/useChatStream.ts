@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { api } from '@/lib/api';
+import { api, getAccessToken } from '@/lib/api';
 
 export interface ChatMessage {
   id?: string;
@@ -99,11 +99,12 @@ export function useChatStream(): UseChatStreamReturn {
     let accumulatedContent = '';
 
     try {
+      const accessToken = await getAccessToken();
       const response = await fetch('/api/v1/advisor/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${getAccessToken()}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           message: text,
@@ -212,18 +213,4 @@ export function useChatStream(): UseChatStreamReturn {
   }, [isStreaming]);
 
   return { messages, conversationId, isStreaming, error, send, cancel, startNewConversation, loadConversation };
-}
-
-// Helper: reads access token from Zustand store without importing the store
-// (avoids circular deps — the store is in a sibling module)
-function getAccessToken(): string {
-  try {
-    // Zustand persists to localStorage under 'auth-storage' by default
-    const raw = localStorage.getItem('kuber-auth');
-    if (!raw) return '';
-    const parsed = JSON.parse(raw) as { state?: { accessToken?: string } };
-    return parsed?.state?.accessToken ?? '';
-  } catch {
-    return '';
-  }
 }

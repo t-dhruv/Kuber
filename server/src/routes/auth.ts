@@ -264,12 +264,13 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
     // Always return success to prevent user enumeration
     if (user) {
       const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenKey = `reset_token_${hashToken(resetToken)}`;
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
       await prisma.userPreference.upsert({
-        where: { userId_key: { userId: user.id, key: `reset_token_${resetToken}` } },
+        where: { userId_key: { userId: user.id, key: resetTokenKey } },
         update: { value: expiresAt.toISOString() },
-        create: { userId: user.id, key: `reset_token_${resetToken}`, value: expiresAt.toISOString() },
+        create: { userId: user.id, key: resetTokenKey, value: expiresAt.toISOString() },
       });
 
       await sendPasswordResetEmail(user.email, resetToken);
@@ -291,7 +292,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
     const pref = await prisma.userPreference.findFirst({
-      where: { key: `reset_token_${token}` },
+      where: { key: `reset_token_${hashToken(token)}` },
     });
     if (!pref) return res.status(400).json({ error: 'Invalid or expired reset token' });
 

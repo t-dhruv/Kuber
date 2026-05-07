@@ -2,9 +2,10 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, requireHouseholdRole } from '../middleware/auth';
 
 const router = Router();
+const requireHouseholdAdmin = requireHouseholdRole(['owner', 'admin']);
 
 const createSchema = z.object({
   name: z.string().min(1).max(100),
@@ -12,7 +13,7 @@ const createSchema = z.object({
 });
 
 // POST / — create token
-router.post('/', async (req: AuthRequest, res: Response) => {
+router.post('/', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   const parse = createSchema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: parse.error.issues[0]?.message });
 
@@ -40,7 +41,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 });
 
 // GET / — list tokens
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   const tokens = await prisma.apiToken.findMany({
     where: { householdId: req.householdId! },
     orderBy: { createdAt: 'desc' },
@@ -50,7 +51,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 });
 
 // DELETE /:id — revoke
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
+router.delete('/:id', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   const token = await prisma.apiToken.findFirst({
     where: { id: req.params.id, householdId: req.householdId! },
   });
