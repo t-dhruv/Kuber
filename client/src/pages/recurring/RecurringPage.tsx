@@ -3,13 +3,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Settings, MoreHorizontal, Pencil, Trash2, PauseCircle, PlayCircle, Check } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
+  FREQUENCY_OPTIONS,
+  frequencyLabel,
+  normalizeFrequency,
+  type Frequency,
+} from './frequency';
+import {
   Card, Button, Input, Select, Modal, ModalFooter, Skeleton, Toggle, CategoryCombobox,
 } from '@/components/ui';
 import { notify } from '@/components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Frequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUALLY';
 type ViewMode = 'monthly' | 'all' | 'calendar';
 
 interface RecurringItem {
@@ -102,22 +107,6 @@ const EMPTY_FORM: RecurringFormValues = {
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const FREQUENCY_OPTIONS = [
-  { value: 'WEEKLY', label: 'Weekly' },
-  { value: 'BIWEEKLY', label: 'Bi-weekly' },
-  { value: 'MONTHLY', label: 'Monthly' },
-  { value: 'QUARTERLY', label: 'Quarterly' },
-  { value: 'ANNUALLY', label: 'Annually' },
-];
-
-const FREQUENCY_LABELS: Record<Frequency, string> = {
-  WEEKLY: 'Weekly',
-  BIWEEKLY: 'Bi-weekly',
-  MONTHLY: 'Monthly',
-  QUARTERLY: 'Quarterly',
-  ANNUALLY: 'Annually',
-};
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -225,7 +214,7 @@ function RecurringModal({
       setForm({
         name: editing.name,
         amount: String(editing.amount),
-        frequency: editing.frequency,
+        frequency: normalizeFrequency(editing.frequency),
         nextDate: editing.nextDate ? editing.nextDate.slice(0, 10) : '',
         accountId: editing.accountId,
         categoryId: editing.categoryId,
@@ -628,7 +617,7 @@ function AllRecurringView({
             </div>
             {/* Row 2: frequency · next date */}
             <div className="text-xs text-[var(--color-text-muted)]">
-              {FREQUENCY_LABELS[item.frequency]} · Next: {fmtDate(item.nextDate)}
+              {frequencyLabel(item.frequency)} · Next: {fmtDate(item.nextDate)}
             </div>
             {/* Row 3: category badge + actions */}
             <div className="flex items-center justify-between gap-2 mt-0.5">
@@ -695,7 +684,7 @@ function AllRecurringView({
               <span className="text-right font-semibold" style={{ color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
                 {item.amount < 0 ? '-' : '+'}{fmtCurrency(item.amount)}
               </span>
-              <span className="text-[var(--color-text-secondary)]">{FREQUENCY_LABELS[item.frequency]}</span>
+              <span className="text-[var(--color-text-secondary)]">{frequencyLabel(item.frequency)}</span>
               <span className="text-[var(--color-text-secondary)]">{fmtDate(item.nextDate)}</span>
               <span className="text-[var(--color-text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis">
                 {accountLabel(item)}
@@ -965,7 +954,7 @@ function DetectedSubscriptionsBanner({ onAdd }: { onAdd: (item: DetectedSubscrip
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-medium text-[var(--color-text)] truncate">{item.name}</span>
                 <span className="text-xs text-[var(--color-text-muted)]">
-                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(item.amount))} · {FREQUENCY_LABELS[item.frequency]}
+                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(item.amount))} · {frequencyLabel(item.frequency)}
                 </span>
               </div>
               <button
@@ -1094,7 +1083,7 @@ export default function RecurringPage() {
     setModalPrefill({
       name: item.name,
       amount: String(item.amount),
-      frequency: item.frequency,
+      frequency: normalizeFrequency(item.frequency),
       nextDate: item.nextDate ? item.nextDate.slice(0, 10) : '',
     });
     setModalOpen(true);

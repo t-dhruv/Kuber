@@ -48,7 +48,7 @@ const actionSchema = z.object({
 });
 
 const ruleBodyBaseSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().optional(),
   conditions: z.array(triggerSchema).optional(),
   triggers: z.array(triggerSchema).optional(),
   actions: z.array(actionSchema).optional(),
@@ -141,12 +141,70 @@ function asPublicAction(action: NormalizedRuleAction) {
   };
 }
 
+function titleCase(value: string) {
+  return value
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function triggerLabel(trigger: Pick<NormalizedRuleTrigger, 'field' | 'operator' | 'value'>) {
+  const fieldLabels: Record<string, string> = {
+    merchantName: 'Merchant name',
+    categoryId: 'Category',
+    accountId: 'Account',
+  };
+  const operatorLabels: Record<string, string> = {
+    notContains: 'does not contain',
+    startsWith: 'starts with',
+    endsWith: 'ends with',
+    notEquals: 'does not equal',
+    gt: 'is greater than',
+    gte: 'is at least',
+    lt: 'is less than',
+    lte: 'is at most',
+  };
+  const field = fieldLabels[trigger.field] ?? titleCase(trigger.field);
+  const operator = operatorLabels[trigger.operator] ?? trigger.operator;
+  return `${field} ${operator} "${trigger.value}"`;
+}
+
+function actionName(action: Pick<NormalizedRuleAction, 'type'>) {
+  const labels: Record<string, string> = {
+    setCategory: 'Set category',
+    clearCategory: 'Clear category',
+    addTag: 'Add tag',
+    removeTag: 'Remove tag',
+    hide: 'Hide transaction',
+    unhide: 'Unhide transaction',
+    markReviewed: 'Mark as reviewed',
+    flagForReview: 'Flag for review',
+    setDescription: 'Set description',
+    setNotes: 'Set notes',
+    appendNotes: 'Append notes',
+    setSourceAccount: 'Set source account',
+    setDestinationAccount: 'Set destination account',
+  };
+  return labels[action.type] ?? titleCase(action.type);
+}
+
+function generateRuleName(triggers: Pick<NormalizedRuleTrigger, 'field' | 'operator' | 'value'>[], actions: Pick<NormalizedRuleAction, 'type'>[]) {
+  const trigger = triggers[0];
+  const action = actions[0];
+  if (!trigger && !action) return 'Untitled rule';
+  if (!trigger) return actionName(action);
+  if (!action) return triggerLabel(trigger);
+  return `${triggerLabel(trigger)} -> ${actionName(action)}`;
+}
+
 function formatRule(rule: RuleWithNormalizedRows) {
   const triggers = normalizeRuleTriggers(rule);
   const ruleActions = normalizeRuleActions(rule);
 
   return {
     ...rule,
+    name: typeof rule.name === 'string' && rule.name.trim()
+      ? rule.name
+      : generateRuleName(triggers, ruleActions),
     triggers: triggers.map(asPublicTrigger),
     ruleActions: ruleActions.map(asPublicAction),
     conditions: Array.isArray(rule.conditions) && (rule.conditions as unknown[]).length > 0
@@ -174,7 +232,7 @@ function buildRuleWriteData(parsed: z.infer<typeof ruleBodySchema> | z.infer<typ
 
   return {
     ...(sortOrder !== undefined ? { sortOrder } : {}),
-    ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+    name: parsed.name?.trim() || generateRuleName(triggers, ruleActions),
     ...(parsed.strict !== undefined ? { strict: parsed.strict } : {}),
     ...(parsed.stopProcessing !== undefined ? { stopProcessing: parsed.stopProcessing } : {}),
     ...(parsed.isActive !== undefined ? { isActive: parsed.isActive } : {}),

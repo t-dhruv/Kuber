@@ -18,6 +18,15 @@ function getMonthBounds(year: number, month: number): { start: Date; end: Date }
   };
 }
 
+function reportableCategoryFilter() {
+  return {
+    OR: [
+      { categoryId: null },
+      { category: { is: { excludeFromReports: false } } },
+    ],
+  };
+}
+
 // GET /api/v1/cashflow
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
@@ -32,6 +41,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         householdId,
         date: { gte: start, lt: end },
         isHidden: false,
+        ...reportableCategoryFilter(),
       },
       select: { date: true, amount: true },
     });
@@ -116,6 +126,7 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
         householdId,
         date: { gte: start, lt: end },
         isHidden: false,
+        ...reportableCategoryFilter(),
       },
       select: {
         date: true,
@@ -367,6 +378,7 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
         householdId,
         date: { gte: startDate, lt: endDate },
         isHidden: false,
+        ...reportableCategoryFilter(),
       },
       select: {
         amount: true,
@@ -514,6 +526,8 @@ router.get('/forecast', async (req: AuthRequest, res: Response) => {
         householdId,
         date: { gte: historyStart, lte: now },
         isHidden: false,
+        recurringItemId: null,
+        ...reportableCategoryFilter(),
       },
       select: { amount: true },
     });
