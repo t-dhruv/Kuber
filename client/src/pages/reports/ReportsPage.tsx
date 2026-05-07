@@ -40,6 +40,7 @@ import {
 import { ExportButtons } from "./components/ExportButtons";
 import { TaxSummaryTab } from "./components/TaxSummaryTab";
 import { OverviewSummary } from "./components/OverviewSummary";
+import { DATE_PRESETS, computeDateRange, type DatePreset } from "./dateRange";
 import { api } from "@/lib/api";
 import {
   Card,
@@ -68,17 +69,6 @@ const CATEGORICAL_COLORS = [
   "#868e96", // slate
 ];
 
-const DATE_PRESETS = [
-  { value: "thisMonth", label: "This month" },
-  { value: "lastMonth", label: "Last month" },
-  { value: "last3months", label: "Last 3 months" },
-  { value: "last6months", label: "Last 6 months" },
-  { value: "thisYear", label: "This year" },
-  { value: "lastYear", label: "Last year" },
-  { value: "custom", label: "Custom range" },
-] as const;
-
-type DatePreset = (typeof DATE_PRESETS)[number]["value"];
 type ReportTab =
   | "overview"
   | "cashflow"
@@ -127,66 +117,6 @@ const fmtCurrencySigned = (amount: number) =>
   );
 
 const fmtPct = (value: number) => `${Math.round(value)}%`;
-
-function fmtDate(d: Date): string {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-// ─── Date preset computation ──────────────────────────────────────────────────
-
-function computeDateRange(preset: DatePreset): {
-  startDate: string;
-  endDate: string;
-} {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-
-  switch (preset) {
-    case "thisMonth":
-      return {
-        startDate: fmtDate(new Date(y, m, 1)),
-        endDate: fmtDate(new Date(y, m + 1, 0)),
-      };
-    case "lastMonth":
-      return {
-        startDate: fmtDate(new Date(y, m - 1, 1)),
-        endDate: fmtDate(new Date(y, m, 0)),
-      };
-    case "last3months": {
-      const start = new Date(y, m - 2, 1);
-      return {
-        startDate: fmtDate(start),
-        endDate: fmtDate(new Date(y, m + 1, 0)),
-      };
-    }
-    case "last6months": {
-      const start = new Date(y, m - 5, 1);
-      return {
-        startDate: fmtDate(start),
-        endDate: fmtDate(new Date(y, m + 1, 0)),
-      };
-    }
-    case "thisYear":
-      return {
-        startDate: fmtDate(new Date(y, 0, 1)),
-        endDate: fmtDate(new Date(y, 11, 31)),
-      };
-    case "lastYear":
-      return {
-        startDate: fmtDate(new Date(y - 1, 0, 1)),
-        endDate: fmtDate(new Date(y - 1, 11, 31)),
-      };
-    default:
-      return {
-        startDate: fmtDate(new Date(y, m - 2, 1)),
-        endDate: fmtDate(new Date(y, m + 1, 0)),
-      };
-  }
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -3600,6 +3530,9 @@ function SaveViewModal({
 export default function ReportsPage() {
   const [tab, setTab] = useState<ReportTab>("overview");
   const [datePreset, setDatePreset] = useState<DatePreset>("thisMonth");
+  const defaultCustomRange = useMemo(() => computeDateRange("custom"), []);
+  const [customStartDate, setCustomStartDate] = useState(defaultCustomRange.startDate);
+  const [customEndDate, setCustomEndDate] = useState(defaultCustomRange.endDate);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
 
   // Filter state
@@ -3643,8 +3576,12 @@ export default function ReportsPage() {
   }
 
   const { startDate, endDate } = useMemo(
-    () => computeDateRange(datePreset),
-    [datePreset],
+    () =>
+      computeDateRange(datePreset, {
+        startDate: customStartDate,
+        endDate: customEndDate,
+      }),
+    [datePreset, customStartDate, customEndDate],
   );
 
   const currentFilters: SavedReport["filters"] = {
@@ -3659,6 +3596,8 @@ export default function ReportsPage() {
   function loadSavedView(filters: SavedReport["filters"]) {
     if (filters.tab) setTab(filters.tab);
     if (filters.datePreset) setDatePreset(filters.datePreset as DatePreset);
+    if (filters.startDate) setCustomStartDate(filters.startDate);
+    if (filters.endDate) setCustomEndDate(filters.endDate);
     if (filters.excludeCategoryIds) setExcludeCategoryIds(filters.excludeCategoryIds);
     if (filters.excludeAccountIds) setExcludeAccountIds(filters.excludeAccountIds);
   }
@@ -3751,6 +3690,22 @@ export default function ReportsPage() {
               }}
             >
               <DatePresetDropdown value={datePreset} onChange={setDatePreset} />
+              {datePreset === "custom" && (
+                <>
+                  <Input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    aria-label="Report start date"
+                  />
+                  <Input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    aria-label="Report end date"
+                  />
+                </>
+              )}
 
               {/* Filters button with dropdown panel */}
               <div style={{ position: "relative" }}>

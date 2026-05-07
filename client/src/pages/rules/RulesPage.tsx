@@ -98,6 +98,22 @@ function getOperatorOptions(field: ConditionField) {
   return field === "amount" ? NUMBER_OPERATORS : STRING_OPERATORS;
 }
 
+function generateRuleName(
+  conditions: RuleCondition[],
+  actions: RuleAction[],
+  categories: Category[] = [],
+): string {
+  const condition = conditions[0];
+  const action = actions[0];
+  if (!condition && !action) return "Untitled rule";
+
+  const conditionText = condition ? conditionLabel(condition) : "";
+  const actionText = action ? actionLabel(action, categories) : "";
+  if (!conditionText) return actionText;
+  if (!actionText) return conditionText;
+  return `${conditionText} -> ${actionText}`;
+}
+
 // ─── Rule Builder ─────────────────────────────────────────────────────────────
 
 interface RuleFormState {
@@ -175,10 +191,6 @@ function RuleBuilderModal({
 
   function handleSave() {
     setError("");
-    if (!form.name.trim()) {
-      setError("Rule name is required.");
-      return;
-    }
     if (form.conditions.some((c) => !c.value.trim())) {
       setError("All condition values must be filled in.");
       return;
@@ -192,7 +204,10 @@ function RuleBuilderModal({
       setError("All action values must be filled in.");
       return;
     }
-    onSave(form);
+    onSave({
+      ...form,
+      name: form.name.trim() || generateRuleName(form.conditions, form.actions, categories),
+    });
   }
 
   return (
@@ -207,7 +222,7 @@ function RuleBuilderModal({
           label="Rule name"
           value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          placeholder="e.g. Tag Amazon orders"
+          placeholder={generateRuleName(form.conditions, form.actions, categories)}
         />
 
         {/* Conditions */}
@@ -683,7 +698,7 @@ export default function RulesPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="font-semibold text-[0.9375rem] text-[var(--color-text)]">
-                      {rule.name}
+                      {rule.name.trim() || generateRuleName(rule.conditions, rule.actions, categories)}
                     </span>
                     <span
                       className="text-[0.6875rem] font-semibold px-[0.4rem] py-0.5 rounded-full"

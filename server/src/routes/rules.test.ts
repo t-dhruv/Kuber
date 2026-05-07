@@ -117,6 +117,42 @@ describe('rules normalized CRUD', () => {
       include: { triggers: true, ruleActions: true },
     });
   });
+
+  it('generates a useful rule name when one is not provided', async () => {
+    vi.mocked(prisma.rule.aggregate).mockResolvedValue({ _max: { sortOrder: 0 } } as any);
+    vi.mocked(prisma.rule.create).mockImplementation((async ({ data }: any) => ({
+      ...normalizedRule,
+      name: data.name,
+      conditions: data.conditions,
+      actions: data.actions,
+      triggers: data.triggers.create,
+      ruleActions: data.ruleActions.create,
+    }) as any) as any);
+
+    const res = await request(makeApp())
+      .post('/rules')
+      .send({
+        conditions: [{ field: 'merchantName', operator: 'contains', value: 'Netflix' }],
+        actions: [{ type: 'setCategory', value: 'cat-subscriptions' }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(prisma.rule.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        name: 'Merchant name contains "Netflix" -> Set category',
+      }),
+    }));
+    expect(res.body.name).toBe('Merchant name contains "Netflix" -> Set category');
+  });
+
+  it('falls back to generated names for existing blank rules', async () => {
+    vi.mocked(prisma.rule.findMany).mockResolvedValue([{ ...normalizedRule, name: '' }] as any);
+
+    const res = await request(makeApp()).get('/rules');
+
+    expect(res.status).toBe(200);
+    expect(res.body[0].name).toBe('Description contains "coffee" -> Set category');
+  });
 });
 
 describe('rules journal simulation and application', () => {
