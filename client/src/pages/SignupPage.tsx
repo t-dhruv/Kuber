@@ -1,10 +1,12 @@
 import { useState, FormEvent } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useSignup } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function SignupPage() {
   const { isAuthenticated } = useAuthStore();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('invite')?.trim() || undefined;
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -29,7 +31,14 @@ export default function SignupPage() {
       return;
     }
 
-    signup.mutate({ email, password, firstName, lastName, householdName });
+    signup.mutate({
+      email,
+      password,
+      firstName,
+      lastName,
+      householdName: inviteToken ? undefined : householdName,
+      inviteToken,
+    });
   }
 
   const errorMessage = validationError
@@ -46,7 +55,7 @@ export default function SignupPage() {
             Kuber
           </h1>
           <p className="text-[var(--color-text-secondary)] mt-2 text-sm">
-            Create your account
+            {inviteToken ? 'Accept your household invite' : 'Create your account'}
           </p>
         </div>
 
@@ -77,10 +86,18 @@ export default function SignupPage() {
             <input id="confirmPassword" type="password" autoComplete="new-password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••" className={inputClass} />
           </div>
 
-          <div className="mb-6">
-            <label htmlFor="householdName" className={labelClass}>What should we call your household?</label>
-            <input id="householdName" type="text" required value={householdName} onChange={(e) => setHouseholdName(e.target.value)} placeholder="The Smith Family" className={inputClass} />
-          </div>
+          {!inviteToken && (
+            <div className="mb-6">
+              <label htmlFor="householdName" className={labelClass}>What should we call your household?</label>
+              <input id="householdName" type="text" required value={householdName} onChange={(e) => setHouseholdName(e.target.value)} placeholder="The Smith Family" className={inputClass} />
+            </div>
+          )}
+
+          {inviteToken && (
+            <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-accent-light)] text-[var(--color-text)] text-sm mb-4">
+              This account will join the household from your invite link.
+            </div>
+          )}
 
           {errorMessage && (
             <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-danger-light)] text-[var(--color-danger)] text-sm mb-4">

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { AppShell } from '@/components/layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import InstallPrompt from '@/components/pwa/InstallPrompt';
+import OfflineStatus from '@/components/pwa/OfflineStatus';
 import { OnboardingWizard, shouldShowOnboarding } from '@/components/onboarding/OnboardingWizard';
 import { NoAccountsGuard } from '@/components/NoAccountsGuard';
 import { api } from '@/lib/api';
@@ -15,6 +16,7 @@ const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const SignupPage = lazy(() => import('@/pages/SignupPage'));
 const ForgotPasswordPage = lazy(() => import('@/pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'));
+const OfflinePage = lazy(() => import('@/pages/OfflinePage'));
 const DashboardPage = lazy(() => import('@/pages/dashboard'));
 const AccountsPage = lazy(() => import('@/pages/accounts'));
 const TransactionsPage = lazy(() => import('@/pages/transactions'));
@@ -127,6 +129,14 @@ export default function App() {
         element={
           <Suspense fallback={<PageLoader />}>
             <ResetPasswordPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/offline"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <OfflinePage />
           </Suspense>
         }
       />
@@ -265,6 +275,7 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
     <InstallPrompt />
+    <OfflineStatus />
     </>
   );
 }

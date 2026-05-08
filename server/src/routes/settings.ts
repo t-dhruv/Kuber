@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest, requireHouseholdRole } from '../middleware/auth';
-import { sendTestEmail } from '../lib/email';
+import { sendHouseholdInviteEmail, sendTestEmail } from '../lib/email';
 import { encrypt } from '../lib/encryption';
 import { getAiClient, invalidateAiCache } from '../lib/ai';
 import { assertSafeOutboundUrl } from '../lib/safeOutboundUrl';
@@ -118,7 +118,7 @@ router.get('/household', async (req: AuthRequest, res: Response) => {
         members: {
           include: {
             user: {
-              select: { id: true, firstName: true, lastName: true, email: true },
+              select: { id: true, firstName: true, lastName: true, email: true, totpEnabled: true },
             },
           },
         },
@@ -133,6 +133,7 @@ router.get('/household', async (req: AuthRequest, res: Response) => {
       email: m.user.email,
       role: m.role,
       joinedAt: m.joinedAt.toISOString(),
+      totpEnabled: m.user.totpEnabled,
     }));
 
     return res.json({
@@ -173,7 +174,7 @@ router.put('/household', async (req: AuthRequest, res: Response) => {
         members: {
           include: {
             user: {
-              select: { id: true, firstName: true, lastName: true, email: true },
+              select: { id: true, firstName: true, lastName: true, email: true, totpEnabled: true },
             },
           },
         },
@@ -187,6 +188,7 @@ router.put('/household', async (req: AuthRequest, res: Response) => {
       email: m.user.email,
       role: m.role,
       joinedAt: m.joinedAt.toISOString(),
+      totpEnabled: m.user.totpEnabled,
     }));
 
     return res.json({
@@ -211,6 +213,11 @@ router.post('/household/invite', async (req: AuthRequest, res: Response) => {
     if (!email) {
       return res.status(400).json({ error: 'email is required' });
     }
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedRole = String(role).trim().toLowerCase();
+    if (!['member', 'admin'].includes(normalizedRole)) {
+      return res.status(400).json({ error: 'role must be member or admin' });
+    }
 
     // Require Owner or Admin
     const membership = await prisma.householdMember.findUnique({
@@ -222,18 +229,31 @@ router.post('/household/invite', async (req: AuthRequest, res: Response) => {
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    await prisma.householdInvite.create({
+    const existingMember = await prisma.householdMember.findFirst({
+      where: { householdId, user: { email: normalizedEmail } },
+    });
+    if (existingMember) {
+      return res.status(409).json({ error: 'User is already a member of this household' });
+    }
+
+    const invite = await prisma.householdInvite.create({
       data: {
         householdId,
-        email,
-        role,
+        email: normalizedEmail,
+        role: normalizedRole,
         expiresAt,
       },
+      include: { household: { select: { name: true } } },
     });
+
+    await sendHouseholdInviteEmail(normalizedEmail, invite.household.name, invite.token);
 
     return res.json({
       success: true,
-      message: 'Invitation sent (email not implemented in dev)',
+      message: 'Invitation sent',
+      token: invite.token,
+      inviteUrl: `/signup?invite=${encodeURIComponent(invite.token)}`,
+      expiresAt: invite.expiresAt.toISOString(),
     });
   } catch (err) {
     req.log.error({ err }, 'settings/household/invite POST');
@@ -276,6 +296,43 @@ router.delete('/household/members/:id', async (req: AuthRequest, res: Response) 
     return res.json({ message: 'Member removed' });
   } catch (err) {
     req.log.error({ err }, 'settings/household/members DELETE');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/settings/household/members/:id/disable-2fa
+router.post('/household/members/:id/disable-2fa', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const userId = req.userId!;
+    const { id: targetUserId } = req.params;
+
+    const membership = await prisma.householdMember.findUnique({
+      where: { userId_householdId: { userId, householdId } },
+    });
+    if (!membership || membership.role.toLowerCase() !== 'owner') {
+      return res.status(403).json({ error: 'Only the owner can reset member 2FA' });
+    }
+
+    if (targetUserId === userId) {
+      return res.status(400).json({ error: 'Use your Security settings to disable your own 2FA' });
+    }
+
+    const targetMembership = await prisma.householdMember.findUnique({
+      where: { userId_householdId: { userId: targetUserId, householdId } },
+    });
+    if (!targetMembership) {
+      return res.status(404).json({ error: 'Member not found in this household' });
+    }
+
+    await prisma.user.update({
+      where: { id: targetUserId },
+      data: { totpSecret: null, totpEnabled: false, backupCodes: [] },
+    });
+
+    return res.json({ message: 'Member two-factor authentication disabled' });
+  } catch (err) {
+    req.log.error({ err }, 'settings/household/members/disable-2fa POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

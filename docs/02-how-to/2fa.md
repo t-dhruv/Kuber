@@ -90,5 +90,5 @@ Use one of your **backup codes**:
 |----------|----------|
 | **QR code won't scan** | Try typing the secret key manually in your authenticator app (click "Show Secret Key" in Kuber). |
 | **"Invalid code" error** | Ensure your phone's time is correct (authenticator codes depend on accurate time). Enable "Set Automatically" in phone Date & Time settings. |
-| **Lost phone + no backup codes** | Restore from a backup or disable 2FA directly in the database. Owner-assisted recovery is planned future work. |
+| **Lost phone + no backup codes** | Ask the household owner to reset 2FA from **Settings -> Household**, then sign in with your password and set up 2FA again. |
 | **Backup codes not showing** | Ensure you completed the verification step. Backup codes only appear after successful verification. |

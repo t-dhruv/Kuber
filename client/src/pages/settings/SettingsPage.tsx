@@ -53,6 +53,7 @@ interface HouseholdMember {
   email: string;
   role: string;
   joinedAt: string;
+  totpEnabled?: boolean;
 }
 
 // ─── Category Types ─────────────────────────────────────────────────
@@ -1013,7 +1014,9 @@ function HouseholdSection() {
   });
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('Member');
+  const [inviteLink, setInviteLink] = useState('');
   const [removeTarget, setRemoveTarget] = useState<HouseholdMember | null>(null);
+  const [twoFactorResetTarget, setTwoFactorResetTarget] = useState<HouseholdMember | null>(null);
 
   useEffect(() => {
     if (data) {
@@ -1033,7 +1036,11 @@ function HouseholdSection() {
 
   const inviteMutation = useMutation({
     mutationFn: () => api.post('/settings/household/invite', { email: inviteEmail, role: inviteRole }),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      const nextInviteLink = response.data?.inviteUrl
+        ? `${window.location.origin}${response.data.inviteUrl}`
+        : '';
+      setInviteLink(nextInviteLink);
       notify.success('Invite sent', `An invitation was sent to ${inviteEmail}`);
       setInviteEmail('');
     },
@@ -1048,6 +1055,16 @@ function HouseholdSection() {
       refetch();
     },
     onError: () => notify.error('Failed to remove member'),
+  });
+
+  const resetTwoFactorMutation = useMutation({
+    mutationFn: (memberId: string) => api.post(`/settings/household/members/${memberId}/disable-2fa`),
+    onSuccess: () => {
+      notify.success('Member 2FA disabled');
+      setTwoFactorResetTarget(null);
+      refetch();
+    },
+    onError: () => notify.error('Failed to disable member 2FA'),
   });
 
   if (isLoading) {
@@ -1148,6 +1165,15 @@ function HouseholdSection() {
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]">
                     {member.role}
                   </span>
+                  {!isOwnerMember && member.totpEnabled && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTwoFactorResetTarget(member)}
+                    >
+                      Reset 2FA
+                    </Button>
+                  )}
                   {!isOwnerMember && (
                     <Button
                       variant="ghost"
@@ -1194,6 +1220,22 @@ function HouseholdSection() {
               >
                 Send invite
               </Button>
+              {inviteLink && (
+                <div className="rounded-[var(--radius-md)] bg-[var(--color-surface-hover)] p-3 text-sm text-[var(--color-text)]">
+                  <div className="font-medium mb-1">Invite link</div>
+                  <div className="break-all text-[var(--color-text-secondary)] mb-2">{inviteLink}</div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(inviteLink);
+                      notify.success('Invite link copied');
+                    }}
+                  >
+                    Copy link
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </Card>
@@ -1217,6 +1259,30 @@ function HouseholdSection() {
             onClick={() => removeTarget && removeMutation.mutate(removeTarget.userId)}
           >
             Remove
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      <Modal
+        open={!!twoFactorResetTarget}
+        onClose={() => setTwoFactorResetTarget(null)}
+        title="Reset Member 2FA"
+        size="sm"
+      >
+        <p className="text-sm text-[var(--color-text)] mb-2">
+          Disable two-factor authentication for <strong>{twoFactorResetTarget ? `${twoFactorResetTarget.firstName} ${twoFactorResetTarget.lastName}`.trim() : ''}</strong>?
+        </p>
+        <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+          They can sign in with their password and set up two-factor authentication again from Security settings.
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setTwoFactorResetTarget(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            loading={resetTwoFactorMutation.isPending}
+            onClick={() => twoFactorResetTarget && resetTwoFactorMutation.mutate(twoFactorResetTarget.userId)}
+          >
+            Reset 2FA
           </Button>
         </ModalFooter>
       </Modal>
