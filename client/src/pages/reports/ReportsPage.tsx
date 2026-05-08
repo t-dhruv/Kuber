@@ -813,10 +813,12 @@ function KpiCards({
               </div>
               <div
                 style={{
-                  fontSize: "1.5rem",
+                  fontSize: "1.75rem",
                   fontWeight: 700,
                   color: card.color,
                   lineHeight: 1.1,
+                  fontFamily: 'var(--font-display)',
+                  fontVariantNumeric: 'tabular-nums',
                 }}
               >
                 {card.value}
