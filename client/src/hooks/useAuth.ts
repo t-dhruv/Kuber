@@ -26,7 +26,7 @@ export function useSignup() {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
   return useMutation({
-    mutationFn: (data: { email: string; password: string; firstName: string; lastName: string; householdName: string }) =>
+    mutationFn: (data: { email: string; password: string; firstName: string; lastName: string; householdName?: string; inviteToken?: string }) =>
       api.post<{ user: UserDto; accessToken: string }>('/auth/signup', data).then(r => r.data),
     onSuccess: (data) => {
       setAuth(data.user, data.accessToken);

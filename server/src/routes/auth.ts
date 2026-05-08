@@ -68,27 +68,49 @@ function setRefreshCookie(res: Response, rawToken: string, rememberMe = false) {
 
 router.post('/signup', async (req: Request, res: Response) => {
   try {
-    const { email, password, firstName, lastName, householdName } = req.body as {
-      email: string; password: string; firstName: string; lastName: string; householdName: string;
+    const { email, password, firstName, lastName, householdName, inviteToken } = req.body as {
+      email: string; password: string; firstName: string; lastName: string; householdName?: string; inviteToken?: string;
     };
 
-    if (!email || !password || !firstName || !lastName || !householdName) {
+    if (!email || !password || !firstName || !lastName || (!householdName && !inviteToken)) {
       return res.status(400).json({ error: 'All fields are required' });
     }
     if (password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
-    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    const normalizedEmail = email.toLowerCase();
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) return res.status(409).json({ error: 'Email already in use' });
+
+    let invite: { id: string; householdId: string; email: string; role: string; expiresAt: Date; usedAt: Date | null } | null = null;
+    if (inviteToken) {
+      invite = await prisma.householdInvite.findUnique({ where: { token: inviteToken } });
+      if (!invite || invite.usedAt || invite.expiresAt <= new Date()) {
+        return res.status(400).json({ error: 'Invite is invalid or expired' });
+      }
+      if (invite.email.toLowerCase() !== normalizedEmail) {
+        return res.status(400).json({ error: 'Invite is for a different email address' });
+      }
+    }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     const result = await prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
-        data: { email: email.toLowerCase(), passwordHash, firstName, lastName },
+        data: { email: normalizedEmail, passwordHash, firstName, lastName },
       });
-      const household = await tx.household.create({ data: { name: householdName } });
+      if (invite) {
+        await tx.householdMember.create({
+          data: { userId: newUser.id, householdId: invite.householdId, role: invite.role },
+        });
+        await tx.householdInvite.update({
+          where: { id: invite.id },
+          data: { usedAt: new Date() },
+        });
+        return { user: newUser, householdId: invite.householdId };
+      }
+      const household = await tx.household.create({ data: { name: householdName! } });
       await tx.householdMember.create({
         data: { userId: newUser.id, householdId: household.id, role: 'owner' },
       });

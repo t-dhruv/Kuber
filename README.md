@@ -162,13 +162,14 @@ Shipped or partially shipped:
 - **CSV import/export** — CSV transaction import and data export are available
 - **Webhooks** — Owner/admin-managed webhook delivery is available
 - **Multiple currencies** — Currency fields and FX routes exist; deeper reporting polish remains in progress
-- **Mobile PWA** — Installable shell exists; offline acceptance coverage remains in progress
+- **Mobile PWA** — Installable shell, cached app navigation, offline route, and offline status banner are available; offline write queues remain future work
+- **Household invites** — Owner/admin-created email invite links and new-user signup redemption are available
+- **2FA owner recovery** — Household owners can reset 2FA for non-owner members
 
 Planned for future releases:
 
 - **Bank sync** — Read-only import via Plaid or MX
-- **Household invite redemption** — emailed invite links and join flow
-- **2FA administrator recovery** — owner-assisted recovery without database access
+- **Offline write queues** — queue account/transaction changes while offline and replay them when connectivity returns
 
 Contributions toward any of these are welcome. Open an issue to discuss before starting large work.
 

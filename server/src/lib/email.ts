@@ -179,6 +179,22 @@ export async function sendWelcomeEmail(to: string, firstName: string) {
   });
 }
 
+export async function sendHouseholdInviteEmail(to: string, householdName: string, token: string) {
+  const url = `${CLIENT_URL}/signup?invite=${encodeURIComponent(token)}`;
+  await sendMail({
+    to,
+    subject: `Join ${householdName} on Kuber`,
+    text: `You've been invited to join ${householdName} on Kuber.\n\nAccept the invite: ${url}\n\nThis invite expires in 7 days.`,
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto">
+        <h2>Join ${householdName} on Kuber</h2>
+        <p>You've been invited to join this household in Kuber.</p>
+        <a href="${url}" style="display:inline-block;padding:10px 20px;background:#6366f1;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Accept Invite</a>
+        <p style="color:#888;font-size:12px;margin-top:24px">This invite expires in 7 days. If you weren't expecting this, you can ignore this email.</p>
+      </div>`,
+  });
+}
+
 export async function sendTestEmail(to: string) {
   await sendMail({
     to,

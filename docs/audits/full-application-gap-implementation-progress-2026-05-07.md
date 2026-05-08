@@ -55,6 +55,10 @@ Focus: Accessibility and UI/UX remediation, custom outbound endpoint governance,
 - [x] F5/P2: Split README roadmap into shipped/partial and planned work.
 - [x] F6/P2: Fix stale reference paths for Sidebar and global CSS.
 - [x] F7/P2: Expand safe outbound URL tests and add audit-log route regression tests.
+- [x] F1/P0 follow-up: Implement redeemable household invite links for new-user signup.
+- [x] F1/P0 follow-up: Send invite email via configured mail provider and expose a copyable invite link to the inviter.
+- [x] F3/P1 follow-up: Add owner-only 2FA reset for non-owner household members.
+- [x] PWA follow-up: Route the offline page, add an offline status banner, and align offline copy with cached-read/no-write-queue behavior.
 
 ## Verification
 
@@ -104,6 +108,17 @@ Focus: Accessibility and UI/UX remediation, custom outbound endpoint governance,
 - 2026-05-07: `npm --workspace server run build` passed after final progress/comment cleanup.
 - 2026-05-07: `npm --workspace client run build` passed after final progress/comment cleanup with Vite chunk-size warnings only.
 - 2026-05-07: `git diff --check` on the U1-U6, C3, S2, and F1-F7 touched files passed with line-ending warnings only.
+- 2026-05-08: GitNexus impact for `settings.ts`, `email.ts`, `signAccessToken`, `useSignup`, and `SignupPage` returned LOW risk before invite/recovery edits.
+- 2026-05-08: `npm --workspace server test -- householdInvites.test.ts` passed after household invite and owner-assisted 2FA recovery work, 1 file / 4 tests.
+- 2026-05-08: `npm --workspace server run build` passed after household invite and owner-assisted 2FA recovery work.
+- 2026-05-08: `npm --workspace client run build` passed after household invite and owner-assisted 2FA recovery work with Vite chunk-size warnings only.
+- 2026-05-08: GitNexus impact for `App` and `vite.config.ts` returned LOW risk before PWA offline routing/status edits.
+- 2026-05-08: `npm --workspace server test` passed after follow-up work, 45 files / 280 tests.
+- 2026-05-08: `npm --workspace server run build` passed after follow-up work.
+- 2026-05-08: `npm --workspace client run build` passed after follow-up work with Vite chunk-size warnings only.
+- 2026-05-08: `npm --workspace client run lint` passed after follow-up work with warnings only.
+- 2026-05-08: `npm --workspace server run lint` passed after follow-up work with warnings only.
+- 2026-05-08: `git diff --check` on the follow-up touched files passed with line-ending warnings only.
 
 ## Backlog Status
 
@@ -120,4 +135,4 @@ Focus: Accessibility and UI/UX remediation, custom outbound endpoint governance,
 
 - Existing source modifications were present before this implementation pass. Keep edits scoped and do not revert unrelated work.
 - `rg.exe` was unavailable in this environment during audit because Windows denied execution from the packaged app path; use PowerShell search or GitNexus if it remains unavailable.
-- Invite email redemption, 2FA owner-assisted recovery, bank sync, and complete PWA/offline behavior remain planned/future work rather than shipped features; docs and roadmap now state that explicitly.
+- Bank sync and offline write queues remain planned/future work rather than shipped features; docs and roadmap state that explicitly.

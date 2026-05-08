@@ -1,4 +1,4 @@
-import { WifiOff, RefreshCw } from 'lucide-react'
+import { WifiOff, RefreshCw } from 'lucide-react';
 
 export default function OfflinePage() {
   return (
@@ -6,7 +6,7 @@ export default function OfflinePage() {
       <WifiOff className="w-16 h-16 text-[#E5622A] mb-6" />
       <h1 className="text-2xl font-bold mb-2">You're offline</h1>
       <p className="text-slate-400 mb-8 max-w-sm">
-        Check your connection and try again. Your data will sync when you're back online.
+        Check your connection and try again. Cached pages may still open, but new data needs the server.
       </p>
       <button
         onClick={() => window.location.reload()}
@@ -16,5 +16,5 @@ export default function OfflinePage() {
         Try again
       </button>
     </div>
-  )
+  );
 }
