@@ -146,10 +146,11 @@ function PageHeader({
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         {/* Period toggle */}
         <div style={{
-          display: 'flex',
-          backgroundColor: 'var(--color-surface-hover)',
+          background: 'var(--color-surface-alt)',
           borderRadius: 'var(--radius-md)',
-          padding: '0.125rem',
+          padding: '3px',
+          display: 'inline-flex',
+          gap: '2px',
         }}>
           {PERIODS.map((p) => (
             <button
@@ -162,8 +163,8 @@ function PageHeader({
                 fontWeight: 500,
                 border: 'none',
                 cursor: 'pointer',
-                backgroundColor: period === p ? 'var(--color-surface)' : 'transparent',
-                color: period === p ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                background: period === p ? 'var(--color-surface)' : 'transparent',
+                color: period === p ? 'var(--color-text)' : 'var(--color-text-muted)',
                 boxShadow: period === p ? 'var(--shadow-sm)' : 'none',
                 transition: 'all 0.15s',
               }}
@@ -419,9 +420,32 @@ function KpiCards({ data, isLoading }: { data?: MonthData; isLoading: boolean })
               <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem', whiteSpace: 'nowrap' }}>
                 {card.label}
               </div>
-              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: card.color }}>
-                {card.format(card.value)}
-              </div>
+              {card.label === 'Savings Rate' ? (
+                <div>
+                  <span style={{
+                    display: 'inline-block',
+                    background: card.color === 'var(--color-success)' ? 'var(--color-success-light)' : card.color === 'var(--color-warning)' ? 'var(--color-warning-light)' : 'var(--color-danger-light)',
+                    color: card.color,
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-full)',
+                    fontSize: 12,
+                    fontWeight: 500,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {card.format(card.value)}
+                  </span>
+                </div>
+              ) : (
+                <div style={{
+                  fontSize: '1.75rem',
+                  fontWeight: 700,
+                  color: card.color,
+                  fontFamily: 'var(--font-display)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {card.format(card.value)}
+                </div>
+              )}
             </>
           )}
         </Card>
@@ -706,7 +730,7 @@ function BarChartView({
               <span style={{ fontSize: '1rem', width: 20, textAlign: 'center', flexShrink: 0 }}>{cat.categoryIcon ?? ''}</span>
               <span style={{ fontSize: '0.875rem', color: 'var(--color-text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat.categoryName}</span>
               <HorizontalBar pct={cat.percent} color="var(--color-success)" />
-              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', flexShrink: 0, textAlign: 'right' }}>{fmtCurrency(cat.amount)}</span>
+              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', flexShrink: 0, textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(cat.amount)}</span>
               <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', flexShrink: 0, textAlign: 'right' }}>{fmtPct(cat.percent)}</span>
             </div>
           ))}
@@ -746,7 +770,7 @@ function BarChartView({
                   </span>
                   <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)', flex: 1 }}>{group.groupName}</span>
                   <HorizontalBar pct={group.percent} color="var(--color-danger)" />
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', minWidth: 72, textAlign: 'right' }}>{fmtCurrency(group.amount)}</span>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', minWidth: 72, textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(group.amount)}</span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(group.percent)}</span>
                 </button>
 
@@ -762,7 +786,7 @@ function BarChartView({
                           <span style={{ fontSize: '0.9375rem', width: 20, textAlign: 'center' }}>{cat.categoryIcon ?? ''}</span>
                           <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', flex: 1 }}>{cat.categoryName}</span>
                           <HorizontalBar pct={groupPct} color="var(--color-danger)" />
-                          <span style={{ fontSize: '0.8125rem', color: 'var(--color-text)', minWidth: 72, textAlign: 'right' }}>{fmtCurrency(cat.amount)}</span>
+                          <span style={{ fontSize: '0.8125rem', color: 'var(--color-text)', minWidth: 72, textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(cat.amount)}</span>
                           <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 36, textAlign: 'right' }}>{fmtPct(groupPct)}</span>
                         </div>
                       );
@@ -905,9 +929,32 @@ function YtdSummary({ data, isLoading }: { data?: YearData; isLoading: boolean }
                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem', whiteSpace: 'nowrap' }}>
                   {stat.label}
                 </div>
-                <div style={{ fontSize: '1.125rem', fontWeight: 700, color: stat.color }}>
-                  {stat.format(stat.value)}
-                </div>
+                {stat.label === 'YTD Savings Rate' ? (
+                  <div style={{ marginTop: '0.25rem' }}>
+                    <span style={{
+                      display: 'inline-block',
+                      background: stat.color === 'var(--color-success)' ? 'var(--color-success-light)' : stat.color === 'var(--color-warning)' ? 'var(--color-warning-light)' : 'var(--color-danger-light)',
+                      color: stat.color,
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-full)',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      {stat.format(stat.value)}
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{
+                    fontSize: '1.75rem',
+                    fontWeight: 700,
+                    color: stat.color,
+                    fontFamily: 'var(--font-display)',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {stat.format(stat.value)}
+                  </div>
+                )}
               </>
             )}
           </div>

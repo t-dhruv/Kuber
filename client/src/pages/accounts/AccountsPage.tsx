@@ -361,7 +361,7 @@ function AccountRow({
 
       {/* Balance + optional 1M change */}
       <div className="flex flex-col items-end shrink-0 mr-1">
-        <div className="text-sm font-semibold" style={{ color: balanceColor(account.balance, account.type) }}>
+        <div className="text-sm font-semibold" style={{ color: balanceColor(account.balance, account.type), fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
           {account.type === 'credit_card'
             ? fmtCurrency(Math.abs(account.balance), account.currency)
             : fmtCurrency(account.balance, account.currency)}
@@ -478,25 +478,34 @@ function NetWorthChart() {
           {isLoading ? (
             <Skeleton height={36} width={160} />
           ) : (
-            <div className="text-[2rem] font-bold" style={{ color: (current?.netWorth ?? 0) >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '2.5rem', fontWeight: 700, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: (current?.netWorth ?? 0) >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>
               {fmtCurrency(current?.netWorth ?? 0)}
             </div>
           )}
           {!isLoading && change && change.since && (
-            <div className="text-[0.8125rem] mt-1" style={{ color: changePositive ? 'var(--color-success)' : 'var(--color-danger)' }}>
-              {fmtChange(change.amount)} ({fmtPercent(change.percent)}) since {fmtDate(change.since)}
+            <div className="mt-1">
+              <span style={{
+                display: 'inline-flex', alignItems: 'center',
+                background: changePositive ? 'var(--color-success-light)' : 'var(--color-danger-light)',
+                color: changePositive ? 'var(--color-success)' : 'var(--color-danger)',
+                padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: 13, fontWeight: 500,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: changePositive ? 'var(--color-success)' : 'var(--color-danger)', display: 'inline-block', marginRight: 4 }} />
+                {fmtChange(change.amount)} ({fmtPercent(change.percent)}) since {fmtDate(change.since)}
+              </span>
             </div>
           )}
         </div>
         {/* Range tabs */}
-        <div className="flex gap-1 bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] p-1">
+        <div style={{ background: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)', padding: 3, display: 'inline-flex', gap: 2 }}>
           {NW_RANGES.map((r) => (
             <button
               key={r}
               onClick={() => setRange(r)}
               className="py-1 px-2.5 text-xs font-semibold border-0 cursor-pointer rounded-[var(--radius-sm)] transition-[background] duration-150"
               style={{
-                backgroundColor: range === r ? 'var(--color-surface-elevated)' : 'transparent',
+                background: range === r ? 'var(--color-surface)' : 'transparent',
+                boxShadow: range === r ? 'var(--shadow-sm)' : 'none',
                 color: range === r ? 'var(--color-text)' : 'var(--color-text-muted)',
               }}
             >
@@ -557,15 +566,15 @@ function NetWorthChart() {
         <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-[var(--color-border)]">
           <div>
             <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.04em] mb-1">Assets</div>
-            <div className="text-base font-bold text-[var(--color-success)] truncate">{fmtCurrency(current.assets)}</div>
+            <div className="text-base font-bold text-[var(--color-success)] truncate" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(current.assets)}</div>
           </div>
           <div>
             <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.04em] mb-1">Liabilities</div>
-            <div className="text-base font-bold text-[var(--color-danger)] truncate">{fmtCurrency(current.liabilities)}</div>
+            <div className="text-base font-bold text-[var(--color-danger)] truncate" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(current.liabilities)}</div>
           </div>
           <div>
             <div className="text-[0.6875rem] text-[var(--color-text-muted)] uppercase tracking-[0.04em] mb-1">Net Worth</div>
-            <div className="text-base font-bold truncate" style={{ color: current.netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>{fmtCurrency(current.netWorth)}</div>
+            <div className="text-base font-bold truncate" style={{ color: current.netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(current.netWorth)}</div>
           </div>
         </div>
       )}
@@ -593,19 +602,19 @@ function NetWorthSummary({
       <div className="flex gap-8 mb-4 flex-wrap">
         <div>
           <div className="text-xs text-[var(--color-text-muted)] mb-1">Assets</div>
-          <div className="text-xl font-bold text-[var(--color-success)]">
+          <div className="text-xl font-bold text-[var(--color-success)]" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
             {fmtCurrency(totalAssets)}
           </div>
         </div>
         <div>
           <div className="text-xs text-[var(--color-text-muted)] mb-1">Liabilities</div>
-          <div className="text-xl font-bold text-[var(--color-danger)]">
+          <div className="text-xl font-bold text-[var(--color-danger)]" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
             {fmtCurrency(Math.abs(totalLiabilities))}
           </div>
         </div>
         <div className="ml-auto">
           <div className="text-xs text-[var(--color-text-muted)] mb-1 text-right">Net Worth</div>
-          <div className="text-2xl font-bold text-right" style={{ color: netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)' }}>
+          <div className="text-2xl font-bold text-right" style={{ color: netWorth >= 0 ? 'var(--color-text)' : 'var(--color-danger)', fontFamily: 'var(--font-display)', fontSize: '2.5rem', fontWeight: 700, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
             {fmtCurrency(netWorth)}
           </div>
         </div>

@@ -224,19 +224,27 @@ function NetWorthWidget({
         <WidgetError />
       ) : (
         <div style={{ marginBottom: '1rem' }}>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '2.25rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
             {fmtCurrency(summary.netWorth.current)}
           </div>
-          <div style={{ marginTop: '0.25rem', fontSize: '0.875rem', color: summary.netWorth.changeAmount >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-            {summary.netWorth.changeAmount >= 0 ? '▲' : '▼'}{' '}
-            {fmtCurrency(Math.abs(summary.netWorth.changeAmount))}{' '}
-            ({summary.netWorth.changeAmount >= 0 ? '+' : ''}{summary.netWorth.changePercent.toFixed(1)}%) this month
+          <div style={{ marginTop: '0.375rem', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+              fontSize: '0.8125rem', fontWeight: 500,
+              padding: '2px 8px', borderRadius: 'var(--radius-full)',
+              backgroundColor: summary.netWorth.changeAmount >= 0 ? 'var(--color-success-light)' : 'var(--color-danger-light)',
+              color: summary.netWorth.changeAmount >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: summary.netWorth.changeAmount >= 0 ? 'var(--color-success)' : 'var(--color-danger)', display: 'inline-block' }} />
+              {summary.netWorth.changeAmount >= 0 ? '+' : ''}{fmtCurrency(summary.netWorth.changeAmount)} · {summary.netWorth.changeAmount >= 0 ? '+' : ''}{summary.netWorth.changePercent.toFixed(1)}%
+            </span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>this month</span>
           </div>
         </div>
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.75rem' }}>
+      <div style={{ display: 'inline-flex', gap: 2, padding: 3, backgroundColor: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)', marginBottom: '0.75rem' }}>
         {NET_WORTH_TABS.map((t) => (
           <button
             key={t}
@@ -245,12 +253,13 @@ function NetWorthWidget({
               padding: '0.25rem 0.625rem',
               borderRadius: 'var(--radius-sm)',
               fontSize: '0.75rem',
-              fontWeight: 600,
+              fontWeight: 500,
               border: 'none',
               cursor: 'pointer',
-              backgroundColor: tab === t ? 'var(--color-accent)' : 'transparent',
-              color: tab === t ? '#fff' : 'var(--color-text-secondary)',
-              transition: 'background 0.15s',
+              backgroundColor: tab === t ? 'var(--color-surface)' : 'transparent',
+              color: tab === t ? 'var(--color-text)' : 'var(--color-text-muted)',
+              boxShadow: tab === t ? 'var(--shadow-sm)' : 'none',
+              transition: 'all 0.15s',
             }}
           >
             {t}
@@ -789,7 +798,7 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
               <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.375rem' }}>
                 Spending
               </div>
-              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
                 {fmtCurrency(data.spending.total)}
               </div>
               <div style={{
@@ -810,7 +819,7 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
               <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.375rem' }}>
                 Net Worth
               </div>
-              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
                 {fmtCurrency(data.netWorth.current)}
               </div>
               <div style={{

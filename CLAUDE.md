@@ -1,34 +1,87 @@
-# Kuber — Claude Code Working Guide
+# Kuber — Claude Code Guide
 
-> Personal finance app. Self-hostable. Open source. Production-grade.
-> Stack: React 18 + TypeScript + Vite | Express + Prisma + PostgreSQL | Docker + Nginx
+Personal finance app. Self-hostable, open source, production-grade.
+
+Stack:
+
+- Frontend: React 18, TypeScript, Vite, Tailwind CSS v4
+- Backend: Node.js, Express 4, TypeScript
+- Database: PostgreSQL 16 + Prisma 5
+- Auth: JWT access token + httpOnly refresh cookie + optional TOTP 2FA
+- Email: SMTP via Nodemailer
+- Testing: Vitest + Playwright
+- Infra: Docker Compose + Nginx
 
 ---
-## Approach
 
-- Think before acting. Read existing files before writing code.
-- Be concise in output but thorough in reasoning.
-- Prefer editing over rewriting whole files.
-- Do not re-read files you have already read unless the file may have changed.
-- Skip files over 100KB unless explicitly required.
-- Suggest running /cost when a session is running long to monitor cache ratio.
-- Recommend starting a new session when switching to an unrelated task.
-- Test your code before declaring done.
-- No sycophantic openers or closing fluff.
-- Keep solutions simple and direct.
+## Core Working Rules
+
+- Be concise in output.
+- Think before acting.
+- Read existing code before editing.
+- Prefer small targeted edits over rewriting whole files.
+- Do not re-read files unless they changed.
+- Do not read files over 100KB unless explicitly required.
+- Do not paste large command output.
+- Use filtered commands with `head`, `tail`, `grep`, or `rtk`.
+- Test code before declaring work complete.
+- Start a new Claude session when switching to an unrelated task.
 - User instructions always override this file.
+
+---
+
+## Token Usage Rules
+
+High token usage usually comes from large command output, repeated file reads, and long conversation history.
+
+Always prefer:
+
+```bash
+rtk npm run test
+rtk npm run build
+rtk npm run lint
+rtk npm run typecheck
+rtk git diff
+rtk git status
+rtk grep "search-term"
+```
+
+Avoid unfiltered commands:
+
+```bash
+cat large-file
+tree
+ls -R
+npm test
+docker logs
+git diff
+```
+
+When large output is needed, filter it:
+
+```bash
+command | head -100
+command | tail -100
+command | grep "error"
+```
+
+Use `/compact` when the session gets long.
+
+Recommend a new session when switching to a different feature or unrelated task.
+
+---
 
 ## Project Layout
 
-```
+```txt
 Kuber/
-├── client/          # React frontend (port 3000)
-├── server/          # Express API (port 4000)
+├── client/          # React frontend
+├── server/          # Express API
 ├── shared/          # Shared TypeScript types/enums
 ├── nginx/           # Nginx config
-├── .claude/         # Agent skills, memory, docs
-├── CLAUDE.md        # This file
-├── AUDITOR.md       # Tech debt + progress tracker (update after every sprint)
+├── .claude/         # Claude skills, memory, docs
+├── CLAUDE.md
+├── AUDITOR.md       # Tech debt + progress tracker
 ├── docker-compose.yml
 ├── docker-compose.prod.yml
 └── Makefile
@@ -36,508 +89,422 @@ Kuber/
 
 ---
 
-## Tech Stack Quick Reference
+## Common Commands
 
-| Layer      | Tech                                                             |
-| ---------- | ---------------------------------------------------------------- |
-| Frontend   | React 18, TypeScript, Vite, Tailwind CSS v4                      |
-| State      | Zustand (auth), TanStack React Query v5 (server state)           |
-| Router     | React Router v6, lazy-loaded pages                               |
-| Backend    | Node.js, Express 4, TypeScript, tsx                              |
-| ORM        | Prisma 5 + PostgreSQL 16                                         |
-| Auth       | JWT (15min) + httpOnly refresh cookie (7d) + TOTP 2FA            |
-| AI Advisor | Multi-provider: Claude, OpenAI, Gemini, Ollama, OpenRouter, None |
-| Email      | SMTP (user-configurable: Gmail, etc.) via Nodemailer             |
-| Testing    | Vitest (unit), Playwright (E2E)                                  |
-| Infra      | Docker Compose + Nginx reverse proxy                             |
-
----
-
-## Development Commands
+Use `rtk` whenever available to reduce token usage.
 
 ```bash
-# Start everything (DB + server + client)
-make dev          # or: npm run dev
+rtk make dev
+rtk make up
+rtk make down
+rtk make logs
 
-# Database
-make db-migrate   # Run Prisma migrations
-make db-seed      # Seed realistic test data
-make db-reset     # Drop + migrate + seed (full reset)
-make db-studio    # Open Prisma Studio on :5555
+rtk make db-migrate
+rtk make db-seed
+rtk make db-reset
+rtk make db-studio
 
-# Docker
-make up           # docker-compose up -d
-make down         # docker-compose down
-make logs         # Follow all container logs
-
-# Testing
-npm run test           # All unit tests
-npm run test:e2e       # Playwright E2E
-npm run test:smoke     # Smoke tests only
-npm run test:coverage  # Coverage report
-
-# Build
-npm run build     # Build all packages
-npm run lint      # ESLint across workspaces
-npm run typecheck # tsc --noEmit across workspaces
+rtk npm run build
+rtk npm run lint
+rtk npm run typecheck
+rtk npm run test
+rtk npm run test:e2e
+rtk npm run test:smoke
+rtk npm run test:coverage
 ```
+
+If `rtk` is not available, run the normal command but keep output filtered.
 
 ---
 
 ## API Conventions
 
-### Response Shape (ALWAYS follow this)
+Success responses return data directly:
 
-```typescript
-// Success — return data directly, no wrapper
-res.json(data)                          // GET single or collection
-res.status(201).json(data)             // POST created
-res.json({ message: 'Deleted' })       // DELETE
-
-// Error — always use this shape
-res.status(4xx|5xx).json({ error: 'Human-readable message' })
+```ts
+res.json(data);
+res.status(201).json(data);
+res.json({ message: "Deleted" });
 ```
 
-**NO `{ data: ... }` wrappers from the server.** The Axios instance in the client handles `.data` extraction from the HTTP response envelope automatically.
+Error responses always use:
 
-### Auth Flow
-
-1. `POST /api/v1/auth/login` → returns `{ accessToken, user }` + sets httpOnly `refreshToken` cookie
-2. All protected routes require `Authorization: Bearer <accessToken>`
-3. Axios interceptor auto-refreshes on 401 via `POST /api/v1/auth/refresh`
-4. JWT payload: `{ userId, householdId, email }`
-
-### Route Naming
-
+```ts
+res.status(400).json({ error: "Human-readable message" });
 ```
-GET    /api/v1/resource           # list
-POST   /api/v1/resource           # create
-GET    /api/v1/resource/:id       # get one
-PUT    /api/v1/resource/:id       # update
-DELETE /api/v1/resource/:id       # delete
-POST   /api/v1/resource/:id/action # sub-action
+
+Do not return server responses wrapped as:
+
+```ts
+res.json({ data });
+```
+
+The client Axios instance already extracts `.data` from the HTTP response envelope.
+
+---
+
+## Route Naming
+
+Use REST-style API routes:
+
+```txt
+GET    /api/v1/resource
+POST   /api/v1/resource
+GET    /api/v1/resource/:id
+PUT    /api/v1/resource/:id
+DELETE /api/v1/resource/:id
+POST   /api/v1/resource/:id/action
 ```
 
 ---
 
-## Database Conventions
+## Auth Rules
 
-- All models have `id` (cuid), `createdAt`, `updatedAt`
-- Household-scoped: every query MUST filter by `householdId` from JWT
-- Soft deletes: use `isDeleted: Boolean @default(false)` — never hard delete financial records
-- Migration naming: `YYYYMMDDHHMMSS_descriptive_name`
-- Always run `npx prisma format` after schema changes
+- Login returns `{ accessToken, user }`.
+- Refresh token is stored in an httpOnly cookie.
+- Protected routes require `Authorization: Bearer <accessToken>`.
+- JWT payload includes `{ userId, householdId, email }`.
+- Access token lifetime is short.
+- Refresh token lifetime is longer.
+- Refresh tokens are stored hashed in the database.
+- Refresh tokens must be invalidated on password change.
+- 2FA is TOTP-based and optional, not mandatory.
 
-### Multi-tenancy Rule
+---
 
-```typescript
-// ALWAYS scope queries to the authenticated household
-const data = await prisma.account.findMany({
-  where: { householdId: req.householdId }, // from requireAuth middleware
+## Database Rules
+
+- Every model should have `id`, `createdAt`, and `updatedAt`.
+- Financial records must use soft delete.
+- Never hard-delete financial records.
+- Household-scoped data must always filter by `householdId`.
+- `householdId` must come from the authenticated request context.
+- Run Prisma format after schema changes.
+
+Example:
+
+```ts
+const accounts = await prisma.account.findMany({
+  where: {
+    householdId: req.householdId,
+    isDeleted: false,
+  },
 });
+```
+
+Migration naming format:
+
+```txt
+YYYYMMDDHHMMSS_descriptive_name
+```
+
+After Prisma schema changes:
+
+```bash
+rtk npx prisma format
 ```
 
 ---
 
 ## Security Requirements
 
-1. **Input validation**: Every route with a body MUST use a Zod schema
-2. **Auth**: All non-public routes use `requireAuth` middleware
-3. **Rate limiting**: Auth endpoints: 10 req/15min. API: 100 req/min
-4. **Secrets**: Never log JWT secrets, passwords, tokens. Use `DEBUG=kuber:*` for dev logs
-5. **CORS**: Only allow `CLIENT_URL` origin in production
-6. **2FA**: TOTP-based (authenticator app). Enforced as optional, never mandatory
-7. **Passwords**: bcrypt, 12 rounds minimum
-8. **Refresh tokens**: Stored hashed in DB, invalidated on password change
+- Validate every route body with Zod.
+- Use `requireAuth` on all non-public routes.
+- Rate-limit auth endpoints.
+- Rate-limit general API endpoints.
+- Never log JWT secrets, passwords, refresh tokens, API keys, or TOTP secrets.
+- Use `DEBUG=kuber:*` for development logs.
+- Production CORS must only allow `CLIENT_URL`.
+- Passwords must use bcrypt with at least 12 rounds.
+- Refresh tokens must be hashed before storage.
+- Do not commit `.env` files.
 
 ---
 
-## Agent Team Roles
+## Frontend Structure
 
-| Agent                 | When to Use                   | Invocation                                |
-| --------------------- | ----------------------------- | ----------------------------------------- |
-| **Planner**           | Before any multi-file feature | `/plan <feature>`                         |
-| **Developer**         | Implementing planned work     | Default Claude                            |
-| **Security Reviewer** | After any auth/input/API work | `/everything-claude-code:security-review` |
-| **Code Reviewer**     | After implementing a feature  | `/everything-claude-code:code-reviewer`   |
-| **E2E Tester**        | After completing a feature    | `/everything-claude-code:e2e`             |
-| **Auditor**           | After each sprint             | Update `AUDITOR.md` manually              |
-| **Doc Updater**       | After major changes           | `/everything-claude-code:doc-updater`     |
-
-### Sprint Workflow
-
-```
-/plan → implement → /security-review → /code-review → /e2e → update AUDITOR.md
-```
-
----
-
-## Environment Variables
-
-```bash
-# Database
-DATABASE_URL=postgresql://kuber:kuber_dev@localhost:5433/kuber_db
-
-# Auth
-JWT_SECRET=<min 64 chars random>
-JWT_REFRESH_SECRET=<min 64 chars random>
-TOTP_APP_NAME=Kuber
-
-# Server
-PORT=4000
-NODE_ENV=development
-CLIENT_URL=http://localhost:3000
-
-# Email (SMTP)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASS=
-SMTP_FROM="Kuber <noreply@yourdomain.com>"
-
-# AI Advisor (all optional — user configures in Settings)
-# Provider stored in UserPreference table, API key stored encrypted
-```
-
----
-
-## Frontend Conventions
-
-### File Structure
-
-```
+```txt
 client/src/
-├── components/     # Shared UI components (no page-specific logic)
+├── components/     # Shared UI components
 ├── pages/          # One folder per route
 │   └── feature/
-│       ├── FeaturePage.tsx      # Page component
-│       ├── components/          # Feature-specific components
-│       └── hooks/               # Feature-specific hooks
+│       ├── FeaturePage.tsx
+│       ├── components/
+│       └── hooks/
 ├── hooks/          # Shared hooks
-├── lib/            # axios instance, utilities
+├── lib/            # Axios instance, utilities
 ├── stores/         # Zustand stores
-└── types/          # Frontend-only types (extend shared types here)
+└── types/          # Frontend-only types
 ```
 
-### Query Keys Convention
+Rules:
 
-```typescript
-// Always use arrays, most specific last
-["accounts"][("accounts", accountId)][("transactions", { page, filter })][ // list // single // filtered list
-  ("dashboard", "summary")
-]; // namespaced
+- Shared components go in `client/src/components`.
+- Page-specific components stay inside the page folder.
+- Server state uses TanStack Query.
+- Auth and lightweight UI state use Zustand.
+- Avoid unnecessary global state.
+- Keep components small and focused.
+
+---
+
+## React Query Rules
+
+Query keys must be arrays.
+
+Examples:
+
+```ts
+["accounts"];
+["accounts", accountId];
+["transactions", { page, filter }];
+["dashboard", "summary"];
 ```
 
-### Error Handling
+Mutation errors should show the server error message when available:
 
-```typescript
-// Every mutation should handle errors
+```ts
 const mutation = useMutation({
-  mutationFn: ...,
-  onError: (err: AxiosError) => {
-    toast.error(err.response?.data?.error ?? 'Something went wrong')
-  }
-})
+  mutationFn: createAccount,
+  onError: (err: AxiosError<{ error?: string }>) => {
+    toast.error(err.response?.data?.error ?? "Something went wrong");
+  },
+});
 ```
 
 ---
 
 ## Testing Standards
 
-### Unit Tests (Vitest)
+Unit tests:
 
-- File: `*.test.ts` next to the file being tested
-- Coverage target: 80% for utilities and hooks
-- Mock Prisma with `vitest-mock-extended`
+- Use Vitest.
+- Test files should be placed next to the file being tested.
+- File format: `*.test.ts` or `*.test.tsx`.
+- Utilities and hooks should have meaningful coverage.
+- Mock Prisma with `vitest-mock-extended` when needed.
 
-### E2E Tests (Playwright)
+E2E tests:
 
-- File: `tests/e2e/*.spec.ts`
-- Test real DB (test database, seeded before run)
-- Every new page/feature needs at minimum a smoke test
+- Use Playwright.
+- E2E files go in `tests/e2e/*.spec.ts`.
+- Use a test database.
+- Seed data before E2E tests.
+- Every new page or feature should have at least a smoke test.
 
-### Smoke Test Checklist (run before any release)
+Before release, verify:
 
-- [ ] Login + logout works
-- [ ] Dashboard loads without errors
-- [ ] Can create an account
-- [ ] Can create a transaction
-- [ ] Can create a budget
-- [ ] Can create a goal
-- [ ] Settings page loads
+- Login works.
+- Logout works.
+- Dashboard loads.
+- Account creation works.
+- Transaction creation works.
+- Budget creation works.
+- Goal creation works.
+- Settings page loads.
 
 ---
 
-## Docker Setup
+## Docker Notes
 
-```yaml
-# Services
-postgres     # PostgreSQL 16, port 5433
-server       # Express API, port 4000
-client       # Vite dev / built static, port 3000
-nginx        # Reverse proxy, port 80/443
+Services:
+
+```txt
+postgres
+server
+client
+nginx
 ```
 
-### Port Map
+Common commands:
 
-| Service    | Internal | Exposed (dev) |
-| ---------- | -------- | ------------- |
-| Postgres   | 5432     | 5433          |
-| Server     | 9002     | 9002          |
-| Client     | 80       | 9001          |
-| Nginx      | 80       | 80            |
-| Grafana    | 3000     | 9003          |
-| Prometheus | 9090     | 9004          |
-| Loki       | 3100     | 9005          |
-| n8n        | 5678     | 9006          |
+```bash
+rtk make up
+rtk make down
+rtk make logs
+```
+
+Do not paste full Docker logs into the conversation. Filter logs:
+
+```bash
+rtk docker logs server
+rtk docker logs postgres
+docker logs server 2>&1 | tail -100
+docker logs server 2>&1 | grep "error"
+```
 
 ---
 
 ## Open Source Standards
 
-- License: MIT
-- Commit style: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`)
-- Branch strategy: `master` (stable) ← `feat/*` / `fix/*` / `chore/*` / `test/*`
-- **Never commit directly to `master` or `main`** — always branch, then open a PR
-- Branch naming: `feat/short-description`, `fix/short-description`, `test/short-description`, `chore/short-description`
-- Every PR / feature must update `AUDITOR.md`
+- License: MIT.
+- Commit style: Conventional Commits.
+- Branch from `master`.
+- Do not commit directly to `master` or `main`.
+- Use feature branches.
+- Keep commits atomic.
+- Commit message body should explain why when useful.
+- Squash noise commits before PR.
+- Update `AUDITOR.md` after meaningful feature work.
 
-### Git Workflow
+Branch naming:
 
-```bash
-# 1. Always branch from latest master
-git checkout master && git pull
-git checkout -b feat/my-feature
-
-# 2. Make atomic commits (one logical change per commit)
-git add <specific files>
-git commit -m "feat: description of what and why"
-
-# 3. Push and open PR — never push directly to master
-git push -u origin feat/my-feature
-gh pr create
+```txt
+feat/short-description
+fix/short-description
+test/short-description
+chore/short-description
+docs/short-description
 ```
 
-- Commits should be atomic: one logical change per commit
-- Commit message body explains _why_, not just _what_
-- Squash noise commits before PR (fixup, wip) — keep history clean
+Commit examples:
+
+```txt
+feat: add household account creation
+fix: scope transaction queries by household
+test: add dashboard smoke test
+docs: update setup guide
+chore: update dependencies
+```
+
+Git workflow:
+
+```bash
+rtk git checkout master
+rtk git pull
+rtk git checkout -b feat/short-description
+
+rtk git status
+rtk git diff
+
+rtk git add <specific-files>
+rtk git commit -m "feat: short description"
+rtk git push -u origin feat/short-description
+```
 
 ---
 
-## Known Architecture Decisions
+## Architecture Decisions
 
-| Decision               | Rationale                                                |
-| ---------------------- | -------------------------------------------------------- |
-| Custom JWT (no Auth0)  | Self-hostable, no external dependency                    |
-| Turborepo monorepo     | Shared types, unified builds                             |
-| Prisma (not raw SQL)   | Type safety, migrations, readable queries                |
-| Tailwind v4            | No config file, CSS-first, zero purge setup              |
-| React Query over Redux | Server state separate from UI state                      |
-| No Plaid yet           | Manual entry first; Plaid/MX in later phase              |
-| SMTP over email SaaS   | Self-hostable, user configures their own provider        |
-| Multi-provider AI      | User chooses Claude/OpenAI/Gemini/Ollama/OpenRouter/None |
+| Decision           | Reason                                            |
+| ------------------ | ------------------------------------------------- |
+| Custom JWT auth    | Self-hostable, no external auth dependency        |
+| Prisma             | Type safety, migrations, readable queries         |
+| PostgreSQL         | Reliable relational database                      |
+| React Query        | Server state management                           |
+| Zustand            | Simple client state                               |
+| SMTP               | Self-hostable email setup                         |
+| Manual entry first | Keeps finance app simple before bank integrations |
+| Multi-provider AI  | User can choose provider or disable AI            |
+
+---
+
+## AI Advisor Rules
+
+- AI provider is optional.
+- Supported providers may include Claude, OpenAI, Gemini, Ollama, OpenRouter, or None.
+- User selects provider in Settings.
+- API keys must be encrypted before storage.
+- Never log AI provider API keys.
+- App must work when AI provider is set to None.
+
+---
+
+## GitNexus Usage
+
+Use GitNexus only for non-trivial code changes.
+
+Before editing important functions, classes, or methods:
+
+- Run impact analysis.
+- Check affected callers and flows.
+- Warn the user if risk is HIGH or CRITICAL.
+
+Before committing:
+
+- Run change detection.
+- Confirm changes only affect expected files, symbols, and flows.
+
+Do not paste the full GitNexus manual into this file.
+
+Use GitNexus skill docs only when needed.
+
+---
+
+## AUDITOR.md Rules
+
+Update `AUDITOR.md` after meaningful feature work.
+
+Track:
+
+- Completed work
+- Known tech debt
+- Security concerns
+- Test gaps
+- Deferred TODOs
+- Follow-up items
+
+Do not leave TODO comments in code unless the item is also tracked in `AUDITOR.md`.
+
+---
+
+## Package Rules
+
+Before adding a new npm package:
+
+- Check whether existing dependencies already solve the problem.
+- Consider bundle impact.
+- Prefer stable, well-maintained packages.
+- Avoid adding packages for small utilities.
+- Explain why the package is needed.
 
 ---
 
 ## DO NOT
 
-- ❌ Return `{ data: ... }` wrappers from server routes
-- ❌ Hard-delete financial records (use soft delete)
-- ❌ Query without `householdId` scope
-- ❌ Store plain-text passwords or secrets
-- ❌ Skip Zod validation on any route with a request body
-- ❌ Use `any` in TypeScript without a `// TODO:` comment
-- ❌ Add new npm packages without checking bundle impact
-- ❌ Commit `.env` files
-- ❌ Leave TODO comments without filing in `AUDITOR.md`
+- Do not return `{ data: ... }` wrappers from API routes.
+- Do not hard-delete financial records.
+- Do not query household data without `householdId`.
+- Do not store plain-text passwords.
+- Do not store plain-text refresh tokens.
+- Do not log secrets.
+- Do not skip Zod validation.
+- Do not use `any` without a clear TODO or reason.
+- Do not add npm packages casually.
+- Do not commit `.env` files.
+- Do not paste large logs.
+- Do not run broad commands without filtering.
+- Do not leave untracked TODO comments.
+- Do not commit directly to `master` or `main`.
 
-<!-- rtk-instructions v2 -->
+---
 
-# RTK (Rust Token Killer) - Token-Optimized Commands
+## When Unsure
 
-## Golden Rule
+Prefer the safest simple option:
 
-**Always prefix commands with `rtk`**. If RTK has a dedicated filter, it uses it. If not, it passes through unchanged. This means RTK is always safe to use.
+1. Read the relevant code.
+2. Make a small targeted change.
+3. Run the smallest useful test.
+4. Summarize what changed.
+5. Mention any remaining risk or follow-up.
 
-**Important**: Even in command chains with `&&`, use `rtk`:
+## GitNexus Usage
 
-```bash
-# ❌ Wrong
-git add . && git commit -m "msg" && git push
+Use GitNexus for non-trivial code exploration, refactoring, and impact analysis.
 
-# ✅ Correct
-rtk git add . && rtk git commit -m "msg" && rtk git push
-```
+Before editing important functions, classes, methods, API routes, database logic, or shared types:
 
-## RTK Commands by Workflow
+- Run GitNexus impact analysis.
+- Check direct callers, affected flows, and risk level.
+- Warn the user before proceeding if risk is HIGH or CRITICAL.
 
-### Build & Compile (80-90% savings)
+Before committing:
 
-```bash
-rtk cargo build         # Cargo build output
-rtk cargo check         # Cargo check output
-rtk cargo clippy        # Clippy warnings grouped by file (80%)
-rtk tsc                 # TypeScript errors grouped by file/code (83%)
-rtk lint                # ESLint/Biome violations grouped (84%)
-rtk prettier --check    # Files needing format only (70%)
-rtk next build          # Next.js build with route metrics (87%)
-```
+- Run GitNexus change detection.
+- Confirm changes only affect expected files, symbols, and execution flows.
 
-### Test (90-99% savings)
+Use GitNexus query/context tools when exploring unfamiliar code instead of broad grep/search.
 
-```bash
-rtk cargo test          # Cargo test failures only (90%)
-rtk vitest run          # Vitest failures only (99.5%)
-rtk playwright test     # Playwright failures only (94%)
-rtk test <cmd>          # Generic test wrapper - failures only
-```
-
-### Git (59-80% savings)
-
-```bash
-rtk git status          # Compact status
-rtk git log             # Compact log (works with all git flags)
-rtk git diff            # Compact diff (80%)
-rtk git show            # Compact show (80%)
-rtk git add             # Ultra-compact confirmations (59%)
-rtk git commit          # Ultra-compact confirmations (59%)
-rtk git push            # Ultra-compact confirmations
-rtk git pull            # Ultra-compact confirmations
-rtk git branch          # Compact branch list
-rtk git fetch           # Compact fetch
-rtk git stash           # Compact stash
-rtk git worktree        # Compact worktree
-```
-
-Note: Git passthrough works for ALL subcommands, even those not explicitly listed.
-
-### GitHub (26-87% savings)
-
-```bash
-rtk gh pr view <num>    # Compact PR view (87%)
-rtk gh pr checks        # Compact PR checks (79%)
-rtk gh run list         # Compact workflow runs (82%)
-rtk gh issue list       # Compact issue list (80%)
-rtk gh api              # Compact API responses (26%)
-```
-
-### JavaScript/TypeScript Tooling (70-90% savings)
-
-```bash
-rtk pnpm list           # Compact dependency tree (70%)
-rtk pnpm outdated       # Compact outdated packages (80%)
-rtk pnpm install        # Compact install output (90%)
-rtk npm run <script>    # Compact npm script output
-rtk npx <cmd>           # Compact npx command output
-rtk prisma              # Prisma without ASCII art (88%)
-```
-
-### Files & Search (60-75% savings)
-
-```bash
-rtk ls <path>           # Tree format, compact (65%)
-rtk read <file>         # Code reading with filtering (60%)
-rtk grep <pattern>      # Search grouped by file (75%)
-rtk find <pattern>      # Find grouped by directory (70%)
-```
-
-### Analysis & Debug (70-90% savings)
-
-```bash
-rtk err <cmd>           # Filter errors only from any command
-rtk log <file>          # Deduplicated logs with counts
-rtk json <file>         # JSON structure without values
-rtk deps                # Dependency overview
-rtk env                 # Environment variables compact
-rtk summary <cmd>       # Smart summary of command output
-rtk diff                # Ultra-compact diffs
-```
-
-### Infrastructure (85% savings)
-
-```bash
-rtk docker ps           # Compact container list
-rtk docker images       # Compact image list
-rtk docker logs <c>     # Deduplicated logs
-rtk kubectl get         # Compact resource list
-rtk kubectl logs        # Deduplicated pod logs
-```
-
-### Network (65-70% savings)
-
-```bash
-rtk curl <url>          # Compact HTTP responses (70%)
-rtk wget <url>          # Compact download output (65%)
-```
-
-### Meta Commands
-
-```bash
-rtk gain                # View token savings statistics
-rtk gain --history      # View command history with savings
-rtk discover            # Analyze Claude Code sessions for missed RTK usage
-rtk proxy <cmd>         # Run command without filtering (for debugging)
-rtk init                # Add RTK instructions to CLAUDE.md
-rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
-```
-
-## Token Savings Overview
-
-| Category         | Commands                       | Typical Savings |
-| ---------------- | ------------------------------ | --------------- |
-| Tests            | vitest, playwright, cargo test | 90-99%          |
-| Build            | next, tsc, lint, prettier      | 70-87%          |
-| Git              | status, log, diff, add, commit | 59-80%          |
-| GitHub           | gh pr, gh run, gh issue        | 26-87%          |
-| Package Managers | pnpm, npm, npx                 | 70-90%          |
-| Files            | ls, read, grep, find           | 60-75%          |
-| Infrastructure   | docker, kubectl                | 85%             |
-| Network          | curl, wget                     | 65-70%          |
-
-Overall average: **60-90% token reduction** on common development operations.
-
-<!-- /rtk-instructions -->
-
-<!-- gitnexus:start -->
-# GitNexus — Code Intelligence
-
-This project is indexed by GitNexus as **Kuber** (7201 symbols, 11603 relationships, 214 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
-
-> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
-
-## Always Do
-
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
-- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
-- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
-
-## Never Do
-
-- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
-- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
-- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
-- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
-
-## Resources
-
-| Resource | Use for |
-|----------|---------|
-| `gitnexus://repo/Kuber/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/Kuber/clusters` | All functional areas |
-| `gitnexus://repo/Kuber/processes` | All execution flows |
-| `gitnexus://repo/Kuber/process/{name}` | Step-by-step execution trace |
-
-## CLI
-
-| Task | Read this skill file |
-|------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
-
-<!-- gitnexus:end -->
+Do not paste full GitNexus manuals or large GitNexus outputs into the conversation.
+Summarize the result and only include the important risks or affected areas.

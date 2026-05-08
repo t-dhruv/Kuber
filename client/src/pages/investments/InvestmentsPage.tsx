@@ -248,11 +248,28 @@ function SkeletonRow() {
   );
 }
 
-function GainBadge({ amount, pct, showArrow = true }: { amount: number; pct: number; showArrow?: boolean }) {
+function GainBadge({ amount, pct, showArrow = true, chip = false }: { amount: number; pct: number; showArrow?: boolean; chip?: boolean }) {
   const positive = amount >= 0;
+  if (chip) {
+    return (
+      <span style={{
+        background: positive ? 'var(--color-success-light)' : 'var(--color-danger-light)',
+        color: positive ? 'var(--color-success)' : 'var(--color-danger)',
+        padding: '2px 8px',
+        borderRadius: 'var(--radius-full)',
+        fontSize: 12,
+        fontWeight: 500,
+        whiteSpace: 'nowrap',
+        fontFamily: 'var(--font-mono)',
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {positive ? '▲' : '▼'} {fmtPct(pct)}
+      </span>
+    );
+  }
   const color = positive ? 'var(--color-success)' : 'var(--color-danger)';
   return (
-    <span style={{ color, fontSize: '0.8125rem', fontWeight: 500, whiteSpace: 'nowrap' }}>
+    <span style={{ color, fontSize: '0.8125rem', fontWeight: 500, whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
       {showArrow && (positive ? '▲' : '▼')}{' '}
       {positive ? '+' : '-'}{fmtCurrency(Math.abs(amount))}{' '}
       <span style={{ opacity: 0.85 }}>{fmtPct(pct)}</span>
@@ -1031,19 +1048,19 @@ function HoldingsTable({
                         </div>
                       </td>
                       <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--color-accent)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                           {h.ticker}
                         </span>
                       </td>
-                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         {h.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}
                       </td>
-                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         {fmtCurrency(h.avgCostBasis)}
                       </td>
                       <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                             {fmtCurrency(h.currentPrice)}
                           </span>
                           <span style={{ fontSize: '0.6875rem', color: h.priceSource === 'live' ? 'var(--color-success)' : 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
@@ -1052,11 +1069,11 @@ function HoldingsTable({
                           </span>
                         </div>
                       </td>
-                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         {fmtCurrency(h.currentValue)}
                       </td>
                       <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                        <GainBadge amount={h.dayChange} pct={h.dayChangePercent} />
+                        <GainBadge amount={h.dayChange} pct={h.dayChangePercent} chip />
                       </td>
                       <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
                         <GainBadge amount={h.gain} pct={h.gainPercent} showArrow={false} />
@@ -2017,6 +2034,23 @@ export default function InvestmentsPage() {
       {/* Holdings Tab */}
       {tab === 'holdings' && (
         <>
+          {/* Portfolio total hero */}
+          {holdingsData && (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
+              <span style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '2.5rem',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                fontVariantNumeric: 'tabular-nums',
+                color: 'var(--color-text)',
+                lineHeight: 1.1,
+              }}>
+                {fmtCurrency(holdingsData.totalValue)}
+              </span>
+              <GainBadge amount={holdingsData.totalGain} pct={holdingsData.totalGainPercent} chip showArrow={false} />
+            </div>
+          )}
           <PerformanceCards
             performanceData={performanceData}
             period={period}

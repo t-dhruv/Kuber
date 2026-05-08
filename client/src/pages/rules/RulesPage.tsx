@@ -57,6 +57,7 @@ interface Rule {
   strict: boolean;
   isActive: boolean;
   sortOrder: number;
+  matchCount?: number;
 }
 
 interface Category {
@@ -699,7 +700,7 @@ export default function RulesPage() {
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5">
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     <span className="font-semibold text-[0.9375rem] text-[var(--color-text)]">
                       {rule.name.trim() || generateRuleName(rule.conditions, rule.actions, categories)}
                     </span>
@@ -716,23 +717,50 @@ export default function RulesPage() {
                     >
                       {rule.isActive ? "Active" : "Disabled"}
                     </span>
-                  </div>
-                  <div className="text-[0.8125rem] text-[var(--color-text-secondary)]">
-                    <span className="font-medium">When: </span>
-                    {rule.conditions.map((c, i) => (
-                      <span key={i}>
-                        {i > 0
-                          ? ` ${(rule.strict ?? true) ? "AND" : "OR"} `
-                          : ""}
-                        {conditionLabel(c)}
+                    {rule.matchCount !== undefined && (
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                        {rule.matchCount} matched
                       </span>
-                    ))}
+                    )}
                   </div>
-                  <div className="text-[0.8125rem] text-[var(--color-text-secondary)] mt-0.5">
-                    <span className="font-medium">Then: </span>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <span className="text-[0.6875rem] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">IF</span>
+                    {rule.conditions.map((c, i) => {
+                      const field = FIELD_OPTIONS.find((f) => f.value === c.field)?.label ?? c.field;
+                      const ops = [...STRING_OPERATORS, ...NUMBER_OPERATORS];
+                      const op = ops.find((o) => o.value === c.operator)?.label ?? c.operator;
+                      return (
+                        <span key={i} className="inline-flex items-center gap-1" style={{
+                          background: 'var(--color-surface-alt)',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: 'var(--radius-full)',
+                          fontSize: 11,
+                          padding: '3px 8px',
+                        }}>
+                          <span style={{ color: 'var(--color-text-muted)' }}>{field}</span>
+                          <span style={{ color: 'var(--color-text)' }}> {op} </span>
+                          <span style={{ color: 'var(--color-text)', fontWeight: 700 }}>"{c.value}"</span>
+                          {i < rule.conditions.length - 1 && (
+                            <span style={{ color: 'var(--color-text-muted)', marginLeft: 4, fontWeight: 600 }}>
+                              {(rule.strict ?? true) ? "AND" : "OR"}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                    <span className="text-[0.6875rem] font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">THEN</span>
                     {rule.actions.map((a, i) => (
-                      <span key={i}>
-                        {i > 0 ? ", " : ""}
+                      <span key={i} style={{
+                        background: 'var(--color-accent-light)',
+                        color: 'var(--color-accent)',
+                        border: '1px solid var(--color-accent-light)',
+                        borderRadius: 'var(--radius-full)',
+                        fontSize: 11,
+                        padding: '3px 8px',
+                        fontWeight: 500,
+                      }}>
                         {actionLabel(a, categories)}
                       </span>
                     ))}

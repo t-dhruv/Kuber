@@ -175,15 +175,15 @@ function BucketCard({
           <span className="text-xl">{meta.icon}</span>
           <span className="font-semibold text-[var(--color-text)]">{meta.label}</span>
         </div>
-        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]">
+        <span style={{ background: 'var(--color-accent-light, rgba(229,98,42,0.12))', color: 'var(--color-accent)', padding: '2px 8px', borderRadius: 'var(--radius-full)', fontSize: 12, fontWeight: 500 }}>
           {meta.targetPct}% target
         </span>
       </div>
 
       {/* Amounts */}
       <div>
-        <span className="text-2xl font-bold text-[var(--color-text)]">{fmtCurrency(bucket.total)}</span>
-        <span className="text-sm text-[var(--color-text-muted)]"> / {fmtCurrency(bucket.target)}</span>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text)' }}>{fmtCurrency(bucket.total)}</span>
+        <span className="text-sm text-[var(--color-text-muted)]" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}> / {fmtCurrency(bucket.target)}</span>
       </div>
 
       {/* Progress */}
@@ -212,7 +212,7 @@ function BucketCard({
                   style={{ width: `${Math.min((cat.amount / maxAmt) * 100, 100)}%` }}
                 />
               </div>
-              <span className="text-xs text-[var(--color-text-muted)] w-16 text-right flex-shrink-0">
+              <span className="text-xs text-[var(--color-text-muted)] w-16 text-right flex-shrink-0" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                 {fmtCurrency(cat.amount)}
               </span>
             </div>
@@ -852,21 +852,63 @@ export default function WealthPage() {
           <p className="text-sm text-[var(--color-text-muted)] mt-0.5">50 / 30 / 20 Rule</p>
         </div>
 
-        {/* Month selector */}
-        <div className="flex items-center gap-2">
+        {/* Month selector — pill-segment style */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          background: 'var(--color-surface-alt, var(--color-surface-hover))',
+          borderRadius: 'var(--radius-md)',
+          padding: '3px',
+          gap: '2px',
+        }}>
           <button
             onClick={handlePrev}
-            className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] transition-colors"
+            style={{
+              padding: '0.25rem 0.5rem',
+              borderRadius: 'calc(var(--radius-md) - 2px)',
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
             aria-label="Previous month"
           >
             <ChevronLeft size={16} />
           </button>
-          <span className="text-sm font-medium text-[var(--color-text)] w-36 text-center">
+          <span style={{
+            background: 'var(--color-surface)',
+            boxShadow: 'var(--shadow-sm)',
+            borderRadius: 'calc(var(--radius-md) - 2px)',
+            padding: '0.25rem 0.75rem',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            color: 'var(--color-text)',
+            width: '9rem',
+            textAlign: 'center',
+            whiteSpace: 'nowrap',
+          }}>
             {getMonthLabel(month)}
           </span>
           <button
             onClick={handleNext}
-            className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] transition-colors"
+            style={{
+              padding: '0.25rem 0.5rem',
+              borderRadius: 'calc(var(--radius-md) - 2px)',
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
             aria-label="Next month"
           >
             <ChevronRight size={16} />
@@ -900,6 +942,34 @@ export default function WealthPage() {
         <WealthSkeleton />
       ) : analysis && analysis.income !== null ? (
         <>
+          {/* ── Monthly total hero ── */}
+          {analysis.income !== null && (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
+              <span style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '2.5rem',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                fontVariantNumeric: 'tabular-nums',
+                color: 'var(--color-text)',
+                lineHeight: 1.1,
+              }}>
+                {fmtCurrency(analysis.income)}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>/mo take-home</span>
+              <span style={{
+                background: 'var(--color-accent-light, rgba(229,98,42,0.12))',
+                color: 'var(--color-accent)',
+                padding: '2px 8px',
+                borderRadius: 'var(--radius-full)',
+                fontSize: 12,
+                fontWeight: 500,
+              }}>
+                50 / 30 / 20
+              </span>
+            </div>
+          )}
+
           {/* ── Three bucket cards ── */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <BucketCard type="needs" bucket={analysis.buckets.needs} income={analysis.income} />

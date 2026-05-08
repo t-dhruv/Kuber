@@ -193,7 +193,7 @@ function EditableBudgetCell({
       className="inline-flex flex-col items-end gap-px cursor-pointer px-1 py-0.5 rounded-[var(--radius-sm)] transition-[border-color] duration-150"
       style={{ borderBottom: hovered ? '1px dashed var(--color-border-strong)' : '1px dashed transparent' }}
     >
-      <div className="inline-flex items-center gap-1 text-sm text-[var(--color-text)]">
+      <div className="inline-flex items-center gap-1 text-sm text-[var(--color-text)]" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
         {hovered && (
           <Pencil size={11} className="text-[var(--color-text-muted)] shrink-0" />
         )}
@@ -503,12 +503,12 @@ function BudgetRow({
         </div>
 
         {/* Actual — hidden on mobile */}
-        <div className="hidden sm:block text-right text-sm text-[var(--color-text)]">
+        <div className="hidden sm:block text-right text-sm text-[var(--color-text)]" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
           {fmtCurrency(item.actual)}
         </div>
 
         {/* Remaining — hidden on mobile */}
-        <div className="hidden sm:block text-right text-sm font-medium" style={{ color: remainingColor(item.remaining) }}>
+        <div className="hidden sm:block text-right text-sm font-medium" style={{ color: remainingColor(item.remaining), fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
           {fmtCurrency(item.remaining)}
         </div>
       </div>
@@ -878,7 +878,7 @@ function LeftToBudgetBanner({
         <div className="flex items-baseline gap-2 flex-wrap">
           <span
             className="text-2xl font-bold"
-            style={{ color: positive ? 'var(--color-success)' : 'var(--color-danger)' }}
+            style={{ color: positive ? 'var(--color-success)' : 'var(--color-danger)', fontFamily: 'var(--font-display)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}
           >
             {fmtCurrency(Math.abs(leftToBudget))}
           </span>
@@ -955,6 +955,9 @@ function SummaryPanel({ data }: { data?: BudgetData }) {
           style={{
             fontSize: '1.875rem',
             color: positive ? 'var(--color-success)' : 'var(--color-danger)',
+            fontFamily: 'var(--font-display)',
+            fontWeight: 700,
+            fontVariantNumeric: 'tabular-nums',
           }}
         >
           {fmtCurrency(Math.abs(leftToBudget))}
@@ -1035,8 +1038,8 @@ function SummaryRow({
       <span className={`text-[0.8125rem] ${bold ? 'font-semibold text-[var(--color-text)]' : 'font-normal text-[var(--color-text-secondary)]'}`}>
         {label}
       </span>
-      <span className={`text-[0.8125rem] text-right text-[var(--color-text)] ${bold ? 'font-semibold' : 'font-normal'}`}>{fmtCurrency(budget)}</span>
-      <span className={`text-[0.8125rem] text-right text-[var(--color-text)] ${bold ? 'font-semibold' : 'font-normal'}`}>{fmtCurrency(actual)}</span>
+      <span className={`text-[0.8125rem] text-right text-[var(--color-text)] ${bold ? 'font-semibold' : 'font-normal'}`} style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(budget)}</span>
+      <span className={`text-[0.8125rem] text-right text-[var(--color-text)] ${bold ? 'font-semibold' : 'font-normal'}`} style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(actual)}</span>
     </div>
   );
 }
@@ -1146,17 +1149,25 @@ export default function BudgetPage() {
 
         {/* Right side: period tabs + settings */}
         <div className="flex items-center gap-3">
-          {/* Period tabs */}
-          <div className="flex border border-[var(--color-border)] rounded-[var(--radius-md)] overflow-hidden">
+          {/* Period tabs — pill-segment style */}
+          <div
+            className="flex items-center"
+            style={{
+              background: 'var(--color-surface-alt)',
+              borderRadius: 'var(--radius-md)',
+              padding: '3px',
+            }}
+          >
             {PERIOD_TABS.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setPeriodTab(tab)}
-                className="px-3 py-1 text-[0.8125rem] font-medium border-none cursor-pointer transition-[background,color] duration-150"
+                className="px-3 py-1 text-[0.8125rem] font-medium border-none cursor-pointer transition-[background,color,box-shadow] duration-150"
                 style={{
-                  borderRight: tab !== 'Decade' ? '1px solid var(--color-border)' : 'none',
-                  backgroundColor: periodTab === tab ? 'var(--color-accent)' : 'var(--color-surface)',
-                  color: periodTab === tab ? '#fff' : 'var(--color-text-secondary)',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: periodTab === tab ? 'var(--color-surface)' : 'transparent',
+                  color: periodTab === tab ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                  boxShadow: periodTab === tab ? 'var(--shadow-sm)' : 'none',
                 }}
               >
                 {tab}
@@ -1226,7 +1237,14 @@ export default function BudgetPage() {
                 <span className="text-[0.8125rem] text-[var(--color-text-secondary)] font-medium">
                   Expenses:
                 </span>
-                <div className="flex border border-[var(--color-border)] rounded-[var(--radius-md)] overflow-hidden">
+                <div
+                  className="flex items-center"
+                  style={{
+                    background: 'var(--color-surface-alt)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '3px',
+                  }}
+                >
                   {([
                     { value: 'byType' as ExpenseViewTab, label: 'By Type' },
                     { value: 'byGroup' as ExpenseViewTab, label: 'By Group' },
@@ -1234,11 +1252,12 @@ export default function BudgetPage() {
                     <button
                       key={t.value}
                       onClick={() => setExpenseViewTab(t.value)}
-                      className="text-[0.8125rem] font-medium border-none cursor-pointer transition-[background,color] duration-150 px-2.5 py-px"
+                      className="text-[0.8125rem] font-medium border-none cursor-pointer transition-[background,color,box-shadow] duration-150 px-2.5 py-px"
                       style={{
-                        borderRight: t.value === 'byType' ? '1px solid var(--color-border)' : 'none',
-                        backgroundColor: expenseViewTab === t.value ? 'var(--color-accent)' : 'var(--color-surface)',
-                        color: expenseViewTab === t.value ? '#fff' : 'var(--color-text-secondary)',
+                        borderRadius: 'var(--radius-md)',
+                        backgroundColor: expenseViewTab === t.value ? 'var(--color-surface)' : 'transparent',
+                        color: expenseViewTab === t.value ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                        boxShadow: expenseViewTab === t.value ? 'var(--shadow-sm)' : 'none',
                       }}
                     >
                       {t.label}

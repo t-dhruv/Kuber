@@ -123,6 +123,31 @@ function formatDaysUntil(days?: number): string {
   return `in ${days} days`;
 }
 
+function statusBadgeStyle(isPaid: boolean, daysUntil: number): { bg: string; color: string } {
+  if (isPaid) return { bg: 'var(--color-success-light)', color: 'var(--color-success)' };
+  if (daysUntil <= 3) return { bg: 'var(--color-danger-light)', color: 'var(--color-danger)' };
+  if (daysUntil <= 7) return { bg: 'var(--color-warning-light)', color: 'var(--color-warning)' };
+  return { bg: 'var(--color-surface-alt)', color: 'var(--color-text-secondary)' };
+}
+
+function StatusBadge({ isPaid, daysUntil }: { isPaid: boolean; daysUntil: number }) {
+  const { bg, color } = statusBadgeStyle(isPaid, daysUntil);
+  const label = isPaid ? 'Paid' : `Due ${formatDaysUntil(daysUntil)}`;
+  return (
+    <span style={{
+      background: bg,
+      color,
+      padding: '2px 8px',
+      borderRadius: 'var(--radius-full)',
+      fontSize: 12,
+      fontWeight: 500,
+      whiteSpace: 'nowrap',
+    }}>
+      {label}
+    </span>
+  );
+}
+
 function accountLabel(item: RecurringItem): string {
   return item.accountLastFour
     ? `${item.accountName} ••${item.accountLastFour}`
@@ -403,7 +428,7 @@ function MonthlyView({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <span className="text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] w-[72px]">Income</span>
-              <span className="text-base font-bold text-[var(--color-success)]">
+              <span className="text-base font-bold text-[var(--color-success)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>
                 {fmtCurrency(data.totalIncome)}
               </span>
             </div>
@@ -427,7 +452,7 @@ function MonthlyView({
                 <span>{fmtCurrency(expensesRemaining)} remaining</span>
               </div>
             </div>
-            <span className="text-sm font-semibold text-[var(--color-text)] shrink-0">
+            <span className="text-sm font-semibold text-[var(--color-text)] shrink-0" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>
               Total: {fmtCurrency(data.totalExpenses)}
             </span>
           </div>
@@ -449,16 +474,16 @@ function MonthlyView({
         ) : (
           <>
             {/* Header */}
-            <div className="grid gap-2 pb-2 border-b border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-muted)]" style={{ gridTemplateColumns: '1fr 100px 90px 36px' }}>
+            <div className="grid gap-2 pb-2 border-b border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-muted)]" style={{ gridTemplateColumns: '1fr 120px 90px 36px' }}>
               <span>Name</span>
-              <span>Due</span>
+              <span>Status</span>
               <span className="text-right">Amount</span>
               <span />
             </div>
 
             {unpaidExpenses.map((item, idx) => (
               <div key={item.id}>
-                <div className="grid gap-2 py-[0.625rem] items-center text-[0.8125rem]" style={{ gridTemplateColumns: '1fr 100px 90px 36px' }}>
+                <div className="grid gap-2 py-[0.625rem] items-center text-[0.8125rem]" style={{ gridTemplateColumns: '1fr 120px 90px 36px' }}>
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="min-w-0">
                       <div className="font-medium text-[var(--color-text)] whitespace-nowrap overflow-hidden text-ellipsis">
@@ -466,10 +491,8 @@ function MonthlyView({
                       </div>
                     </div>
                   </div>
-                  <span className="text-[var(--color-text-secondary)] text-xs">
-                    {formatDaysUntil(item.daysUntil)}
-                  </span>
-                  <span className="text-right font-semibold text-[var(--color-danger)]">
+                  <StatusBadge isPaid={false} daysUntil={item.daysUntil} />
+                  <span className="text-right font-semibold text-[var(--color-danger)]" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                     -{fmtCurrency(item.amount)}
                   </span>
                   <span />
@@ -506,15 +529,16 @@ function MonthlyView({
         ) : (
           <>
             {/* Header */}
-            <div className="grid gap-2 pb-2 border-b border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-muted)]" style={{ gridTemplateColumns: '1fr 100px 90px' }}>
+            <div className="grid gap-2 pb-2 border-b border-[var(--color-border)] text-xs font-semibold text-[var(--color-text-muted)]" style={{ gridTemplateColumns: '1fr 80px 100px 90px' }}>
               <span>Name</span>
+              <span>Status</span>
               <span>Next Date</span>
               <span className="text-right">Amount</span>
             </div>
 
             {paidExpenses.map((item, idx) => (
               <div key={item.id}>
-                <div className="grid gap-2 py-[0.625rem] items-center text-[0.8125rem] opacity-80" style={{ gridTemplateColumns: '1fr 100px 90px' }}>
+                <div className="grid gap-2 py-[0.625rem] items-center text-[0.8125rem] opacity-80" style={{ gridTemplateColumns: '1fr 80px 100px 90px' }}>
                   <div className="flex items-center gap-2 min-w-0">
                     <Check size={14} className="text-[var(--color-success)] font-bold flex-shrink-0" />
                     <div className="min-w-0">
@@ -523,10 +547,11 @@ function MonthlyView({
                       </div>
                     </div>
                   </div>
-                  <span className="text-[var(--color-text-muted)] text-xs">
+                  <StatusBadge isPaid={true} daysUntil={0} />
+                  <span className="text-[var(--color-text-muted)]" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
                     {fmtDate(item.nextDate)}
                   </span>
-                  <span className="text-right font-semibold text-[var(--color-text-muted)]">
+                  <span className="text-right font-semibold text-[var(--color-text-muted)]" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                     {fmtCurrency(item.amount)}
                   </span>
                 </div>
@@ -610,7 +635,7 @@ function AllRecurringView({
               </div>
               <span
                 className="font-bold text-sm shrink-0"
-                style={{ color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}
+                style={{ color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}
               >
                 {item.amount < 0 ? '-' : '+'}{fmtCurrency(item.amount)}
               </span>
@@ -681,11 +706,11 @@ function AllRecurringView({
               <div className="font-medium text-[var(--color-text)] whitespace-nowrap overflow-hidden text-ellipsis">
                 {item.name}
               </div>
-              <span className="text-right font-semibold" style={{ color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+              <span className="text-right font-semibold" style={{ color: item.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                 {item.amount < 0 ? '-' : '+'}{fmtCurrency(item.amount)}
               </span>
               <span className="text-[var(--color-text-secondary)]">{frequencyLabel(item.frequency)}</span>
-              <span className="text-[var(--color-text-secondary)]">{fmtDate(item.nextDate)}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-muted)' }}>{fmtDate(item.nextDate)}</span>
               <span className="text-[var(--color-text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis">
                 {accountLabel(item)}
               </span>

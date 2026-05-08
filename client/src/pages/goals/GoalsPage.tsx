@@ -120,7 +120,7 @@ function goalStatusStyle(status: GoalStatus): { bg: string; color: string; label
     case 'at_risk':
       return { bg: 'var(--color-warning-light)', color: 'var(--color-warning)', label: 'At Risk' };
     case 'completed':
-      return { bg: 'var(--color-border)', color: 'var(--color-text-secondary)', label: 'Completed' };
+      return { bg: 'var(--color-info-light, var(--color-border))', color: 'var(--color-info, var(--color-text-secondary))', label: 'Completed' };
   }
 }
 
@@ -214,8 +214,15 @@ function GoalCard({
             </div>
           </div>
           <span
-            className="shrink-0 text-[0.6875rem] font-semibold py-0.5 px-2 rounded-[var(--radius-full)]"
-            style={{ backgroundColor: statusStyle.bg, color: statusStyle.color }}
+            className="shrink-0 text-[0.6875rem] font-[500]"
+            style={{
+              background: statusStyle.bg,
+              color: statusStyle.color,
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-full)',
+              fontSize: 12,
+              fontWeight: 500,
+            }}
           >
             {statusStyle.label}
           </span>
@@ -226,19 +233,19 @@ function GoalCard({
           <div className="flex justify-between mb-1.5 text-xs text-[var(--color-text-secondary)]">
             <span>{Math.round(pct * 100)}%</span>
           </div>
-          <div className="h-2 bg-[var(--color-border)] rounded-[var(--radius-full)] overflow-hidden">
+          <div className="bg-[var(--color-border)] overflow-hidden" style={{ height: 8, borderRadius: 'var(--radius-full)' }}>
             <div
-              className="h-full bg-[var(--color-accent)] rounded-[var(--radius-full)] transition-[width] duration-[400ms] ease-in-out"
-              style={{ width: `${pct * 100}%` }}
+              className="h-full bg-[var(--color-accent)] transition-[width] duration-[400ms] ease-in-out"
+              style={{ width: `${pct * 100}%`, borderRadius: 'var(--radius-full)' }}
             />
           </div>
         </div>
 
         {/* Amounts */}
-        <div className="text-sm text-[var(--color-text-secondary)] mb-1.5">
-          <span className="font-semibold text-[var(--color-text)]">{fmtCurrency(goal.currentAmount)}</span>
+        <div className="text-sm text-[var(--color-text-secondary)] mb-1.5" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <span className="font-bold text-[var(--color-text)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(goal.currentAmount)}</span>
           {' / '}
-          {fmtCurrency(goal.targetAmount)}
+          <span style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(goal.targetAmount)}</span>
         </div>
 
         {/* Target date + monthly */}
@@ -247,7 +254,7 @@ function GoalCard({
             <span>Target: {fmtDate(goal.targetDate)}</span>
           )}
           {goal.monthlyContribution != null && goal.monthlyContribution > 0 && (
-            <span>Monthly: {fmtCurrency(goal.monthlyContribution)}/mo</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>Monthly: {fmtCurrency(goal.monthlyContribution)}/mo</span>
           )}
         </div>
 
@@ -298,8 +305,15 @@ function DebtGoalCard({
         <div className="flex items-start justify-between gap-2 mb-3">
           <span className="text-[0.9375rem] font-semibold text-[var(--color-text)]">{goal.name}</span>
           <span
-            className="shrink-0 text-[0.6875rem] font-semibold py-0.5 px-2 rounded-[var(--radius-full)]"
-            style={{ backgroundColor: statusStyle.bg, color: statusStyle.color }}
+            className="shrink-0"
+            style={{
+              background: statusStyle.bg,
+              color: statusStyle.color,
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-full)',
+              fontSize: 12,
+              fontWeight: 500,
+            }}
           >
             {statusStyle.label}
           </span>
@@ -309,15 +323,15 @@ function DebtGoalCard({
         <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="text-center">
             <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-0.5">Original</div>
-            <div className="text-[0.8125rem] font-semibold text-[var(--color-text)]">{fmtCurrency(goal.targetAmount)}</div>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-text)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(goal.targetAmount)}</div>
           </div>
           <div className="text-center">
             <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-0.5">Paid Off</div>
-            <div className="text-[0.8125rem] font-semibold text-[var(--color-success)]">{fmtCurrency(goal.currentAmount)}</div>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-success)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(goal.currentAmount)}</div>
           </div>
           <div className="text-center">
             <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-0.5">Remaining</div>
-            <div className="text-[0.8125rem] font-semibold text-[var(--color-danger)]">{fmtCurrency(remaining)}</div>
+            <div className="text-[0.8125rem] font-semibold text-[var(--color-danger)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(remaining)}</div>
           </div>
         </div>
 
@@ -349,7 +363,7 @@ function DebtGoalCard({
         <div className="flex flex-col gap-0.5 mb-3.5 text-xs text-[var(--color-text-muted)]">
           {goal.targetDate && <span>Target payoff: {fmtDate(goal.targetDate)}</span>}
           {goal.monthlyContribution != null && goal.monthlyContribution > 0 && (
-            <span>Monthly payment: {fmtCurrency(goal.monthlyContribution)}/mo</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>Monthly payment: {fmtCurrency(goal.monthlyContribution)}/mo</span>
           )}
         </div>
 
@@ -1169,8 +1183,15 @@ export default function GoalsPage() {
           Goals
         </h1>
 
-        {/* Sub-tabs */}
-        <div className="flex bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] overflow-hidden shrink-0">
+        {/* Sub-tabs — pill-segment style */}
+        <div
+          className="flex items-center shrink-0"
+          style={{
+            background: 'var(--color-surface-alt)',
+            borderRadius: 'var(--radius-md)',
+            padding: '3px',
+          }}
+        >
           {([
             { value: 'save_up', label: 'Save up' },
             { value: 'pay_down', label: 'Pay down' },
@@ -1178,10 +1199,12 @@ export default function GoalsPage() {
             <button
               key={tab.value}
               onClick={() => setSubTab(tab.value)}
-              className="py-1.5 px-3.5 border-none cursor-pointer text-[0.8125rem] font-medium transition-[background] duration-150"
+              className="py-1.5 px-3.5 border-none cursor-pointer text-[0.8125rem] font-medium transition-[background,color,box-shadow] duration-150"
               style={{
-                backgroundColor: subTab === tab.value ? 'var(--color-accent)' : 'transparent',
-                color: subTab === tab.value ? '#fff' : 'var(--color-text-secondary)',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: subTab === tab.value ? 'var(--color-surface)' : 'transparent',
+                color: subTab === tab.value ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                boxShadow: subTab === tab.value ? 'var(--shadow-sm)' : 'none',
               }}
             >
               {tab.label}
