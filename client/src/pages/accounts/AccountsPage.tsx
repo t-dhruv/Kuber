@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { ChevronDown, ChevronRight, RefreshCw, Plus, MoreHorizontal, Pencil, EyeOff, MinusCircle, Trash2, X, ExternalLink, Upload } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getColorToken } from '@/lib/colors';
 import {
   Card, Button, Input, Select, Modal, ModalFooter, Skeleton, InstitutionLogo, ConfirmDialog,
 } from '@/components/ui';
@@ -552,10 +553,10 @@ function NetWorthChart() {
             <Line
               type="monotone"
               dataKey="netWorth"
-              stroke="#E5622A"
+              stroke={getColorToken('accent')}
               strokeWidth={2}
               dot={false}
-              activeDot={{ r: 4, fill: '#E5622A' }}
+              activeDot={{ r: 4, fill: getColorToken('accent') }}
             />
           </LineChart>
         </ResponsiveContainer>
@@ -1187,8 +1188,8 @@ function AccountDetailDrawer({
                     <AreaChart data={history} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
                       <defs>
                         <linearGradient id="acctGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#E5622A" stopOpacity={0.2} />
-                          <stop offset="95%" stopColor="#E5622A" stopOpacity={0} />
+                          <stop offset="5%" stopColor={getColorToken('accent')} stopOpacity={0.2} />
+                          <stop offset="95%" stopColor={getColorToken('accent')} stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -1201,7 +1202,7 @@ function AccountDetailDrawer({
                         labelFormatter={(label: string) => fmtDate(label)}
                         contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem' }}
                       />
-                      <Area type="monotone" dataKey="balance" stroke="#E5622A" strokeWidth={2} fill="url(#acctGrad)" dot={false} />
+                      <Area type="monotone" dataKey="balance" stroke={getColorToken('accent')} strokeWidth={2} fill="url(#acctGrad)" dot={false} />
                     </AreaChart>
                   </ResponsiveContainer>
                 )}

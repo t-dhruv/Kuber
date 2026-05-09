@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { Plus, ChevronRight, ChevronDown, Trash2, RefreshCw, Newspaper, Loader2, Upload } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getColorToken } from '@/lib/colors';
 import {
   Card, Skeleton, Button, Modal, ModalFooter, Input, Select, notify, ConfirmDialog,
 } from '@/components/ui';
@@ -399,7 +400,7 @@ function PerformanceChart({ data, isLoading, hasHoldings }: { data?: HistoryPoin
               <Line
                 type="monotone"
                 dataKey="value"
-                stroke="#E5622A"
+                stroke={getColorToken('accent')}
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}

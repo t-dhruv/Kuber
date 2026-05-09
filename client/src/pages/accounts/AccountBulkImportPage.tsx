@@ -6,13 +6,14 @@
  * validation → confirm → done.
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Upload, Download, FileText, AlertCircle, CheckCircle2,
   RefreshCw, ChevronDown, ChevronUp, X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getColorToken } from '@/lib/colors';
 import { Button, notify } from '@/components/ui';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -51,11 +52,6 @@ const COLUMN_DESCRIPTIONS = [
   { col: 'id',                    req: false, desc: 'Leave blank to CREATE; paste existing account ID to UPDATE' },
 ];
 
-const ACTION_STYLES: Record<string, { bg: string; color: string; label: string }> = {
-  create: { bg: 'rgba(16,185,129,0.08)', color: 'var(--color-success)', label: 'Create' },
-  update: { bg: 'rgba(99,102,241,0.08)', color: '#6366f1',              label: 'Update' },
-  skip:   { bg: 'rgba(239,68,68,0.08)',  color: 'var(--color-danger)',   label: 'Skip'   },
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -123,9 +119,11 @@ function UploadZone({ onFile }: { onFile: (f: File) => void }) {
 function PreviewTable({
   rows,
   onToggleSkip,
+  actionStyles,
 }: {
   rows: PreviewRow[];
   onToggleSkip: (idx: number) => void;
+  actionStyles: Record<string, { bg: string; color: string; label: string }>;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
@@ -145,7 +143,7 @@ function PreviewTable({
         </thead>
         <tbody>
           {rows.map((row, i) => {
-            const style = ACTION_STYLES[row.action];
+            const style = actionStyles[row.action];
             const hasIssues = row.errors.length > 0 || row.warnings.length > 0;
             const exp = expanded.has(i);
             return (
@@ -204,7 +202,7 @@ function PreviewTable({
                         </div>
                       ))}
                       {row.warnings.map((w, j) => (
-                        <div key={j} className="flex items-start gap-1.5 text-[0.75rem] mb-1 text-[#f59e0b]">
+                        <div key={j} className="flex items-start gap-1.5 text-[0.75rem] mb-1 text-[var(--color-warning)]">
                           <AlertCircle size={12} className="mt-0.5 shrink-0" /> {w}
                         </div>
                       ))}
@@ -232,6 +230,15 @@ export default function AccountBulkImportPage() {
   const [rows,    setRows]    = useState<PreviewRow[]>([]);
   const [result,  setResult]  = useState<ConfirmResult | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+
+  const ACTION_STYLES = useMemo(
+    () => ({
+      create: { bg: 'rgba(16,185,129,0.08)', color: getColorToken('success'), label: 'Create' },
+      update: { bg: getColorToken('accent-light'), color: getColorToken('accent'), label: 'Update' },
+      skip:   { bg: 'rgba(239,68,68,0.08)',  color: getColorToken('danger'),   label: 'Skip'   },
+    }),
+    [],
+  );
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
@@ -354,7 +361,7 @@ export default function AccountBulkImportPage() {
             {[
               { label: 'Total rows',    value: preview.summary.total,   color: 'var(--color-text)' },
               { label: 'To create',     value: rows.filter((r) => r.action === 'create').length, color: 'var(--color-success)' },
-              { label: 'To update',     value: rows.filter((r) => r.action === 'update').length, color: '#6366f1' },
+              { label: 'To update',     value: rows.filter((r) => r.action === 'update').length, color: getColorToken('accent') },
               { label: 'With errors',   value: errorCount,              color: errorCount > 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' },
             ].map((s) => (
               <div key={s.label} className="bg-[var(--color-surface-hover)] rounded-xl px-4 py-3">
@@ -374,7 +381,7 @@ export default function AccountBulkImportPage() {
 
           {/* Preview table */}
           <div className="border border-[var(--color-border)] rounded-xl overflow-hidden">
-            <PreviewTable rows={rows} onToggleSkip={toggleSkip} />
+            <PreviewTable rows={rows} onToggleSkip={toggleSkip} actionStyles={ACTION_STYLES} />
           </div>
 
           {/* Actions */}

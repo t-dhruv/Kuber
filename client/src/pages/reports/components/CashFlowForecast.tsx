@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { api } from "@/lib/api";
+import { getChartColor } from "@/lib/colors";
 import { Card, Skeleton } from "@/components/ui";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -237,8 +238,8 @@ export function CashFlowForecast() {
               >
                 <defs>
                   <linearGradient id="forecastGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0c8599" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#0c8599" stopOpacity={0.02} />
+                    <stop offset="5%" stopColor={getChartColor(6)} stopOpacity={0.25} />
+                    <stop offset="95%" stopColor={getChartColor(6)} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
@@ -277,11 +278,11 @@ export function CashFlowForecast() {
                 <Line
                   type="monotone"
                   dataKey="projected"
-                  stroke="#0c8599"
+                  stroke={getChartColor(6)}
                   strokeWidth={2}
                   strokeDasharray="6 3"
                   dot={false}
-                  activeDot={{ r: 4, fill: "#0c8599" }}
+                  activeDot={{ r: 4, fill: getChartColor(6) }}
                 />
               </ComposedChart>
             </ResponsiveContainer>
