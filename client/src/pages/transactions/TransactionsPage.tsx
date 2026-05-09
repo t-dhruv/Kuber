@@ -1940,7 +1940,7 @@ export default function TransactionsPage() {
       {duplicateCount > 0 && (
         <button
           onClick={() => setShowDuplicateModal(true)}
-          className="flex items-center gap-2 w-full py-2.5 px-4 rounded-[var(--radius-md)] border border-[#f59e0b] bg-[#fffbeb] text-[#92400e] cursor-pointer text-sm font-medium text-left"
+          className="flex items-center gap-2 w-full py-2.5 px-4 rounded-[var(--radius-md)] border border-[var(--color-warning)] bg-[var(--color-warning-light)] text-[var(--color-text)] cursor-pointer text-sm font-medium text-left"
         >
           <span className="text-base">⚠</span>
           <span>
