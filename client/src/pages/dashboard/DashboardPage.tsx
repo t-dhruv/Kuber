@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { Check, PartyPopper } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getColorToken } from '@/lib/colors';
 import { Card, CardHeader, CardDivider, Skeleton, notify } from '@/components/ui';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
@@ -156,7 +157,7 @@ function WidgetHeader({
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      <span className="widget-label">
         {title}
       </span>
       {action && <div style={{ flexShrink: 0 }}>{action}</div>}
@@ -224,19 +225,27 @@ function NetWorthWidget({
         <WidgetError />
       ) : (
         <div style={{ marginBottom: '1rem' }}>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '2.25rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
             {fmtCurrency(summary.netWorth.current)}
           </div>
-          <div style={{ marginTop: '0.25rem', fontSize: '0.875rem', color: summary.netWorth.changeAmount >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-            {summary.netWorth.changeAmount >= 0 ? '▲' : '▼'}{' '}
-            {fmtCurrency(Math.abs(summary.netWorth.changeAmount))}{' '}
-            ({summary.netWorth.changeAmount >= 0 ? '+' : ''}{summary.netWorth.changePercent.toFixed(1)}%) this month
+          <div style={{ marginTop: '0.375rem', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+              fontSize: '0.8125rem', fontWeight: 500,
+              padding: '2px 8px', borderRadius: 'var(--radius-full)',
+              backgroundColor: summary.netWorth.changeAmount >= 0 ? 'var(--color-success-light)' : 'var(--color-danger-light)',
+              color: summary.netWorth.changeAmount >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: summary.netWorth.changeAmount >= 0 ? 'var(--color-success)' : 'var(--color-danger)', display: 'inline-block' }} />
+              {summary.netWorth.changeAmount >= 0 ? '+' : ''}{fmtCurrency(summary.netWorth.changeAmount)} · {summary.netWorth.changeAmount >= 0 ? '+' : ''}{summary.netWorth.changePercent.toFixed(1)}%
+            </span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>this month</span>
           </div>
         </div>
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.75rem' }}>
+      <div style={{ display: 'inline-flex', gap: 2, padding: 3, backgroundColor: 'var(--color-surface-alt)', borderRadius: 'var(--radius-md)', marginBottom: '0.75rem' }}>
         {NET_WORTH_TABS.map((t) => (
           <button
             key={t}
@@ -245,12 +254,13 @@ function NetWorthWidget({
               padding: '0.25rem 0.625rem',
               borderRadius: 'var(--radius-sm)',
               fontSize: '0.75rem',
-              fontWeight: 600,
+              fontWeight: 500,
               border: 'none',
               cursor: 'pointer',
-              backgroundColor: tab === t ? 'var(--color-accent)' : 'transparent',
-              color: tab === t ? '#fff' : 'var(--color-text-secondary)',
-              transition: 'background 0.15s',
+              backgroundColor: tab === t ? 'var(--color-surface)' : 'transparent',
+              color: tab === t ? 'var(--color-text)' : 'var(--color-text-muted)',
+              boxShadow: tab === t ? 'var(--shadow-sm)' : 'none',
+              transition: 'all 0.15s',
             }}
           >
             {t}
@@ -268,8 +278,8 @@ function NetWorthWidget({
             <AreaChart data={filtered} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
             <defs>
               <linearGradient id="nwGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#E5622A" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#E5622A" stopOpacity={0} />
+                <stop offset="5%" stopColor={getColorToken('accent')} stopOpacity={0.2} />
+                <stop offset="95%" stopColor={getColorToken('accent')} stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -285,7 +295,7 @@ function NetWorthWidget({
                 fontSize: '0.8125rem',
               }}
             />
-            <Area type="monotone" dataKey="value" stroke="#E5622A" strokeWidth={2} fill="url(#nwGrad)" dot={false} />
+            <Area type="monotone" dataKey="value" stroke={getColorToken('accent')} strokeWidth={2} fill="url(#nwGrad)" dot={false} />
           </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -517,7 +527,7 @@ function SpendingWidget({ data, isLoading, isError }: { data?: SpendingChart; is
               formatter={(value) => value === 'thisMonth' ? 'This month' : 'Last month'}
               wrapperStyle={{ fontSize: '0.75rem', paddingTop: '0.375rem' }}
             />
-            <Line type="monotone" dataKey="thisMonth" stroke="#E5622A" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="thisMonth" stroke={getColorToken('accent')} strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="lastMonth" stroke="#adb5bd" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
           </LineChart>
           </ResponsiveContainer>
@@ -789,7 +799,7 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
               <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.375rem' }}>
                 Spending
               </div>
-              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
                 {fmtCurrency(data.spending.total)}
               </div>
               <div style={{
@@ -810,7 +820,7 @@ function WeeklyRecapWidget({ data, isLoading, isError }: { data?: WeeklyRecapDat
               <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.375rem' }}>
                 Net Worth
               </div>
-              <div style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.1 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
                 {fmtCurrency(data.netWorth.current)}
               </div>
               <div style={{

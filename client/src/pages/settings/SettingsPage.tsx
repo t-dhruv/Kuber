@@ -267,6 +267,16 @@ function ProfileSection() {
 // ─── Section: Display ─────────────────────────────────────────────────────────
 
 type ThemeOption = 'light' | 'dark' | 'system';
+type AccentOption = 'orange' | 'green' | 'ink' | 'indigo' | 'teal' | 'lime';
+
+const ACCENT_OPTIONS: { id: AccentOption; name: string; swatch: string }[] = [
+  { id: 'orange', name: 'Ember Orange', swatch: '#E5622A' },
+  { id: 'green',  name: 'Vault Green',  swatch: '#1B7A4F' },
+  { id: 'ink',    name: 'Ink Black',    swatch: '#111827' },
+  { id: 'indigo', name: 'Trust Indigo', swatch: '#3730A3' },
+  { id: 'teal',   name: 'Terminal Teal',swatch: '#0E9594' },
+  { id: 'lime',   name: 'Neon Lime',    swatch: '#C6F24C' },
+];
 
 function applyTheme(theme: ThemeOption) {
   if (theme === 'system') {
@@ -277,15 +287,28 @@ function applyTheme(theme: ThemeOption) {
   }
 }
 
+function applyAccent(accent: AccentOption) {
+  document.documentElement.dataset.accent = accent;
+}
+
 function DisplaySection() {
   const [theme, setTheme] = useState<ThemeOption>(() => {
     return (localStorage.getItem('kuber_theme') as ThemeOption) ?? 'system';
+  });
+  const [accent, setAccent] = useState<AccentOption>(() => {
+    return (localStorage.getItem('kuber_accent') as AccentOption) ?? 'orange';
   });
 
   function handleThemeChange(t: ThemeOption) {
     setTheme(t);
     localStorage.setItem('kuber_theme', t);
     applyTheme(t);
+  }
+
+  function handleAccentChange(a: AccentOption) {
+    setAccent(a);
+    localStorage.setItem('kuber_accent', a);
+    applyAccent(a);
   }
 
   const options: { value: ThemeOption; label: string; description: string }[] = [
@@ -295,7 +318,7 @@ function DisplaySection() {
   ];
 
   return (
-    <div>
+    <div className="flex flex-col gap-6">
       <SectionHeader title="Display" description="Customize the visual appearance of Kuber." />
 
       <Card padding="lg" style={{ maxWidth: 480 }}>
@@ -332,6 +355,52 @@ function DisplaySection() {
               </div>
             </label>
           ))}
+        </div>
+      </Card>
+
+      <Card padding="lg" style={{ maxWidth: 480 }}>
+        <div className="mb-3">
+          <span className="text-sm font-semibold text-[var(--color-text)]">Brand Accent</span>
+          <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+            Default is Ember Orange — Kuber's signature warm tone. Applies everywhere instantly.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {ACCENT_OPTIONS.map((a) => {
+            const active = accent === a.id;
+            return (
+              <button
+                key={a.id}
+                onClick={() => handleAccentChange(a.id)}
+                className="flex items-center gap-2.5 p-2.5 rounded-[var(--radius-md)] cursor-pointer text-left transition-[border-color,background-color] duration-[0.15s]"
+                style={{
+                  border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                  background: active ? 'var(--color-accent-light)' : 'var(--color-surface)',
+                }}
+              >
+                <span
+                  className="flex-shrink-0 rounded-full"
+                  style={{ width: 20, height: 20, background: a.swatch, border: '1px solid var(--color-border)' }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="text-[13px] font-medium truncate"
+                    style={{ color: active ? 'var(--color-accent)' : 'var(--color-text)' }}
+                  >
+                    {a.name}
+                  </div>
+                </div>
+                {a.id === 'orange' && !active && (
+                  <span
+                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0"
+                    style={{ background: 'var(--color-surface-alt)', color: 'var(--color-text-muted)' }}
+                  >
+                    Default
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </Card>
     </div>

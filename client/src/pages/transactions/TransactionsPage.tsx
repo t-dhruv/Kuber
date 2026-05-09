@@ -281,6 +281,18 @@ function RefundTransactionPicker({
   );
 }
 
+// ─── Category Pill ────────────────────────────────────────────────────────────
+
+function CategoryPill({ name, color }: { name: string; color?: string }) {
+  const c = color ?? 'var(--color-accent)';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 500, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: `${c}18`, color: c }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c }} />
+      {name}
+    </span>
+  );
+}
+
 // ─── Transaction Detail Drawer ────────────────────────────────────────────────
 
 interface DrawerProps {
@@ -1339,8 +1351,8 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       </div>
 
       {/* Category name — hidden on mobile */}
-      <div className="hidden sm:block flex-[0_0_130px] text-[0.8125rem] text-[var(--color-text-secondary)] whitespace-nowrap overflow-hidden text-ellipsis">
-        {txn.categoryName}
+      <div className="hidden sm:block flex-[0_0_130px] overflow-hidden">
+        <CategoryPill name={txn.categoryName} color={txn.categoryColor ?? undefined} />
       </div>
 
       {/* Account — hidden on mobile and tablet */}
@@ -1389,8 +1401,8 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
 
       {/* Amount */}
       <div
-        className="flex-[0_0_90px] text-right text-sm font-semibold [font-variant-numeric:tabular-nums]"
-        style={{ color: txn.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}
+        className="flex-[0_0_90px] text-right text-sm font-semibold"
+        style={{ color: txn.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}
       >
         {txn.amount < 0 ? '-' : '+'}{fmtCurrency(txn.amount)}
       </div>
@@ -1785,6 +1797,42 @@ export default function TransactionsPage() {
         </Button>
       </div>
 
+      {/* KPI Summary Strip */}
+      {(() => {
+        const income = transactions.reduce((sum, t) => t.amount > 0 ? sum + t.amount : sum, 0);
+        const spending = transactions.reduce((sum, t) => t.amount < 0 ? sum + Math.abs(t.amount) : sum, 0);
+        const count = txnPages?.pages[0]?.total ?? transactions.length;
+        const tiles = [
+          { label: 'Transactions', value: String(count), color: 'var(--color-text)' },
+          { label: 'Income', value: fmtCurrency(income), color: 'var(--color-success)' },
+          { label: 'Spending', value: fmtCurrency(spending), color: 'var(--color-text)' },
+        ];
+        return (
+          <div className="flex gap-3 flex-wrap">
+            {tiles.map(({ label, value, color }) => (
+              <div
+                key={label}
+                style={{
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '14px 16px',
+                  minWidth: 120,
+                  flex: '1 1 120px',
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 4 }}>
+                  {label}
+                </div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Auto-categorize panel */}
       {showAutoCatPanel && (
         <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4 flex flex-col gap-3">
@@ -1892,7 +1940,7 @@ export default function TransactionsPage() {
       {duplicateCount > 0 && (
         <button
           onClick={() => setShowDuplicateModal(true)}
-          className="flex items-center gap-2 w-full py-2.5 px-4 rounded-[var(--radius-md)] border border-[#f59e0b] bg-[#fffbeb] text-[#92400e] cursor-pointer text-sm font-medium text-left"
+          className="flex items-center gap-2 w-full py-2.5 px-4 rounded-[var(--radius-md)] border border-[var(--color-warning)] bg-[var(--color-warning-light)] text-[var(--color-text)] cursor-pointer text-sm font-medium text-left"
         >
           <span className="text-base">⚠</span>
           <span>

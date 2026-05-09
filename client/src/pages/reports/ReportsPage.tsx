@@ -13,6 +13,7 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
+import { getColorToken, getChartColor } from "@/lib/colors";
 import {
   ReportsSankeyChart,
   type SankeyData,
@@ -813,10 +814,12 @@ function KpiCards({
               </div>
               <div
                 style={{
-                  fontSize: "1.5rem",
+                  fontSize: "1.75rem",
                   fontWeight: 700,
                   color: card.color,
                   lineHeight: 1.1,
+                  fontFamily: 'var(--font-display)',
+                  fontVariantNumeric: 'tabular-nums',
                 }}
               >
                 {card.value}
@@ -1012,9 +1015,9 @@ function CashFlowTab({
                     gap: "1rem",
                   }}
                 >
-                  <LegendDot color="#2f9e44" label="Income" />
-                  <LegendDot color="#E5622A" label="Expenses" />
-                  <LegendDot color="#1971c2" label="Net" line />
+                  <LegendDot color={getColorToken('success')} label="Income" />
+                  <LegendDot color={getColorToken('accent')} label="Expenses" />
+                  <LegendDot color={getColorToken('info')} label="Net" line />
                 </div>
               )}
             </div>
@@ -1084,7 +1087,7 @@ function CashFlowTab({
                       <Bar
                         dataKey="expenses"
                         name="expenses"
-                        fill="#E5622A"
+                        fill={getColorToken('accent')}
                         radius={[3, 3, 0, 0]}
                         maxBarSize={26}
                         opacity={0.88}
@@ -1958,8 +1961,8 @@ function SavingsTab({
                   marginLeft: "auto",
                 }}
               >
-                <LegendDot color="#0c8599" label="Saved" />
-                <LegendDot color="#1971c2" label="Savings rate" line />
+                <LegendDot color={getChartColor(6)} label="Saved" />
+                <LegendDot color={getColorToken('info')} label="Savings rate" line />
               </div>
             </div>
 
@@ -2022,7 +2025,7 @@ function SavingsTab({
                     yAxisId="money"
                     dataKey="net"
                     name="saved"
-                    fill="#0c8599"
+                    fill={getChartColor(6)}
                     radius={[3, 3, 0, 0]}
                     maxBarSize={28}
                   />

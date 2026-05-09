@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Calendar, TrendingDown, DollarSign, Percent, AlertTriangle, Info } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getColorToken } from '@/lib/colors';
 import { Button, Input, Skeleton, notify } from '@/components/ui';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -76,7 +77,7 @@ function StatTile({
 }: {
   label: string; value: string; sub?: string; danger?: boolean; warn?: boolean;
 }) {
-  const color = danger ? 'var(--color-danger)' : warn ? 'var(--color-warning, #f59e0b)' : 'var(--color-text)';
+  const color = danger ? 'var(--color-danger)' : warn ? 'var(--color-warning)' : 'var(--color-text)';
   return (
     <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2.5">
       <div className="text-[0.625rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em] mb-0.5">{label}</div>
@@ -321,10 +322,10 @@ export function LiabilityDetailPanel({ liability, currency }: { liability: Liabi
               {/* Trigger rate warning (CA variable) */}
               {data.triggerRate != null && (
                 <div className="flex items-start gap-2 rounded-[var(--radius-md)] px-3 py-3 text-[0.8125rem]"
-                  style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)' }}>
-                  <AlertTriangle size={14} className="shrink-0 mt-0.5" style={{ color: '#f59e0b' }} />
+                  style={{ backgroundColor: 'var(--color-warning-light)', border: `1px solid var(--color-warning)` }}>
+                  <AlertTriangle size={14} className="shrink-0 mt-0.5" style={{ color: getColorToken('warning') }} />
                   <div>
-                    <div className="font-semibold" style={{ color: '#f59e0b' }}>
+                    <div className="font-semibold" style={{ color: getColorToken('warning') }}>
                       Trigger Rate: {data.triggerRate.toFixed(2)}%
                     </div>
                     <div className="text-[var(--color-text-muted)] mt-0.5">

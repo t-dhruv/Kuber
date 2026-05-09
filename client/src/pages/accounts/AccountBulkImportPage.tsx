@@ -6,13 +6,14 @@
  * validation → confirm → done.
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Upload, Download, FileText, AlertCircle, CheckCircle2,
   RefreshCw, ChevronDown, ChevronUp, X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getColorToken } from '@/lib/colors';
 import { Button, notify } from '@/components/ui';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -51,11 +52,6 @@ const COLUMN_DESCRIPTIONS = [
   { col: 'id',                    req: false, desc: 'Leave blank to CREATE; paste existing account ID to UPDATE' },
 ];
 
-const ACTION_STYLES: Record<string, { bg: string; color: string; label: string }> = {
-  create: { bg: 'rgba(16,185,129,0.08)', color: 'var(--color-success)', label: 'Create' },
-  update: { bg: 'rgba(99,102,241,0.08)', color: '#6366f1',              label: 'Update' },
-  skip:   { bg: 'rgba(239,68,68,0.08)',  color: 'var(--color-danger)',   label: 'Skip'   },
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -86,7 +82,7 @@ function UploadZone({ onFile }: { onFile: (f: File) => void }) {
   return (
     <div
       className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors"
-      style={{ borderColor: dragging ? 'var(--color-accent)' : 'var(--color-border)', backgroundColor: dragging ? 'rgba(99,102,241,0.04)' : undefined }}
+      style={{ borderColor: dragging ? 'var(--color-accent)' : 'var(--color-border)', backgroundColor: dragging ? 'var(--color-accent-light)' : undefined }}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
@@ -123,9 +119,11 @@ function UploadZone({ onFile }: { onFile: (f: File) => void }) {
 function PreviewTable({
   rows,
   onToggleSkip,
+  actionStyles,
 }: {
   rows: PreviewRow[];
   onToggleSkip: (idx: number) => void;
+  actionStyles: Record<string, { bg: string; color: string; label: string }>;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
@@ -135,7 +133,7 @@ function PreviewTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[0.8125rem] border-collapse">
+      <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b border-[var(--color-border)]">
             {['Row', 'Action', 'Name', 'Type', 'Balance', 'Institution', 'Currency', ''].map((h) => (
@@ -145,7 +143,7 @@ function PreviewTable({
         </thead>
         <tbody>
           {rows.map((row, i) => {
-            const style = ACTION_STYLES[row.action];
+            const style = actionStyles[row.action];
             const hasIssues = row.errors.length > 0 || row.warnings.length > 0;
             const exp = expanded.has(i);
             return (
@@ -157,7 +155,7 @@ function PreviewTable({
                 >
                   <td className="py-2 px-2 text-[var(--color-text-muted)]">{row.rowIndex}</td>
                   <td className="py-2 px-2">
-                    <span className="text-[0.6875rem] font-semibold px-1.5 py-0.5 rounded"
+                    <span className="text-xs font-semibold px-2 py-1 rounded"
                       style={{ backgroundColor: style.bg, color: style.color }}>
                       {style.label}
                     </span>
@@ -199,12 +197,12 @@ function PreviewTable({
                   <tr key={`e-${i}`} className="border-b border-[var(--color-border)]">
                     <td colSpan={8} className="px-4 pb-2 pt-1">
                       {row.errors.map((e, j) => (
-                        <div key={j} className="flex items-start gap-1.5 text-[0.75rem] mb-1" style={{ color: 'var(--color-danger)' }}>
+                        <div key={j} className="flex items-start gap-2 text-xs mb-1" style={{ color: 'var(--color-danger)' }}>
                           <AlertCircle size={12} className="mt-0.5 shrink-0" /> {e}
                         </div>
                       ))}
                       {row.warnings.map((w, j) => (
-                        <div key={j} className="flex items-start gap-1.5 text-[0.75rem] mb-1 text-[#f59e0b]">
+                        <div key={j} className="flex items-start gap-2 text-xs mb-1 text-[var(--color-warning)]">
                           <AlertCircle size={12} className="mt-0.5 shrink-0" /> {w}
                         </div>
                       ))}
@@ -232,6 +230,15 @@ export default function AccountBulkImportPage() {
   const [rows,    setRows]    = useState<PreviewRow[]>([]);
   const [result,  setResult]  = useState<ConfirmResult | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+
+  const ACTION_STYLES = useMemo(
+    () => ({
+      create: { bg: 'rgba(16,185,129,0.08)', color: getColorToken('success'), label: 'Create' },
+      update: { bg: getColorToken('accent-light'), color: getColorToken('accent'), label: 'Update' },
+      skip:   { bg: 'rgba(239,68,68,0.08)',  color: getColorToken('danger'),   label: 'Skip'   },
+    }),
+    [],
+  );
 
   // ── Mutations ────────────────────────────────────────────────────────────
 
@@ -305,10 +312,10 @@ export default function AccountBulkImportPage() {
       {/* CSV column guide */}
       {showGuide && (
         <div className="mb-6 border border-[var(--color-border)] rounded-xl overflow-hidden">
-          <div className="px-4 py-3 bg-[var(--color-surface-hover)] text-[0.8125rem] font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em]">
+          <div className="px-4 py-3 bg-[var(--color-surface-hover)] text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-[0.04em]">
             CSV Column Reference
           </div>
-          <table className="w-full text-[0.8125rem]">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--color-border)]">
                 <th className="text-left px-4 py-2 font-semibold text-[var(--color-text-secondary)]">Column</th>
@@ -319,9 +326,9 @@ export default function AccountBulkImportPage() {
             <tbody>
               {COLUMN_DESCRIPTIONS.map((c) => (
                 <tr key={c.col} className="border-b border-[var(--color-border)]">
-                  <td className="px-4 py-2 font-mono text-[0.75rem]">{c.col}</td>
+                  <td className="px-4 py-2 font-mono text-xs">{c.col}</td>
                   <td className="px-4 py-2">
-                    <span className="text-[0.6875rem] font-semibold px-1.5 py-0.5 rounded"
+                    <span className="text-xs font-semibold px-2 py-1 rounded"
                       style={{ backgroundColor: c.req ? 'rgba(239,68,68,0.1)' : 'rgba(0,0,0,0.05)', color: c.req ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
                       {c.req ? 'Required' : 'Optional'}
                     </span>
@@ -354,18 +361,18 @@ export default function AccountBulkImportPage() {
             {[
               { label: 'Total rows',    value: preview.summary.total,   color: 'var(--color-text)' },
               { label: 'To create',     value: rows.filter((r) => r.action === 'create').length, color: 'var(--color-success)' },
-              { label: 'To update',     value: rows.filter((r) => r.action === 'update').length, color: '#6366f1' },
+              { label: 'To update',     value: rows.filter((r) => r.action === 'update').length, color: getColorToken('accent') },
               { label: 'With errors',   value: errorCount,              color: errorCount > 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' },
             ].map((s) => (
               <div key={s.label} className="bg-[var(--color-surface-hover)] rounded-xl px-4 py-3">
-                <div className="text-[0.625rem] uppercase tracking-[0.05em] text-[var(--color-text-muted)] mb-0.5">{s.label}</div>
+                <div className="text-xs uppercase tracking-[0.05em] text-[var(--color-text-muted)] mb-1">{s.label}</div>
                 <div className="text-xl font-bold" style={{ color: s.color }}>{s.value}</div>
               </div>
             ))}
           </div>
 
           {errorCount > 0 && (
-            <div className="flex items-center gap-2 text-[0.8125rem] px-3 py-2 rounded-lg"
+            <div className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg"
               style={{ backgroundColor: 'rgba(239,68,68,0.08)', color: 'var(--color-danger)' }}>
               <AlertCircle size={14} />
               {errorCount} row{errorCount > 1 ? 's have' : ' has'} validation errors and will be skipped. Expand the row to see details.
@@ -374,7 +381,7 @@ export default function AccountBulkImportPage() {
 
           {/* Preview table */}
           <div className="border border-[var(--color-border)] rounded-xl overflow-hidden">
-            <PreviewTable rows={rows} onToggleSkip={toggleSkip} />
+            <PreviewTable rows={rows} onToggleSkip={toggleSkip} actionStyles={ACTION_STYLES} />
           </div>
 
           {/* Actions */}
@@ -408,7 +415,7 @@ export default function AccountBulkImportPage() {
           {result.errors.length > 0 && (
             <div className="w-full text-left">
               {result.errors.map((e, i) => (
-                <div key={i} className="text-[0.75rem] text-[var(--color-danger)] mb-1 flex items-start gap-1.5">
+                <div key={i} className="text-xs text-[var(--color-danger)] mb-1 flex items-start gap-2">
                   <AlertCircle size={12} className="mt-0.5 shrink-0" /> {e.error}
                 </div>
               ))}
