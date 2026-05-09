@@ -157,7 +157,7 @@ function WidgetHeader({
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      <span className="widget-label">
         {title}
       </span>
       {action && <div style={{ flexShrink: 0 }}>{action}</div>}

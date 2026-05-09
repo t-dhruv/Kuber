@@ -77,7 +77,7 @@ function StatTile({
 }: {
   label: string; value: string; sub?: string; danger?: boolean; warn?: boolean;
 }) {
-  const color = danger ? 'var(--color-danger)' : warn ? 'var(--color-warning, #f59e0b)' : 'var(--color-text)';
+  const color = danger ? 'var(--color-danger)' : warn ? 'var(--color-warning)' : 'var(--color-text)';
   return (
     <div className="bg-[var(--color-surface-hover)] rounded-[var(--radius-md)] px-3 py-2.5">
       <div className="text-[0.625rem] text-[var(--color-text-muted)] uppercase tracking-[0.05em] mb-0.5">{label}</div>

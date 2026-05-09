@@ -1130,7 +1130,7 @@ function AccountDetailDrawer({
                                 Math.abs(detail.balance) / detail.creditLimit > 0.9
                                   ? 'var(--color-danger)'
                                   : Math.abs(detail.balance) / detail.creditLimit > 0.7
-                                  ? '#f59e0b'
+                                  ? 'var(--color-warning)'
                                   : 'var(--color-success)',
                             }}
                           />

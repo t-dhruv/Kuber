@@ -163,7 +163,7 @@ function GoalOverflowMenu({
             <button
               key={item.label}
               onClick={() => { item.action(); setOpen(false); }}
-              className={`flex items-center gap-2 w-full px-3 py-2 bg-transparent border-none cursor-pointer text-[0.8125rem] text-left hover:bg-[var(--color-surface-hover)] ${item.danger ? 'text-[var(--color-danger)]' : 'text-[var(--color-text)]'}`}
+              className={`flex items-center gap-2 w-full px-3 py-2 bg-transparent border-none cursor-pointer text-sm text-left hover:bg-[var(--color-surface-hover)] ${item.danger ? 'text-[var(--color-danger)]' : 'text-[var(--color-text)]'}`}
             >
               {item.icon}
               {item.label}
@@ -214,7 +214,7 @@ function GoalCard({
             </div>
           </div>
           <span
-            className="shrink-0 text-[0.6875rem] font-[500]"
+            className="shrink-0 text-xs font-[500]"
             style={{
               background: statusStyle.bg,
               color: statusStyle.color,
@@ -322,16 +322,16 @@ function DebtGoalCard({
         {/* Debt amounts row */}
         <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="text-center">
-            <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-0.5">Original</div>
-            <div className="text-[0.8125rem] font-semibold text-[var(--color-text)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(goal.targetAmount)}</div>
+            <div className="text-xs text-[var(--color-text-muted)] mb-0.5">Original</div>
+            <div className="text-sm font-semibold text-[var(--color-text)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(goal.targetAmount)}</div>
           </div>
           <div className="text-center">
-            <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-0.5">Paid Off</div>
-            <div className="text-[0.8125rem] font-semibold text-[var(--color-success)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(goal.currentAmount)}</div>
+            <div className="text-xs text-[var(--color-text-muted)] mb-0.5">Paid Off</div>
+            <div className="text-sm font-semibold text-[var(--color-success)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(goal.currentAmount)}</div>
           </div>
           <div className="text-center">
-            <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-0.5">Remaining</div>
-            <div className="text-[0.8125rem] font-semibold text-[var(--color-danger)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(remaining)}</div>
+            <div className="text-xs text-[var(--color-text-muted)] mb-0.5">Remaining</div>
+            <div className="text-sm font-semibold text-[var(--color-danger)]" style={{ fontFamily: 'var(--font-display)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(remaining)}</div>
           </div>
         </div>
 
@@ -405,7 +405,7 @@ function PayDownSummary({ goals }: { goals: Goal[] }) {
           key={item.label}
           className={`flex-1 px-4 py-3.5 text-center${i > 0 ? ' border-l border-[var(--color-border)]' : ''}`}
         >
-          <div className="text-[0.6875rem] text-[var(--color-text-muted)] mb-1 font-medium uppercase tracking-[0.05em]">
+          <div className="text-xs text-[var(--color-text-muted)] mb-1 font-medium uppercase tracking-[0.05em]">
             {item.label}
           </div>
           <div className="text-base font-bold" style={{ color: item.color }}>
@@ -566,7 +566,7 @@ function AddGoalModal({
                 >
                   <span className="text-xl"><LucideIcon name={gt.icon} size={20} /></span>
                   <span
-                    className="text-[0.6875rem] font-medium text-center leading-[1.3]"
+                    className="text-xs font-medium text-center leading-[1.3]"
                     style={{ color: form.type === gt.value ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
                   >
                     {gt.label}
@@ -782,7 +782,7 @@ function AddDebtGoalModal({
                 ]}
               />
             ) : (
-              <p className="text-[0.8125rem] text-[var(--color-text-muted)] py-2">
+              <p className="text-sm text-[var(--color-text-muted)] py-2">
                 No credit card or loan accounts found. Add one in Accounts first.
               </p>
             )}
@@ -1199,7 +1199,7 @@ export default function GoalsPage() {
             <button
               key={tab.value}
               onClick={() => setSubTab(tab.value)}
-              className="py-1.5 px-3.5 border-none cursor-pointer text-[0.8125rem] font-medium transition-[background,color,box-shadow] duration-150"
+              className="py-1.5 px-3.5 border-none cursor-pointer text-sm font-medium transition-[background,color,box-shadow] duration-150"
               style={{
                 borderRadius: 'var(--radius-md)',
                 backgroundColor: subTab === tab.value ? 'var(--color-surface)' : 'transparent',
