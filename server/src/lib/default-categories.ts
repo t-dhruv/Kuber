@@ -320,7 +320,7 @@ export async function seedDefaultCategories(
         data: {
           householdId,
           name: cd.name,
-          emoji: cd.emoji,
+          icon: cd.emoji,
           type: gd.type,
           groupId: group.id,
           sortOrder: ci,
