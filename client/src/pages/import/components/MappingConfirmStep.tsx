@@ -35,6 +35,8 @@ export interface DetectMappingResult {
 export interface ConfirmedMapping {
   dateColumn: string;
   descriptionColumn: string;
+  descriptionColumn2?: string;
+  descriptionSeparator?: string;
   amountStrategy: AmountStrategy;
   amountColumn?: string;
   debitColumn?: string;
@@ -75,6 +77,8 @@ export default function MappingConfirmStep({ result, onConfirm, onCancel }: Prop
   const getDetected = (field: StandardField) =>
     result.mappings.find((m) => m.field === field)?.csvHeader ?? '';
 
+  const [descCol2, setDescCol2] = useState('');
+  const [descSeparator, setDescSeparator] = useState(' – ');
   const [amountStrategy, setAmountStrategy] = useState<AmountStrategy>(result.amountStrategy);
   const [localeFormat, setLocaleFormat] = useState<LocaleFormat>(result.localeFormat);
   const [cols, setCols] = useState<Record<StandardField, string>>({
@@ -96,6 +100,7 @@ export default function MappingConfirmStep({ result, onConfirm, onCancel }: Prop
     onConfirm({
       dateColumn: cols.date,
       descriptionColumn: cols.description,
+      ...(descCol2 ? { descriptionColumn2: descCol2, descriptionSeparator: descSeparator } : {}),
       amountStrategy,
       amountColumn: amountStrategy === 'single' ? cols.amount : undefined,
       debitColumn: amountStrategy === 'debit-credit' ? cols.debit : undefined,
@@ -214,6 +219,39 @@ export default function MappingConfirmStep({ result, onConfirm, onCancel }: Prop
             </div>
           );
         })}
+      </div>
+
+      {/* Description column combiner */}
+      <div className="p-3 rounded-lg border border-[color:var(--color-border)] space-y-3">
+        <p className="text-sm font-medium">Combine description columns <span className="text-[color:var(--color-text-secondary)] font-normal">(optional)</span></p>
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <Select
+              id="desc-col2"
+              label="Add second column"
+              value={descCol2}
+              onChange={(e) => setDescCol2(e.target.value)}
+              options={headerOptions}
+            />
+          </div>
+          {descCol2 && (
+            <div className="w-36">
+              <label className="block text-xs text-[color:var(--color-text-secondary)] mb-1">Separator</label>
+              <input
+                type="text"
+                value={descSeparator}
+                onChange={(e) => setDescSeparator(e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-[color:var(--color-border)] rounded-md bg-[color:var(--color-surface)] focus:outline-none focus:border-[color:var(--color-primary)]"
+                placeholder=" – "
+              />
+            </div>
+          )}
+        </div>
+        {descCol2 && cols.description && (
+          <p className="text-xs text-[color:var(--color-text-secondary)]">
+            Result: <span className="font-mono">[{cols.description}]{descSeparator}[{descCol2}]</span>
+          </p>
+        )}
       </div>
 
       {/* Preview sample */}

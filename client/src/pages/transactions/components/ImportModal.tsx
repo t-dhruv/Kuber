@@ -38,6 +38,8 @@ interface Account {
 interface CsvMapping {
   date: string;
   description: string;
+  descriptionColumn2?: string;
+  descriptionSeparator?: string;
   amount: string;
   category?: string;
   notes?: string;
@@ -244,13 +246,17 @@ interface Step2Props {
   csvText: string;
   mapping: CsvMapping;
   invertAmounts: boolean;
+  descCol2: string;
+  descSeparator: string;
   onMapping: (m: CsvMapping) => void;
   onInvertAmounts: (v: boolean) => void;
+  onDescCol2: (val: string) => void;
+  onDescSeparator: (val: string) => void;
   onBack: () => void;
   onNext: () => void;
 }
 
-function Step2Map({ headers, csvText, mapping, invertAmounts, onMapping, onInvertAmounts, onBack, onNext }: Step2Props) {
+function Step2Map({ headers, csvText, mapping, invertAmounts, descCol2, descSeparator, onMapping, onInvertAmounts, onDescCol2, onDescSeparator, onBack, onNext }: Step2Props) {
   const options = [SKIP, ...headers];
 
   const set = (key: keyof CsvMapping, val: string) => {
@@ -300,6 +306,64 @@ function Step2Map({ headers, csvText, mapping, invertAmounts, onMapping, onInver
             </NativeSelect>
           </div>
         ))}
+
+        {/* Description column combiner */}
+        <div className="col-span-2 p-3 rounded-[var(--radius-md)] border border-[var(--color-border)] space-y-3">
+          <p className="text-[0.8125rem] font-medium text-[var(--color-text)]">
+            Combine description columns <span className="text-[var(--color-text-muted)] font-normal">(optional)</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <label className="block text-[0.8125rem] font-medium text-[var(--color-text-muted)] mb-1">
+                Add second column
+              </label>
+              <NativeSelect
+                value={descCol2}
+                onChange={(e) => {
+                  onDescCol2(e.target.value);
+                  const newMapping = { ...mapping };
+                  if (e.target.value) {
+                    newMapping.descriptionColumn2 = e.target.value;
+                    newMapping.descriptionSeparator = descSeparator;
+                  } else {
+                    delete newMapping.descriptionColumn2;
+                    delete newMapping.descriptionSeparator;
+                  }
+                  onMapping(newMapping);
+                }}
+              >
+                {options.map(h => <option key={h} value={h}>{h}</option>)}
+              </NativeSelect>
+            </div>
+            {descCol2 && (
+              <div className="flex-1">
+                <label className="block text-[0.8125rem] font-medium text-[var(--color-text-muted)] mb-1">
+                  Separator
+                </label>
+                <input
+                  type="text"
+                  value={descSeparator}
+                  onChange={(e) => {
+                    onDescSeparator(e.target.value);
+                    onMapping({
+                      ...mapping,
+                      descriptionColumn2: descCol2,
+                      descriptionSeparator: e.target.value,
+                    });
+                  }}
+                  maxLength={20}
+                  className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] py-2 pl-3 text-sm bg-[var(--color-surface)] text-[var(--color-text)]"
+                  placeholder=" – "
+                />
+              </div>
+            )}
+          </div>
+          {descCol2 && mapping.description && (
+            <p className="text-[0.75rem] text-[var(--color-text-muted)]">
+              Result: <span className="font-mono">[{mapping.description}]{descSeparator}[{descCol2}]</span>
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Preview table */}
@@ -533,6 +597,8 @@ export function ImportModal({ open, onClose, onImported }: ImportModalProps) {
   const [dateFormat, setDateFormat] = useState('YYYY-MM-DD');
   const [mapping, setMapping] = useState<CsvMapping>({ date: '', description: '', amount: '' });
   const [invertAmounts, setInvertAmounts] = useState(false);
+  const [descCol2, setDescCol2] = useState('');
+  const [descSeparator, setDescSeparator] = useState(' – ');
 
   const accountsQuery = useQuery({
     queryKey: ['accounts'],
@@ -560,6 +626,8 @@ export function ImportModal({ open, onClose, onImported }: ImportModalProps) {
     setAccountId('');
     setDateFormat('YYYY-MM-DD');
     setMapping({ date: '', description: '', amount: '' });
+    setDescCol2('');
+    setDescSeparator(' – ');
     onClose();
   };
 
@@ -573,7 +641,10 @@ export function ImportModal({ open, onClose, onImported }: ImportModalProps) {
     // Parse headers and auto-map
     const lines = csvText.split('\n').filter(l => l.trim().length > 0);
     const headers = lines[0]?.split(',').map(h => h.replace(/^"|"$/g, '').trim()) ?? [];
-    setMapping(autoMap(headers));
+    const mapped = autoMap(headers);
+    setMapping(mapped);
+    setDescCol2(mapped.descriptionColumn2 ?? '');
+    setDescSeparator(mapped.descriptionSeparator ?? ' – ');
     setStep(2);
   };
 
@@ -621,8 +692,12 @@ export function ImportModal({ open, onClose, onImported }: ImportModalProps) {
           csvText={csvText}
           mapping={mapping}
           invertAmounts={invertAmounts}
+          descCol2={descCol2}
+          descSeparator={descSeparator}
           onMapping={setMapping}
           onInvertAmounts={setInvertAmounts}
+          onDescCol2={setDescCol2}
+          onDescSeparator={setDescSeparator}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
         />

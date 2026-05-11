@@ -518,6 +518,8 @@ function parseDate(raw: string, format: string): Date | null {
 interface CsvMapping {
   date: string;
   description: string;
+  descriptionColumn2?: string;
+  descriptionSeparator?: string;
   amount: string;
   category?: string;
   notes?: string;
@@ -564,7 +566,11 @@ function parseImportRows(
     if (amtIdx === -1) { errors.push({ row: rowNum, message: 'amount column not found' }); continue; }
 
     const rawDate = row[dateIdx] ?? '';
-    const rawDesc = row[descIdx] ?? '';
+    const descIdx2 = mapping.descriptionColumn2 ? idx(mapping.descriptionColumn2) : -1;
+    const rawDesc1 = row[descIdx] ?? '';
+    const rawDesc2 = descIdx2 !== -1 ? (row[descIdx2] ?? '') : '';
+    const separator = mapping.descriptionSeparator ?? ' – ';
+    const rawDesc = rawDesc2 ? `${rawDesc1}${separator}${rawDesc2}` : rawDesc1;
     const rawAmt = row[amtIdx] ?? '';
 
     const date = parseDate(rawDate, dateFormat);

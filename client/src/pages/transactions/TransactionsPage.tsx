@@ -288,7 +288,6 @@ function CategoryPill({ name, color }: { name: string; color?: string }) {
   const c = color ?? 'var(--color-accent)';
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 500, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: `${c}18`, color: c }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c }} />
       {name}
     </span>
   );
@@ -1372,7 +1371,7 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       </div>
 
       {/* Category name — hidden on mobile */}
-      <div className="hidden sm:block flex-[0_0_130px] overflow-hidden">
+      <div className="hidden sm:block flex-[0_0_150px] overflow-hidden">
         <CategoryPill name={txn.categoryName} color={txn.categoryColor ?? undefined} />
       </div>
 

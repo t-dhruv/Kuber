@@ -366,6 +366,8 @@ const ParseWithMappingSchema = z.object({
   accountId: z.string(),
   dateColumn: z.string(),
   descriptionColumn: z.string(),
+  descriptionColumn2: z.string().optional(),
+  descriptionSeparator: z.string().max(20).optional(),
   amountStrategy: z.enum(['single', 'debit-credit']),
   amountColumn: z.string().optional(),
   debitColumn: z.string().optional(),
@@ -381,7 +383,7 @@ router.post('/parse-with-mapping', upload.single('file'), async (req: AuthReques
   );
   if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
 
-  const { accountId, dateColumn, descriptionColumn, amountStrategy, amountColumn, debitColumn, creditColumn, localeFormat } = parsed.data;
+  const { accountId, dateColumn, descriptionColumn, descriptionColumn2, descriptionSeparator, amountStrategy, amountColumn, debitColumn, creditColumn, localeFormat } = parsed.data;
 
   try {
     const account = await prisma.account.findFirst({
@@ -411,7 +413,10 @@ router.post('/parse-with-mapping', upload.single('file'), async (req: AuthReques
 
     const parsedRows = dataRows.map((row) => {
       const rawDate = get(row, dateColumn);
-      const description = get(row, descriptionColumn).trim();
+      const part1 = get(row, descriptionColumn).trim();
+      const part2 = descriptionColumn2 ? get(row, descriptionColumn2).trim() : '';
+      const separator = descriptionSeparator ?? ' – ';
+      const description = part2 ? `${part1}${separator}${part2}` : part1;
       const parsedDate = rawDate ? parseDate(rawDate) : null;
 
       let amount: number | null = null;
