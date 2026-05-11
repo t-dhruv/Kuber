@@ -3,18 +3,19 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Plus, ChevronRight, RotateCcw, X, Check,
-  ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, CheckCheck,
+  ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, CheckCheck, Receipt,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { usePrefetchLogos } from '@/hooks/usePrefetchLogos';
 import {
   Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card, notify, ConfirmDialog, CategoryCombobox,
+  EmptyState, Tooltip,
 } from '@/components/ui';
+import { AiSetupNudge } from '@/components/ui/AiSetupNudge';
 import { ImportModal } from './components/ImportModal';
 import { SplitTransactionModal } from './components/SplitTransactionModal';
 import { DuplicateReviewModal } from './components/DuplicateReviewModal';
 import { ReceiptOcrModal } from './components/ReceiptOcrModal';
-import { AiSetupNudge } from '@/components/ui/AiSetupNudge';
 import { InstitutionLogo } from '@/components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1235,15 +1236,15 @@ function BulkActionsBar({ count, categories, onRecategorize, onMarkReviewed, onH
   const pickerRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="sticky top-0 z-20 bg-[var(--color-accent)] px-4 py-2.5 flex items-center gap-2 rounded-[var(--radius-md)] mb-2 flex-wrap">
-      <span className="text-sm font-semibold text-white mr-auto">
+    <div className="sticky top-0 z-20 bg-[var(--color-accent)] px-4 py-2.5 flex items-center gap-2 rounded-[var(--radius-md)] mb-2 flex-wrap transition-all duration-200">
+      <Badge className="bg-white/30 text-white mr-auto">
         {count} selected
-      </span>
+      </Badge>
 
       <div className="relative" ref={pickerRef}>
         <button
           onClick={() => setShowCategoryPicker((v) => !v)}
-          className="bg-white/20 border-none cursor-pointer text-white px-3 py-1.5 rounded-[var(--radius-sm)] text-[0.8125rem] font-medium"
+          className="bg-white/20 hover:bg-white/30 border-none cursor-pointer text-white px-3 py-1.5 rounded-[var(--radius-sm)] text-[0.8125rem] font-medium transition-colors"
         >
           Recategorize
         </button>
@@ -1261,18 +1262,27 @@ function BulkActionsBar({ count, categories, onRecategorize, onMarkReviewed, onH
       {[
         { label: 'Mark Reviewed', action: onMarkReviewed },
         { label: 'Hide', action: onHide },
-        { label: 'Delete', action: onDelete },
       ].map(({ label, action }) => (
         <button
           key={label}
           onClick={action}
-          className="bg-white/20 border-none cursor-pointer text-white px-3 py-1.5 rounded-[var(--radius-sm)] text-[0.8125rem] font-medium"
+          className="bg-white/20 hover:bg-white/30 border-none cursor-pointer text-white px-3 py-1.5 rounded-[var(--radius-sm)] text-[0.8125rem] font-medium transition-colors"
         >
           {label}
         </button>
       ))}
 
-      <button onClick={onClear} aria-label="Clear filters" className="bg-transparent border-none cursor-pointer text-white/80 p-1">
+      {/* Destructive separator */}
+      <div className="w-px h-5 bg-white/20" />
+
+      <button
+        onClick={onDelete}
+        className="bg-white/20 hover:bg-white/30 border-none cursor-pointer text-white px-3 py-1.5 rounded-[var(--radius-sm)] text-[0.8125rem] font-medium transition-colors"
+      >
+        Delete
+      </button>
+
+      <button onClick={onClear} aria-label="Clear selection" className="bg-transparent border-none cursor-pointer text-white/80 hover:text-white p-1 transition-colors ml-auto">
         <X size={16} />
       </button>
     </div>
@@ -1308,18 +1318,25 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
     }
   }
 
+  const handleRowClick = (e: React.MouseEvent) => {
+    if (editing) return;
+    if ((e.target as HTMLElement).closest('input, button')) return;
+    onOpen(txn);
+  };
+
   return (
     <div
-      className="flex items-center h-[52px] px-3 gap-3 cursor-default"
+      className="flex items-center h-[52px] px-3 gap-3 cursor-pointer transition-colors duration-150"
       style={{ backgroundColor: selected ? 'var(--color-accent-light)' : 'transparent' }}
-      onMouseEnter={(e) => { if (!selected) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'; }}
-      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.backgroundColor = selected ? 'var(--color-accent-light)' : 'transparent'; }}
+      onMouseEnter={(e) => { if (!selected && !editing) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'; }}
+      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+      onClick={handleRowClick}
     >
       {/* Checkbox */}
       <input
         type="checkbox"
         checked={selected}
-        onChange={(e) => onSelect(txn.id, e.target.checked)}
+        onChange={(e) => { e.stopPropagation(); onSelect(txn.id, e.target.checked); }}
         className="accent-[var(--color-accent)] shrink-0 cursor-pointer"
       />
 
@@ -1333,7 +1350,7 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       />
 
       {/* Merchant name */}
-      <div className="flex-[1_1_180px] min-w-0" onDoubleClick={startEdit}>
+      <div className="flex-[1_1_180px] min-w-0" onDoubleClick={startEdit} style={{ cursor: editing ? 'text' : 'pointer' }}>
         {editing ? (
           <input
             ref={inputRef}
@@ -1341,10 +1358,14 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={commitEdit}
             onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(false); }}
+            onClick={(e) => e.stopPropagation()}
             className="text-sm font-medium text-[var(--color-text)] border border-[var(--color-accent)] rounded-[var(--radius-sm)] py-0.5 px-1.5 bg-[var(--color-surface)] font-[inherit] w-full"
           />
         ) : (
-          <div className="text-sm font-medium text-[var(--color-text)] whitespace-nowrap overflow-hidden text-ellipsis">
+          <div
+            className="text-sm font-medium text-[var(--color-text)] whitespace-nowrap overflow-hidden text-ellipsis"
+            title={txn.merchantName}
+          >
             {txn.merchantName}
           </div>
         )}
@@ -1356,42 +1377,51 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       </div>
 
       {/* Account — hidden on mobile and tablet */}
-      <div className="hidden md:block flex-[0_0_150px] text-[0.8125rem] text-[var(--color-text-muted)] whitespace-nowrap overflow-hidden text-ellipsis">
-        {txn.accountName}{txn.accountLastFour ? ` ••${txn.accountLastFour}` : ''}
+      <div className="hidden md:block flex-[0_0_150px]">
+        <Tooltip content={txn.accountName + (txn.accountLastFour ? ` ••${txn.accountLastFour}` : '')}>
+          <div className="text-[0.8125rem] text-[var(--color-text-muted)] whitespace-nowrap overflow-hidden text-ellipsis">
+            {txn.accountName}{txn.accountLastFour ? ` ••${txn.accountLastFour}` : ''}
+          </div>
+        </Tooltip>
       </div>
 
-      {/* Badges — hidden on mobile */}
-      <div className="hidden sm:flex gap-1 flex-[0_0_auto]">
-        {txn.isRecurring && (
-          <span title="Recurring" className="text-[var(--color-info)] text-sm">
-            <RotateCcw size={13} />
-          </span>
-        )}
+      {/* Badges */}
+      <div className="flex gap-1 flex-[0_0_auto]">
+        {/* On mobile: only show Review badge */}
         {txn.needsReview && (
           <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-warning-light)] text-[var(--color-warning)]">
             Review
           </span>
         )}
-        {txn.isPending && (
-          <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]">
-            Pending
-          </span>
-        )}
-        {txn.isSplit && (
-          <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-accent-light)] text-[var(--color-accent)]">
-            Split
-          </span>
-        )}
-        {txn.isTransfer && (
-          <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]">
-            Transfer
-          </span>
-        )}
+
+        {/* On sm+: show all badges */}
+        <div className="hidden sm:flex gap-1">
+          {txn.isRecurring && (
+            <span title="Recurring" className="text-[var(--color-info)] text-sm">
+              <RotateCcw size={13} />
+            </span>
+          )}
+          {txn.isPending && (
+            <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]">
+              Pending
+            </span>
+          )}
+          {txn.isSplit && (
+            <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-accent-light)] text-[var(--color-accent)]">
+              Split
+            </span>
+          )}
+          {txn.isTransfer && (
+            <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]">
+              Transfer
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Split button — hidden on mobile */}
       <button
-        className="hidden sm:flex items-center gap-1 bg-transparent border-none cursor-pointer p-1 shrink-0"
+        className="hidden sm:flex items-center justify-center gap-1 bg-transparent border-none cursor-pointer p-1.5 shrink-0 rounded-sm transition-colors duration-150 hover:bg-[var(--color-surface-hover)]"
         onClick={(e) => { e.stopPropagation(); onSplit(txn); }}
         title={txn.isSplit ? 'Edit split' : 'Split transaction'}
         style={{ color: txn.isSplit ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
@@ -1408,21 +1438,15 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       </div>
 
       {txn.refunds && txn.refunds.length > 0 && (
-        <span
-          className="text-[0.625rem] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
-          style={{ backgroundColor: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}
-        >
+        <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-info-light)] text-[var(--color-info)] shrink-0">
           REFUNDED
         </span>
       )}
 
-      {/* Arrow */}
-      <button
-        onClick={() => onOpen(txn)}
-        className="bg-transparent border-none cursor-pointer text-[var(--color-text-muted)] p-1 shrink-0"
-      >
+      {/* Visual indicator for clickable row */}
+      <div className="hidden sm:block w-5 text-[var(--color-text-muted)] opacity-40 shrink-0">
         <ChevronRight size={16} />
-      </button>
+      </div>
     </div>
   );
 }
@@ -1444,6 +1468,7 @@ export default function TransactionsPage() {
   const autoCatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [splitTxn, setSplitTxn] = useState<Transaction | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const search = searchParams.get('search') ?? '';
 
@@ -1573,6 +1598,20 @@ export default function TransactionsPage() {
   // Cleanup polling interval on unmount
   useEffect(() => () => stopAutoCatPolling(), []);
 
+  // Auto-scroll pagination: trigger fetchNextPage when sentinel enters viewport
+  useEffect(() => {
+    if (!sentinelRef.current || !hasNextPage || isFetchingNextPage) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    }, { threshold: 0.1 });
+
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
   // ── URL param helpers ──
 
   function setParam(key: string, value: string) {
@@ -1695,101 +1734,13 @@ export default function TransactionsPage() {
 
   return (
     <div className="py-4 flex flex-col gap-3">
-      {/* Page header */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* Header Row 1: Title + Add */}
+      <div className="flex items-center gap-3">
         <h1 className="text-[1.375rem] font-bold text-[var(--color-text)] m-0 mr-auto">
           Transactions
         </h1>
-
-        {/* Search — full width on mobile */}
-        <div className="w-full sm:w-60">
-          <Input
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setParam('search', e.target.value)}
-            className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
-            leftIcon={<Search size={14} />}
-          />
-        </div>
-
-        {/* Date range — hidden on mobile, shown on sm+ */}
-        <div className="hidden sm:flex items-center gap-3">
-          <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
-            From
-            <input
-              type="date"
-              value={searchParams.get('startDate') ?? ''}
-              onChange={(e) => setParam('startDate', e.target.value)}
-              className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
-            />
-          </label>
-          
-          <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
-            To
-            <input
-              type="date"
-              value={searchParams.get('endDate') ?? ''}
-              onChange={(e) => setParam('endDate', e.target.value)}
-              className="px-2.5 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
-            />
-          </label>
-        </div>
-
-        {/* Filters button */}
-        <button
-          onClick={() => setShowFilters(true)}
-          className="flex items-center gap-1.5 py-[0.4rem] px-[0.875rem] rounded-[var(--radius-md)] border border-[var(--color-border)] cursor-pointer text-sm font-medium"
-          style={{
-            backgroundColor: activeFilterCount > 0 ? 'var(--color-accent-light)' : 'var(--color-surface)',
-            color: activeFilterCount > 0 ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-          }}
-        >
-          <SlidersHorizontal size={14} />
-          Filters
-          {activeFilterCount > 0 && (
-            <span className="bg-[var(--color-accent)] text-white rounded-[var(--radius-full)] px-1.5 text-[0.6875rem] font-bold">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
-
-        {/* Auto-categorize button */}
-        <Button
-          variant="secondary"
-          icon={<Sparkles size={14} />}
-          className="flex items-center gap-1.5 py-[0.4rem] px-[0.875rem] rounded-[var(--radius-md)] border border-[var(--color-border)] cursor-pointer text-sm font-medium"
-          onClick={async () => {
-            setShowAutoCatPanel(true);
-            await refetchAutoCatStatus();
-          }}
-        >
-          Auto-categorize
-        </Button>
-
-        {/* Scan Receipt button */}
-        <Button
-          variant="secondary"
-          icon={<Camera size={14} />}
-          className="flex items-center gap-1.5 py-[0.4rem] px-[0.875rem] rounded-[var(--radius-md)] border border-[var(--color-border)] cursor-pointer text-sm font-medium"
-          onClick={() => setShowReceiptModal(true)}
-        >
-          Scan Receipt
-        </Button>
-
-        {/* Import CSV button */}
-        <Button
-          variant="secondary"
-          icon={<Upload size={14} />}
-          className="flex items-center gap-1.5 py-[0.4rem] px-[0.875rem] rounded-[var(--radius-md)] border border-[var(--color-border)] cursor-pointer text-sm font-medium"
-          onClick={() => setShowImportModal(true)}
-        >
-          Import CSV
-        </Button>
-
-        {/* Add button */}
         <Button
           variant="primary"
-          className="flex items-center gap-1.5 py-[0.4rem] px-[0.875rem] rounded-[var(--radius-md)] border border-[var(--color-border)] cursor-pointer text-sm font-medium"
           icon={<Plus size={14} />}
           onClick={() => setShowAddModal(true)}
         >
@@ -1797,15 +1748,99 @@ export default function TransactionsPage() {
         </Button>
       </div>
 
+      {/* Header Row 2: Search + filters + secondary actions */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Search — full width on sm, 200px on md+ */}
+        <Input
+          placeholder="Search..."
+          value={search}
+          onChange={(e) => setParam('search', e.target.value)}
+          className="flex-1 sm:w-52"
+          leftIcon={<Search size={14} />}
+        />
+
+        {/* Date range — hidden on mobile */}
+        <div className="hidden sm:flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+            From
+            <input
+              type="date"
+              value={searchParams.get('startDate') ?? ''}
+              onChange={(e) => setParam('startDate', e.target.value)}
+              className="px-2 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+            To
+            <input
+              type="date"
+              value={searchParams.get('endDate') ?? ''}
+              onChange={(e) => setParam('endDate', e.target.value)}
+              className="px-2 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
+            />
+          </label>
+        </div>
+
+        {/* Filters button */}
+        <Button
+          variant="ghost"
+          icon={<SlidersHorizontal size={14} />}
+          onClick={() => setShowFilters(true)}
+          style={{
+            borderColor: activeFilterCount > 0 ? 'var(--color-accent)' : 'var(--color-border)',
+            color: activeFilterCount > 0 ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+          }}
+          className="border"
+        >
+          Filters {activeFilterCount > 0 && <Badge className="ml-1">{activeFilterCount}</Badge>}
+        </Button>
+
+        {/* Icon-only secondary actions with tooltips */}
+        <Tooltip content="Import CSV">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Upload size={14} />}
+            onClick={() => setShowImportModal(true)}
+            className="!p-2"
+          />
+        </Tooltip>
+
+        <Tooltip content="Scan Receipt">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Camera size={14} />}
+            onClick={() => setShowReceiptModal(true)}
+            className="!p-2"
+          />
+        </Tooltip>
+
+        <Tooltip content="Auto-categorize">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Sparkles size={14} />}
+            onClick={async () => {
+              setShowAutoCatPanel(true);
+              await refetchAutoCatStatus();
+            }}
+            className="!p-2"
+          />
+        </Tooltip>
+      </div>
+
       {/* KPI Summary Strip */}
       {(() => {
         const income = transactions.reduce((sum, t) => t.amount > 0 ? sum + t.amount : sum, 0);
         const spending = transactions.reduce((sum, t) => t.amount < 0 ? sum + Math.abs(t.amount) : sum, 0);
+        const net = income - spending;
         const count = txnPages?.pages[0]?.total ?? transactions.length;
         const tiles = [
           { label: 'Transactions', value: String(count), color: 'var(--color-text)' },
           { label: 'Income', value: fmtCurrency(income), color: 'var(--color-success)' },
           { label: 'Spending', value: fmtCurrency(spending), color: 'var(--color-text)' },
+          { label: 'Net', value: fmtCurrency(net), color: net >= 0 ? 'var(--color-success)' : 'var(--color-danger)' },
         ];
         return (
           <div className="flex gap-3 flex-wrap">
@@ -1835,26 +1870,24 @@ export default function TransactionsPage() {
 
       {/* Auto-categorize panel */}
       {showAutoCatPanel && (
-        <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4 flex flex-col gap-3">
+        <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4 flex flex-col gap-2 transition-all duration-200">
           {autoCatStatusFetching && (
             <p className="text-sm text-[color:var(--color-text-secondary)]">Checking AI status…</p>
           )}
           {!autoCatStatusFetching && autoCatStatus && !autoCatStatus.configured && (
-            <>
-              <AiSetupNudge message="Auto-categorize requires an AI provider. Set one up to automatically categorize your uncategorized transactions." />
-              <div className="flex justify-end">
-                <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--color-text-secondary)] hover:underline">Dismiss</button>
-              </div>
-            </>
+            <div className="flex items-center justify-between gap-2">
+              <AiSetupNudge compact />
+              <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--color-text-secondary)] hover:underline shrink-0">Dismiss</button>
+            </div>
           )}
           {!autoCatStatusFetching && autoCatStatus && autoCatStatus.configured && (
-            <div className="flex flex-col gap-3">
+            <>
               {/* Progress state */}
               {autoCatMutation.isPending || (autoCatProgress && !autoCatProgress.done) ? (
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-[color:var(--color-text-secondary)]">
-                      Analyzing transactions… {autoCatProgress ? `${autoCatProgress.processed} / ${autoCatProgress.total}` : ''}
+                      Analyzing… {autoCatProgress ? `${autoCatProgress.processed} / ${autoCatProgress.total}` : ''}
                     </span>
                     {autoCatProgress && (
                       <span className="text-[color:var(--color-text-secondary)] text-xs">
@@ -1874,31 +1907,32 @@ export default function TransactionsPage() {
                   </div>
                 </div>
               ) : autoCatProgress?.done ? (
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-[color:var(--color-text-secondary)]">
-                    Done — {autoCatProgress.queued} queued for review, {autoCatProgress.total - autoCatProgress.queued} skipped.
+                    Done — {autoCatProgress.queued} matched, {autoCatProgress.total - autoCatProgress.queued} skipped.
                   </p>
                   <button
                     onClick={() => { setShowAutoCatPanel(false); setAutoCatProgress(null); }}
-                    className="text-sm text-[color:var(--color-text-secondary)] hover:underline"
+                    className="text-sm text-[color:var(--color-text-secondary)] hover:underline shrink-0"
                   >
                     Dismiss
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-[color:var(--color-text-secondary)]">
                     {autoCatStatus.uncategorizedCount > 0
                       ? `Auto-categorize ${autoCatStatus.uncategorizedCount} uncategorized transaction${autoCatStatus.uncategorizedCount !== 1 ? 's' : ''}?`
                       : autoCatStatus.reviewCount > 0
-                        ? `${autoCatStatus.reviewCount} transaction${autoCatStatus.reviewCount !== 1 ? 's' : ''} awaiting review — no new ones to process.`
-                        : 'All transactions are already categorized.'}
+                        ? `${autoCatStatus.reviewCount} awaiting review.`
+                        : 'All categorized.'}
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button onClick={() => setShowAutoCatPanel(false)} className="text-sm text-[color:var(--color-text-secondary)] hover:underline">Cancel</button>
                     {autoCatStatus.uncategorizedCount > 0 && (
                       <Button
                         variant="primary"
+                        size="sm"
                         disabled={autoCatMutation.isPending}
                         onClick={() => autoCatMutation.mutate()}
                       >
@@ -1908,7 +1942,7 @@ export default function TransactionsPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
       )}
@@ -1998,20 +2032,29 @@ export default function TransactionsPage() {
             ))}
           </div>
         ) : groups.length === 0 ? (
-          <div className="p-12 text-center text-[var(--color-text-muted)] text-sm">
-            <p className="m-0 font-medium">No transactions found.</p>
-            <p className="m-0 mt-1 text-xs">Transactions will appear here once you add accounts and transactions.</p>
+          <div className="p-6">
+            <EmptyState
+              icon={<Receipt size={32} />}
+              title="No transactions found"
+              description={search || activeFilterCount > 0 ? "Try adjusting your search or filters." : "Add your first transaction or import a CSV to get started."}
+              action={!search && activeFilterCount === 0 ? (
+                <div className="flex gap-2 justify-center">
+                  <Button variant="primary" icon={<Plus size={14} />} onClick={() => setShowAddModal(true)}>Add Transaction</Button>
+                  <Button variant="secondary" icon={<Upload size={14} />} onClick={() => setShowImportModal(true)}>Import CSV</Button>
+                </div>
+              ) : undefined}
+            />
           </div>
         ) : (
           groups.map((group) => (
             <div key={group.date}>
-              {/* Date group header */}
-              <div className="flex items-center justify-between py-1.5 px-3 bg-[var(--color-bg)] border-b border-[var(--color-border)] border-t border-t-[var(--color-border)]">
-                <span className="text-xs font-bold text-[var(--color-text-secondary)] uppercase tracking-[0.04em]">
+              {/* Date group header — sticky */}
+              <div className="sticky top-0 z-10 flex items-center justify-between py-2.5 px-3 bg-[var(--color-bg)] border-b border-[var(--color-border)]">
+                <span className="text-[0.6875rem] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.05em]">
                   {fmtGroupDate(group.date)}
                 </span>
                 <span
-                  className="text-[0.8125rem] font-semibold [font-variant-numeric:tabular-nums]"
+                  className="text-[0.875rem] font-semibold [font-variant-numeric:tabular-nums]"
                   style={{ color: group.dayTotal < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}
                 >
                   {group.dayTotal < 0 ? '-' : '+'}{fmtCurrency(group.dayTotal)}
@@ -2038,54 +2081,25 @@ export default function TransactionsPage() {
           ))
         )}
 
-        {/* Load more */}
-        {hasNextPage && (
-          <div className="px-3 py-3 border-t border-[var(--color-border)] flex justify-center">
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={isFetchingNextPage}
-              onClick={() => fetchNextPage()}
-            >
-              Load more
-            </Button>
+        {/* Auto-scroll sentinel */}
+        {hasNextPage && <div ref={sentinelRef} className="h-px" />}
+
+        {/* Loading skeleton while fetching next page */}
+        {isFetchingNextPage && (
+          <div className="p-4 flex flex-col gap-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 h-[52px]">
+                <Skeleton width={16} height={16} />
+                <Skeleton width={32} height={32} rounded />
+                <Skeleton height={14} style={{ flex: '1 1 180px' }} />
+                <Skeleton height={14} style={{ flex: '0 0 130px' }} />
+                <Skeleton height={14} width={80} />
+              </div>
+            ))}
           </div>
         )}
       </Card>
 
-      {/* Summary Stats Panel */}
-      {!txnsLoading && transactions.length > 0 && (() => {
-        const expenses = transactions.filter((t) => t.amount < 0);
-        const totalSpending = expenses.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-        const largestExpense = expenses.length > 0 ? Math.max(...expenses.map((t) => Math.abs(t.amount))) : 0;
-        const avgAmount = transactions.length > 0 ? transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0) / transactions.length : 0;
-        const dates = transactions.map((t) => t.date).sort();
-        const firstDate = dates[0] ? new Date(dates[0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
-        const lastDate = dates[dates.length - 1] ? new Date(dates[dates.length - 1]).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
-
-        return (
-          <Card padding="lg">
-            <div className="text-xs font-bold text-[var(--color-text-muted)] uppercase tracking-[0.06em] mb-3">
-              Summary
-            </div>
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-              {[
-                { label: 'Total transactions', value: String(transactions.length) },
-                { label: 'Total spending', value: fmtCurrency(totalSpending) },
-                { label: 'Largest expense', value: largestExpense > 0 ? fmtCurrency(largestExpense) : '—' },
-                { label: 'Average transaction', value: fmtCurrency(avgAmount) },
-                { label: 'First transaction', value: firstDate },
-                { label: 'Last transaction', value: lastDate },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <div className="text-xs text-[var(--color-text-muted)] mb-0.5">{label}</div>
-                  <div className="text-[0.9375rem] font-semibold text-[var(--color-text)] [font-variant-numeric:tabular-nums]">{value}</div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        );
-      })()}
 
       {/* Filters panel */}
       <FiltersPanel
