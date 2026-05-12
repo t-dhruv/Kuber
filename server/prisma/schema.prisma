@@ -309,6 +309,7 @@ model TransactionJournal {
   isPending       Boolean                  @default(false)
   isReconciled    Boolean                  @default(false)
   reconciledAt    DateTime?
+  isDeleted       Boolean                  @default(false)
   order           Int                      @default(0)
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
@@ -324,6 +325,7 @@ model TransactionJournal {
   @@index([householdId, transactionType, date])
   @@index([groupId])
   @@index([categoryId])
+  @@index([householdId, isDeleted, date])
   @@map("transaction_journals")
 }
 

@@ -417,6 +417,7 @@ function TransactionDrawer({ transaction, categories, accounts, onClose, onSaved
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['budget'] });
+      setConfirmDelete(false);
       onClose();
     },
     onError: () => notify.error('Failed to delete transaction'),

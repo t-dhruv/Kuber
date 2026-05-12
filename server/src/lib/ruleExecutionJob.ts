@@ -12,7 +12,7 @@ export async function runRuleExecutionJob(): Promise<{ processed: number; matche
   const since = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000);
 
   const journals = await prisma.transactionJournal.findMany({
-    where: { createdAt: { gte: since } },
+    where: { createdAt: { gte: since }, isDeleted: false },
     include: {
       entries: true,
       tags: { include: { tag: true } },

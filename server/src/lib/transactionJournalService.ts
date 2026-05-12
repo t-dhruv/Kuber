@@ -415,7 +415,11 @@ export async function deleteLegacyTransactionJournal(
       return false;
     }
 
-    await tx.transactionGroup.delete({ where: { id: existing.journal.groupId } });
+    // Soft-delete the journal instead of hard-deleting the group
+    await tx.transactionJournal.update({
+      where: { id: existing.journal.id },
+      data: { isDeleted: true, updatedAt: new Date() },
+    });
     return true;
   });
 }

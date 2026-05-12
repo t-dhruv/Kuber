@@ -576,6 +576,7 @@ export async function fetchJournalReportRows(
 ): Promise<JournalReportRow[]> {
   const where: Prisma.TransactionJournalWhereInput = {
     householdId: input.householdId,
+    isDeleted: false,
     ...(input.start && input.end ? { date: { gte: input.start, lte: input.end } } : {}),
   };
 

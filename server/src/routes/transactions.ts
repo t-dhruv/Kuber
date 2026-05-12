@@ -400,6 +400,12 @@ router.delete('/before', async (req: AuthRequest, res: Response) => {
       data: { isDeleted: true, updatedAt: new Date() },
     });
 
+    // Cascade soft-delete to related journal entries
+    await prisma.transactionJournal.updateMany({
+      where: { householdId, date: { lt: cutoff }, isDeleted: false },
+      data: { isDeleted: true, updatedAt: new Date() },
+    });
+
     logAudit({
       householdId,
       userId: req.userId!,
