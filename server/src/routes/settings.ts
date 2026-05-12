@@ -461,8 +461,8 @@ router.delete('/categories/:id', async (req: AuthRequest, res: Response) => {
     }
 
     // Check if any transactions use this category
-    const txCount = await prisma.transaction.count({
-      where: { categoryId: id, householdId },
+    const txCount = await prisma.transactionJournal.count({
+      where: { categoryId: id, householdId, isDeleted: false },
     });
     if (txCount > 0) {
       return res.status(400).json({

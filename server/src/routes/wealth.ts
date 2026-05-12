@@ -49,18 +49,19 @@ async function detectPrevMonthIncome(householdId: string): Promise<number | null
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
   const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
-  const incomeTxns = await prisma.transaction.findMany({
+  const incomeTxns = await prisma.transactionJournal.findMany({
     where: {
       householdId,
       date: { gte: prevMonthStart, lte: prevMonthEnd },
-      amount: { gt: 0 },
+      transactionType: 'deposit',
       isHidden: false,
+      isDeleted: false,
     },
-    select: { amount: true },
+    select: { amountDecimal: true },
   });
 
   if (incomeTxns.length === 0) return null;
-  return incomeTxns.reduce((sum, t) => sum + t.amount, 0);
+  return incomeTxns.reduce((sum, t) => sum + Number(t.amountDecimal), 0);
 }
 
 // ─── GET /api/v1/wealth/income ────────────────────────────────────────────────
@@ -243,12 +244,13 @@ router.get('/analysis', async (req: AuthRequest, res: Response) => {
     const { start, end, month } = getMonthRange(req.query.month as string | undefined);
 
     // 3. Fetch spending transactions with category bucketType
-    const transactions = await prisma.transaction.findMany({
+    const transactions = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         date: { gte: start, lte: end },
-        amount: { lt: 0 },
+        transactionType: 'withdrawal',
         isHidden: false,
+        isDeleted: false,
       },
       include: {
         category: {
@@ -258,7 +260,11 @@ router.get('/analysis', async (req: AuthRequest, res: Response) => {
     });
 
     // 4. Sum per bucket and accumulate category totals
-    const { bucketTotals, catMap } = bucketTransactions(transactions);
+    const { bucketTotals, catMap } = bucketTransactions(transactions.map(t => ({
+      amount: Math.abs(Number(t.amountDecimal)),
+      categoryId: t.categoryId,
+      category: t.category,
+    })));
 
     // 5. Compute targets (0 if no income set)
     const targets = computeTargets(income);
@@ -416,8 +422,8 @@ router.post('/ai-analysis', async (req: AuthRequest, res: Response) => {
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
     const [transactions, categories] = await Promise.all([
-      prisma.transaction.findMany({
-        where: { householdId, date: { gte: monthStart, lte: monthEnd }, amount: { lt: 0 }, isHidden: false },
+      prisma.transactionJournal.findMany({
+        where: { householdId, date: { gte: monthStart, lte: monthEnd }, transactionType: 'withdrawal', isHidden: false, isDeleted: false },
         include: { category: { select: { id: true, name: true, bucketType: true } } },
       }),
       prisma.category.findMany({
@@ -437,7 +443,7 @@ router.post('/ai-analysis', async (req: AuthRequest, res: Response) => {
     for (const tx of transactions) {
       const bucket = tx.category?.bucketType ?? 'uncategorized';
       const catName = tx.category?.name ?? 'Uncategorized';
-      const amt = Math.abs(tx.amount);
+      const amt = Math.abs(Number(tx.amountDecimal));
       bucketTotals[bucket] = (bucketTotals[bucket] ?? 0) + amt;
       const map = bucketCategories[bucket]!;
       map.set(catName, (map.get(catName) ?? 0) + amt);
