@@ -728,10 +728,17 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
     // Merchant cache to avoid redundant DB calls within this import
     const merchantCache = new Map<string, string>(); // name -> id
 
+    // Get virtual accounts for journal creation
+    const virtualAccounts = await getVirtualAccountsByType(householdId);
+    if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
+      return res.status(500).json({ error: 'Missing virtual accounts for import' });
+    }
+
     // Run all inserts in a transaction (including balance update for atomicity)
     const [created, createdJournals] = await prisma.$transaction(async (tx) => {
       const results: string[] = [];
       const journals: any[] = [];
+      let totalAmount = 0;
 
       for (const row of parsed) {
         // Resolve or create merchant
@@ -760,35 +767,32 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
           ? (categoryMap.get(row.category.toLowerCase()) ?? null)
           : null;
 
-        const newTx = await tx.transaction.create({
-          data: {
+        // Create journal directly (no legacy transaction)
+        const journal = await createJournalFromLegacyTransaction(
+          tx,
+          {
             householdId,
             accountId,
             date: row.date,
             description: row.description,
-            originalDescription: row.description,
             amount: row.amount,
-            categoryId,
-            merchantId,
+            categoryId: categoryId ?? undefined,
             notes: row.notes ?? null,
-            needsReview: true, // imported transactions start as needing review
-            isHidden: false,
-            isRecurring: false,
-            isSplit: false,
+            merchantId,
           },
-          include: { tags: true },
-        });
-        const journal = await createTransactionJournalInTransaction(tx, buildJournalInputFromLegacyTransaction(newTx));
+          row.amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
+          row.amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+        );
         journals.push(journal);
-        results.push(newTx.id);
+        results.push(journal.journalId);
+        totalAmount += row.amount;
       }
 
       // Update account running balance by the net sum of all imported transactions
-      const net = parsed.reduce((sum, row) => sum + row.amount, 0);
       if (results.length > 0) {
         await tx.account.update({
           where: { id: accountId },
-          data: { balance: { increment: net } },
+          data: { balance: { increment: totalAmount } },
         });
       }
 
