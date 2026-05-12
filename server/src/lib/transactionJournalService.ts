@@ -644,3 +644,87 @@ export async function getTransactionJournalGroup(
 
   return group ? formatTransactionJournalGroup(group) : null;
 }
+
+export interface JournalQueryFilter {
+  householdId: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  isPending?: boolean;
+  amountGt?: number;
+  amountLt?: number;
+  categoryIds?: string[];
+  limit?: number;
+  orderBy?: 'date' | 'amount';
+  orderDirection?: 'asc' | 'desc';
+}
+
+export interface JournalQueryOptions {
+  withCategory?: boolean;
+  withEntries?: boolean;
+}
+
+export async function queryJournalAmounts(
+  filter: JournalQueryFilter,
+  options: JournalQueryOptions = {},
+  prisma: PrismaLike = defaultPrisma,
+) {
+  const where: any = {
+    householdId: filter.householdId,
+    isDeleted: false,
+  };
+
+  if (filter.dateFrom || filter.dateTo) {
+    where.date = {};
+    if (filter.dateFrom) where.date.gte = filter.dateFrom;
+    if (filter.dateTo) where.date.lt = filter.dateTo;
+  }
+
+  if (filter.isPending !== undefined) {
+    where.isPending = filter.isPending;
+  }
+
+  if (filter.amountGt !== undefined || filter.amountLt !== undefined) {
+    where.amountDecimal = {};
+    if (filter.amountGt !== undefined) where.amountDecimal.gt = filter.amountGt;
+    if (filter.amountLt !== undefined) where.amountDecimal.lt = filter.amountLt;
+  }
+
+  if (filter.categoryIds && filter.categoryIds.length > 0) {
+    where.categoryId = { in: filter.categoryIds };
+  }
+
+  const orderByField = filter.orderBy === 'amount' ? 'amountDecimal' : 'date';
+  const orderByDir = filter.orderDirection === 'asc' ? 'asc' : 'desc';
+
+  const baseQuery = {
+    where,
+    orderBy: { [orderByField]: orderByDir },
+    take: filter.limit,
+  };
+
+  // Use include if relations needed, select otherwise
+  if (options.withCategory || options.withEntries) {
+    const include: any = {};
+    if (options.withCategory) {
+      include.category = { select: { id: true, name: true, icon: true } };
+    }
+    if (options.withEntries) {
+      include.entries = { select: { accountId: true, amountDecimal: true } };
+    }
+    return await prisma.transactionJournal.findMany({
+      ...baseQuery,
+      include,
+    });
+  }
+
+  return await prisma.transactionJournal.findMany({
+    ...baseQuery,
+    select: {
+      id: true,
+      date: true,
+      amountDecimal: true,
+      categoryId: true,
+      description: true,
+    },
+  });
+}

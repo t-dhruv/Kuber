@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { queryJournalAmounts } from '../lib/transactionJournalService';
 
 const router = Router();
 
@@ -31,31 +32,25 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
     });
     const netWorthCurrent = Math.round(accounts.reduce((sum, a) => sum + a.balance, 0) * 100) / 100;
 
-    // Transactions this month and last month scoped to household
+    // Transactions this month and last month from journal (scoped to household)
     const [thisMonthTxns, lastMonthTxns] = await Promise.all([
-      prisma.transaction.findMany({
-        where: {
-          householdId,
-          date: { gte: thisMonth.start, lt: thisMonth.end },
-          isHidden: false,
-        },
-        select: { amount: true },
+      queryJournalAmounts({
+        householdId,
+        dateFrom: thisMonth.start,
+        dateTo: thisMonth.end,
       }),
-      prisma.transaction.findMany({
-        where: {
-          householdId,
-          date: { gte: lastMonth.start, lt: lastMonth.end },
-          isHidden: false,
-        },
-        select: { amount: true },
+      queryJournalAmounts({
+        householdId,
+        dateFrom: lastMonth.start,
+        dateTo: lastMonth.end,
       }),
     ]);
 
     const r2 = (n: number) => Math.round(n * 100) / 100;
-    const incomeThisMonth = r2(thisMonthTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0));
-    const expensesThisMonth = r2(thisMonthTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0));
-    const incomeLastMonth = r2(lastMonthTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0));
-    const expensesLastMonth = r2(lastMonthTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0));
+    const incomeThisMonth = r2(thisMonthTxns.filter(t => Number(t.amountDecimal) > 0).reduce((s, t) => s + Number(t.amountDecimal), 0));
+    const expensesThisMonth = r2(thisMonthTxns.filter(t => Number(t.amountDecimal) < 0).reduce((s, t) => s + Math.abs(Number(t.amountDecimal)), 0));
+    const incomeLastMonth = r2(lastMonthTxns.filter(t => Number(t.amountDecimal) > 0).reduce((s, t) => s + Number(t.amountDecimal), 0));
+    const expensesLastMonth = r2(lastMonthTxns.filter(t => Number(t.amountDecimal) < 0).reduce((s, t) => s + Math.abs(Number(t.amountDecimal)), 0));
 
     const netWorthChangeAmount = incomeThisMonth - expensesThisMonth;
     const netWorthChangePercent = netWorthCurrent !== 0
@@ -106,32 +101,26 @@ router.get('/spending-chart', async (req: AuthRequest, res: Response) => {
     const lastMonth = getPrevMonthBounds(now);
 
     const [thisMonthTxns, lastMonthTxns] = await Promise.all([
-      prisma.transaction.findMany({
-        where: {
-          householdId,
-          date: { gte: thisMonth.start, lt: thisMonth.end },
-          amount: { lt: 0 },
-          isHidden: false,
-        },
-        select: { date: true, amount: true },
+      queryJournalAmounts({
+        householdId,
+        dateFrom: thisMonth.start,
+        dateTo: thisMonth.end,
+        amountLt: 0,
       }),
-      prisma.transaction.findMany({
-        where: {
-          householdId,
-          date: { gte: lastMonth.start, lt: lastMonth.end },
-          amount: { lt: 0 },
-          isHidden: false,
-        },
-        select: { date: true, amount: true },
+      queryJournalAmounts({
+        householdId,
+        dateFrom: lastMonth.start,
+        dateTo: lastMonth.end,
+        amountLt: 0,
       }),
     ]);
 
     // Group by day
-    const groupByDay = (txns: Array<{ date: Date; amount: number }>): Array<{ day: number; amount: number }> => {
+    const groupByDay = (txns: any[]): Array<{ day: number; amount: number }> => {
       const map = new Map<number, number>();
       for (const t of txns) {
         const day = new Date(t.date).getDate();
-        map.set(day, (map.get(day) ?? 0) + Math.abs(t.amount));
+        map.set(day, (map.get(day) ?? 0) + Math.abs(Number(t.amountDecimal)));
       }
       return Array.from(map.entries())
         .map(([day, amount]) => ({ day, amount }))
@@ -170,22 +159,19 @@ router.get('/budget-summary', async (req: AuthRequest, res: Response) => {
 
     const categoryIds = budgets.map(b => b.categoryId).filter((id): id is string => !!id);
 
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        householdId,
-        categoryId: { in: categoryIds },
-        date: { gte: thisMonth.start, lt: thisMonth.end },
-        amount: { lt: 0 },
-        isHidden: false,
-      },
-      select: { categoryId: true, amount: true },
+    const transactions = await queryJournalAmounts({
+      householdId,
+      categoryIds,
+      dateFrom: thisMonth.start,
+      dateTo: thisMonth.end,
+      amountLt: 0,
     });
 
     // Sum spending per category
     const spentByCategory = new Map<string, number>();
     for (const t of transactions) {
       if (t.categoryId) {
-        spentByCategory.set(t.categoryId, (spentByCategory.get(t.categoryId) ?? 0) + Math.abs(t.amount));
+        spentByCategory.set(t.categoryId, (spentByCategory.get(t.categoryId) ?? 0) + Math.abs(Number(t.amountDecimal)));
       }
     }
 
@@ -316,17 +302,13 @@ router.get('/net-worth-chart', async (req: AuthRequest, res: Response) => {
 
     // Monthly savings rate estimate from last 3 months of transactions
     const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-    const txns = await prisma.transaction.findMany({
-      where: {
-        householdId,
-        date: { gte: threeMonthsAgo },
-        isHidden: false,
-      },
-      select: { amount: true },
+    const txns = await queryJournalAmounts({
+      householdId,
+      dateFrom: threeMonthsAgo,
     });
 
-    const totalIncome = txns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-    const totalExpenses = txns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+    const totalIncome = txns.filter(t => Number(t.amountDecimal) > 0).reduce((s, t) => s + Number(t.amountDecimal), 0);
+    const totalExpenses = txns.filter(t => Number(t.amountDecimal) < 0).reduce((s, t) => s + Math.abs(Number(t.amountDecimal)), 0);
     const avgMonthlySavings = (totalIncome - totalExpenses) / 3;
 
     // Build 12 monthly data points going back 11 months from now
@@ -428,28 +410,22 @@ router.get('/weekly-recap', async (req: AuthRequest, res: Response) => {
 
     // Spending: last 7 days vs prev 7 days
     const [last7Txns, prev7Txns] = await Promise.all([
-      prisma.transaction.findMany({
-        where: {
-          householdId,
-          date: { gte: last7Start, lt: now },
-          amount: { lt: 0 },
-          isHidden: false,
-        },
-        select: { amount: true, categoryId: true },
+      queryJournalAmounts({
+        householdId,
+        dateFrom: last7Start,
+        dateTo: now,
+        amountLt: 0,
       }),
-      prisma.transaction.findMany({
-        where: {
-          householdId,
-          date: { gte: prev7Start, lt: last7Start },
-          amount: { lt: 0 },
-          isHidden: false,
-        },
-        select: { amount: true },
+      queryJournalAmounts({
+        householdId,
+        dateFrom: prev7Start,
+        dateTo: last7Start,
+        amountLt: 0,
       }),
     ]);
 
-    const spendingTotal = last7Txns.reduce((s, t) => s + Math.abs(t.amount), 0);
-    const spendingPrev = prev7Txns.reduce((s, t) => s + Math.abs(t.amount), 0);
+    const spendingTotal = last7Txns.reduce((s, t) => s + Math.abs(Number(t.amountDecimal)), 0);
+    const spendingPrev = prev7Txns.reduce((s, t) => s + Math.abs(Number(t.amountDecimal)), 0);
     const spendingChange = spendingTotal - spendingPrev;
     const spendingChangePercent = spendingPrev !== 0 ? (spendingChange / spendingPrev) * 100 : 0;
 
@@ -475,20 +451,23 @@ router.get('/weekly-recap', async (req: AuthRequest, res: Response) => {
     // Top category by spending last 7 days
     let topCategory: { name: string; amount: number; icon: string | null } | null = null;
     if (last7Txns.length > 0) {
-      const byCategory = new Map<string, number>();
+      const byCategory = new Map<string, { amount: number; icon: string | null }>();
       for (const t of last7Txns) {
-        if (t.categoryId) {
-          byCategory.set(t.categoryId, (byCategory.get(t.categoryId) ?? 0) + Math.abs(t.amount));
+        if (t.categoryId && t.categoryId in byCategory === false) {
+          byCategory.set(t.categoryId, { amount: Math.abs(Number(t.amountDecimal)), icon: null });
+        } else if (t.categoryId) {
+          const entry = byCategory.get(t.categoryId)!;
+          entry.amount += Math.abs(Number(t.amountDecimal));
         }
       }
       if (byCategory.size > 0) {
-        const [topCatId, topCatAmt] = [...byCategory.entries()].sort((a, b) => b[1] - a[1])[0];
+        const [topCatId, topCatData] = [...byCategory.entries()].sort((a, b) => b[1].amount - a[1].amount)[0];
         const cat = await prisma.category.findUnique({
           where: { id: topCatId },
           select: { name: true, icon: true },
         });
         if (cat) {
-          topCategory = { name: cat.name, amount: topCatAmt, icon: cat.icon ?? null };
+          topCategory = { name: cat.name, amount: topCatData.amount, icon: cat.icon ?? null };
         }
       }
     }
@@ -546,12 +525,13 @@ router.get('/health-score', async (req: AuthRequest, res: Response) => {
     const thisMonth = getMonthBounds(now);
 
     // ── Savings rate (30 pts) ──
-    const monthTxns = await prisma.transaction.findMany({
-      where: { householdId, date: { gte: thisMonth.start, lt: thisMonth.end }, isHidden: false },
-      select: { amount: true },
+    const monthTxns = await queryJournalAmounts({
+      householdId,
+      dateFrom: thisMonth.start,
+      dateTo: thisMonth.end,
     });
-    const incomeThisMonth = monthTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-    const expensesThisMonth = monthTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+    const incomeThisMonth = monthTxns.filter(t => Number(t.amountDecimal) > 0).reduce((s, t) => s + Number(t.amountDecimal), 0);
+    const expensesThisMonth = monthTxns.filter(t => Number(t.amountDecimal) < 0).reduce((s, t) => s + Math.abs(Number(t.amountDecimal)), 0);
     const savingsRate = incomeThisMonth > 0 ? (incomeThisMonth - expensesThisMonth) / incomeThisMonth : 0;
     const savingsScore = Math.round(Math.min(1, Math.max(0, savingsRate)) * 30);
 
@@ -560,13 +540,16 @@ router.get('/health-score', async (req: AuthRequest, res: Response) => {
     let budgetScore = 0;
     if (budgets.length > 0) {
       const catIds = budgets.map(b => b.categoryId).filter((id): id is string => !!id);
-      const budgetTxns = await prisma.transaction.findMany({
-        where: { householdId, categoryId: { in: catIds }, date: { gte: thisMonth.start, lt: thisMonth.end }, amount: { lt: 0 }, isHidden: false },
-        select: { categoryId: true, amount: true },
+      const budgetTxns = await queryJournalAmounts({
+        householdId,
+        categoryIds: catIds,
+        dateFrom: thisMonth.start,
+        dateTo: thisMonth.end,
+        amountLt: 0,
       });
       const spentMap = new Map<string, number>();
       for (const t of budgetTxns) {
-        if (t.categoryId) spentMap.set(t.categoryId, (spentMap.get(t.categoryId) ?? 0) + Math.abs(t.amount));
+        if (t.categoryId) spentMap.set(t.categoryId, (spentMap.get(t.categoryId) ?? 0) + Math.abs(Number(t.amountDecimal)));
       }
       const underBudget = budgets.filter(b => b.categoryId && (spentMap.get(b.categoryId) ?? 0) <= b.amount).length;
       budgetScore = Math.round((underBudget / budgets.length) * 25);
