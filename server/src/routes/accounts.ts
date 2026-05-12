@@ -6,6 +6,7 @@ import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
 import { NOT_DELETED } from '../lib/softDeleteWhere';
+import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration';
 
 const csvUpload = multer({
   storage: multer.memoryStorage(),
@@ -444,25 +445,34 @@ router.post('/:id/reconcile', async (req: AuthRequest, res: Response) => {
       return res.json({ message: 'Already balanced', adjustment: 0 });
     }
 
-    await prisma.$transaction([
-      prisma.transaction.create({
-        data: {
+    // Create balance adjustment as journal transaction
+    const virtualAccounts = await getVirtualAccountsByType(householdId);
+    const expenseAccountId = adjustment < 0 ? virtualAccounts.expenseAccountId : virtualAccounts.revenueAccountId;
+
+    if (!expenseAccountId) {
+      throw new Error('Missing virtual account for balance adjustment');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await createJournalFromLegacyTransaction(
+        tx,
+        {
           householdId,
           accountId: id,
           date: new Date(),
           description: 'Balance Adjustment',
-          originalDescription: 'Balance Adjustment',
           amount: adjustment,
-          needsReview: false,
-          isHidden: false,
-          isSplit: false,
         },
-      }),
-      prisma.account.update({
+        adjustment < 0 ? expenseAccountId : undefined,
+        adjustment > 0 ? expenseAccountId : undefined,
+      );
+
+      // Update account balance
+      await tx.account.update({
         where: { id },
         data: { balance: target },
-      }),
-    ]);
+      });
+    });
 
     logAudit({ householdId, userId: req.userId!, action: 'UPDATE', entity: 'ACCOUNT', entityId: id, before: { balance: account.balance }, after: { balance: target } });
 

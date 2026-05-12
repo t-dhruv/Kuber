@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration';
 
 const router = Router();
 
@@ -65,18 +66,27 @@ router.post('/:accountId/reconcile', async (req: AuthRequest, res: Response) => 
     const difference   = statementBalance - clearedTotal;
 
     if (Math.abs(difference) > 0.001) {
-      await prisma.transaction.create({
-        data: {
-          householdId:         req.householdId!,
-          accountId:           req.params.accountId,
-          description:         'Reconciliation Adjustment',
-          originalDescription: 'Reconciliation Adjustment',
-          amount:              difference,
-          date:                new Date(statementDate),
-          isCleared:           true,
-          clearedDate:         new Date(statementDate),
-          needsReview:         false,
-        },
+      // Create reconciliation adjustment as journal transaction
+      const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
+      const expenseAccountId = difference < 0 ? virtualAccounts.expenseAccountId : virtualAccounts.revenueAccountId;
+
+      if (!expenseAccountId) {
+        throw new Error('Missing virtual account for reconciliation adjustment');
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await createJournalFromLegacyTransaction(
+          tx,
+          {
+            householdId: req.householdId!,
+            accountId: req.params.accountId,
+            description: 'Reconciliation Adjustment',
+            amount: difference,
+            date: new Date(statementDate),
+          },
+          difference < 0 ? expenseAccountId : undefined,
+          difference > 0 ? expenseAccountId : undefined,
+        );
       });
     }
 

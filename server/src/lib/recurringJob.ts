@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from './legacyToJournalMigration';
 
 export function advanceNextDate(current: Date, frequency: string): Date {
   // Work in UTC to avoid timezone shifts
@@ -34,25 +35,38 @@ export async function processRecurringItems(prisma: PrismaClient): Promise<void>
 
   for (const item of dueItems) {
     if (!item.isAutopay) continue;
-    await prisma.transaction.create({
-      data: {
-        householdId:         item.householdId,
-        accountId:           item.accountId,
-        categoryId:          item.categoryId ?? null,
-        description:         item.name,
-        originalDescription: item.name,
-        amount:              -Math.abs(item.amount),
-        date:                item.nextDate,
-        isRecurring:         true,
-        recurringItemId:     item.id,
-        needsReview:         false,
-      },
-    });
 
-    const nextDate = advanceNextDate(item.nextDate, item.frequency);
-    await prisma.recurringItem.update({
-      where: { id: item.id },
-      data:  { nextDate, lastProcessedAt: new Date() },
+    // Get virtual accounts for journal creation
+    const virtualAccounts = await getVirtualAccountsByType(item.householdId, undefined, prisma);
+    if (!virtualAccounts.expenseAccountId) {
+      console.error(`No expense account for recurring item ${item.id} in household ${item.householdId}`);
+      continue;
+    }
+
+    // Create journal instead of legacy transaction
+    await prisma.$transaction(async (tx) => {
+      await createJournalFromLegacyTransaction(
+        tx,
+        {
+          householdId: item.householdId,
+          accountId: item.accountId,
+          categoryId: item.categoryId ?? undefined,
+          description: item.name,
+          amount: -Math.abs(item.amount), // Withdrawal
+          date: item.nextDate,
+          isRecurring: true,
+        },
+        virtualAccounts.expenseAccountId!,
+      );
+
+      // Update recurring item next date
+      await tx.recurringItem.update({
+        where: { id: item.id },
+        data: {
+          nextDate: advanceNextDate(item.nextDate, item.frequency),
+          lastProcessedAt: new Date(),
+        },
+      });
     });
   }
 }
