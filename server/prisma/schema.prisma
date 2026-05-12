@@ -305,6 +305,7 @@ model TransactionJournal {
   amountDecimal   Decimal                  @db.Decimal(19, 4)
   currencyCode    String                   @default("USD")
   categoryId      String?
+  merchantId      String?
   notes           String?
   isPending       Boolean                  @default(false)
   isReconciled    Boolean                  @default(false)
@@ -312,13 +313,19 @@ model TransactionJournal {
   needsReview     Boolean                  @default(false)
   isHidden        Boolean                  @default(false)
   isRecurring     Boolean                  @default(false)
+  isSplit         Boolean                  @default(false)
   isDeleted       Boolean                  @default(false)
+  aiSuggestedCategoryId     String?
+  aiSuggestedCategoryName   String?
+  aiSuggestionConfidence    Float?
   order           Int                      @default(0)
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
   household       Household                @relation(fields: [householdId], references: [id], onDelete: Cascade)
   group           TransactionGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
   category        Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  merchant        Merchant?                @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  aiSuggestedCategory Category?             @relation("JournalAiSuggestedCategory", fields: [aiSuggestedCategoryId], references: [id], onDelete: SetNull)
   entries         TransactionEntry[]
   tags            JournalTag[]
   meta            TransactionJournalMeta[]
@@ -328,6 +335,7 @@ model TransactionJournal {
   @@index([householdId, transactionType, date])
   @@index([groupId])
   @@index([categoryId])
+  @@index([merchantId])
   @@index([householdId, isDeleted, date])
   @@map("transaction_journals")
 }
@@ -384,6 +392,7 @@ model Category {
   recurringItems      RecurringItem[]
   transactionSplits   TransactionSplit[]
   aiSuggestedTransactions Transaction[] @relation("AiSuggestedCategory")
+  journalsAiSuggested TransactionJournal[] @relation("JournalAiSuggestedCategory")
   learningExamples        CategoryLearningExample[]
 
   @@map("categories")
@@ -741,6 +750,7 @@ model Merchant {
   createdAt    DateTime      @default(now())
   household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  journals     TransactionJournal[]
 
   @@map("merchants")
 }

@@ -20,20 +20,20 @@ router.get('/:accountId/reconcile', async (req: AuthRequest, res: Response) => {
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
-    const uncleared = await prisma.transaction.findMany({
-      where:   { accountId: req.params.accountId, householdId: req.householdId!, isCleared: false },
+    const uncleared = await prisma.transactionJournal.findMany({
+      where:   { entries: { some: { accountId: req.params.accountId } }, householdId: req.householdId!, isReconciled: false, isDeleted: false },
       orderBy: { date: 'desc' },
       take:    200,
     });
 
-    const clearedAgg = await prisma.transaction.aggregate({
-      where: { accountId: req.params.accountId, householdId: req.householdId!, isCleared: true },
-      _sum:  { amount: true },
+    const clearedAgg = await prisma.transactionJournal.aggregate({
+      where: { entries: { some: { accountId: req.params.accountId } }, householdId: req.householdId!, isReconciled: true, isDeleted: false },
+      _sum:  { amountDecimal: true },
     });
 
     return res.json({
       unclearedTransactions: uncleared,
-      clearedBalance: clearedAgg._sum.amount ?? 0,
+      clearedBalance: Number(clearedAgg._sum.amountDecimal ?? 0),
     });
   } catch (err) {
     req.log.error({ err }, 'reconcile/preview');
