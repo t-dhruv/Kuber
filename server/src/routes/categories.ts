@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
 
 const categoryCreateSchema = z.object({
   name: z.string().min(1),
@@ -21,7 +22,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
 
     const categories = await prisma.category.findMany({
-      where: { householdId },
+      where: { householdId, ...NOT_DELETED },
       include: { group: { select: { id: true, name: true } } },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
