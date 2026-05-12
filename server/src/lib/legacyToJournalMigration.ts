@@ -82,6 +82,7 @@ export async function createJournalFromLegacyTransaction(
     notes: notes ?? undefined,
     isPending: false,
     isReconciled: false,
+    tags: input.tagIds,
     meta,
   };
 
