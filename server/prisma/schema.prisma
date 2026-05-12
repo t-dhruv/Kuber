@@ -309,6 +309,9 @@ model TransactionJournal {
   isPending       Boolean                  @default(false)
   isReconciled    Boolean                  @default(false)
   reconciledAt    DateTime?
+  needsReview     Boolean                  @default(false)
+  isHidden        Boolean                  @default(false)
+  isRecurring     Boolean                  @default(false)
   isDeleted       Boolean                  @default(false)
   order           Int                      @default(0)
   createdAt       DateTime                 @default(now())
