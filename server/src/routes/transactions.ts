@@ -411,13 +411,8 @@ router.delete('/before', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'date is not a valid date' });
     }
 
-    const result = await prisma.transaction.updateMany({
-      where: { householdId, date: { lt: cutoff }, isDeleted: false },
-      data: { isDeleted: true, updatedAt: new Date() },
-    });
-
-    // Cascade soft-delete to related journal entries
-    await prisma.transactionJournal.updateMany({
+    // Soft-delete journals before the given date
+    const result = await prisma.transactionJournal.updateMany({
       where: { householdId, date: { lt: cutoff }, isDeleted: false },
       data: { isDeleted: true, updatedAt: new Date() },
     });
