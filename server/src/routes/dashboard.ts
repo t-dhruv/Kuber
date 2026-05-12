@@ -209,27 +209,32 @@ router.get('/recent-transactions', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
 
-    const transactions = await prisma.transaction.findMany({
-      where: { householdId, isHidden: false },
+    const journals = await prisma.transactionJournal.findMany({
+      where: { householdId, isHidden: false, isDeleted: false },
       orderBy: { date: 'desc' },
       take: 5,
       include: {
         category: { select: { name: true, icon: true } },
-        merchant: { select: { displayName: true } },
-        account: { select: { name: true } },
+        entries: {
+          orderBy: { createdAt: 'asc' },
+          include: { account: { select: { name: true } } },
+        },
       },
     });
 
-    const data = transactions.map(t => ({
-      id: t.id,
-      date: t.date.toISOString(),
-      merchantName: t.merchant?.displayName ?? t.description,
-      amount: t.amount,
-      categoryName: t.category?.name ?? null,
-      categoryIcon: t.category?.icon ?? null,
-      categoryColor: null,
-      accountName: t.account.name,
-    }));
+    const data = journals.map(j => {
+      const mainEntry = j.entries?.[0];
+      return {
+        id: j.id,
+        date: j.date.toISOString(),
+        merchantName: j.description,
+        amount: Number(j.amountDecimal),
+        categoryName: j.category?.name ?? null,
+        categoryIcon: j.category?.icon ?? null,
+        categoryColor: null,
+        accountName: mainEntry?.account?.name ?? 'Unknown',
+      };
+    });
 
     return res.json(data);
   } catch (err) {

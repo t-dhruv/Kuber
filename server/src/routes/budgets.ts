@@ -146,15 +146,16 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    // Fetch all transactions for the specified month
-    const transactions = await prisma.transaction.findMany({
+    // Fetch all journals for the specified month
+    const journals = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         date: { gte: start, lt: end },
         isHidden: false,
-        isTransfer: false,
+        transactionType: { not: 'transfer' },
+        isDeleted: false,
       },
-      select: { categoryId: true, amount: true },
+      select: { categoryId: true, amountDecimal: true },
     });
 
     // Also get all categories (to detect unbudgeted spend)
@@ -165,11 +166,11 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     // Sum actuals by categoryId
     const actualByCategory = new Map<string, number>();
-    for (const t of transactions) {
-      if (t.categoryId) {
+    for (const j of journals) {
+      if (j.categoryId) {
         actualByCategory.set(
-          t.categoryId,
-          (actualByCategory.get(t.categoryId) ?? 0) + t.amount,
+          j.categoryId,
+          (actualByCategory.get(j.categoryId) ?? 0) + Number(j.amountDecimal),
         );
       }
     }

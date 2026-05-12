@@ -395,14 +395,14 @@ router.post('/budget-coach/stream', async (req: AuthRequest, res: Response) => {
     const startDate = new Date(year, mon - 1, 1);
     const endDate = new Date(year, mon, 0, 23, 59, 59);
 
-    const [budgets, transactions, categories] = await Promise.all([
+    const [budgets, journals, categories] = await Promise.all([
       prisma.budget.findMany({
         where: { householdId },
         include: { category: { select: { name: true, icon: true } } },
       }),
-      prisma.transaction.findMany({
-        where: { householdId, date: { gte: startDate, lte: endDate }, isHidden: false },
-        select: { amount: true, categoryId: true, description: true },
+      prisma.transactionJournal.findMany({
+        where: { householdId, date: { gte: startDate, lte: endDate }, isHidden: false, isDeleted: false },
+        select: { amountDecimal: true, categoryId: true, description: true },
       }),
       prisma.category.findMany({
         where: { householdId },
@@ -412,14 +412,14 @@ router.post('/budget-coach/stream', async (req: AuthRequest, res: Response) => {
 
     // Aggregate actuals per category
     const actualMap = new Map<string, number>();
-    for (const t of transactions) {
-      if (t.categoryId) {
-        actualMap.set(t.categoryId, (actualMap.get(t.categoryId) ?? 0) + Math.abs(t.amount));
+    for (const j of journals) {
+      if (j.categoryId) {
+        actualMap.set(j.categoryId, (actualMap.get(j.categoryId) ?? 0) + Math.abs(Number(j.amountDecimal)));
       }
     }
 
-    const totalIncome = transactions.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-    const totalSpent = transactions.filter((t) => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+    const totalIncome = journals.filter((j) => Number(j.amountDecimal) > 0).reduce((s, j) => s + Number(j.amountDecimal), 0);
+    const totalSpent = journals.filter((j) => Number(j.amountDecimal) < 0).reduce((s, j) => s + Math.abs(Number(j.amountDecimal)), 0);
 
     const budgetSummary = budgets.map((b) => {
       const actual = actualMap.get(b.categoryId ?? '') ?? 0;
@@ -427,7 +427,7 @@ router.post('/budget-coach/stream', async (req: AuthRequest, res: Response) => {
       return `${b.category?.icon ?? ''} ${b.category?.name ?? 'Unknown'}: budgeted $${b.amount.toFixed(0)}, spent $${actual.toFixed(0)}${over ? ' ⚠️ OVER' : ''}`;
     }).join('\n');
 
-    const uncategorized = transactions.filter((t) => !t.categoryId && t.amount < 0).length;
+    const uncategorized = journals.filter((j) => !j.categoryId && Number(j.amountDecimal) < 0).length;
 
     const systemPrompt = `You are a helpful personal finance coach. Be concise, warm, and actionable. Focus on the most important 2-3 insights.`;
     const userMsg = question
