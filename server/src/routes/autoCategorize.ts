@@ -6,6 +6,7 @@ import { startBatchAutoCategorize, getBatchJobState, detectRuleSuggestions, sugg
 import { getAiClientForHousehold } from '../lib/ai/index.js';
 import { rulesAppliedTotal } from '../lib/metrics.js';
 import { logAudit } from '../lib/audit.js';
+import { queryJournalsWithRelations } from '../lib/transactionJournalService.js';
 
 const router = Router();
 
@@ -48,32 +49,17 @@ router.get('/review-queue', async (req: AuthRequest, res: Response) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
     const skip = (page - 1) * limit;
 
-    const [transactions, total, ruleSuggestions] = await Promise.all([
-      prisma.transaction.findMany({
-        where: {
-          householdId: req.householdId!,
-          needsReview: true,
-          OR: [
-            { aiSuggestedCategoryId: { not: null } },
-            { aiSuggestedCategoryName: { not: null } },
-          ],
-        },
-        orderBy: { date: 'desc' },
+    const [journals, total, ruleSuggestions] = await Promise.all([
+      queryJournalsWithRelations({
+        householdId: req.householdId!,
+        needsReview: true,
+        hasAiSuggestion: true,
+        orderBy: 'date',
+        orderDirection: 'desc',
         skip,
-        take: limit,
-        select: {
-          id: true,
-          description: true,
-          amount: true,
-          date: true,
-          aiSuggestedCategoryId: true,
-          aiSuggestedCategoryName: true,
-          aiSuggestionConfidence: true,
-          aiSuggestedCategory: { select: { id: true, name: true, icon: true } },
-          account: { select: { name: true } },
-        },
-      }),
-      prisma.transaction.count({
+        limit,
+      }, prisma),
+      prisma.transactionJournal.count({
         where: {
           householdId: req.householdId!,
           needsReview: true,
@@ -85,6 +71,18 @@ router.get('/review-queue', async (req: AuthRequest, res: Response) => {
       }),
       detectRuleSuggestions(prisma, req.householdId!),
     ]);
+
+    const transactions = journals.map(j => ({
+      id: j.id,
+      description: j.description,
+      amount: Number(j.amountDecimal),
+      date: j.date,
+      aiSuggestedCategoryId: j.aiSuggestedCategoryId,
+      aiSuggestedCategoryName: j.aiSuggestedCategoryName,
+      aiSuggestionConfidence: j.aiSuggestionConfidence,
+      aiSuggestedCategory: j.aiSuggestedCategory,
+      account: j.entries[0] ? { name: j.entries[0].account.name } : null,
+    }));
 
     return res.json({ transactions, total, page, limit, ruleSuggestions });
   } catch (err) {
@@ -113,7 +111,7 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
     const { transactionId, action, categoryId, createCategory } = parse.data;
     const householdId = req.householdId!;
 
-    const txn = await prisma.transaction.findFirst({
+    const journal = await prisma.transactionJournal.findFirst({
       where: { id: transactionId, householdId, needsReview: true },
       select: {
         id: true,
@@ -122,10 +120,10 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
         needsReview: true,
       },
     });
-    if (!txn) return res.status(404).json({ error: 'Transaction not found or already reviewed' });
+    if (!journal) return res.status(404).json({ error: 'Transaction not found or already reviewed' });
 
     if (action === 'skip') {
-      await prisma.transaction.update({
+      await prisma.transactionJournal.update({
         where: { id: transactionId },
         data: {
           needsReview: false,
@@ -164,17 +162,17 @@ router.post('/confirm', async (req: AuthRequest, res: Response) => {
     }
 
     // Save learning example when user corrects with a different category
-    if (finalCategoryId !== txn.aiSuggestedCategoryId) {
+    if (finalCategoryId !== journal.aiSuggestedCategoryId) {
       await prisma.categoryLearningExample.create({
         data: {
           householdId,
-          descriptionPattern: txn.description,
+          descriptionPattern: journal.description,
           correctCategoryId: finalCategoryId,
         },
       });
     }
 
-    await prisma.transaction.update({
+    await prisma.transactionJournal.update({
       where: { id: transactionId },
       data: {
         categoryId: finalCategoryId,
@@ -209,7 +207,7 @@ router.post('/reject-bulk', async (req: AuthRequest, res: Response) => {
     const cursor = req.body?.cursor as string | undefined;
     const limit = Math.min(parseInt(req.body?.limit as string) || 500, 500);
 
-    const toReject = await prisma.transaction.findMany({
+    const toReject = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         needsReview: true,
@@ -227,7 +225,7 @@ router.post('/reject-bulk', async (req: AuthRequest, res: Response) => {
 
     await prisma.$transaction(
       items.map((t) =>
-        prisma.transaction.update({
+        prisma.transactionJournal.update({
           where: { id: t.id },
           data: {
             needsReview: false,
@@ -265,7 +263,7 @@ router.post('/skip-bulk', async (req: AuthRequest, res: Response) => {
     const cursor = req.body?.cursor as string | undefined;
     const limit = Math.min(parseInt(req.body?.limit as string) || 500, 500);
 
-    const toSkip = await prisma.transaction.findMany({
+    const toSkip = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         needsReview: true,
@@ -282,7 +280,7 @@ router.post('/skip-bulk', async (req: AuthRequest, res: Response) => {
 
     await prisma.$transaction(
       items.map((t) =>
-        prisma.transaction.update({
+        prisma.transactionJournal.update({
           where: { id: t.id },
           data: {
             needsReview: false,
@@ -320,7 +318,7 @@ router.post('/confirm-bulk', async (req: AuthRequest, res: Response) => {
     const cursor = req.body?.cursor as string | undefined;
     const limit = Math.min(parseInt(req.body?.limit as string) || 500, 500);
 
-    const toApply = await prisma.transaction.findMany({
+    const toApply = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         needsReview: true,
@@ -338,7 +336,7 @@ router.post('/confirm-bulk', async (req: AuthRequest, res: Response) => {
 
     await prisma.$transaction(
       items.map((t) =>
-        prisma.transaction.update({
+        prisma.transactionJournal.update({
           where: { id: t.id },
           data: {
             categoryId: t.aiSuggestedCategoryId,
@@ -384,7 +382,7 @@ router.post('/re-run', async (req: AuthRequest, res: Response) => {
       return res.status(200).json({ updated: 0, notConfigured: true, setupMessage: NOT_CONFIGURED_MSG });
     }
 
-    const pending = await prisma.transaction.findMany({
+    const pending = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         needsReview: true,
@@ -392,7 +390,7 @@ router.post('/re-run', async (req: AuthRequest, res: Response) => {
       },
       orderBy: { id: 'asc' },
       take: limit + 1,
-      select: { id: true, description: true, amount: true },
+      select: { id: true, description: true, amountDecimal: true },
     });
 
     const hasMore = pending.length > limit;
@@ -401,9 +399,9 @@ router.post('/re-run', async (req: AuthRequest, res: Response) => {
 
     let updated = 0;
     for (const txn of items) {
-      const suggestion = await suggestCategory(prisma, householdId, txn.description, txn.amount);
+      const suggestion = await suggestCategory(prisma, householdId, txn.description, Number(txn.amountDecimal));
       if (suggestion && suggestion.confidence >= 0.5) {
-        await prisma.transaction.update({
+        await prisma.transactionJournal.update({
           where: { id: txn.id },
           data: {
             aiSuggestedCategoryId: suggestion.categoryId ?? null,
@@ -426,7 +424,7 @@ router.post('/re-run', async (req: AuthRequest, res: Response) => {
 router.get('/status', async (req: AuthRequest, res: Response) => {
   try {
     const [uncategorizedCount, reviewCount, configured] = await Promise.all([
-      prisma.transaction.count({
+      prisma.transactionJournal.count({
         where: {
           householdId: req.householdId!,
           categoryId: null,
@@ -438,7 +436,7 @@ router.get('/status', async (req: AuthRequest, res: Response) => {
           ],
         },
       }),
-      prisma.transaction.count({
+      prisma.transactionJournal.count({
         where: {
           householdId: req.householdId!,
           needsReview: true,

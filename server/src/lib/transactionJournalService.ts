@@ -722,6 +722,8 @@ export interface JournalListQuery {
   skip?: number;
   orderBy?: 'date' | 'amount';
   orderDirection?: 'asc' | 'desc';
+  needsReview?: boolean;
+  hasAiSuggestion?: boolean;
 }
 
 export async function queryJournalsWithRelations(
@@ -749,6 +751,17 @@ export async function queryJournalsWithRelations(
     where.categoryId = { in: query.categoryIds };
   }
 
+  if (query.needsReview !== undefined) {
+    where.needsReview = query.needsReview;
+  }
+
+  if (query.hasAiSuggestion) {
+    where.OR = [
+      { aiSuggestedCategoryId: { not: null } },
+      { aiSuggestedCategoryName: { not: null } },
+    ];
+  }
+
   const orderByField = query.orderBy === 'amount' ? 'amountDecimal' : 'date';
   const orderByDir = query.orderDirection === 'asc' ? 'asc' : 'desc';
 
@@ -756,6 +769,7 @@ export async function queryJournalsWithRelations(
     where,
     include: {
       category: { select: { id: true, name: true, icon: true } },
+      aiSuggestedCategory: { select: { id: true, name: true, icon: true } },
       entries: {
         select: { accountId: true, amountDecimal: true, account: { select: { id: true, name: true } } },
       },
