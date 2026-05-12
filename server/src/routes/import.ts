@@ -21,6 +21,7 @@ import { parseDate } from '../lib/dateUtils.js';
 import { detectColumnMapping } from '../lib/csvColumnDetector.js';
 import { detectLocaleFormat, parseAmount, mergeDebitCredit } from '../lib/amountParser.js';
 import { transactionsImportedTotal } from '../lib/metrics.js';
+import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration.js';
 
 const router = Router();
 
@@ -672,20 +673,34 @@ router.post('/confirm', async (req: AuthRequest, res) => {
 
           const batchNote = batchId ? `[batch:${batchId}]` : null;
           const notes = [row.notes, batchNote].filter(Boolean).join(' ') || null;
-          await tx.transaction.create({
-            data: {
+
+          // Get virtual accounts for journal creation (cache after first lookup)
+          const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
+          if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
+            throw new Error('Missing virtual accounts for import');
+          }
+
+          // Create journal instead of legacy transaction
+          const meta: Record<string, string> = {};
+          if (merchantId) meta.legacyMerchantId = merchantId;
+          if (bankSource) meta.bankSource = bankSource;
+          if (batchId) meta.batchId = batchId;
+
+          await createJournalFromLegacyTransaction(
+            tx,
+            {
               householdId: req.householdId!,
               accountId,
               date: txDate,
               description: row.description,
-              originalDescription: row.description,
               amount: row.amount,
-              categoryId: resolvedCategoryId,
-              merchantId,
-              notes,
-              needsReview: !resolvedCategoryId,
+              categoryId: resolvedCategoryId ?? undefined,
+              notes: notes ?? undefined,
             },
-          });
+            row.amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
+            row.amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+          );
+
           importedAmountSum += row.amount;
           imported++;
         } catch (err) {
@@ -835,11 +850,37 @@ router.post('/webhook', async (req: AuthRequest, res) => {
       });
     }
 
-    // Bulk insert — single DB roundtrip
+    // Bulk insert via journals
+    let imported = 0;
     if (toCreate.length > 0) {
-      await prisma.transaction.createMany({ data: toCreate });
+      const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
+      if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
+        throw new Error('Missing virtual accounts for webhook import');
+      }
+
+      await prisma.$transaction(async (tx) => {
+        for (const row of toCreate) {
+          try {
+            await createJournalFromLegacyTransaction(
+              tx,
+              {
+                householdId: row.householdId,
+                accountId: row.accountId,
+                date: row.date,
+                description: row.description,
+                amount: row.amount,
+              },
+              row.amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
+              row.amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+            );
+            imported++;
+          } catch (err) {
+            // Skip individual errors in bulk import
+            console.error('Webhook import error:', err);
+          }
+        }
+      });
     }
-    const imported = toCreate.length;
 
     await prisma.importHistory.create({
       data: {

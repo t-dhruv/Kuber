@@ -22,6 +22,7 @@ import {
   syncLegacyTransactionJournal,
 } from '../lib/transactionJournalService';
 import { planTransferConversion } from '../lib/transferConversion';
+import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration';
 
 // multer: memory storage, CSV only, 10 MB limit
 const upload = multer({
@@ -950,67 +951,65 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const createdTx = await prisma.transaction.create({
-      data: {
-        householdId,
-        accountId,
-        date: new Date(date),
-        description,
-        originalDescription: description,
-        amount,
-        currencyCode,
-        originalAmount: originalAmount ?? null,
-        fxRate: fxRate ?? null,
-        categoryId: categoryId ?? null,
-        notes: notes ?? null,
-        isRecurring: isRecurring ?? false,
-        isRefund: isRefund ?? false,
-        needsReview: false,
-        isHidden: false,
-        isSplit: false,
-        ...(tagIds && Array.isArray(tagIds) && tagIds.length > 0
-          ? { tags: { create: tagIds.map((tagId: string) => ({ tagId })) } }
-          : {}),
+    // Get virtual accounts for journal creation
+    const virtualAccounts = await getVirtualAccountsByType(householdId);
+    if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
+      throw new Error('Missing virtual accounts for transaction');
+    }
+
+    // Create journal directly (no legacy TX)
+    const journal = await prisma.$transaction(async (tx) => {
+      const journalResult = await createJournalFromLegacyTransaction(
+        tx,
+        {
+          householdId,
+          accountId,
+          date: new Date(date),
+          description,
+          amount,
+          categoryId: categoryId ?? undefined,
+          currencyCode,
+          originalAmount: originalAmount ?? undefined,
+          fxRate: fxRate ?? undefined,
+          notes: notes ?? undefined,
+          isRecurring: isRecurring ?? false,
+          isRefund: isRefund ?? false,
+          tagIds,
+        },
+        amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
+        amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+      );
+
+      // Update account balance
+      await tx.account.update({
+        where: { id: accountId },
+        data: { balance: { increment: amount } },
+      });
+
+      return journalResult;
+    });
+
+    // Get full journal with entries for response
+    const fullJournal = await prisma.transactionJournal.findUniqueOrThrow({
+      where: { id: journal.journalId },
+      include: {
+        entries: { include: { account: true } },
+        category: true,
+        tags: { include: { tag: true } },
+        meta: true,
       },
-      include: TX_INCLUDE,
     });
 
-    await applyActiveRulesToTransaction(prisma, createdTx.id, householdId, {
-      description: createdTx.description,
-      merchantName: createdTx.description,
-      amount: createdTx.amount,
-    });
-
-    // Match bills — fire-and-forget, never fail the request
-    matchBillsForTransaction(prisma, {
-      id: createdTx.id,
-      householdId: req.householdId!,
-      date: createdTx.date,
-      amount: createdTx.amount,
-      description: createdTx.description,
-    }).catch(() => {});
-
-    const tx = await prisma.transaction.findUniqueOrThrow({
-      where: { id: createdTx.id },
-      include: TX_INCLUDE,
-    });
-
-    const journal = await createTransactionJournal(buildJournalInputFromLegacyTransaction(tx));
+    // Apply rules to journal
     await applyActiveRulesToJournal(prisma, {
-      journalId: journal.id,
+      journalId: fullJournal.id,
       householdId,
-      matchInput: buildRuleMatchInputFromJournal(journal),
+      matchInput: buildRuleMatchInputFromJournal(fullJournal),
     });
 
-    // Update account running balance
-    await prisma.account.update({
-      where: { id: accountId },
-      data: { balance: { increment: amount } },
-    });
-
-    logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'TRANSACTION', entityId: tx.id, after: { amount: tx.amount, description: tx.description } });
-    fireWebhooks(householdId, 'transaction.created', formatTx(tx)).catch(() => {});
-    return res.status(201).json(formatTx(tx));
+    logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'TRANSACTION', entityId: fullJournal.id, after: { amount: fullJournal.amountDecimal, description: fullJournal.description } });
+    fireWebhooks(householdId, 'transaction.created', { id: fullJournal.id, description: fullJournal.description, amount: Number(fullJournal.amountDecimal), date: fullJournal.date }).catch(() => {});
+    return res.status(201).json({ id: fullJournal.id, description: fullJournal.description, amount: Number(fullJournal.amountDecimal), date: fullJournal.date, categoryId: fullJournal.categoryId, notes: fullJournal.notes });
   } catch (err) {
     req.log.error({ err }, 'transactions/create');
     return res.status(500).json({ error: 'Internal server error' });
@@ -1585,40 +1584,20 @@ router.post('/transfer', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'One or both accounts not found' });
     }
 
-    const transferId = crypto.randomUUID();
     const txDate = new Date(date);
 
-    const [debit, credit, journal] = await prisma.$transaction(async (tx) => {
-      const debit = await tx.transaction.create({
-        data: {
-          householdId,
-          accountId: fromAccountId,
-          amount: -Math.abs(amount),
-          date: txDate,
-          description: `Transfer to ${accounts.find(a => a.id === toAccountId)!.name}`,
-          originalDescription: `Transfer to ${accounts.find(a => a.id === toAccountId)!.name}`,
-          isTransfer: true,
-          transferId,
-          notes: notes ?? null,
-        },
-        include: TX_INCLUDE,
+    const journal = await prisma.$transaction(async (tx) => {
+      // Update both account balances
+      await tx.account.update({
+        where: { id: fromAccountId },
+        data: { balance: { increment: -Math.abs(amount) } },
       });
-      const credit = await tx.transaction.create({
-        data: {
-          householdId,
-          accountId: toAccountId,
-          amount: Math.abs(amount),
-          date: txDate,
-          description: `Transfer from ${accounts.find(a => a.id === fromAccountId)!.name}`,
-          originalDescription: `Transfer from ${accounts.find(a => a.id === fromAccountId)!.name}`,
-          isTransfer: true,
-          transferId,
-          notes: notes ?? null,
-        },
-        include: TX_INCLUDE,
+      await tx.account.update({
+        where: { id: toAccountId },
+        data: { balance: { increment: Math.abs(amount) } },
       });
 
-      const journal = await createTransactionJournalInTransaction(tx, {
+      return await createTransactionJournalInTransaction(tx, {
         householdId,
         type: 'transfer',
         amount: Math.abs(amount),
@@ -1628,23 +1607,30 @@ router.post('/transfer', async (req: AuthRequest, res: Response) => {
         date: txDate,
         currencyCode: 'CAD',
         notes: notes ?? undefined,
-        meta: {
-          legacyTransferId: transferId,
-          legacyDebitTransactionId: debit.id,
-          legacyCreditTransactionId: credit.id,
-        },
       });
+    });
 
-      return [debit, credit, journal] as const;
+    // Fetch full journal with entries for response
+    const fullJournal = await prisma.transactionJournal.findUniqueOrThrow({
+      where: { id: journal.journalId },
+      include: {
+        entries: { include: { account: true } },
+        category: true,
+        tags: { include: { tag: true } },
+        meta: true,
+      },
     });
 
     await applyActiveRulesToJournal(prisma, {
-      journalId: journal.id,
+      journalId: fullJournal.id,
       householdId,
-      matchInput: buildRuleMatchInputFromJournal(journal),
+      matchInput: buildRuleMatchInputFromJournal(fullJournal),
     });
 
-    return res.status(201).json({ debit: formatTx(debit), credit: formatTx(credit) });
+    logAudit({ householdId, userId: req.userId!, action: 'CREATE', entity: 'TRANSACTION', entityId: fullJournal.id, after: { amount: fullJournal.amountDecimal, description: fullJournal.description } });
+    fireWebhooks(householdId, 'transaction.created', { id: fullJournal.id, description: fullJournal.description, amount: Number(fullJournal.amountDecimal), date: fullJournal.date }).catch(() => {});
+
+    return res.status(201).json({ id: fullJournal.id, description: fullJournal.description, amount: Number(fullJournal.amountDecimal), date: fullJournal.date, notes: fullJournal.notes });
   } catch (err: any) {
     req.log.error({ err }, 'transactions/transfer');
     return res.status(500).json({ error: 'Internal server error' });
