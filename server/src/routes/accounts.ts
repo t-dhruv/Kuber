@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
 
 const csvUpload = multer({
   storage: multer.memoryStorage(),
@@ -115,7 +116,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
 
     const accounts = await prisma.account.findMany({
-      where: { householdId },
+      where: { householdId, ...NOT_DELETED },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     });
 
@@ -169,7 +170,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
 
     const accounts = await prisma.account.findMany({
-      where: { householdId },
+      where: { householdId, ...NOT_DELETED },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     });
 
@@ -178,7 +179,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
       type: a.type,
       institution: a.institution ?? '',
       lastFour: a.lastFour ?? '',
-      balance: a.balance,
+      balance: a.balanceDecimal ? Number(a.balanceDecimal) : a.balance,
       currency: a.currency,
       hidden: a.isHidden ? 'Yes' : 'No',
       excludeFromNetWorth: a.excludeFromNetWorth ? 'Yes' : 'No',

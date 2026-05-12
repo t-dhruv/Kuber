@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { fireWebhooks } from '../lib/webhookFire';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
 import { applyActiveRulesToJournal, applyActiveRulesToTransaction } from '../lib/ruleEngine';
 import { getTransactionSplitDetails } from '../lib/transactionSplits';
@@ -72,7 +73,7 @@ function formatTx(t: any) {
     date: t.date.toISOString(),
     merchantName: formatMerchantName(t.merchant, t.description),
     originalDescription: t.originalDescription,
-    amount: t.amount,
+    amount: t.amountDecimal ? Number(t.amountDecimal) : t.amount,
     currencyCode: t.currencyCode ?? 'CAD',
     originalAmount: t.originalAmount !== null && t.originalAmount !== undefined ? Number(t.originalAmount) : null,
     fxRate: t.fxRate !== null && t.fxRate !== undefined ? Number(t.fxRate) : null,
@@ -188,7 +189,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     } = parsed.data;
 
     // Build where clause
-    const where: any = { householdId };
+    const where: any = { householdId, ...NOT_DELETED };
 
     if (accountId) where.accountId = accountId;
     if (categoryId) where.categoryId = categoryId;
@@ -326,7 +327,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { startDate, endDate, accountId } = req.query as Record<string, string | undefined>;
 
-    const where: Record<string, unknown> = { householdId };
+    const where: Record<string, unknown> = { householdId, ...NOT_DELETED };
 
     if (accountId) where.accountId = accountId;
 
@@ -394,8 +395,9 @@ router.delete('/before', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'date is not a valid date' });
     }
 
-    const result = await prisma.transaction.deleteMany({
-      where: { householdId, date: { lt: cutoff } },
+    const result = await prisma.transaction.updateMany({
+      where: { householdId, date: { lt: cutoff }, isDeleted: false },
+      data: { isDeleted: true, updatedAt: new Date() },
     });
 
     logAudit({
@@ -1181,17 +1183,12 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const householdId = req.householdId!;
 
-    const existing = await prisma.transaction.findFirst({ where: { id, householdId } });
+    const existing = await prisma.transaction.findFirst({ where: { id, householdId, ...NOT_DELETED } });
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
 
     await deleteLegacyTransactionJournal(id);
-    await prisma.transaction.delete({ where: { id } });
-
-    // Undo the transaction's effect on account balance
-    await prisma.account.update({
-      where: { id: existing.accountId },
-      data: { balance: { increment: -existing.amount } },
-    });
+    // Soft delete: mark as deleted instead of hard delete
+    await prisma.transaction.update({ where: { id }, data: { isDeleted: true, updatedAt: new Date() } });
 
     logAudit({ householdId, userId: req.userId!, action: 'DELETE', entity: 'TRANSACTION', entityId: id, before: { amount: existing.amount, description: existing.description } });
 

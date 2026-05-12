@@ -83,7 +83,7 @@ model Household {
   availableBudgets        AvailableBudget[]
   attachments             Attachment[]
   transactionLinks        TransactionLink[]
-  objectGroups          ObjectGroup[]
+  objectGroups            ObjectGroup[]
 
   @@map("households")
 }
@@ -202,6 +202,7 @@ model Account {
   isHidden              Boolean                  @default(false)
   excludeFromNetWorth   Boolean                  @default(false)
   excludeFromReports   Boolean                  @default(false)
+  isDeleted             Boolean                  @default(false)
   lastSynced            DateTime?
   objectGroupId        String?
   createdAt             DateTime                 @default(now())
@@ -254,6 +255,7 @@ model Transaction {
   clearedDate         DateTime?
   reconcileId         String?
   refundedTransactionId String?
+  isDeleted           Boolean          @default(false)
   refundedTransaction   Transaction? @relation("RefundLink", fields: [refundedTransactionId], references: [id], onDelete: SetNull)
   refunds               Transaction[] @relation("RefundLink")
   recurringItemId   String?
@@ -261,7 +263,7 @@ model Transaction {
   updatedAt           DateTime         @updatedAt
   account             Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
   category            Category?        @relation(fields: [categoryId], references: [id])
-  merchant            Merchant?        @relation(fields: [merchantId], references: [id])
+  merchant            Merchant?        @relation(fields: [merchantId], references: [id], onDelete: SetNull)
   transferGroup       TransferGroup?   @relation(fields: [transferGroupId], references: [id], onDelete: SetNull)
   tags                TransactionTag[]
   goalAllocations     GoalAllocation[]
@@ -366,6 +368,7 @@ model Category {
   bucketType        String          @default("uncategorized") // needs | wants | savings | uncategorized
   isTaxDeductible   Boolean         @default(false)
   excludeFromReports   Boolean         @default(false)
+  isDeleted      Boolean         @default(false)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
@@ -406,6 +409,7 @@ model Budget {
   autoBudgetType    String?
   autoBudgetAmount  Decimal?  @db.Decimal(19, 4)
   groupId      String?
+  isDeleted    Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
@@ -526,6 +530,7 @@ model RecurringItem {
   categoryId  String?
   isAutopay   Boolean   @default(false)
   isActive    Boolean   @default(true)
+  isDeleted   Boolean   @default(false)
   lastProcessedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -551,6 +556,7 @@ model Goal {
   accountId           String?
   icon                String?
   imageUrl            String?
+  isDeleted           Boolean          @default(false)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   household           Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
