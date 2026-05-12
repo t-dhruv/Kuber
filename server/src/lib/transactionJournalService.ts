@@ -526,6 +526,54 @@ function toIso(value: Date | string | null | undefined) {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
+export interface JournalFormatOptions {
+  includeSplits?: boolean;
+  includeRefunds?: boolean;
+  includeTags?: boolean;
+}
+
+export function formatJournalAsTransaction(journal: any, options: JournalFormatOptions = {}) {
+  const mainEntry = journal.entries?.[0];
+  const mainAccountId = mainEntry?.accountId ?? null;
+  const mainAccountName = mainEntry?.account?.name ?? null;
+
+  return {
+    id: journal.id,
+    date: toIso(journal.date),
+    merchantName: journal.description,
+    originalDescription: journal.description,
+    amount: toNumber(journal.amountDecimal),
+    currencyCode: journal.currencyCode ?? 'CAD',
+    originalAmount: null,
+    fxRate: null,
+    categoryId: journal.categoryId ?? null,
+    categoryName: journal.category?.name ?? null,
+    categoryIcon: journal.category?.icon ?? null,
+    categoryColor: null,
+    accountId: mainAccountId,
+    accountName: mainAccountName ?? 'Unknown',
+    isRecurring: false,
+    needsReview: false,
+    isHidden: false,
+    isPending: journal.isPending ?? false,
+    isSplit: false,
+    splitDetails: [],
+    isTransfer: journal.transactionType === 'transfer',
+    transferId: null,
+    isRefund: false,
+    refundedTransactionId: null,
+    refundedTransaction: null,
+    refunds: [],
+    splits: [],
+    notes: journal.notes ?? null,
+    tags: (journal.tags ?? []).map((jt: any) => ({
+      id: jt.tag.id,
+      name: jt.tag.name,
+      color: jt.tag.color,
+    })),
+  };
+}
+
 export function formatTransactionJournalGroup(group: any) {
   return {
     id: group.id,
@@ -661,6 +709,63 @@ export interface JournalQueryFilter {
 export interface JournalQueryOptions {
   withCategory?: boolean;
   withEntries?: boolean;
+}
+
+export interface JournalListQuery {
+  householdId: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  amountGt?: number;
+  amountLt?: number;
+  categoryIds?: string[];
+  limit?: number;
+  skip?: number;
+  orderBy?: 'date' | 'amount';
+  orderDirection?: 'asc' | 'desc';
+}
+
+export async function queryJournalsWithRelations(
+  query: JournalListQuery,
+  prisma: PrismaLike = defaultPrisma,
+) {
+  const where: any = {
+    householdId: query.householdId,
+    isDeleted: false,
+  };
+
+  if (query.dateFrom || query.dateTo) {
+    where.date = {};
+    if (query.dateFrom) where.date.gte = query.dateFrom;
+    if (query.dateTo) where.date.lt = query.dateTo;
+  }
+
+  if (query.amountGt !== undefined || query.amountLt !== undefined) {
+    where.amountDecimal = {};
+    if (query.amountGt !== undefined) where.amountDecimal.gt = query.amountGt;
+    if (query.amountLt !== undefined) where.amountDecimal.lt = query.amountLt;
+  }
+
+  if (query.categoryIds && query.categoryIds.length > 0) {
+    where.categoryId = { in: query.categoryIds };
+  }
+
+  const orderByField = query.orderBy === 'amount' ? 'amountDecimal' : 'date';
+  const orderByDir = query.orderDirection === 'asc' ? 'asc' : 'desc';
+
+  return await prisma.transactionJournal.findMany({
+    where,
+    include: {
+      category: { select: { id: true, name: true, icon: true } },
+      entries: {
+        select: { accountId: true, amountDecimal: true, account: { select: { id: true, name: true } } },
+      },
+      tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+      meta: true,
+    },
+    orderBy: { [orderByField]: orderByDir },
+    skip: query.skip,
+    take: query.limit,
+  });
 }
 
 export async function queryJournalAmounts(

@@ -17,8 +17,10 @@ import {
   createTransactionJournal,
   createTransactionJournalInTransaction,
   deleteLegacyTransactionJournal,
+  formatJournalAsTransaction,
   getTransactionJournalGroup,
   listTransactionJournalGroups,
+  queryJournalsWithRelations,
   syncLegacyTransactionJournal,
 } from '../lib/transactionJournalService';
 import { planTransferConversion } from '../lib/transferConversion';
@@ -255,7 +257,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     // Always add id as tiebreaker for stable cursor pagination
     const orderBy: any = [{ [sortField]: sortOrder }, { id: 'desc' }];
 
-    // ── Cursor-based path ──────────────────────────────────────────────────────
+    // ── Cursor-based path (journal) ────────────────────────────────────────────
     if (cursorParam) {
       let cursor: { date: string; id: string };
       try {
@@ -265,20 +267,25 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       }
 
       const cursorDate = new Date(cursor.date);
-      // Fetch one extra to determine if there's a next page
-      const whereWithCursor = {
-        ...where,
-        OR: [
-          { date: sortOrder === 'desc' ? { lt: cursorDate } : { gt: cursorDate } },
-          { date: cursorDate, id: { lt: cursor.id } },
-        ],
-      };
+      const journalWhere: any = { ...where, isDeleted: false };
 
-      const rows = await prisma.transaction.findMany({
-        where: whereWithCursor,
-        include: TX_INCLUDE,
-        orderBy,
-        take: limit + 1,
+      if (sortOrder === 'desc') {
+        journalWhere.OR = [
+          { date: { lt: cursorDate } },
+          { date: cursorDate, id: { lt: cursor.id } },
+        ];
+      } else {
+        journalWhere.OR = [
+          { date: { gt: cursorDate } },
+          { date: cursorDate, id: { gt: cursor.id } },
+        ];
+      }
+
+      const rows = await queryJournalsWithRelations({
+        ...where,
+        limit: limit + 1,
+        orderBy: sort === 'amount' ? 'amount' : 'date',
+        orderDirection: order === 'asc' ? 'asc' : 'desc',
       });
 
       const hasMore = rows.length > limit;
@@ -289,17 +296,23 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         : null;
 
       return res.json({
-        transactions: page_rows.map(formatTx),
+        transactions: page_rows.map(j => formatJournalAsTransaction(j)),
         nextCursor,
         hasMore,
       });
     }
 
-    // ── Offset-based path (backward compat + page-number UI) ──────────────────
+    // ── Offset-based path (journal) ────────────────────────────────────────────
     const skip = (page - 1) * limit;
     const [transactions, total] = await Promise.all([
-      prisma.transaction.findMany({ where, include: TX_INCLUDE, orderBy, skip, take: limit }),
-      prisma.transaction.count({ where }),
+      queryJournalsWithRelations({
+        ...where,
+        skip,
+        limit,
+        orderBy: sort === 'amount' ? 'amount' : 'date',
+        orderDirection: order === 'asc' ? 'asc' : 'desc',
+      }),
+      prisma.transactionJournal.count({ where: { ...where, isDeleted: false } }),
     ]);
 
     const lastRow = transactions[transactions.length - 1];
@@ -308,7 +321,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       : null;
 
     return res.json({
-      transactions: transactions.map(formatTx),
+      transactions: transactions.map(j => formatJournalAsTransaction(j)),
       total,
       page,
       totalPages: Math.ceil(total / limit),
