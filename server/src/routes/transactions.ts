@@ -1419,25 +1419,23 @@ router.post('/:id/convert-transfer', async (req: AuthRequest, res: Response) => 
       return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid input' });
     }
 
-    // Try to find via journal first
-    const existingJournal = await prisma.transactionJournal.findFirst({
-      where: {
-        householdId,
-        meta: { some: { name: 'legacyTransactionId', value: id } },
-      },
+    // Find journal by ID
+    const existing = await prisma.transactionJournal.findFirst({
+      where: { id, householdId, isDeleted: false },
       include: {
-        meta: true,
         category: { select: { id: true, name: true, icon: true } },
-        entries: { include: { account: { select: { id: true, name: true } } } },
+        entries: {
+          orderBy: { createdAt: 'asc' },
+          include: { account: { select: { id: true, name: true } } },
+        },
+        tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
       },
-    });
-
-    const existing = await prisma.transaction.findFirst({
-      where: { id, householdId },
-      include: TX_INCLUDE,
     });
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
-    if (existing.isTransfer) return res.status(400).json({ error: 'Transaction is already a transfer' });
+
+    // Check if journal is already a transfer (has multiple entries with opposite signs or transfer type)
+    const hasTransferMeta = existing.entries && existing.entries.length >= 2;
+    if (hasTransferMeta) return res.status(400).json({ error: 'Transaction is already a transfer' });
 
     const { fromAccountId, toAccountId, amount, date, notes } = parsed.data;
     if (fromAccountId === toAccountId) {
@@ -1455,8 +1453,20 @@ router.post('/:id/convert-transfer', async (req: AuthRequest, res: Response) => 
     const fromAccount = accounts.find((account) => account.id === fromAccountId)!;
     const toAccount = accounts.find((account) => account.id === toAccountId)!;
     const transferId = crypto.randomUUID();
+
+    // Extract journal data for planning
+    const journalData = {
+      accountId: existing.entries?.[0]?.accountId || fromAccountId,
+      amount: Number(existing.amountDecimal),
+      description: existing.description,
+      originalDescription: existing.description,
+      date: existing.date,
+      currencyCode: existing.currencyCode ?? 'CAD',
+      notes: existing.notes ?? null,
+    };
+
     const plan = planTransferConversion({
-      existing,
+      existing: journalData,
       fromAccountId,
       toAccountId,
       fromAccountName: fromAccount.name,
@@ -1467,53 +1477,28 @@ router.post('/:id/convert-transfer', async (req: AuthRequest, res: Response) => 
       notes,
     });
 
-    const [updated, counterpart, journal] = await prisma.$transaction(async (tx) => {
-      const oldJournal = await tx.transactionJournalMeta.findFirst({
-        where: { name: 'legacyTransactionId', value: id },
-        include: { journal: { select: { groupId: true } } },
-      });
-      if (oldJournal?.journal) {
-        await tx.transactionGroup.delete({ where: { id: oldJournal.journal.groupId } });
+    const transferJournal = await prisma.$transaction(async (tx) => {
+      // Reverse account balance for old journal
+      if (existing.entries?.[0]) {
+        const accountId = existing.entries[0].accountId;
+        const journalAmount = Number(existing.amountDecimal);
+        await tx.account.update({
+          where: { id: accountId },
+          data: { balance: { increment: -journalAmount } },
+        });
       }
 
-      await tx.transactionSplit.deleteMany({ where: { transactionId: id } });
+      // Delete old journal and its group
+      if (existing.groupId) {
+        await tx.transactionGroup.delete({ where: { id: existing.groupId } });
+      } else {
+        await tx.transactionJournal.update({
+          where: { id },
+          data: { isDeleted: true, updatedAt: new Date() },
+        });
+      }
 
-      await tx.account.update({
-        where: { id: existing.accountId },
-        data: { balance: { increment: -existing.amount } },
-      });
-
-      const updated = await tx.transaction.update({
-        where: { id },
-        data: {
-          ...plan.updatedExisting,
-          notes: plan.updatedExisting.notes ?? null,
-          currencyCode: plan.updatedExisting.currencyCode ?? 'CAD',
-          refundedTransactionId: null,
-          isRefund: false,
-        },
-        include: TX_INCLUDE,
-      });
-
-      const counterpart = await tx.transaction.create({
-        data: {
-          householdId,
-          ...plan.counterpart,
-          notes: plan.counterpart.notes ?? null,
-          currencyCode: plan.counterpart.currencyCode ?? 'CAD',
-        },
-        include: TX_INCLUDE,
-      });
-
-      await tx.account.update({
-        where: { id: updated.accountId },
-        data: { balance: { increment: updated.amount } },
-      });
-      await tx.account.update({
-        where: { id: counterpart.accountId },
-        data: { balance: { increment: counterpart.amount } },
-      });
-
+      // Create new transfer journal
       const journal = await createTransactionJournalInTransaction(tx, {
         householdId,
         type: 'transfer',
@@ -1524,20 +1509,35 @@ router.post('/:id/convert-transfer', async (req: AuthRequest, res: Response) => 
         date: plan.updatedExisting.date,
         currencyCode: plan.updatedExisting.currencyCode ?? 'CAD',
         notes: plan.updatedExisting.notes ?? undefined,
-        meta: {
-          legacyTransferId: transferId,
-          legacyDebitTransactionId: updated.amount < 0 ? updated.id : counterpart.id,
-          legacyCreditTransactionId: updated.amount > 0 ? updated.id : counterpart.id,
-        },
       });
 
-      return [updated, counterpart, journal] as const;
+      // Update account balances for new transfer entries
+      await tx.account.update({
+        where: { id: fromAccountId },
+        data: { balance: { increment: -plan.amount } },
+      });
+      await tx.account.update({
+        where: { id: toAccountId },
+        data: { balance: { increment: plan.amount } },
+      });
+
+      return journal;
+    });
+
+    // Fetch full journal for response
+    const fullJournal = await prisma.transactionJournal.findUniqueOrThrow({
+      where: { id: transferJournal.journalId },
+      include: {
+        entries: { include: { account: { select: { id: true, name: true } } } },
+        category: { select: { id: true, name: true, icon: true } },
+        tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+      },
     });
 
     await applyActiveRulesToJournal(prisma, {
-      journalId: journal.id,
+      journalId: fullJournal.id,
       householdId,
-      matchInput: buildRuleMatchInputFromJournal(journal),
+      matchInput: buildRuleMatchInputFromJournal(fullJournal),
     });
 
     logAudit({
@@ -1545,14 +1545,34 @@ router.post('/:id/convert-transfer', async (req: AuthRequest, res: Response) => 
       userId: req.userId!,
       action: 'UPDATE',
       entity: 'TRANSACTION',
-      entityId: updated.id,
-      before: { amount: existing.amount, description: existing.description },
-      after: { amount: updated.amount, description: updated.description, transferId },
+      entityId: fullJournal.id,
+      before: { description: existing.description, amount: Number(existing.amountDecimal) },
+      after: { description: fullJournal.description, amount: Number(fullJournal.amountDecimal), transferId },
     });
-    fireWebhooks(householdId, 'transaction.updated', formatTx(updated)).catch(() => {});
-    fireWebhooks(householdId, 'transaction.created', formatTx(counterpart)).catch(() => {});
+    fireWebhooks(householdId, 'transaction.updated', { id: fullJournal.id, description: fullJournal.description, amount: Number(fullJournal.amountDecimal) }).catch(() => {});
 
-    return res.status(200).json({ debit: formatTx(updated.amount < 0 ? updated : counterpart), credit: formatTx(updated.amount > 0 ? updated : counterpart) });
+    // Format response with debit/credit entries
+    const debitEntry = fullJournal.entries?.find(e => Number(e.amountDecimal) < 0);
+    const creditEntry = fullJournal.entries?.find(e => Number(e.amountDecimal) > 0);
+
+    return res.status(200).json({
+      debit: debitEntry ? {
+        id: fullJournal.id,
+        date: fullJournal.date.toISOString(),
+        description: fullJournal.description,
+        amount: Math.abs(Number(debitEntry.amountDecimal)),
+        accountId: debitEntry.accountId,
+        accountName: debitEntry.account.name,
+      } : null,
+      credit: creditEntry ? {
+        id: fullJournal.id,
+        date: fullJournal.date.toISOString(),
+        description: fullJournal.description,
+        amount: Number(creditEntry.amountDecimal),
+        accountId: creditEntry.accountId,
+        accountName: creditEntry.account.name,
+      } : null,
+    });
   } catch (err) {
     req.log.error({ err }, 'transactions/convert-transfer');
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Internal server error' });
