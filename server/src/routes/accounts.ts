@@ -5,6 +5,8 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
+import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration';
 
 const csvUpload = multer({
   storage: multer.memoryStorage(),
@@ -115,7 +117,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
 
     const accounts = await prisma.account.findMany({
-      where: { householdId },
+      where: { householdId, ...NOT_DELETED },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     });
 
@@ -169,7 +171,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
 
     const accounts = await prisma.account.findMany({
-      where: { householdId },
+      where: { householdId, ...NOT_DELETED },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     });
 
@@ -178,7 +180,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
       type: a.type,
       institution: a.institution ?? '',
       lastFour: a.lastFour ?? '',
-      balance: a.balance,
+      balance: a.balanceDecimal ? Number(a.balanceDecimal) : a.balance,
       currency: a.currency,
       hidden: a.isHidden ? 'Yes' : 'No',
       excludeFromNetWorth: a.excludeFromNetWorth ? 'Yes' : 'No',
@@ -267,21 +269,21 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     const now = new Date();
     const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-    const transactions = await prisma.transaction.findMany({
+    const journals = await prisma.transactionJournal.findMany({
       where: {
-        accountId: id,
+        entries: { some: { accountId: id } },
         date: { gte: twelveMonthsAgo },
         isHidden: false,
       },
-      select: { date: true, amount: true },
+      select: { date: true, amountDecimal: true },
       orderBy: { date: 'asc' },
     });
 
     // Build monthly sum map
     const monthlySums = new Map<string, number>();
-    for (const t of transactions) {
-      const key = `${t.date.getFullYear()}-${String(t.date.getMonth() + 1).padStart(2, '0')}`;
-      monthlySums.set(key, (monthlySums.get(key) ?? 0) + t.amount);
+    for (const j of journals) {
+      const key = `${j.date.getFullYear()}-${String(j.date.getMonth() + 1).padStart(2, '0')}`;
+      monthlySums.set(key, (monthlySums.get(key) ?? 0) + Number(j.amountDecimal));
     }
 
     // Back-project from current balance: start at current, walk backwards subtracting each month's net
@@ -297,9 +299,9 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       runningBalance -= monthlySums.get(key) ?? 0;
     }
 
-    // Recent transactions (last 10)
-    const recentTxns = await prisma.transaction.findMany({
-      where: { accountId: id, isHidden: false },
+    // Recent journals (last 10)
+    const recentJournals = await prisma.transactionJournal.findMany({
+      where: { entries: { some: { accountId: id } }, isHidden: false },
       orderBy: { date: 'desc' },
       take: 10,
       include: {
@@ -308,13 +310,13 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    const recentTransactions = recentTxns.map(t => ({
-      id: t.id,
-      date: t.date.toISOString(),
-      merchantName: t.merchant?.displayName ?? t.description,
-      amount: t.amount,
-      categoryName: t.category?.name ?? null,
-      categoryIcon: t.category?.icon ?? null,
+    const recentTransactions = recentJournals.map(j => ({
+      id: j.id,
+      date: j.date.toISOString(),
+      merchantName: j.merchant?.displayName ?? j.description,
+      amount: Number(j.amountDecimal),
+      categoryName: j.category?.name ?? null,
+      categoryIcon: j.category?.icon ?? null,
     }));
 
     return res.json({
@@ -443,25 +445,34 @@ router.post('/:id/reconcile', async (req: AuthRequest, res: Response) => {
       return res.json({ message: 'Already balanced', adjustment: 0 });
     }
 
-    await prisma.$transaction([
-      prisma.transaction.create({
-        data: {
+    // Create balance adjustment as journal transaction
+    const virtualAccounts = await getVirtualAccountsByType(householdId);
+    const expenseAccountId = adjustment < 0 ? virtualAccounts.expenseAccountId : virtualAccounts.revenueAccountId;
+
+    if (!expenseAccountId) {
+      throw new Error('Missing virtual account for balance adjustment');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await createJournalFromLegacyTransaction(
+        tx,
+        {
           householdId,
           accountId: id,
           date: new Date(),
           description: 'Balance Adjustment',
-          originalDescription: 'Balance Adjustment',
           amount: adjustment,
-          needsReview: false,
-          isHidden: false,
-          isSplit: false,
         },
-      }),
-      prisma.account.update({
+        adjustment < 0 ? expenseAccountId : undefined,
+        adjustment > 0 ? expenseAccountId : undefined,
+      );
+
+      // Update account balance
+      await tx.account.update({
         where: { id },
         data: { balance: target },
-      }),
-    ]);
+      });
+    });
 
     logAudit({ householdId, userId: req.userId!, action: 'UPDATE', entity: 'ACCOUNT', entityId: id, before: { balance: account.balance }, after: { balance: target } });
 
@@ -504,9 +515,9 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    // Soft-delete all transactions belonging to this account, then delete the account
-    await prisma.transaction.updateMany({
-      where: { accountId: id, householdId },
+    // Soft-delete all journals with entries for this account, then delete the account
+    await prisma.transactionJournal.updateMany({
+      where: { entries: { some: { accountId: id } }, householdId },
       data: { isHidden: true },
     });
     await prisma.account.delete({ where: { id } });
@@ -549,10 +560,14 @@ router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
       ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {}),
     };
 
-    const [total, transactions] = await Promise.all([
-      prisma.transaction.count({ where }),
-      prisma.transaction.findMany({
-        where,
+    // Filter by account via entries relation
+    const accountFilter = { entries: { some: { accountId: id } } };
+    const journalWhere = { ...where, ...accountFilter };
+
+    const [total, journals] = await Promise.all([
+      prisma.transactionJournal.count({ where: journalWhere }),
+      prisma.transactionJournal.findMany({
+        where: journalWhere,
         orderBy: { date: 'desc' },
         skip,
         take: limit,
@@ -563,17 +578,17 @@ router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
       }),
     ]);
 
-    const data = transactions.map(t => ({
-      id: t.id,
-      date: t.date.toISOString(),
-      description: t.description,
-      merchantName: t.merchant?.displayName ?? t.description,
-      amount: t.amount,
-      categoryName: t.category?.name ?? null,
-      categoryIcon: t.category?.icon ?? null,
-      isRecurring: t.isRecurring,
-      needsReview: t.needsReview,
-      isPending: t.isPending,
+    const data = journals.map(j => ({
+      id: j.id,
+      date: j.date.toISOString(),
+      description: j.description,
+      merchantName: j.merchant?.displayName ?? j.description,
+      amount: Number(j.amountDecimal),
+      categoryName: j.category?.name ?? null,
+      categoryIcon: j.category?.icon ?? null,
+      isRecurring: j.isRecurring,
+      needsReview: j.needsReview,
+      isPending: j.isPending,
     }));
 
     return res.json({

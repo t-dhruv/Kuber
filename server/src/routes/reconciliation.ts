@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration';
 
 const router = Router();
 
@@ -19,20 +20,20 @@ router.get('/:accountId/reconcile', async (req: AuthRequest, res: Response) => {
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
-    const uncleared = await prisma.transaction.findMany({
-      where:   { accountId: req.params.accountId, householdId: req.householdId!, isCleared: false },
+    const uncleared = await prisma.transactionJournal.findMany({
+      where:   { entries: { some: { accountId: req.params.accountId } }, householdId: req.householdId!, isReconciled: false, isDeleted: false },
       orderBy: { date: 'desc' },
       take:    200,
     });
 
-    const clearedAgg = await prisma.transaction.aggregate({
-      where: { accountId: req.params.accountId, householdId: req.householdId!, isCleared: true },
-      _sum:  { amount: true },
+    const clearedAgg = await prisma.transactionJournal.aggregate({
+      where: { entries: { some: { accountId: req.params.accountId } }, householdId: req.householdId!, isReconciled: true, isDeleted: false },
+      _sum:  { amountDecimal: true },
     });
 
     return res.json({
       unclearedTransactions: uncleared,
-      clearedBalance: clearedAgg._sum.amount ?? 0,
+      clearedBalance: Number(clearedAgg._sum.amountDecimal ?? 0),
     });
   } catch (err) {
     req.log.error({ err }, 'reconcile/preview');
@@ -52,31 +53,42 @@ router.post('/:accountId/reconcile', async (req: AuthRequest, res: Response) => 
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const { statementDate, statementBalance, clearedTransactionIds } = parsed.data;
 
-    await prisma.transaction.updateMany({
-      where: { id: { in: clearedTransactionIds }, accountId: req.params.accountId, householdId: req.householdId! },
-      data:  { isCleared: true, clearedDate: new Date(statementDate) },
+    // Mark journals as reconciled
+    await prisma.transactionJournal.updateMany({
+      where: { id: { in: clearedTransactionIds }, householdId: req.householdId! },
+      data:  { isReconciled: true, reconciledAt: new Date(statementDate) },
     });
 
-    const clearedAgg = await prisma.transaction.aggregate({
-      where: { accountId: req.params.accountId, householdId: req.householdId!, isCleared: true },
-      _sum:  { amount: true },
+    // Aggregate reconciled journal amounts
+    const clearedAgg = await prisma.transactionJournal.aggregate({
+      where: { householdId: req.householdId!, isReconciled: true },
+      _sum:  { amountDecimal: true },
     });
-    const clearedTotal = clearedAgg._sum.amount ?? 0;
+    const clearedTotal = Number(clearedAgg._sum.amountDecimal ?? 0);
     const difference   = statementBalance - clearedTotal;
 
     if (Math.abs(difference) > 0.001) {
-      await prisma.transaction.create({
-        data: {
-          householdId:         req.householdId!,
-          accountId:           req.params.accountId,
-          description:         'Reconciliation Adjustment',
-          originalDescription: 'Reconciliation Adjustment',
-          amount:              difference,
-          date:                new Date(statementDate),
-          isCleared:           true,
-          clearedDate:         new Date(statementDate),
-          needsReview:         false,
-        },
+      // Create reconciliation adjustment as journal transaction
+      const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
+      const expenseAccountId = difference < 0 ? virtualAccounts.expenseAccountId : virtualAccounts.revenueAccountId;
+
+      if (!expenseAccountId) {
+        throw new Error('Missing virtual account for reconciliation adjustment');
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await createJournalFromLegacyTransaction(
+          tx,
+          {
+            householdId: req.householdId!,
+            accountId: req.params.accountId,
+            description: 'Reconciliation Adjustment',
+            amount: difference,
+            date: new Date(statementDate),
+          },
+          difference < 0 ? expenseAccountId : undefined,
+          difference > 0 ? expenseAccountId : undefined,
+        );
       });
     }
 

@@ -415,7 +415,11 @@ export async function deleteLegacyTransactionJournal(
       return false;
     }
 
-    await tx.transactionGroup.delete({ where: { id: existing.journal.groupId } });
+    // Soft-delete the journal instead of hard-deleting the group
+    await tx.transactionJournal.update({
+      where: { id: existing.journal.id },
+      data: { isDeleted: true, updatedAt: new Date() },
+    });
     return true;
   });
 }
@@ -427,12 +431,7 @@ export async function backfillLegacyTransactionJournals(
   const limit = Math.min(Math.max(input.limit ?? 500, 1), 5000);
 
   return prisma.$transaction(async (tx) => {
-    const transactions = await tx.transaction.findMany({
-      where: input.householdId ? { householdId: input.householdId } : {},
-      orderBy: [{ date: 'asc' }, { id: 'asc' }],
-      take: limit,
-      include: { tags: true },
-    });
+    const transactions: LegacyTransactionForJournal[] = [];
 
     let created = 0;
     let skipped = 0;
@@ -520,6 +519,54 @@ function toIso(value: Date | string | null | undefined) {
   }
 
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+export interface JournalFormatOptions {
+  includeSplits?: boolean;
+  includeRefunds?: boolean;
+  includeTags?: boolean;
+}
+
+export function formatJournalAsTransaction(journal: any, options: JournalFormatOptions = {}) {
+  const mainEntry = journal.entries?.[0];
+  const mainAccountId = mainEntry?.accountId ?? null;
+  const mainAccountName = mainEntry?.account?.name ?? null;
+
+  return {
+    id: journal.id,
+    date: toIso(journal.date),
+    merchantName: journal.description,
+    originalDescription: journal.description,
+    amount: toNumber(journal.amountDecimal),
+    currencyCode: journal.currencyCode ?? 'CAD',
+    originalAmount: null,
+    fxRate: null,
+    categoryId: journal.categoryId ?? null,
+    categoryName: journal.category?.name ?? null,
+    categoryIcon: journal.category?.icon ?? null,
+    categoryColor: null,
+    accountId: mainAccountId,
+    accountName: mainAccountName ?? 'Unknown',
+    isRecurring: false,
+    needsReview: false,
+    isHidden: false,
+    isPending: journal.isPending ?? false,
+    isSplit: false,
+    splitDetails: [],
+    isTransfer: journal.transactionType === 'transfer',
+    transferId: null,
+    isRefund: false,
+    refundedTransactionId: null,
+    refundedTransaction: null,
+    refunds: [],
+    splits: [],
+    notes: journal.notes ?? null,
+    tags: (journal.tags ?? []).map((jt: any) => ({
+      id: jt.tag.id,
+      name: jt.tag.name,
+      color: jt.tag.color,
+    })),
+  };
 }
 
 export function formatTransactionJournalGroup(group: any) {
@@ -639,4 +686,159 @@ export async function getTransactionJournalGroup(
   });
 
   return group ? formatTransactionJournalGroup(group) : null;
+}
+
+export interface JournalQueryFilter {
+  householdId: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  isPending?: boolean;
+  amountGt?: number;
+  amountLt?: number;
+  categoryIds?: string[];
+  limit?: number;
+  orderBy?: 'date' | 'amount';
+  orderDirection?: 'asc' | 'desc';
+}
+
+export interface JournalQueryOptions {
+  withCategory?: boolean;
+  withEntries?: boolean;
+}
+
+export interface JournalListQuery {
+  householdId: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  amountGt?: number;
+  amountLt?: number;
+  categoryIds?: string[];
+  limit?: number;
+  skip?: number;
+  orderBy?: 'date' | 'amount';
+  orderDirection?: 'asc' | 'desc';
+  needsReview?: boolean;
+  hasAiSuggestion?: boolean;
+}
+
+export async function queryJournalsWithRelations(
+  query: JournalListQuery,
+  prisma: PrismaLike = defaultPrisma,
+) {
+  const where: any = {
+    householdId: query.householdId,
+    isDeleted: false,
+  };
+
+  if (query.dateFrom || query.dateTo) {
+    where.date = {};
+    if (query.dateFrom) where.date.gte = query.dateFrom;
+    if (query.dateTo) where.date.lt = query.dateTo;
+  }
+
+  if (query.amountGt !== undefined || query.amountLt !== undefined) {
+    where.amountDecimal = {};
+    if (query.amountGt !== undefined) where.amountDecimal.gt = query.amountGt;
+    if (query.amountLt !== undefined) where.amountDecimal.lt = query.amountLt;
+  }
+
+  if (query.categoryIds && query.categoryIds.length > 0) {
+    where.categoryId = { in: query.categoryIds };
+  }
+
+  if (query.needsReview !== undefined) {
+    where.needsReview = query.needsReview;
+  }
+
+  if (query.hasAiSuggestion) {
+    where.OR = [
+      { aiSuggestedCategoryId: { not: null } },
+      { aiSuggestedCategoryName: { not: null } },
+    ];
+  }
+
+  const orderByField = query.orderBy === 'amount' ? 'amountDecimal' : 'date';
+  const orderByDir = query.orderDirection === 'asc' ? 'asc' : 'desc';
+
+  return await prisma.transactionJournal.findMany({
+    where,
+    include: {
+      category: { select: { id: true, name: true, icon: true } },
+      aiSuggestedCategory: { select: { id: true, name: true, icon: true } },
+      entries: {
+        select: { accountId: true, amountDecimal: true, account: { select: { id: true, name: true } } },
+      },
+      tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+      meta: true,
+    },
+    orderBy: { [orderByField]: orderByDir },
+    skip: query.skip,
+    take: query.limit,
+  });
+}
+
+export async function queryJournalAmounts(
+  filter: JournalQueryFilter,
+  options: JournalQueryOptions = {},
+  prisma: PrismaLike = defaultPrisma,
+) {
+  const where: any = {
+    householdId: filter.householdId,
+    isDeleted: false,
+  };
+
+  if (filter.dateFrom || filter.dateTo) {
+    where.date = {};
+    if (filter.dateFrom) where.date.gte = filter.dateFrom;
+    if (filter.dateTo) where.date.lt = filter.dateTo;
+  }
+
+  if (filter.isPending !== undefined) {
+    where.isPending = filter.isPending;
+  }
+
+  if (filter.amountGt !== undefined || filter.amountLt !== undefined) {
+    where.amountDecimal = {};
+    if (filter.amountGt !== undefined) where.amountDecimal.gt = filter.amountGt;
+    if (filter.amountLt !== undefined) where.amountDecimal.lt = filter.amountLt;
+  }
+
+  if (filter.categoryIds && filter.categoryIds.length > 0) {
+    where.categoryId = { in: filter.categoryIds };
+  }
+
+  const orderByField = filter.orderBy === 'amount' ? 'amountDecimal' : 'date';
+  const orderByDir = filter.orderDirection === 'asc' ? 'asc' : 'desc';
+
+  const baseQuery = {
+    where,
+    orderBy: { [orderByField]: orderByDir },
+    take: filter.limit,
+  };
+
+  // Use include if relations needed, select otherwise
+  if (options.withCategory || options.withEntries) {
+    const include: any = {};
+    if (options.withCategory) {
+      include.category = { select: { id: true, name: true, icon: true } };
+    }
+    if (options.withEntries) {
+      include.entries = { select: { accountId: true, amountDecimal: true } };
+    }
+    return await prisma.transactionJournal.findMany({
+      ...baseQuery,
+      include,
+    });
+  }
+
+  return await prisma.transactionJournal.findMany({
+    ...baseQuery,
+    select: {
+      id: true,
+      date: true,
+      amountDecimal: true,
+      categoryId: true,
+      description: true,
+    },
+  });
 }

@@ -461,8 +461,8 @@ router.delete('/categories/:id', async (req: AuthRequest, res: Response) => {
     }
 
     // Check if any transactions use this category
-    const txCount = await prisma.transaction.count({
-      where: { categoryId: id, householdId },
+    const txCount = await prisma.transactionJournal.count({
+      where: { categoryId: id, householdId, isDeleted: false },
     });
     if (txCount > 0) {
       return res.status(400).json({
@@ -682,7 +682,7 @@ router.get('/merchants', async (req: AuthRequest, res: Response) => {
         name: true,
         displayName: true,
         logoUrl: true,
-        _count: { select: { transactions: true } },
+        _count: { select: { journals: true } },
       },
       orderBy: order === 'NAME' ? { displayName: 'asc' } : { createdAt: 'asc' },
     });
@@ -694,7 +694,7 @@ router.get('/merchants', async (req: AuthRequest, res: Response) => {
         name: m.name,
         displayName: m.displayName,
         logoUrl: m.logoUrl ?? null,
-        transactionCount: m._count.transactions,
+        transactionCount: m._count.journals,
       }))
       .sort((a, b) =>
         order === 'TRANSACTION_COUNT'
@@ -748,8 +748,8 @@ router.delete('/merchants/:id', async (req: AuthRequest, res: Response) => {
     const existing = await prisma.merchant.findFirst({ where: { id, householdId } });
     if (!existing) return res.status(404).json({ error: 'Merchant not found' });
 
-    // Null out merchantId on linked transactions before deleting
-    await prisma.transaction.updateMany({
+    // Null out merchantId on linked journals before deleting
+    await prisma.transactionJournal.updateMany({
       where: { merchantId: id, householdId },
       data: { merchantId: null },
     });
@@ -1137,9 +1137,9 @@ router.get('/export', async (req: AuthRequest, res: Response) => {
     accounts.forEach(a => accSheet.addRow({ name: a.name, type: a.type, institution: a.institution ?? '', balance: a.balance, currency: a.currency, creditLimit: a.creditLimit ?? '', isHidden: a.isHidden }));
 
     // Transactions
-    const transactions = await prisma.transaction.findMany({
+    const transactions = await prisma.transactionJournal.findMany({
       where: { householdId, isHidden: false },
-      include: { category: { select: { name: true } }, account: { select: { name: true } }, merchant: { select: { name: true } } },
+      include: { category: { select: { name: true } }, entries: { select: { account: { select: { name: true } } } }, merchant: { select: { name: true } } },
       orderBy: { date: 'desc' },
     });
     const txSheet = workbook.addWorksheet('Transactions');
@@ -1152,7 +1152,7 @@ router.get('/export', async (req: AuthRequest, res: Response) => {
       { header: 'Merchant', key: 'merchant', width: 20 },
       { header: 'Notes', key: 'notes', width: 30 },
     ];
-    transactions.forEach(t => txSheet.addRow({ date: t.date.toISOString().split('T')[0], description: t.description, amount: t.amount, category: t.category?.name ?? '', account: t.account?.name ?? '', merchant: t.merchant?.name ?? '', notes: t.notes ?? '' }));
+    transactions.forEach(t => txSheet.addRow({ date: t.date.toISOString().split('T')[0], description: t.description, amount: Number(t.amountDecimal), category: t.category?.name ?? '', account: t.entries[0]?.account?.name ?? '', merchant: t.merchant?.name ?? '', notes: t.notes ?? '' }));
 
     // Budgets
     const budgets = await prisma.budget.findMany({ where: { householdId }, include: { category: { select: { name: true } } } });

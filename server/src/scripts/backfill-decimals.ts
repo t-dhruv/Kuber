@@ -11,62 +11,35 @@ function toDec(val: number | null | undefined): string | null {
 }
 
 async function backfillTransactions() {
-  console.log('--- Backfilling Transactions ---');
+  console.log('--- Backfilling TransactionJournals ---');
   let cursor: string | undefined = undefined;
   let processed = 0;
 
   while (true) {
-    const transactions: any[] = await prisma.transaction.findMany({
+    const journals: any[] = await prisma.transactionJournal.findMany({
       take: BATCH_SIZE,
       skip: cursor ? 1 : 0,
       ...(cursor && { cursor: { id: cursor } }),
-      where: {
-        amountDecimal: null
-      },
       orderBy: { id: 'asc' }
     });
 
-    if (transactions.length === 0) break;
+    if (journals.length === 0) break;
 
-    for (const txn of transactions) {
-      const amountDecimal = toDec(txn.amount);
-      
-      let splitOps: any[] = [];
-      
-      // If splits exist, migrate them to TransactionSplit
-      if (txn.isSplit && txn.splitDetails) {
-        try {
-          const splits = typeof txn.splitDetails === 'string' ? JSON.parse(txn.splitDetails) : txn.splitDetails;
-          if (Array.isArray(splits)) {
-            splitOps = splits.map(split => ({
-              amountDecimal: toDec(split.amount || 0),
-              categoryId: split.categoryId || null,
-              notes: split.notes || null
-            }));
-          }
-        } catch (e) {
-          console.error(`Failed to parse splits for transaction ${txn.id}`, e);
-        }
-      }
+    for (const journal of journals) {
+      // Journals should have decimal amounts, but backfill if missing
+      const amountDecimal = journal.amountDecimal || '0';
 
-      await prisma.transaction.update({
-        where: { id: txn.id },
+      await prisma.transactionJournal.update({
+        where: { id: journal.id },
         data: {
           amountDecimal: amountDecimal,
-          ...(splitOps.length > 0 && {
-            splits: {
-              createMany: {
-                data: splitOps
-              }
-            }
-          })
         }
       });
       processed++;
     }
-    
-    cursor = transactions[transactions.length - 1].id;
-    console.log(`Transactions: processed ${processed}`);
+
+    cursor = journals[journals.length - 1].id;
+    console.log(`TransactionJournals: processed ${processed}`);
   }
 }
 

@@ -47,17 +47,16 @@ router.post('/detect', async (req: AuthRequest, res: Response) => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 90);
 
-    const txns = await prisma.transaction.findMany({
-      where: { householdId, date: { gte: cutoff }, amount: { lt: 0 }, isHidden: false },
-      include: { merchant: { select: { displayName: true } } },
+    const txns = await prisma.transactionJournal.findMany({
+      where: { householdId, date: { gte: cutoff }, transactionType: 'withdrawal', isHidden: false, isDeleted: false },
       orderBy: { date: 'asc' },
     });
 
-    // Group by normalized merchant name + rounded amount (±5% tolerance)
+    // Group by normalized description + rounded amount (±5% tolerance)
     const groups = new Map<string, typeof txns>();
     for (const t of txns) {
-      const name = (t.merchant?.displayName ?? t.description).trim();
-      const amt = Math.round(Math.abs(t.amount) * 100) / 100;
+      const name = t.description.trim();
+      const amt = Math.round(Math.abs(Number(t.amountDecimal)) * 100) / 100;
       const key = `${name.toLowerCase()}|${amt}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(t);
@@ -93,8 +92,8 @@ router.post('/detect', async (req: AuthRequest, res: Response) => {
       if (existingKeys.has(key)) continue;
 
       const lastTxn = sorted[sorted.length - 1];
-      const name = lastTxn.merchant?.displayName ?? lastTxn.description;
-      const amt = Math.round(Math.abs(lastTxn.amount) * 100) / 100;
+      const name = lastTxn.description;
+      const amt = Math.round(Math.abs(Number(lastTxn.amountDecimal)) * 100) / 100;
 
       // Estimate next date based on frequency from last transaction
       const lastDate = new Date(lastTxn.date);
@@ -184,14 +183,12 @@ router.get('/monthly-summary', async (req: AuthRequest, res: Response) => {
     });
 
     // Load all transactions in that month to determine "isPaid"
-    const monthTxns = await prisma.transaction.findMany({
+    const monthTxns = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         date: { gte: monthStart, lt: monthEnd },
         isHidden: false,
-      },
-      include: {
-        merchant: { select: { displayName: true } },
+        isDeleted: false,
       },
     });
 
@@ -200,11 +197,10 @@ router.get('/monthly-summary', async (req: AuthRequest, res: Response) => {
       const nameLower = item.name.toLowerCase();
       const targetAmount = Math.abs(item.amount);
       return monthTxns.some(t => {
-        const txnAmount = Math.abs(t.amount);
-        const merchantMatch = t.merchant?.displayName.toLowerCase().includes(nameLower)
-          || t.description.toLowerCase().includes(nameLower);
+        const txnAmount = Math.abs(Number(t.amountDecimal));
+        const descriptionMatch = t.description.toLowerCase().includes(nameLower);
         const amountMatch = Math.abs(txnAmount - targetAmount) < 0.01;
-        return merchantMatch && amountMatch;
+        return descriptionMatch && amountMatch;
       });
     }
 

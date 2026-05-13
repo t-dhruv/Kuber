@@ -49,12 +49,13 @@ export async function sendDigestEmail(householdId: string): Promise<void> {
   const netWorthChange = currentNetWorth - priorNetWorth;
 
   // 2. Top 5 spending categories this month
-  const monthTransactions = await prisma.transaction.findMany({
+  const monthTransactions = await prisma.transactionJournal.findMany({
     where: {
       householdId,
       date: { gte: monthStart, lte: now },
-      amount: { lt: 0 },
+      amountDecimal: { lt: 0 },
       isHidden: false,
+      isDeleted: false,
     },
     include: { category: { select: { name: true, icon: true } } },
   });
@@ -64,11 +65,12 @@ export async function sendDigestEmail(householdId: string): Promise<void> {
     const key = t.categoryId ?? '__uncategorized__';
     const name = t.category?.name ?? 'Uncategorized';
     const icon = t.category?.icon ?? null;
+    const amount = Math.abs(Number(t.amountDecimal));
     const existing = categoryMap.get(key);
     if (existing) {
-      existing.total += Math.abs(t.amount);
+      existing.total += amount;
     } else {
-      categoryMap.set(key, { name, icon, total: Math.abs(t.amount) });
+      categoryMap.set(key, { name, icon, total: amount });
     }
   }
   const topCategories = Array.from(categoryMap.values())

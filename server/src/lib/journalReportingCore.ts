@@ -73,20 +73,6 @@ export interface JournalReportCatalogEntry {
 
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-interface LegacyReportTransaction {
-  id: string;
-  householdId: string;
-  amount: number;
-  amountDecimal?: unknown;
-  date: Date;
-  description: string;
-  isTransfer?: boolean | null;
-  transferId?: string | null;
-  category: JournalReportCategory | null;
-  account: JournalReportAccount | null;
-  tags?: Array<{ tag: JournalReportTag }>;
-}
-
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -126,103 +112,6 @@ function findReportAccount(journal: any): JournalReportAccount | null {
 
 function entryBalance(journal: any) {
   return roundMoney((journal.entries ?? []).reduce((sum: number, entry: any) => sum + toNumber(entry.amountDecimal), 0));
-}
-
-function mapLegacyTransactionToReportRow(transaction: LegacyReportTransaction): JournalReportRow {
-  const amount = toNumber(transaction.amountDecimal ?? transaction.amount);
-  const category = transaction.category
-    ? {
-        id: transaction.category.id,
-        name: transaction.category.name,
-        icon: transaction.category.icon ?? null,
-        type: transaction.category.type ?? null,
-        isTaxDeductible: Boolean(transaction.category.isTaxDeductible),
-        excludeFromReports: Boolean(transaction.category.excludeFromReports),
-      }
-    : null;
-
-  return {
-    id: transaction.id,
-    householdId: transaction.householdId,
-    transactionType: transaction.isTransfer ? 'transfer' : amount >= 0 ? 'deposit' : 'withdrawal',
-    date: transaction.date instanceof Date ? transaction.date : new Date(transaction.date),
-    description: transaction.description,
-    amount: Math.abs(amount),
-    signedAmount: amount,
-    category,
-    reportAccount: transaction.account
-      ? {
-          id: transaction.account.id,
-          name: transaction.account.name,
-          type: transaction.account.type ?? null,
-          excludeFromReports: Boolean(transaction.account.excludeFromReports),
-        }
-      : null,
-    tags: (transaction.tags ?? []).map((link) => ({
-      id: link.tag.id,
-      name: link.tag.name,
-      color: link.tag.color ?? null,
-    })),
-    entryBalance: 0,
-  };
-}
-
-async function fetchUnlinkedLegacyReportRows(
-  input: { householdId: string; start?: Date; end?: Date },
-  prisma = defaultPrisma,
-): Promise<JournalReportRow[]> {
-  const legacyTransactions = await prisma.transaction.findMany({
-    where: {
-      householdId: input.householdId,
-      isHidden: false,
-      ...(input.start && input.end ? { date: { gte: input.start, lte: input.end } } : {}),
-    },
-    orderBy: [{ date: 'asc' }, { id: 'asc' }],
-    include: {
-      category: { select: { id: true, name: true, icon: true, type: true, isTaxDeductible: true, excludeFromReports: true } },
-      account: { select: { id: true, name: true, type: true, excludeFromReports: true } },
-      tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
-    },
-  });
-
-  if (legacyTransactions.length === 0) return [];
-
-  const legacyIds = new Set(legacyTransactions.map((transaction) => transaction.id));
-  const transferIds = new Set(
-    legacyTransactions
-      .map((transaction) => transaction.transferId)
-      .filter((transferId): transferId is string => typeof transferId === 'string' && transferId.length > 0),
-  );
-  const linkedMetaValues = await prisma.transactionJournalMeta.findMany({
-    where: {
-      OR: [
-        { name: 'legacyTransactionId', value: { in: Array.from(legacyIds) } },
-        { name: 'legacyDebitTransactionId', value: { in: Array.from(legacyIds) } },
-        { name: 'legacyCreditTransactionId', value: { in: Array.from(legacyIds) } },
-        ...(transferIds.size > 0
-          ? [{ name: 'legacyTransferId', value: { in: Array.from(transferIds) } }]
-          : []),
-      ],
-    },
-    select: { name: true, value: true },
-  });
-
-  const linkedLegacyIds = new Set(
-    linkedMetaValues
-      .filter((meta) => meta.name !== 'legacyTransferId')
-      .map((meta) => meta.value),
-  );
-  const linkedTransferIds = new Set(
-    linkedMetaValues
-      .filter((meta) => meta.name === 'legacyTransferId')
-      .map((meta) => meta.value),
-  );
-
-  return legacyTransactions
-    .filter((transaction) => !linkedLegacyIds.has(transaction.id))
-    .filter((transaction) => !transaction.transferId || !linkedTransferIds.has(transaction.transferId))
-    .map(mapLegacyTransactionToReportRow)
-    .filter((row) => !row.category?.excludeFromReports);
 }
 
 export function classifyReportPeriod(start: Date, end: Date): JournalReportPeriod {
@@ -576,6 +465,7 @@ export async function fetchJournalReportRows(
 ): Promise<JournalReportRow[]> {
   const where: Prisma.TransactionJournalWhereInput = {
     householdId: input.householdId,
+    isDeleted: false,
     ...(input.start && input.end ? { date: { gte: input.start, lte: input.end } } : {}),
   };
 
@@ -596,7 +486,6 @@ export async function fetchJournalReportRows(
   const journalRows = journals
     .map(mapJournalToReportRow)
     .filter((row) => !row.category?.excludeFromReports);
-  const legacyRows = await fetchUnlinkedLegacyReportRows(input, prisma);
 
-  return [...journalRows, ...legacyRows].sort((a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id));
+  return journalRows.sort((a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id));
 }

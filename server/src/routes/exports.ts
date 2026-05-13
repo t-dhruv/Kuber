@@ -30,15 +30,15 @@ function fmtCurrency(amount: number): string {
 // ─── Data fetchers ────────────────────────────────────────────────────────────
 
 async function getSpendingData(householdId: string, start: Date, end: Date) {
-  const transactions = await prisma.transaction.findMany({
-    where: { householdId, date: { gte: start, lte: end }, amount: { lt: 0 }, isHidden: false },
+  const transactions = await prisma.transactionJournal.findMany({
+    where: { householdId, date: { gte: start, lte: end }, transactionType: 'withdrawal', isHidden: false, isDeleted: false },
     include: { category: { select: { name: true, icon: true } } },
   });
 
   const categoryMap = new Map<string, { name: string; icon: string | null; amount: number }>();
   let total = 0;
   for (const t of transactions) {
-    const abs = Math.abs(t.amount);
+    const abs = Math.abs(Number(t.amountDecimal));
     total += abs;
     const key = t.categoryId ?? '__uncategorized__';
     const name = t.category?.name ?? 'Uncategorized';
@@ -56,10 +56,10 @@ async function getSpendingData(householdId: string, start: Date, end: Date) {
 }
 
 async function getCashFlowData(householdId: string, start: Date, end: Date) {
-  const transactions = await prisma.transaction.findMany({
-    where: { householdId, date: { gte: start, lte: end }, isHidden: false },
+  const transactions = await prisma.transactionJournal.findMany({
+    where: { householdId, date: { gte: start, lte: end }, isHidden: false, isDeleted: false },
   });
-  const summary = buildCashFlowSummary(transactions.map((t) => ({ amount: t.amount, type: t.amount >= 0 ? 'income' : 'expense' })));
+  const summary = buildCashFlowSummary(transactions.map((t) => ({ amount: Number(t.amountDecimal), type: t.transactionType === 'deposit' ? 'income' : 'expense' })));
   const net = summary.income - summary.expense;
   const savingsRate = summary.income > 0 ? Math.round((net / summary.income) * 100) : 0;
   return { income: summary.income, expenses: summary.expense, net, savingsRate };
@@ -69,12 +69,13 @@ async function getTaxData(householdId: string, year: number) {
   const start = new Date(year, 0, 1);
   const end = new Date(year, 11, 31, 23, 59, 59);
 
-  const transactions = await prisma.transaction.findMany({
+  const transactions = await prisma.transactionJournal.findMany({
     where: {
       householdId,
       isHidden: false,
       date: { gte: start, lte: end },
       category: { isTaxDeductible: true },
+      isDeleted: false,
     },
     include: { category: { select: { id: true, name: true, icon: true } } },
   });
@@ -85,10 +86,10 @@ async function getTaxData(householdId: string, year: number) {
     const key = t.category.id;
     const existing = categoryMap.get(key);
     if (existing) {
-      existing.amount += Math.abs(t.amount);
+      existing.amount += Math.abs(Number(t.amountDecimal));
       existing.transactionCount += 1;
     } else {
-      categoryMap.set(key, { name: t.category.name, icon: t.category.icon ?? null, amount: Math.abs(t.amount), transactionCount: 1 });
+      categoryMap.set(key, { name: t.category.name, icon: t.category.icon ?? null, amount: Math.abs(Number(t.amountDecimal)), transactionCount: 1 });
     }
   }
 

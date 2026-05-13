@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { parseReceiptEmail } from './emailParser.js';
 import { createModuleLogger } from './logger.js';
 import { decryptImapConfig } from './imapConfig.js';
+import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from './legacyToJournalMigration.js';
 const log = createModuleLogger('imap');
 
 export interface ImapConfig {
@@ -149,16 +150,28 @@ export async function runImapCheckForAllHouseholds(prisma: PrismaClient): Promis
 
         if (!account) continue;
 
-        await prisma.transaction.create({
-          data: {
-            householdId: config.householdId,
-            accountId: account.id,
-            description: txn.description,
-            originalDescription: txn.description,
-            amount: txn.amount,
-            date: new Date(txn.date),
-            needsReview: true,
-          },
+        // Create email transaction as journal entry
+        const virtualAccounts = await getVirtualAccountsByType(config.householdId);
+        const expenseAccountId = txn.amount < 0 ? virtualAccounts.expenseAccountId : virtualAccounts.revenueAccountId;
+
+        if (!expenseAccountId) {
+          log.warn(`No virtual account for household ${config.householdId}, skipping IMAP import`);
+          continue;
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await createJournalFromLegacyTransaction(
+            tx,
+            {
+              householdId: config.householdId,
+              accountId: account.id,
+              description: txn.description,
+              amount: txn.amount,
+              date: new Date(txn.date),
+            },
+            txn.amount < 0 ? expenseAccountId : undefined,
+            txn.amount > 0 ? expenseAccountId : undefined,
+          );
         });
       }
     } catch (err) {

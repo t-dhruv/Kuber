@@ -236,7 +236,7 @@ export async function startBatchAutoCategorize(
   }
 
   // Clear stale AI suggestions so we start fresh
-  await prisma.transaction.updateMany({
+  await prisma.transactionJournal.updateMany({
     where: {
       householdId,
       needsReview: true,
@@ -256,11 +256,11 @@ export async function startBatchAutoCategorize(
     orderBy: { sortOrder: 'asc' },
   });
 
-  const uncategorized = await prisma.transaction.findMany({
+  const uncategorized = await prisma.transactionJournal.findMany({
     where: { householdId, categoryId: null, isHidden: false, needsReview: false },
     orderBy: { date: 'desc' },
     take: limit,
-    select: { id: true, description: true, amount: true, merchantId: true, notes: true },
+    select: { id: true, description: true, amountDecimal: true, notes: true },
   });
 
   // Apply rules first — direct category assignment, no review needed
@@ -275,11 +275,11 @@ export async function startBatchAutoCategorize(
 
       const matchInput: import('./ruleEngine.js').RuleMatchInput = {
         description: txn.description,
-        amount:      txn.amount,
+        amount:      Number(txn.amountDecimal),
         notes:       txn.notes,
       };
       if (ruleMatches(conditions, matchInput)) {
-        await prisma.transaction.update({
+        await prisma.transactionJournal.update({
           where: { id: txn.id },
           data: { categoryId: setCatAction.value!, needsReview: false },
         });
@@ -316,7 +316,8 @@ export async function startBatchAutoCategorize(
 
     // Deduplicate by merchant before chunking — "AMAZON* ABC123" and "AMAZON* XYZ456"
     // collapse to one representative; result fans back to all txns in the group.
-    const { representatives, keyById, groupByKey } = deduplicateByMerchant(needsAi);
+    const needsAiWithAmount = needsAi.map(t => ({ ...t, amount: Number(t.amountDecimal) }));
+    const { representatives, keyById, groupByKey } = deduplicateByMerchant(needsAiWithAmount);
 
     // Fire and forget — processes deduplicated representatives in chunks
     (async () => {
@@ -335,7 +336,7 @@ export async function startBatchAutoCategorize(
             for (const txnId of siblingIds) {
               if (suggestion) {
                 updates.push(
-                  prisma.transaction.updateMany({
+                  prisma.transactionJournal.updateMany({
                     where: { id: txnId, categoryId: null },
                     data: {
                       needsReview: true,
@@ -420,20 +421,15 @@ export async function detectRuleSuggestions(
     })
   );
 
-  const reviewQueue = await prisma.transaction.findMany({
+  const reviewQueue = await prisma.transactionJournal.findMany({
     where: {
       householdId,
       needsReview: true,
-      OR: [
-        { aiSuggestedCategoryId: { not: null } },
-        { aiSuggestedCategoryName: { not: null } },
-      ],
+      isDeleted: false,
     },
     select: {
       description: true,
-      aiSuggestedCategoryId: true,
-      aiSuggestedCategoryName: true,
-      aiSuggestedCategory: { select: { name: true } },
+      category: { select: { name: true } },
     },
   });
 
@@ -448,9 +444,8 @@ export async function detectRuleSuggestions(
     const firstToken = txn.description.toLowerCase().split(/[\s_-]/)[0].trim();
     if (!firstToken || firstToken.length < 3) continue;
 
-    const catId = txn.aiSuggestedCategoryId ?? null;
-    const catName = txn.aiSuggestedCategory?.name ?? txn.aiSuggestedCategoryName ?? '';
-    const key = `${firstToken}::${catId ?? catName}`;
+    const catName = txn.category?.name ?? '';
+    const key = `${firstToken}::${catName}`;
 
     const existing = groups.get(key);
     if (existing) {
@@ -458,7 +453,7 @@ export async function detectRuleSuggestions(
     } else {
       groups.set(key, {
         value: firstToken,
-        suggestedCategoryId: catId,
+        suggestedCategoryId: null,
         suggestedCategoryName: catName,
         count: 1,
       });

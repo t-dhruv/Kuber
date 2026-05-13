@@ -36,29 +36,31 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     const { start, end } = getYearBounds(year);
 
-    const transactions = await prisma.transaction.findMany({
+    const journals = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         date: { gte: start, lt: end },
         isHidden: false,
+        isDeleted: false,
         ...reportableCategoryFilter(),
       },
-      select: { date: true, amount: true },
+      select: { date: true, amountDecimal: true },
     });
 
     // Aggregate by month
     const monthMap = new Map<number, { income: number; expenses: number }>();
 
-    for (const t of transactions) {
-      const m = new Date(t.date).getMonth() + 1; // 1-based
+    for (const j of journals) {
+      const m = new Date(j.date).getMonth() + 1; // 1-based
       if (!monthMap.has(m)) {
         monthMap.set(m, { income: 0, expenses: 0 });
       }
       const entry = monthMap.get(m)!;
-      if (t.amount > 0) {
-        entry.income += t.amount;
+      const amount = Number(j.amountDecimal);
+      if (amount > 0) {
+        entry.income += amount;
       } else {
-        entry.expenses += Math.abs(t.amount);
+        entry.expenses += Math.abs(amount);
       }
     }
 
@@ -121,16 +123,17 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
 
     const { start, end } = getMonthBounds(year, month);
 
-    const transactions = await prisma.transaction.findMany({
+    const journals = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         date: { gte: start, lt: end },
         isHidden: false,
+        isDeleted: false,
         ...reportableCategoryFilter(),
       },
       select: {
         date: true,
-        amount: true,
+        amountDecimal: true,
         description: true,
         categoryId: true,
         category: {
@@ -138,7 +141,7 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
         },
         merchantId: true,
         merchant: {
-          select: { id: true, name: true, displayName: true },
+          select: { id: true, name: true },
         },
       },
     });
@@ -166,64 +169,63 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
     const dailyIncome = new Map<number, number>();
     const dailyExpenses = new Map<number, number>();
 
-    for (const t of transactions) {
-      const day = new Date(t.date).getDate();
+    for (const j of journals) {
+      const day = new Date(j.date).getDate();
+      const amount = Number(j.amountDecimal);
 
-      if (t.amount > 0) {
-        dailyIncome.set(day, (dailyIncome.get(day) ?? 0) + t.amount);
+      if (amount > 0) {
+        dailyIncome.set(day, (dailyIncome.get(day) ?? 0) + amount);
       } else {
-        dailyExpenses.set(day, (dailyExpenses.get(day) ?? 0) + Math.abs(t.amount));
+        dailyExpenses.set(day, (dailyExpenses.get(day) ?? 0) + Math.abs(amount));
       }
 
-      const catId = t.categoryId ?? '__uncategorized';
-      const catName = t.category?.name ?? 'Uncategorized';
-      const catIcon = t.category?.icon ?? null;
-      const catType = t.category?.type ?? 'EXPENSE';
+      const catId = j.categoryId ?? '__uncategorized';
+      const catName = j.category?.name ?? 'Uncategorized';
+      const catIcon = j.category?.icon ?? null;
+      const catType = j.category?.type ?? 'EXPENSE';
 
       // Merchant key: use merchantId if present, else fall back to description
-      const mKey = t.merchantId ?? `__desc_${t.description}`;
-      const mName = t.merchant
-        ? (t.merchant.displayName || t.merchant.name)
-        : t.description;
-      const mId = t.merchantId ?? null;
+      const mKey = j.merchantId ?? `__desc_${j.description}`;
+      const mName = j.merchant?.name ?? j.description;
+      const mId = j.merchantId ?? null;
 
-      if (catType?.toUpperCase() === 'INCOME' || t.amount > 0) {
+      if (catType?.toUpperCase() === 'INCOME' || amount > 0) {
         const existing = incomeByCategory.get(catId);
         if (existing) {
-          existing.amount += t.amount > 0 ? t.amount : Math.abs(t.amount);
+          existing.amount += amount > 0 ? amount : Math.abs(amount);
         } else {
           incomeByCategory.set(catId, {
             categoryId: catId,
             categoryName: catName,
             categoryIcon: catIcon,
-            amount: t.amount > 0 ? t.amount : Math.abs(t.amount),
+            amount: amount > 0 ? amount : Math.abs(amount),
           });
         }
 
         const mExisting = incomeByMerchantMap.get(mKey);
         if (mExisting) {
-          mExisting.amount += t.amount > 0 ? t.amount : Math.abs(t.amount);
+          mExisting.amount += amount > 0 ? amount : Math.abs(amount);
           mExisting.transactionCount += 1;
         } else {
           incomeByMerchantMap.set(mKey, {
             merchantId: mId,
             merchantName: mName,
-            amount: t.amount > 0 ? t.amount : Math.abs(t.amount),
+            amount: amount > 0 ? amount : Math.abs(amount),
             transactionCount: 1,
           });
         }
       } else {
-        const groupName = t.category?.group?.name ?? 'Uncategorized';
-        const groupId = t.category?.groupId ?? '__ungrouped';
+        const groupName = j.category?.group?.name ?? 'Uncategorized';
+        const groupId = j.category?.groupId ?? '__ungrouped';
         const existing = expenseByCategory.get(catId);
         if (existing) {
-          existing.amount += Math.abs(t.amount);
+          existing.amount += Math.abs(amount);
         } else {
           expenseByCategory.set(catId, {
             categoryId: catId,
             categoryName: catName,
             categoryIcon: catIcon,
-            amount: Math.abs(t.amount),
+            amount: Math.abs(amount),
             groupName,
             groupId,
           });
@@ -231,13 +233,13 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
 
         const mExisting = expenseByMerchantMap.get(mKey);
         if (mExisting) {
-          mExisting.amount += Math.abs(t.amount);
+          mExisting.amount += Math.abs(amount);
           mExisting.transactionCount += 1;
         } else {
           expenseByMerchantMap.set(mKey, {
             merchantId: mId,
             merchantName: mName,
-            amount: Math.abs(t.amount),
+            amount: Math.abs(amount),
             transactionCount: 1,
           });
         }
@@ -373,15 +375,16 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
 
-    const transactions = await prisma.transaction.findMany({
+    const journals = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         date: { gte: startDate, lt: endDate },
         isHidden: false,
+        isDeleted: false,
         ...reportableCategoryFilter(),
       },
       select: {
-        amount: true,
+        amountDecimal: true,
         categoryId: true,
         category: {
           select: {
@@ -403,23 +406,24 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
     type ExpenseCategory = { id: string; name: string; icon: string; amount: number; bucketType: string };
     const expenseCatMap = new Map<string, ExpenseCategory>();
 
-    for (const t of transactions) {
-      const catId = t.categoryId ?? '__uncategorized';
-      const catName = t.category?.name ?? 'Uncategorized';
-      const catIcon = t.category?.icon ?? '';
-      const catType = t.category?.type ?? 'EXPENSE';
-      const bucketType = t.category?.bucketType ?? 'uncategorized';
+    for (const j of journals) {
+      const catId = j.categoryId ?? '__uncategorized';
+      const catName = j.category?.name ?? 'Uncategorized';
+      const catIcon = j.category?.icon ?? '';
+      const catType = j.category?.type ?? 'EXPENSE';
+      const bucketType = j.category?.bucketType ?? 'uncategorized';
+      const amount = Number(j.amountDecimal);
 
-      if (catType?.toUpperCase() === 'INCOME' || t.amount > 0) {
-        const amt = Math.abs(t.amount);
+      if (catType?.toUpperCase() === 'INCOME' || amount > 0) {
+        const amt = Math.abs(amount);
         const existing = incomeMap.get(catId);
         if (existing) {
           existing.amount += amt;
         } else {
           incomeMap.set(catId, { id: catId, name: catName, icon: catIcon, amount: amt });
         }
-      } else if (t.amount < 0) {
-        const amt = Math.abs(t.amount);
+      } else if (amount < 0) {
+        const amt = Math.abs(amount);
         const existing = expenseCatMap.get(catId);
         if (existing) {
           existing.amount += amt;
@@ -521,26 +525,28 @@ router.get('/forecast', async (req: AuthRequest, res: Response) => {
     const historyStart = new Date(now);
     historyStart.setDate(historyStart.getDate() - 90);
 
-    const historicalTxns = await prisma.transaction.findMany({
+    const historicalJournals = await prisma.transactionJournal.findMany({
       where: {
         householdId,
         date: { gte: historyStart, lte: now },
         isHidden: false,
-        recurringItemId: null,
+        isRecurring: false,
+        isDeleted: false,
         ...reportableCategoryFilter(),
       },
-      select: { amount: true },
+      select: { amountDecimal: true },
     });
 
     let totalIncome = 0;
     let totalExpenses = 0;
-    for (const t of historicalTxns) {
-      if (t.amount > 0) totalIncome += t.amount;
-      else totalExpenses += Math.abs(t.amount);
+    for (const j of historicalJournals) {
+      const amount = Number(j.amountDecimal);
+      if (amount > 0) totalIncome += amount;
+      else totalExpenses += Math.abs(amount);
     }
 
-    const avgDailyIncome = historicalTxns.length > 0 ? totalIncome / 90 : 0;
-    const avgDailyExpense = historicalTxns.length > 0 ? totalExpenses / 90 : 0;
+    const avgDailyIncome = historicalJournals.length > 0 ? totalIncome / 90 : 0;
+    const avgDailyExpense = historicalJournals.length > 0 ? totalExpenses / 90 : 0;
 
     // 3. Known recurring items in the forecast window
     const recurringItems = await prisma.recurringItem.findMany({

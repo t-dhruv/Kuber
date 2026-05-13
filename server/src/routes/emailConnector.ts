@@ -9,6 +9,7 @@ import { prisma } from '../lib/prisma.js';
 import { AuthRequest, requireHouseholdRole } from '../middleware/auth.js';
 import { fetchReceiptEmails } from '../lib/imapWatcher.js';
 import { decryptImapConfig, encryptImapConfig } from '../lib/imapConfig.js';
+import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration.js';
 
 const router = Router();
 const requireHouseholdAdmin = requireHouseholdRole(['owner', 'admin']);
@@ -114,16 +115,27 @@ router.post('/sync', requireHouseholdAdmin, async (req: AuthRequest, res: Respon
         : await prisma.account.findFirst({ where: { householdId: config.householdId, type: 'checking' } });
       if (!account) continue;
 
-      await prisma.transaction.create({
-        data: {
-          householdId: config.householdId,
-          accountId: account.id,
-          description: txn.description,
-          originalDescription: txn.description,
-          amount: txn.amount,
-          date: new Date(txn.date),
-          needsReview: true,
-        },
+      // Create email transaction as journal entry
+      const virtualAccounts = await getVirtualAccountsByType(config.householdId);
+      const expenseAccountId = txn.amount < 0 ? virtualAccounts.expenseAccountId : virtualAccounts.revenueAccountId;
+
+      if (!expenseAccountId) {
+        continue;
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await createJournalFromLegacyTransaction(
+          tx,
+          {
+            householdId: config.householdId,
+            accountId: account.id,
+            description: txn.description,
+            amount: txn.amount,
+            date: new Date(txn.date),
+          },
+          txn.amount < 0 ? expenseAccountId : undefined,
+          txn.amount > 0 ? expenseAccountId : undefined,
+        );
       });
       imported++;
     }

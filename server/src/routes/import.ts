@@ -21,6 +21,7 @@ import { parseDate } from '../lib/dateUtils.js';
 import { detectColumnMapping } from '../lib/csvColumnDetector.js';
 import { detectLocaleFormat, parseAmount, mergeDebitCredit } from '../lib/amountParser.js';
 import { transactionsImportedTotal } from '../lib/metrics.js';
+import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration.js';
 
 const router = Router();
 
@@ -145,14 +146,14 @@ async function parseUploadedFile(
   }));
 
   // Fetch existing hashes for this account and compute dedup set
-  const existingTxns = await prisma.transaction.findMany({
-    where: { accountId, householdId, isHidden: false },
-    select: { date: true, description: true, amount: true },
+  const existingJournals = await prisma.transactionJournal.findMany({
+    where: { entries: { some: { accountId } }, householdId, isHidden: false },
+    select: { date: true, description: true, amountDecimal: true },
   });
 
   const existingHashes = new Set(
-    existingTxns.map((t) =>
-      computeDedupHash(t.date.toISOString().slice(0, 10), t.description, t.amount)
+    existingJournals.map((j) =>
+      computeDedupHash(j.date.toISOString().slice(0, 10), j.description, Number(j.amountDecimal))
     )
   );
 
@@ -398,14 +399,14 @@ router.post('/parse-with-mapping', upload.single('file'), async (req: AuthReques
     const headers = rows[0];
     const dataRows = rows.slice(1);
 
-    // Fetch existing transactions for dedup (recompute hash from date+desc+amount)
-    const existingTxns = await prisma.transaction.findMany({
-      where: { accountId, householdId: req.householdId!, isHidden: false },
-      select: { date: true, description: true, amount: true },
+    // Fetch existing journals for dedup (recompute hash from date+desc+amount)
+    const existingJournals = await prisma.transactionJournal.findMany({
+      where: { entries: { some: { accountId } }, householdId: req.householdId!, isHidden: false },
+      select: { date: true, description: true, amountDecimal: true },
     });
     const hashSet = new Set(
-      existingTxns.map((t) =>
-        computeDedupHash(t.date.toISOString().slice(0, 10), t.description, t.amount)
+      existingJournals.map((j) =>
+        computeDedupHash(j.date.toISOString().slice(0, 10), j.description, Number(j.amountDecimal))
       )
     );
 
@@ -672,20 +673,34 @@ router.post('/confirm', async (req: AuthRequest, res) => {
 
           const batchNote = batchId ? `[batch:${batchId}]` : null;
           const notes = [row.notes, batchNote].filter(Boolean).join(' ') || null;
-          await tx.transaction.create({
-            data: {
+
+          // Get virtual accounts for journal creation (cache after first lookup)
+          const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
+          if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
+            throw new Error('Missing virtual accounts for import');
+          }
+
+          // Create journal instead of legacy transaction
+          const meta: Record<string, string> = {};
+          if (merchantId) meta.legacyMerchantId = merchantId;
+          if (bankSource) meta.bankSource = bankSource;
+          if (batchId) meta.batchId = batchId;
+
+          await createJournalFromLegacyTransaction(
+            tx,
+            {
               householdId: req.householdId!,
               accountId,
               date: txDate,
               description: row.description,
-              originalDescription: row.description,
               amount: row.amount,
-              categoryId: resolvedCategoryId,
-              merchantId,
-              notes,
-              needsReview: !resolvedCategoryId,
+              categoryId: resolvedCategoryId ?? undefined,
+              notes: notes ?? undefined,
             },
-          });
+            row.amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
+            row.amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+          );
+
           importedAmountSum += row.amount;
           imported++;
         } catch (err) {
@@ -705,10 +720,10 @@ router.post('/confirm', async (req: AuthRequest, res) => {
 
     // Create rollback checkpoint
     if (imported > 0) {
-      // We need the IDs of newly created transactions — re-query by hash match or by createdAt
-      // Simplest: query transactions created in the last few seconds for this account
-      const recentIds = await prisma.transaction.findMany({
-        where: { accountId, householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
+      // We need the IDs of newly created journals — re-query by createdAt
+      // Simplest: query journals created in the last few seconds
+      const recentIds = await prisma.transactionJournal.findMany({
+        where: { householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
         select: { id: true },
       });
       await createCheckpoint(
@@ -801,13 +816,13 @@ router.post('/webhook', async (req: AuthRequest, res) => {
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     // Dedup check
-    const existingTxns = await prisma.transaction.findMany({
-      where: { accountId, householdId: req.householdId!, isHidden: false },
-      select: { date: true, description: true, amount: true },
+    const existingJournals = await prisma.transactionJournal.findMany({
+      where: { entries: { some: { accountId } }, householdId: req.householdId!, isHidden: false },
+      select: { date: true, description: true, amountDecimal: true },
     });
     const existingHashes = new Set(
-      existingTxns.map((t) =>
-        computeDedupHash(t.date.toISOString().slice(0, 10), t.description, t.amount)
+      existingJournals.map((j) =>
+        computeDedupHash(j.date.toISOString().slice(0, 10), j.description, Number(j.amountDecimal))
       )
     );
 
@@ -835,11 +850,37 @@ router.post('/webhook', async (req: AuthRequest, res) => {
       });
     }
 
-    // Bulk insert — single DB roundtrip
+    // Bulk insert via journals
+    let imported = 0;
     if (toCreate.length > 0) {
-      await prisma.transaction.createMany({ data: toCreate });
+      const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
+      if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
+        throw new Error('Missing virtual accounts for webhook import');
+      }
+
+      await prisma.$transaction(async (tx) => {
+        for (const row of toCreate) {
+          try {
+            await createJournalFromLegacyTransaction(
+              tx,
+              {
+                householdId: row.householdId,
+                accountId: row.accountId,
+                date: row.date,
+                description: row.description,
+                amount: row.amount,
+              },
+              row.amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
+              row.amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+            );
+            imported++;
+          } catch (err) {
+            // Skip individual errors in bulk import
+            console.error('Webhook import error:', err);
+          }
+        }
+      });
     }
-    const imported = toCreate.length;
 
     await prisma.importHistory.create({
       data: {

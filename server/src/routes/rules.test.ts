@@ -200,7 +200,7 @@ describe('rules journal simulation and application', () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ matched: 1, journalsMatched: ['journal-1'], checkpointId: '' });
     expect(prisma.transactionJournal.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { householdId: 'hh-1' },
+      where: expect.objectContaining({ householdId: 'hh-1', isDeleted: false }),
     }));
   });
 

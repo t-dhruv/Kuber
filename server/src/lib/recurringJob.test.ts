@@ -25,46 +25,66 @@ describe('advanceNextDate', () => {
 
 describe('processRecurringItems', () => {
   function makePrisma({ items = [] }: { items?: any[] } = {}) {
-    const txCreate = vi.fn().mockResolvedValue({ id: 'tx-new' });
+    const journalCreate = vi.fn().mockResolvedValue({ id: 'journal-new' });
+    const groupCreate = vi.fn().mockResolvedValue({ id: 'group-new' });
     const riUpdate = vi.fn().mockResolvedValue({});
     const riFindMany = vi.fn().mockResolvedValue(items);
+    const accountFindFirst = vi.fn()
+      .mockResolvedValueOnce({ id: 'expense-1' })
+      .mockResolvedValueOnce({ id: 'revenue-1' });
+    const transaction = vi.fn(async (fn: any) => fn({
+      recurringItem: { update: riUpdate },
+      transactionGroup: { create: groupCreate },
+      transactionJournal: { create: journalCreate },
+    }));
+
     return {
       prisma: {
         recurringItem: { findMany: riFindMany, update: riUpdate },
-        transaction: { create: txCreate },
+        account: { findFirst: accountFindFirst },
+        $transaction: transaction,
       },
-      txCreate, riUpdate, riFindMany,
+      accountFindFirst,
+      groupCreate,
+      journalCreate,
+      riUpdate,
+      riFindMany,
+      transaction,
     };
   }
 
   beforeEach(() => { vi.clearAllMocks(); });
 
   it('skips items where isAutopay is false', async () => {
-    const { prisma, txCreate } = makePrisma({
+    const { prisma, journalCreate } = makePrisma({
       items: [{ id: 'ri-1', isAutopay: false, nextDate: new Date('2026-04-01'), frequency: 'monthly', householdId: 'hh-1', accountId: 'acc-1', amount: 100, name: 'Rent', categoryId: null }],
     });
     await processRecurringItems(prisma as any);
-    expect(txCreate).not.toHaveBeenCalled();
+    expect(journalCreate).not.toHaveBeenCalled();
   });
 
-  it('creates transaction and advances nextDate for overdue autopay item', async () => {
+  it('creates journal and advances nextDate for overdue autopay item', async () => {
     const nextDate = new Date('2026-04-01');
-    const { prisma, txCreate, riUpdate } = makePrisma({
+    const { prisma, journalCreate, riUpdate } = makePrisma({
       items: [{ id: 'ri-1', isAutopay: true, nextDate, frequency: 'monthly', householdId: 'hh-1', accountId: 'acc-1', amount: 1200, name: 'Rent', categoryId: 'cat-1' }],
     });
     await processRecurringItems(prisma as any);
-    expect(txCreate).toHaveBeenCalledWith({
+    expect(journalCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         householdId: 'hh-1',
-        accountId: 'acc-1',
+        transactionType: 'withdrawal',
         categoryId: 'cat-1',
         description: 'Rent',
-        amount: -1200,
+        amountDecimal: 1200,
         date: nextDate,
-        isRecurring: true,
-        recurringItemId: 'ri-1',
-        needsReview: false,
+        entries: {
+          create: [
+            { accountId: 'acc-1', amountDecimal: -1200, currencyCode: 'USD' },
+            { accountId: 'expense-1', amountDecimal: 1200, currencyCode: 'USD' },
+          ],
+        },
       }),
+      include: expect.objectContaining({ entries: true }),
     });
     expect(riUpdate).toHaveBeenCalledWith({
       where: { id: 'ri-1' },

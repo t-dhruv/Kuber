@@ -66,11 +66,11 @@ router.post('/:id/split', async (req: AuthRequest, res: Response) => {
 
   const { splits } = parsed.data;
 
-  const txn = await prisma.transaction.findFirst({ where: { id, householdId } });
-  if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+  const journal = await prisma.transactionJournal.findFirst({ where: { id, householdId } });
+  if (!journal) return res.status(404).json({ error: 'Transaction not found' });
 
   try {
-    validateSplitAmounts(txn.amount, splits);
+    validateSplitAmounts(Number(journal.amountDecimal), splits);
   } catch (err: unknown) {
     return res.status(400).json({ error: err instanceof Error ? err.message : 'Validation error' });
   }
@@ -98,24 +98,31 @@ router.post('/:id/split', async (req: AuthRequest, res: Response) => {
         notes:         s.notes ?? null,
       })),
     });
-      return tx.transaction.update({
-        where: { id },
-        data: {
-          isSplit:      true,
-          splitDetails: Prisma.DbNull,
-        },
-        include: {
-          category: { select: { id: true, name: true, icon: true } },
-          account:  { select: { id: true, name: true } },
-          splits: {
-            include: { category: { select: { id: true, name: true, icon: true } } },
-            orderBy: { createdAt: 'asc' },
-          },
-        },
-      });
+
+    return tx.transactionJournal.update({
+      where: { id },
+      data: { isSplit: true },
+      include: {
+        category: { select: { id: true, name: true, icon: true } },
+        entries: { select: { account: { select: { id: true, name: true } } } },
+      },
+    });
   });
 
-  return res.json(updated);
+  // Shape response to match expected format
+  const formatted = {
+    id: updated.id,
+    date: updated.date,
+    description: updated.description,
+    categoryId: updated.categoryId,
+    category: updated.category,
+    accountId: updated.entries[0]?.account?.id ?? null,
+    account: updated.entries[0]?.account ?? null,
+    amountDecimal: updated.amountDecimal,
+    isSplit: updated.isSplit,
+  };
+
+  return res.json(formatted);
 });
 
 // ─── GET /api/v1/transactions/:id/splits ─────────────────────────────────────
@@ -124,13 +131,13 @@ router.get('/:id/splits', async (req: AuthRequest, res: Response) => {
   const householdId = req.householdId!;
   const { id }      = req.params;
 
-  const txn = await prisma.transaction.findFirst({
+  const journal = await prisma.transactionJournal.findFirst({
     where: { id, householdId },
     select: { id: true, isSplit: true },
   });
-  if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+  if (!journal) return res.status(404).json({ error: 'Transaction not found' });
 
-  if (!txn.isSplit) return res.json([]);
+  if (!journal.isSplit) return res.json([]);
 
   const splits = await prisma.transactionSplit.findMany({
     where:   { transactionId: id },
@@ -147,14 +154,14 @@ router.delete('/:id/split', async (req: AuthRequest, res: Response) => {
   const householdId = req.householdId!;
   const { id }      = req.params;
 
-  const txn = await prisma.transaction.findFirst({ where: { id, householdId } });
-  if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+  const journal = await prisma.transactionJournal.findFirst({ where: { id, householdId } });
+  if (!journal) return res.status(404).json({ error: 'Transaction not found' });
 
   await prisma.$transaction(async (tx) => {
     await tx.transactionSplit.deleteMany({ where: { transactionId: id } });
-    await tx.transaction.update({
+    await tx.transactionJournal.update({
       where: { id },
-      data:  { isSplit: false, splitDetails: Prisma.DbNull },
+      data:  { isSplit: false },
     });
   });
 

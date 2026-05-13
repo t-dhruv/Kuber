@@ -9,8 +9,8 @@ interface CreateLinkInput {
 
 const LINK_INCLUDE = {
   linkType: { select: { name: true, inward: true, outward: true } },
-  from:     { select: { id: true, description: true, amount: true, date: true } },
-  to:       { select: { id: true, description: true, amount: true, date: true } },
+  from:     { select: { id: true, description: true, amountDecimal: true, date: true } },
+  to:       { select: { id: true, description: true, amountDecimal: true, date: true } },
 } as const;
 
 export async function listLinkTypes() {
@@ -21,8 +21,8 @@ export async function createLink(input: CreateLinkInput) {
   if (input.fromId === input.toId) throw new Error('Cannot link a transaction to itself');
 
   const [fromTx, toTx] = await Promise.all([
-    prisma.transaction.findFirst({ where: { id: input.fromId, householdId: input.householdId } }),
-    prisma.transaction.findFirst({ where: { id: input.toId,   householdId: input.householdId } }),
+    prisma.transactionJournal.findFirst({ where: { id: input.fromId, householdId: input.householdId, isDeleted: false } }),
+    prisma.transactionJournal.findFirst({ where: { id: input.toId,   householdId: input.householdId, isDeleted: false } }),
   ]);
   if (!fromTx || !toTx) throw new Error('Transaction not found');
 

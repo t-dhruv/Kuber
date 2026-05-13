@@ -267,7 +267,7 @@ async function getMatchInputFromTestBody(body: z.infer<typeof testBodySchema>, h
   if (body.matchInput) return body.matchInput;
 
   const journal = await prisma.transactionJournal.findFirst({
-    where: { id: body.journalId!, householdId },
+    where: { id: body.journalId!, householdId, isDeleted: false },
     include: JOURNAL_INCLUDE,
   });
   if (!journal) throw new Error('Transaction journal not found');
@@ -277,7 +277,7 @@ async function getMatchInputFromTestBody(body: z.infer<typeof testBodySchema>, h
 
 async function listJournalRuleCandidates(householdId: string) {
   return prisma.transactionJournal.findMany({
-    where: { householdId },
+    where: { householdId, isDeleted: false },
     include: JOURNAL_INCLUDE,
     orderBy: [{ date: 'asc' }, { id: 'asc' }],
   });

@@ -24,7 +24,7 @@ export function parseSearchQuery(query: string): SearchNode[] {
   return nodes;
 }
 
-type TxWhere = Prisma.TransactionWhereInput;
+type TxWhere = Prisma.TransactionJournalWhereInput;
 
 const OP_TO_PRISMA: Record<string, string> = {
   '>':  'gt',
@@ -58,10 +58,10 @@ const FIELD_BUILDERS: Record<string, (value: string, op: string) => TxWhere> = {
   amount: (v, op) => {
     const num      = parseFloat(v);
     const prismaOp = OP_TO_PRISMA[op] ?? 'equals';
-    return { amount: { [prismaOp]: num } as Prisma.FloatFilter<'Transaction'> };
+    return { amountDecimal: { [prismaOp]: num } as Prisma.DecimalFilter<'TransactionJournal'> };
   },
   category:    (v) => ({ category: { name: { contains: v, mode: 'insensitive' } } }),
-  account:     (v) => ({ account: { name: { contains: v, mode: 'insensitive' } } }),
+  account:     (v) => ({ entries: { some: { account: { name: { contains: v, mode: 'insensitive' } } } } }),
   tag:         (v) => ({ tags: { some: { tag: { name: { contains: v, mode: 'insensitive' } } } } }),
   date:        (v) => resolveDateKeyword(v),
   date_before: (v) => ({ date: { lt: new Date(v) } }),

@@ -13,9 +13,9 @@ export async function createCheckpoint(
 ): Promise<string> {
   if (txnIds.length === 0) return '';
 
-  const txns = await prisma.transaction.findMany({
-    where: { id: { in: txnIds }, householdId },
-    select: { id: true, amount: true, description: true, categoryId: true, merchantId: true, isHidden: true, date: true, notes: true },
+  const txns = await prisma.transactionJournal.findMany({
+    where: { id: { in: txnIds }, householdId, isDeleted: false },
+    select: { id: true, amountDecimal: true, description: true, categoryId: true, isHidden: true, date: true, notes: true },
   });
 
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -25,7 +25,15 @@ export async function createCheckpoint(
       householdId,
       type,
       label,
-      snapshot: txns as unknown as import('@prisma/client').Prisma.JsonValue[],
+      snapshot: txns.map(t => ({
+        id: t.id,
+        amountDecimal: t.amountDecimal.toString(),
+        description: t.description,
+        categoryId: t.categoryId,
+        isHidden: t.isHidden,
+        date: t.date.toISOString(),
+        notes: t.notes,
+      })) as unknown as import('@prisma/client').Prisma.JsonValue[],
       txnCount: txns.length,
       expiresAt,
     },
@@ -47,25 +55,27 @@ export async function rollbackCheckpoint(
   if (new Date() > checkpoint.expiresAt) throw new Error('Checkpoint has expired');
 
   const snapshot = checkpoint.snapshot as Array<{
-    id: string; amount: number; description: string; categoryId: string | null;
-    merchantId: string | null; isHidden: boolean; date: string; notes: string | null;
+    id: string; amountDecimal: string; description: string; categoryId: string | null;
+    isHidden: boolean; date: string; notes: string | null;
   }>;
 
   let restored = 0;
 
-  // For bulk-import: delete the created transactions
+  // For bulk-import: soft-delete the created journals
   if (checkpoint.type === 'bulk-import') {
     const ids = snapshot.map((s) => s.id);
-    await prisma.transaction.deleteMany({ where: { id: { in: ids }, householdId } });
+    await prisma.transactionJournal.updateMany({
+      where: { id: { in: ids }, householdId },
+      data: { isDeleted: true, updatedAt: new Date() },
+    });
     restored = ids.length;
   } else {
     // For rule/categorize/delete: restore field values
     for (const snap of snapshot) {
-      await prisma.transaction.updateMany({
+      await prisma.transactionJournal.updateMany({
         where: { id: snap.id, householdId },
         data: {
           categoryId: snap.categoryId,
-          merchantId: snap.merchantId,
           isHidden: snap.isHidden,
           notes: snap.notes,
         },
