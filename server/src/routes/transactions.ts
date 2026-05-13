@@ -1419,6 +1419,19 @@ router.post('/:id/convert-transfer', async (req: AuthRequest, res: Response) => 
       return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid input' });
     }
 
+    // Try to find via journal first
+    const existingJournal = await prisma.transactionJournal.findFirst({
+      where: {
+        householdId,
+        meta: { some: { name: 'legacyTransactionId', value: id } },
+      },
+      include: {
+        meta: true,
+        category: { select: { id: true, name: true, icon: true } },
+        entries: { include: { account: { select: { id: true, name: true } } } },
+      },
+    });
+
     const existing = await prisma.transaction.findFirst({
       where: { id, householdId },
       include: TX_INCLUDE,
