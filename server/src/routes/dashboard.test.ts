@@ -56,8 +56,8 @@ describe('dashboard route integration', () => {
     });
     expect(queryJournalAmounts).toHaveBeenCalledWith(expect.objectContaining({
       householdId: 'household-1',
-      dateFrom: new Date('2026-05-01T04:00:00.000Z'),
-      dateTo: new Date('2026-06-01T04:00:00.000Z'),
+      dateFrom: new Date(2026, 4, 1),
+      dateTo: new Date(2026, 5, 1),
     }));
     expect(res.body).toMatchObject({
       netWorth: { current: 750 },
