@@ -24,10 +24,10 @@ const upload = multer({
 
 router.post('/transactions/:txId/attachments', upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
-    const tx = await prisma.transaction.findFirst({
+    const journal = await prisma.transactionJournal.findFirst({
       where: { id: req.params.txId, householdId: req.householdId! },
     });
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (!journal) return res.status(404).json({ error: 'Transaction not found' });
     if (!req.file) return res.status(400).json({ error: 'File required' });
 
     const stored = await storeFile(req.householdId!, req.params.txId, req.file.originalname, req.file.buffer);
@@ -58,10 +58,10 @@ router.post('/transactions/:txId/attachments', upload.single('file'), async (req
 
 router.get('/transactions/:txId/attachments', async (req: AuthRequest, res: Response) => {
   try {
-    const tx = await prisma.transaction.findFirst({
+    const journal = await prisma.transactionJournal.findFirst({
       where: { id: req.params.txId, householdId: req.householdId! },
     });
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (!journal) return res.status(404).json({ error: 'Transaction not found' });
 
     const attachments = await prisma.attachment.findMany({
       where:   { transactionId: req.params.txId, householdId: req.householdId! },
