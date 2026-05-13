@@ -53,16 +53,18 @@ router.post('/:accountId/reconcile', async (req: AuthRequest, res: Response) => 
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const { statementDate, statementBalance, clearedTransactionIds } = parsed.data;
 
-    await prisma.transaction.updateMany({
-      where: { id: { in: clearedTransactionIds }, accountId: req.params.accountId, householdId: req.householdId! },
-      data:  { isCleared: true, clearedDate: new Date(statementDate) },
+    // Mark journals as reconciled
+    await prisma.transactionJournal.updateMany({
+      where: { id: { in: clearedTransactionIds }, householdId: req.householdId! },
+      data:  { isReconciled: true, reconciledAt: new Date(statementDate) },
     });
 
-    const clearedAgg = await prisma.transaction.aggregate({
-      where: { accountId: req.params.accountId, householdId: req.householdId!, isCleared: true },
-      _sum:  { amount: true },
+    // Aggregate reconciled journal amounts
+    const clearedAgg = await prisma.transactionJournal.aggregate({
+      where: { householdId: req.householdId!, isReconciled: true },
+      _sum:  { amountDecimal: true },
     });
-    const clearedTotal = clearedAgg._sum.amount ?? 0;
+    const clearedTotal = Number(clearedAgg._sum.amountDecimal ?? 0);
     const difference   = statementBalance - clearedTotal;
 
     if (Math.abs(difference) > 0.001) {
