@@ -86,14 +86,6 @@ export async function createJournalFromLegacyTransaction(
     meta,
   };
 
-  // Need virtual accounts for withdrawal/deposit
-  if (journalType === 'withdrawal' && !virtualExpenseAccountId) {
-    throw new Error('Virtual expense account required for withdrawal');
-  }
-  if (journalType === 'deposit' && !virtualRevenueAccountId) {
-    throw new Error('Virtual revenue account required for deposit');
-  }
-
   if (journalType === 'withdrawal') {
     journalInput.virtualExpenseAccountId = virtualExpenseAccountId;
   } else if (journalType === 'deposit') {

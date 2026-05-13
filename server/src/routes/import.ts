@@ -674,11 +674,8 @@ router.post('/confirm', async (req: AuthRequest, res) => {
           const batchNote = batchId ? `[batch:${batchId}]` : null;
           const notes = [row.notes, batchNote].filter(Boolean).join(' ') || null;
 
-          // Get virtual accounts for journal creation (cache after first lookup)
+          // Reuse existing virtual accounts when present; journal creation will create missing ones.
           const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
-          if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
-            throw new Error('Missing virtual accounts for import');
-          }
 
           // Create journal instead of legacy transaction
           const meta: Record<string, string> = {};
@@ -697,8 +694,8 @@ router.post('/confirm', async (req: AuthRequest, res) => {
               categoryId: resolvedCategoryId ?? undefined,
               notes: notes ?? undefined,
             },
-            row.amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
-            row.amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+            row.amount < 0 ? (virtualAccounts.expenseAccountId ?? undefined) : undefined,
+            row.amount > 0 ? (virtualAccounts.revenueAccountId ?? undefined) : undefined,
           );
 
           importedAmountSum += row.amount;
@@ -854,9 +851,6 @@ router.post('/webhook', async (req: AuthRequest, res) => {
     let imported = 0;
     if (toCreate.length > 0) {
       const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
-      if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
-        throw new Error('Missing virtual accounts for webhook import');
-      }
 
       await prisma.$transaction(async (tx) => {
         for (const row of toCreate) {
@@ -870,8 +864,8 @@ router.post('/webhook', async (req: AuthRequest, res) => {
                 description: row.description,
                 amount: row.amount,
               },
-              row.amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
-              row.amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+              row.amount < 0 ? (virtualAccounts.expenseAccountId ?? undefined) : undefined,
+              row.amount > 0 ? (virtualAccounts.revenueAccountId ?? undefined) : undefined,
             );
             imported++;
           } catch (err) {

@@ -738,11 +738,8 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
     // Merchant cache to avoid redundant DB calls within this import
     const merchantCache = new Map<string, string>(); // name -> id
 
-    // Get virtual accounts for journal creation
+    // Reuse existing virtual accounts when present; journal creation will create missing ones.
     const virtualAccounts = await getVirtualAccountsByType(householdId);
-    if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
-      return res.status(500).json({ error: 'Missing virtual accounts for import' });
-    }
 
     // Run all inserts in a transaction (including balance update for atomicity)
     const [created, createdJournals] = await prisma.$transaction(async (tx) => {
@@ -790,8 +787,8 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
             notes: row.notes ?? null,
             merchantId,
           },
-          row.amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
-          row.amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+          row.amount < 0 ? (virtualAccounts.expenseAccountId ?? undefined) : undefined,
+          row.amount > 0 ? (virtualAccounts.revenueAccountId ?? undefined) : undefined,
         );
         journals.push(journal);
         results.push(journal.journalId);
