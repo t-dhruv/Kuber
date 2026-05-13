@@ -99,15 +99,6 @@ router.post('/:id/split', async (req: AuthRequest, res: Response) => {
       })),
     });
 
-    // Update both Transaction (legacy) and TransactionJournal (new model)
-    await tx.transaction.update({
-      where: { id },
-      data: {
-        isSplit:      true,
-        splitDetails: Prisma.DbNull,
-      },
-    });
-
     return tx.transactionJournal.update({
       where: { id },
       data: { isSplit: true },

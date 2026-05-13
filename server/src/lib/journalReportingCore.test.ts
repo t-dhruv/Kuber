@@ -158,40 +158,30 @@ describe('journal reporting core', () => {
     expect(audit.transferJournals).toBe(1);
   });
 
-  it('includes unlinked legacy transactions so report charts do not go blank before backfill', async () => {
+  it('reads report rows from transaction journals without requiring the removed legacy transaction delegate', async () => {
     const prisma = {
-      transactionJournal: { findMany: vi.fn().mockResolvedValue([]) },
-      transactionJournalMeta: { findMany: vi.fn().mockResolvedValue([]) },
-      transaction: {
+      transactionJournal: {
         findMany: vi.fn().mockResolvedValue([
           {
-            id: 'legacy-food',
+            id: 'journal-food',
             householdId: 'hh-1',
-            accountId: 'acct-checking',
-            amount: -42,
-            amountDecimal: null,
+            transactionType: 'withdrawal',
+            amountDecimal: 42,
             date: new Date('2026-01-10T00:00:00.000Z'),
             description: 'Groceries',
-            isHidden: false,
-            isTransfer: false,
-            transferId: null,
             category: { id: 'cat-food', name: 'Food', icon: 'cart', type: 'expense', isTaxDeductible: false, excludeFromReports: false },
-            account: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false },
+            entries: [{ accountId: 'acct-checking', amountDecimal: -42, account: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false } }],
             tags: [{ tag: { id: 'tag-home', name: 'Home', color: '#111111' } }],
           },
           {
-            id: 'legacy-payroll',
+            id: 'journal-payroll',
             householdId: 'hh-1',
-            accountId: 'acct-checking',
-            amount: 500,
-            amountDecimal: null,
+            transactionType: 'deposit',
+            amountDecimal: 500,
             date: new Date('2026-01-15T00:00:00.000Z'),
             description: 'Payroll',
-            isHidden: false,
-            isTransfer: false,
-            transferId: null,
             category: { id: 'cat-pay', name: 'Salary', icon: null, type: 'income', isTaxDeductible: false, excludeFromReports: false },
-            account: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false },
+            entries: [{ accountId: 'acct-checking', amountDecimal: 500, account: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false } }],
             tags: [],
           },
         ]),
@@ -220,5 +210,6 @@ describe('journal reporting core', () => {
       start: new Date('2026-01-01'),
       end: new Date('2026-01-31'),
     })).toMatchObject({ income: 500, expenses: 42, net: 458 });
+    expect(prisma.transactionJournal.findMany).toHaveBeenCalled();
   });
 });

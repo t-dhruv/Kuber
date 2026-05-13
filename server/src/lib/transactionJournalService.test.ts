@@ -426,120 +426,22 @@ describe('deleteLegacyTransactionJournal', () => {
 
     await expect(deleteLegacyTransactionJournal('tx-1', prisma as any)).resolves.toBe(true);
 
-    expect(tx.transactionGroup.delete).toHaveBeenCalledWith({ where: { id: 'group-1' } });
+    expect(tx.transactionJournal.update).toHaveBeenCalledWith({
+      where: { id: 'journal-1' },
+      data: { isDeleted: true, updatedAt: expect.any(Date) },
+    });
   });
 });
 
 describe('backfillLegacyTransactionJournals', () => {
-  it('creates journals only for legacy transactions without journal metadata', async () => {
+  it('is a no-op after the legacy transaction model has been removed', async () => {
     const { prisma, tx } = makePrismaMock();
-    tx.transaction.findMany.mockResolvedValue([
-      {
-        id: 'tx-1',
-        householdId: 'hh-1',
-        accountId: 'checking-1',
-        amount: -12,
-        date: new Date('2026-05-01T00:00:00.000Z'),
-        description: 'Lunch',
-        currencyCode: 'USD',
-        categoryId: null,
-        notes: null,
-        isPending: false,
-        isCleared: false,
-        tags: [],
-      },
-      {
-        id: 'tx-2',
-        householdId: 'hh-1',
-        accountId: 'checking-1',
-        amount: 20,
-        date: new Date('2026-05-02T00:00:00.000Z'),
-        description: 'Refund',
-        currencyCode: 'USD',
-        categoryId: null,
-        notes: null,
-        isPending: false,
-        isCleared: false,
-        tags: [],
-      },
-    ]);
-    tx.transactionJournalMeta.findFirst
-      .mockResolvedValueOnce({ journal: { id: 'journal-existing', groupId: 'group-existing' } })
-      .mockResolvedValueOnce(null);
-    tx.account.findFirst.mockResolvedValue({ id: 'revenue-refund' });
 
     await expect(backfillLegacyTransactionJournals({ householdId: 'hh-1', limit: 50 }, prisma as any))
-      .resolves.toEqual({ scanned: 2, created: 1, skipped: 1 });
+      .resolves.toEqual({ scanned: 0, created: 0, skipped: 0 });
 
-    expect(tx.transaction.findMany).toHaveBeenCalledWith({
-      where: { householdId: 'hh-1' },
-      orderBy: [{ date: 'asc' }, { id: 'asc' }],
-      take: 50,
-      include: { tags: true },
-    });
-    expect(tx.transactionJournal.create).toHaveBeenCalledTimes(1);
-  });
-
-  it('backfills one transfer journal for a legacy transfer pair', async () => {
-    const { prisma, tx } = makePrismaMock();
-    tx.transaction.findMany.mockResolvedValue([
-      {
-        id: 'debit-1',
-        householdId: 'hh-1',
-        accountId: 'checking-1',
-        amount: -250,
-        date: new Date('2026-05-01T00:00:00.000Z'),
-        description: 'Transfer to Savings',
-        currencyCode: 'USD',
-        categoryId: null,
-        notes: 'monthly',
-        isPending: false,
-        isCleared: false,
-        isTransfer: true,
-        transferId: 'transfer-1',
-        tags: [],
-      },
-      {
-        id: 'credit-1',
-        householdId: 'hh-1',
-        accountId: 'savings-1',
-        amount: 250,
-        date: new Date('2026-05-01T00:00:00.000Z'),
-        description: 'Transfer from Checking',
-        currencyCode: 'USD',
-        categoryId: null,
-        notes: 'monthly',
-        isPending: false,
-        isCleared: false,
-        isTransfer: true,
-        transferId: 'transfer-1',
-        tags: [],
-      },
-    ]);
-    tx.transactionJournalMeta.findFirst.mockResolvedValue(null);
-
-    await expect(backfillLegacyTransactionJournals({ householdId: 'hh-1', limit: 50 }, prisma as any))
-      .resolves.toEqual({ scanned: 2, created: 1, skipped: 0 });
-
-    expect(tx.transactionJournal.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        transactionType: 'transfer',
-        amountDecimal: 250,
-        entries: {
-          create: [
-            { accountId: 'checking-1', amountDecimal: -250, currencyCode: 'USD' },
-            { accountId: 'savings-1', amountDecimal: 250, currencyCode: 'USD' },
-          ],
-        },
-        meta: {
-          create: [
-            { name: 'legacyTransferId', value: 'transfer-1' },
-            { name: 'legacyDebitTransactionId', value: 'debit-1' },
-            { name: 'legacyCreditTransactionId', value: 'credit-1' },
-          ],
-        },
-      }),
-    }));
+    expect(tx.transaction.findMany).not.toHaveBeenCalled();
+    expect(tx.transactionJournal.create).not.toHaveBeenCalled();
   });
 });
 

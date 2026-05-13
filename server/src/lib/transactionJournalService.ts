@@ -431,12 +431,7 @@ export async function backfillLegacyTransactionJournals(
   const limit = Math.min(Math.max(input.limit ?? 500, 1), 5000);
 
   return prisma.$transaction(async (tx) => {
-    const transactions = await tx.transaction.findMany({
-      where: input.householdId ? { householdId: input.householdId } : {},
-      orderBy: [{ date: 'asc' }, { id: 'asc' }],
-      take: limit,
-      include: { tags: true },
-    });
+    const transactions: LegacyTransactionForJournal[] = [];
 
     let created = 0;
     let skipped = 0;

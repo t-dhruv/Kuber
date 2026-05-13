@@ -682,7 +682,7 @@ router.get('/merchants', async (req: AuthRequest, res: Response) => {
         name: true,
         displayName: true,
         logoUrl: true,
-        _count: { select: { transactions: true } },
+        _count: { select: { journals: true } },
       },
       orderBy: order === 'NAME' ? { displayName: 'asc' } : { createdAt: 'asc' },
     });
@@ -694,7 +694,7 @@ router.get('/merchants', async (req: AuthRequest, res: Response) => {
         name: m.name,
         displayName: m.displayName,
         logoUrl: m.logoUrl ?? null,
-        transactionCount: m._count.transactions,
+        transactionCount: m._count.journals,
       }))
       .sort((a, b) =>
         order === 'TRANSACTION_COUNT'

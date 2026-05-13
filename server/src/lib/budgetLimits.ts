@@ -99,10 +99,12 @@ export async function recalcSpentAmount(
 
   const { start, end } = parsePeriodKey(periodKey, period);
 
-  const agg = await db.transaction.aggregate({
+  const agg = await db.transactionJournal.aggregate({
     where: {
       householdId: budget.householdId,
       categoryId: budget.categoryId ?? undefined,
+      transactionType: 'withdrawal',
+      isDeleted: false,
       date: { gte: start, lte: end },
     },
     _sum: { amountDecimal: true },

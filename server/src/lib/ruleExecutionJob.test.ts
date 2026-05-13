@@ -57,7 +57,7 @@ describe('runRuleExecutionJob', () => {
     await expect(runRuleExecutionJob()).resolves.toEqual({ processed: 1, matched: 1 });
 
     expect(prisma.transactionJournal.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { createdAt: { gte: expect.any(Date) } },
+      where: expect.objectContaining({ createdAt: { gte: expect.any(Date) }, isDeleted: false }),
       include: expect.objectContaining({ entries: true }),
     }));
   });

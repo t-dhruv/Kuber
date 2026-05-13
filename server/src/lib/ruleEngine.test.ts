@@ -17,7 +17,7 @@ function createPrismaMock() {
     rule: { findMany: ruleFindMany },
     $transaction: vi.fn(async (fn: (tx: any) => Promise<void>) => {
       await fn({
-        transaction: { updateMany: transactionUpdateMany },
+        transactionJournal: { updateMany: transactionUpdateMany },
         transactionTag: { upsert: transactionTagUpsert },
       });
     }),
@@ -179,7 +179,7 @@ describe('applyActiveRulesToTransactionGrouped', () => {
     const prisma = {
       ruleGroup: { findMany: vi.fn().mockResolvedValue(groups) },
       $transaction: vi.fn(async (fn: any) => fn({
-        transaction: { updateMany: txUpdateMany },
+        transactionJournal: { updateMany: txUpdateMany },
         transactionTag: { upsert: txTagUpsert },
       })),
     };

@@ -44,7 +44,7 @@ describe('buildSearchWhere', () => {
 
   it('builds amount gt filter', () => {
     const where = buildSearchWhere('amount:>100');
-    expect(where).toMatchObject({ AND: [{ amount: { gt: 100 } }] });
+    expect(where).toMatchObject({ AND: [{ amountDecimal: { gt: 100 } }] });
   });
 
   it('builds category filter', () => {

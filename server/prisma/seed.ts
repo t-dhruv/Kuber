@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { backfillLegacyTransactionJournals } from "../src/lib/transactionJournalService";
+import { Decimal } from "@prisma/client/runtime/library";
 
 const prisma = new PrismaClient();
 
@@ -45,9 +45,21 @@ function addMonths(date: Date, months: number): Date {
 function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
+function endOfPreviousMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 0);
+}
 function dayInMonth(base: Date, day: number): Date {
   const d = new Date(base.getFullYear(), base.getMonth(), day);
   return d;
+}
+function formatMonthYear(date: Date): string {
+  return date.toLocaleString("en-CA", { month: "short", year: "numeric" });
+}
+function monthlyRunDates(today: Date, dayOfMonth: number) {
+  const currentRun = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
+  const lastRunAt = currentRun <= today ? currentRun : addMonths(currentRun, -1);
+  const nextRunAt = currentRun > today ? currentRun : addMonths(currentRun, 1);
+  return { lastRunAt, nextRunAt };
 }
 
 // Enumerate every calendar day between two dates (inclusive)
@@ -84,7 +96,6 @@ async function main() {
   await prisma.holdingLot.deleteMany();
   await prisma.recurringInvestment.deleteMany();
   await prisma.investmentHolding.deleteMany();
-  await prisma.transaction.deleteMany();
   await prisma.budget.deleteMany();
   await prisma.recurringItem.deleteMany();
   await prisma.goal.deleteMany();
@@ -469,11 +480,13 @@ async function main() {
   };
 
   // -------------------------------------------------------------------------
-  // Transactions — Jan 1 2025 → Mar 20 2026
+  // Transactions — Jan 1 2025 through the latest complete month.
   // -------------------------------------------------------------------------
 
   const START = new Date("2025-01-01");
-  const END = new Date("2026-03-20");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const END = endOfPreviousMonth(today);
 
   // Canadian merchants
   const groceryMerchants = [
@@ -1171,28 +1184,46 @@ async function main() {
 
   console.log(`Creating ${txInputs.length} transactions…`);
 
+  const txGroup = await prisma.transactionGroup.create({
+    data: {
+      householdId: household.id,
+      title: "Seed Data Transactions",
+    },
+  });
+
   const createdTransactions = await Promise.all(
-    txInputs.map((tx) =>
-      prisma.transaction.create({
+    txInputs.map(async (tx) => {
+      const amount = roundCents(tx.amount);
+      const absAmount = Math.abs(amount);
+      const transactionType = amount >= 0 ? "deposit" : "withdrawal";
+
+      const journal = await prisma.transactionJournal.create({
         data: {
           householdId: household.id,
-          accountId: tx.accountId,
+          groupId: txGroup.id,
+          transactionType,
           date: tx.date,
           description: tx.description,
-          originalDescription: tx.description,
-          amount: roundCents(tx.amount),
+          amountDecimal: new Decimal(absAmount),
+          currencyCode: "CAD",
           categoryId: tx.categoryId,
         },
-      }),
-    ),
+      });
+
+      await prisma.transactionEntry.create({
+        data: {
+          journalId: journal.id,
+          accountId: tx.accountId,
+          amountDecimal: new Decimal(absAmount),
+          currencyCode: "CAD",
+        },
+      });
+
+      return journal;
+    }),
   );
 
-  console.log(`Created ${createdTransactions.length} transactions.`);
-  const journalBackfill = await backfillLegacyTransactionJournals(
-    { householdId: household.id, limit: 5000 },
-    prisma,
-  );
-  console.log(`Created ${journalBackfill.created} transaction journals (${journalBackfill.skipped} skipped).`);
+  console.log(`Created ${createdTransactions.length} transaction journals.`);
 
   // -------------------------------------------------------------------------
   // Investment Holdings + Lots (TFSA — Canadian-heavy, RRSP, US brokerage)
@@ -1221,7 +1252,7 @@ async function main() {
       symbol: "VCN.TO",
       name: "Vanguard FTSE Canada All Cap Index ETF",
       assetClass: "ca_stock",
-      currentPrice: 46.82,
+      currentPrice: 69.74,
       lots: [
         {
           date: "2025-01-15",
@@ -1251,7 +1282,7 @@ async function main() {
       symbol: "XIC.TO",
       name: "iShares S&P/TSX Capped Composite Index ETF",
       assetClass: "ca_stock",
-      currentPrice: 38.54,
+      currentPrice: 54.77,
       lots: [
         {
           date: "2025-01-20",
@@ -1271,7 +1302,7 @@ async function main() {
       symbol: "ZAG.TO",
       name: "BMO Aggregate Bond Index ETF",
       assetClass: "bond",
-      currentPrice: 14.82,
+      currentPrice: 13.66,
       lots: [
         {
           date: "2025-01-25",
@@ -1291,7 +1322,7 @@ async function main() {
       symbol: "RY.TO",
       name: "Royal Bank of Canada",
       assetClass: "ca_stock",
-      currentPrice: 148.25,
+      currentPrice: 249.87,
       lots: [
         {
           date: "2025-02-01",
@@ -1310,7 +1341,7 @@ async function main() {
       symbol: "TD.TO",
       name: "Toronto-Dominion Bank",
       assetClass: "ca_stock",
-      currentPrice: 84.6,
+      currentPrice: 147.59,
       lots: [
         {
           date: "2025-02-10",
@@ -1329,7 +1360,7 @@ async function main() {
       symbol: "ENB.TO",
       name: "Enbridge Inc",
       assetClass: "ca_stock",
-      currentPrice: 57.4,
+      currentPrice: 75.19,
       lots: [
         {
           date: "2025-03-01",
@@ -1348,7 +1379,7 @@ async function main() {
       symbol: "SU.TO",
       name: "Suncor Energy Inc",
       assetClass: "ca_stock",
-      currentPrice: 56.8,
+      currentPrice: 91.15,
       lots: [
         { date: "2025-03-15", shares: 20, price: 48.2 },
         { date: "2025-06-15", shares: 15, price: 51.4 },
@@ -1361,7 +1392,7 @@ async function main() {
       symbol: "SHOP.TO",
       name: "Shopify Inc",
       assetClass: "ca_stock",
-      currentPrice: 128.4,
+      currentPrice: 136.87,
       lots: [
         {
           date: "2025-01-10",
@@ -1380,7 +1411,7 @@ async function main() {
       symbol: "BCE.TO",
       name: "BCE Inc",
       assetClass: "ca_stock",
-      currentPrice: 34.8,
+      currentPrice: 33.53,
       lots: [
         {
           date: "2025-04-05",
@@ -1399,7 +1430,7 @@ async function main() {
       symbol: "RBF460",
       name: "RBC Canadian Dividend Fund",
       assetClass: "mutual_fund",
-      currentPrice: 22.48,
+      currentPrice: 23.1,
       lots: [
         {
           date: "2025-01-31",
@@ -1430,7 +1461,7 @@ async function main() {
       symbol: "XEQT.TO",
       name: "iShares Core Equity ETF Portfolio",
       assetClass: "ca_stock",
-      currentPrice: 32.85,
+      currentPrice: 43.37,
       lots: [
         {
           date: "2025-01-28",
@@ -1453,7 +1484,7 @@ async function main() {
       symbol: "VFV.TO",
       name: "Vanguard S&P 500 Index ETF (CAD-Hedged)",
       assetClass: "us_stock",
-      currentPrice: 118.6,
+      currentPrice: 179.96,
       lots: [
         {
           date: "2025-01-28",
@@ -1473,7 +1504,7 @@ async function main() {
       symbol: "ZEM.TO",
       name: "BMO MSCI Emerging Markets Index ETF",
       assetClass: "international_stock",
-      currentPrice: 24.1,
+      currentPrice: 32.3,
       lots: [
         { date: "2025-02-15", shares: 80, price: 21.8 },
         { date: "2025-05-15", shares: 50, price: 22.4 },
@@ -1488,7 +1519,7 @@ async function main() {
       symbol: "TDB902",
       name: "TD Canadian Index Fund - e",
       assetClass: "mutual_fund",
-      currentPrice: 138.4,
+      currentPrice: 150.8,
       lots: [
         {
           date: "2025-01-31",
@@ -1511,7 +1542,7 @@ async function main() {
       symbol: "MFC.TO",
       name: "Manulife Financial Corporation",
       assetClass: "ca_stock",
-      currentPrice: 42.8,
+      currentPrice: 54.82,
       lots: [
         { date: "2025-03-01", shares: 30, price: 35.4 },
         { date: "2025-06-01", shares: 20, price: 37.8 },
@@ -1527,7 +1558,7 @@ async function main() {
       symbol: "VTI",
       name: "Vanguard Total Stock Market ETF",
       assetClass: "us_stock",
-      currentPrice: 248.6,
+      currentPrice: 350.53,
       lots: [
         {
           date: "2025-01-10",
@@ -1547,7 +1578,7 @@ async function main() {
       symbol: "AAPL",
       name: "Apple Inc",
       assetClass: "us_stock",
-      currentPrice: 228.5,
+      currentPrice: 294.8,
       lots: [
         { date: "2025-01-15", shares: 10, price: 182.4 },
         { date: "2025-04-15", shares: 5, price: 195.2 },
@@ -1561,7 +1592,7 @@ async function main() {
       symbol: "MSFT",
       name: "Microsoft Corporation",
       assetClass: "us_stock",
-      currentPrice: 420.8,
+      currentPrice: 407.77,
       lots: [
         { date: "2025-01-20", shares: 5, price: 368.4 },
         { date: "2025-05-20", shares: 3, price: 388.2 },
@@ -1574,7 +1605,7 @@ async function main() {
       symbol: "QQQ",
       name: "Invesco QQQ Trust (NASDAQ-100)",
       assetClass: "us_stock",
-      currentPrice: 488.2,
+      currentPrice: 707.24,
       lots: [
         { date: "2025-02-01", shares: 8, price: 438.6, note: "Tech exposure" },
         { date: "2025-05-01", shares: 5, price: 455.8 },
@@ -1588,7 +1619,7 @@ async function main() {
       symbol: "NVDA",
       name: "NVIDIA Corporation",
       assetClass: "us_stock",
-      currentPrice: 138.4,
+      currentPrice: 220.78,
       lots: [
         { date: "2025-01-25", shares: 12, price: 98.2, note: "AI chip play" },
         { date: "2025-04-25", shares: 8, price: 108.6 },
@@ -1602,7 +1633,7 @@ async function main() {
       symbol: "BND",
       name: "Vanguard Total Bond Market ETF",
       assetClass: "bond",
-      currentPrice: 74.8,
+      currentPrice: 73.36,
       lots: [
         { date: "2025-02-15", shares: 20, price: 72.4 },
         { date: "2025-05-15", shares: 15, price: 73.2 },
@@ -1617,7 +1648,7 @@ async function main() {
       symbol: "VFIAX",
       name: "Vanguard 500 Index Fund Admiral Shares",
       assetClass: "mutual_fund",
-      currentPrice: 528.4,
+      currentPrice: 662.57,
       lots: [
         {
           date: "2025-01-31",
@@ -1680,7 +1711,9 @@ async function main() {
     where: { accountId: usInvestAccount.id, symbol: "VTI" },
   });
 
-  const nextRun = new Date("2026-04-15");
+  const vcnRuns = monthlyRunDates(today, 15);
+  const xeqtRuns = monthlyRunDates(today, 28);
+  const vtiRuns = monthlyRunDates(today, 10);
 
   if (vcnHolding) {
     await prisma.recurringInvestment.create({
@@ -1690,8 +1723,8 @@ async function main() {
         frequency: "monthly",
         dayOfMonth: 15,
         status: "active",
-        lastRunAt: new Date("2026-03-15"),
-        nextRunAt: nextRun,
+        lastRunAt: vcnRuns.lastRunAt,
+        nextRunAt: vcnRuns.nextRunAt,
       },
     });
   }
@@ -1703,8 +1736,8 @@ async function main() {
         frequency: "monthly",
         dayOfMonth: 28,
         status: "active",
-        lastRunAt: new Date("2026-02-28"),
-        nextRunAt: new Date("2026-03-28"),
+        lastRunAt: xeqtRuns.lastRunAt,
+        nextRunAt: xeqtRuns.nextRunAt,
       },
     });
   }
@@ -1716,8 +1749,8 @@ async function main() {
         frequency: "monthly",
         dayOfMonth: 10,
         status: "active",
-        lastRunAt: new Date("2026-03-10"),
-        nextRunAt: new Date("2026-04-10"),
+        lastRunAt: vtiRuns.lastRunAt,
+        nextRunAt: vtiRuns.nextRunAt,
       },
     });
   }
@@ -1747,9 +1780,6 @@ async function main() {
     { category: "TFSA Contribution", amount: 500 },
     { category: "RRSP Contribution", amount: 500 },
   ];
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
   await prisma.budget.createMany({
     data: budgetDefs.map((bd) => ({
@@ -2119,16 +2149,16 @@ async function main() {
         name: "Honda Civic Auto Loan — TD Auto Finance",
         type: "auto_loan",
         originalAmount: 22_000,
-        currentBalance: 7_840,
+        currentBalance: 6_580,
         interestRate: 4.99,
         monthlyPayment: 420,
-        maturityDate: new Date("2026-03-01"),
-        notes: "60-month loan, final payment March 2026.",
+        maturityDate: new Date("2026-09-01"),
+        notes: "Extended 60-month loan with extra principal payments; final payment expected September 2026.",
         currency: "CAD",
         region: "CA",
         rateType: "fixed",
         termStartDate: new Date("2021-03-01"),
-        termEndDate: new Date("2026-03-01"),
+        termEndDate: new Date("2026-09-01"),
         amortizationYears: 5,
         paymentFrequency: "monthly",
       },
@@ -2226,7 +2256,10 @@ async function main() {
         type: "subscription",
         severity: "info",
         title: "Upcoming subscription renewal",
-        body: "Netflix Canada ($20.99) renews in 3 days on April 17.",
+        body: `Netflix Canada ($20.99) renews on ${addDays(
+          today,
+          3,
+        ).toLocaleDateString("en-CA", { month: "short", day: "numeric" })}.`,
         read: false,
         linkedEntityType: "recurringItem",
         createdAt: threeDaysAgo,
@@ -2394,7 +2427,7 @@ async function main() {
     `  Accounts:        TD Chequing · RBC Savings · Scotia Visa · Questrade TFSA · Wealthsimple RRSP · Fidelity US`,
   );
   console.log(
-    `  Transactions:    ${createdTransactions.length}  (Jan 2025 – Mar 2026)`,
+    `  Transactions:    ${createdTransactions.length}  (${formatMonthYear(START)} – ${formatMonthYear(END)})`,
   );
   console.log(
     `  Categories:      ${categoryMap.size} across ${groupDefs.length} groups`,

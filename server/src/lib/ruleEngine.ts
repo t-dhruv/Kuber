@@ -139,7 +139,7 @@ export async function applyActionsToTransaction(
 
   await (prisma as any).$transaction(async (tx: any) => {
     if (Object.keys(updateData).length > 0) {
-      await tx.transaction.updateMany({ where: { id: txId, householdId }, data: updateData });
+      await tx.transactionJournal.updateMany({ where: { id: txId, householdId }, data: updateData });
     }
     for (const tagId of tagUpserts) {
       await tx.transactionTag.upsert({
