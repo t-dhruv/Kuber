@@ -146,14 +146,14 @@ async function parseUploadedFile(
   }));
 
   // Fetch existing hashes for this account and compute dedup set
-  const existingTxns = await prisma.transaction.findMany({
-    where: { accountId, householdId, isHidden: false },
-    select: { date: true, description: true, amount: true },
+  const existingJournals = await prisma.transactionJournal.findMany({
+    where: { entries: { some: { accountId } }, householdId, isHidden: false },
+    select: { date: true, description: true, amountDecimal: true },
   });
 
   const existingHashes = new Set(
-    existingTxns.map((t) =>
-      computeDedupHash(t.date.toISOString().slice(0, 10), t.description, t.amount)
+    existingJournals.map((j) =>
+      computeDedupHash(j.date.toISOString().slice(0, 10), j.description, Number(j.amountDecimal))
     )
   );
 
@@ -399,14 +399,14 @@ router.post('/parse-with-mapping', upload.single('file'), async (req: AuthReques
     const headers = rows[0];
     const dataRows = rows.slice(1);
 
-    // Fetch existing transactions for dedup (recompute hash from date+desc+amount)
-    const existingTxns = await prisma.transaction.findMany({
-      where: { accountId, householdId: req.householdId!, isHidden: false },
-      select: { date: true, description: true, amount: true },
+    // Fetch existing journals for dedup (recompute hash from date+desc+amount)
+    const existingJournals = await prisma.transactionJournal.findMany({
+      where: { entries: { some: { accountId } }, householdId: req.householdId!, isHidden: false },
+      select: { date: true, description: true, amountDecimal: true },
     });
     const hashSet = new Set(
-      existingTxns.map((t) =>
-        computeDedupHash(t.date.toISOString().slice(0, 10), t.description, t.amount)
+      existingJournals.map((j) =>
+        computeDedupHash(j.date.toISOString().slice(0, 10), j.description, Number(j.amountDecimal))
       )
     );
 
@@ -720,10 +720,10 @@ router.post('/confirm', async (req: AuthRequest, res) => {
 
     // Create rollback checkpoint
     if (imported > 0) {
-      // We need the IDs of newly created transactions — re-query by hash match or by createdAt
-      // Simplest: query transactions created in the last few seconds for this account
-      const recentIds = await prisma.transaction.findMany({
-        where: { accountId, householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
+      // We need the IDs of newly created journals — re-query by createdAt
+      // Simplest: query journals created in the last few seconds
+      const recentIds = await prisma.transactionJournal.findMany({
+        where: { householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
         select: { id: true },
       });
       await createCheckpoint(
@@ -816,13 +816,13 @@ router.post('/webhook', async (req: AuthRequest, res) => {
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     // Dedup check
-    const existingTxns = await prisma.transaction.findMany({
-      where: { accountId, householdId: req.householdId!, isHidden: false },
-      select: { date: true, description: true, amount: true },
+    const existingJournals = await prisma.transactionJournal.findMany({
+      where: { entries: { some: { accountId } }, householdId: req.householdId!, isHidden: false },
+      select: { date: true, description: true, amountDecimal: true },
     });
     const existingHashes = new Set(
-      existingTxns.map((t) =>
-        computeDedupHash(t.date.toISOString().slice(0, 10), t.description, t.amount)
+      existingJournals.map((j) =>
+        computeDedupHash(j.date.toISOString().slice(0, 10), j.description, Number(j.amountDecimal))
       )
     );
 
