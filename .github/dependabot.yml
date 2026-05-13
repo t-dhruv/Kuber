@@ -7,7 +7,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: '06:00'
+      time: "06:00"
       timezone: UTC
     open-pull-requests-limit: 10
     groups:
@@ -18,8 +18,8 @@ updates:
           - patch
     ignore:
       # Major version bumps need manual review
-      - dependency-name: '*'
-        update-types: ['version-update:semver-major']
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     labels:
       - dependencies
 
@@ -29,13 +29,13 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: '06:00'
+      time: "06:00"
       timezone: UTC
     open-pull-requests-limit: 5
     groups:
       actions:
         patterns:
-          - '*'
+          - "*"
     labels:
       - dependencies
       - github-actions
@@ -46,7 +46,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: '06:00'
+      time: "06:00"
       timezone: UTC
     labels:
       - dependencies
@@ -57,7 +57,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: '06:00'
+      time: "06:00"
       timezone: UTC
     labels:
       - dependencies
