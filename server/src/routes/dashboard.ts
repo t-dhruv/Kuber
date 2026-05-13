@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { queryJournalAmounts } from '../lib/transactionJournalService';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
 
 const router = Router();
 
@@ -27,7 +28,7 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
 
     // Net worth: sum all non-excluded account balances
     const accounts = await prisma.account.findMany({
-      where: { householdId, isHidden: false, excludeFromNetWorth: false },
+      where: { householdId, isHidden: false, excludeFromNetWorth: false, ...NOT_DELETED },
       select: { balance: true },
     });
     const netWorthCurrent = Math.round(accounts.reduce((sum, a) => sum + a.balance, 0) * 100) / 100;
@@ -145,7 +146,7 @@ router.get('/budget-summary', async (req: AuthRequest, res: Response) => {
     const thisMonth = getMonthBounds(now);
 
     const budgets = await prisma.budget.findMany({
-      where: { householdId },
+      where: { householdId, ...NOT_DELETED },
       include: {
         category: {
           select: { id: true, name: true, icon: true },
@@ -251,7 +252,7 @@ router.get('/recurring-summary', async (req: AuthRequest, res: Response) => {
     const thisMonth = getMonthBounds(now);
 
     const items = await prisma.recurringItem.findMany({
-      where: { householdId, isActive: true },
+      where: { householdId, isActive: true, ...NOT_DELETED },
       select: { id: true, name: true, amount: true, nextDate: true },
     });
 
@@ -300,7 +301,7 @@ router.get('/net-worth-chart', async (req: AuthRequest, res: Response) => {
 
     // Current net worth
     const accounts = await prisma.account.findMany({
-      where: { householdId, isHidden: false, excludeFromNetWorth: false },
+      where: { householdId, isHidden: false, excludeFromNetWorth: false, ...NOT_DELETED },
       select: { balance: true },
     });
     const netWorthCurrent = accounts.reduce((sum, a) => sum + a.balance, 0);
@@ -342,7 +343,7 @@ router.get('/goals-summary', async (req: AuthRequest, res: Response) => {
     const now = new Date();
 
     const goals = await prisma.goal.findMany({
-      where: { householdId },
+      where: { householdId, ...NOT_DELETED },
       select: {
         id: true,
         name: true,
@@ -443,7 +444,7 @@ router.get('/weekly-recap', async (req: AuthRequest, res: Response) => {
     });
 
     const accounts = await prisma.account.findMany({
-      where: { householdId, isHidden: false, excludeFromNetWorth: false },
+      where: { householdId, isHidden: false, excludeFromNetWorth: false, ...NOT_DELETED },
       select: { balance: true },
     });
     const netWorthCurrent = accounts.reduce((s, a) => s + a.balance, 0);
@@ -467,8 +468,8 @@ router.get('/weekly-recap', async (req: AuthRequest, res: Response) => {
       }
       if (byCategory.size > 0) {
         const [topCatId, topCatData] = [...byCategory.entries()].sort((a, b) => b[1].amount - a[1].amount)[0];
-        const cat = await prisma.category.findUnique({
-          where: { id: topCatId },
+        const cat = await prisma.category.findFirst({
+          where: { id: topCatId, householdId, ...NOT_DELETED },
           select: { name: true, icon: true },
         });
         if (cat) {
@@ -483,6 +484,7 @@ router.get('/weekly-recap', async (req: AuthRequest, res: Response) => {
       where: {
         householdId,
         isActive: true,
+        ...NOT_DELETED,
         nextDate: { gte: now, lte: next7End },
       },
       select: { name: true, amount: true, nextDate: true },
@@ -541,7 +543,7 @@ router.get('/health-score', async (req: AuthRequest, res: Response) => {
     const savingsScore = Math.round(Math.min(1, Math.max(0, savingsRate)) * 30);
 
     // ── Budget adherence (25 pts) ──
-    const budgets = await prisma.budget.findMany({ where: { householdId }, select: { categoryId: true, amount: true } });
+    const budgets = await prisma.budget.findMany({ where: { householdId, ...NOT_DELETED }, select: { categoryId: true, amount: true } });
     let budgetScore = 0;
     if (budgets.length > 0) {
       const catIds = budgets.map(b => b.categoryId).filter((id): id is string => !!id);
@@ -561,7 +563,7 @@ router.get('/health-score', async (req: AuthRequest, res: Response) => {
     }
 
     // ── Goal progress (25 pts) ──
-    const goals = await prisma.goal.findMany({ where: { householdId }, select: { targetAmount: true, currentAmount: true } });
+    const goals = await prisma.goal.findMany({ where: { householdId, ...NOT_DELETED }, select: { targetAmount: true, currentAmount: true } });
     let goalScore = 0;
     if (goals.length > 0) {
       const avgPct = goals.reduce((s, g) => s + (g.targetAmount > 0 ? Math.min(1, g.currentAmount / g.targetAmount) : 0), 0) / goals.length;
@@ -570,7 +572,7 @@ router.get('/health-score', async (req: AuthRequest, res: Response) => {
 
     // ── Emergency fund (20 pts) ──
     const liquidAccounts = await prisma.account.findMany({
-      where: { householdId, type: { in: ['CHECKING', 'SAVINGS'] }, isHidden: false },
+      where: { householdId, type: { in: ['CHECKING', 'SAVINGS'] }, isHidden: false, ...NOT_DELETED },
       select: { balance: true },
     });
     const liquidBalance = liquidAccounts.reduce((s, a) => s + a.balance, 0);

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { calculateTfsaRoom, calculateRrspRoom } from '../lib/taxRoomCalculator.js';
+import { NOT_DELETED } from '../lib/softDeleteWhere.js';
 
 const router = Router();
 
@@ -18,6 +19,14 @@ const TaxAccountSchema = z.object({
   withdrawalsYtd: z.number().min(0).optional(),
   notes: z.string().optional().nullable(),
 });
+
+async function linkedAccountBelongsToHousehold(linkedAccountId: string | null | undefined, householdId: string) {
+  if (!linkedAccountId) return true;
+  const account = await prisma.account.findFirst({
+    where: { id: linkedAccountId, householdId, ...NOT_DELETED },
+  });
+  return Boolean(account);
+}
 
 // GET /api/v1/tax-accounts
 router.get('/', async (req: AuthRequest, res: Response) => {
@@ -83,8 +92,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const parse = TaxAccountSchema.safeParse(req.body);
     if (!parse.success) return res.status(400).json({ error: parse.error.flatten() });
+    const householdId = req.householdId!;
+    if (!(await linkedAccountBelongsToHousehold(parse.data.linkedAccountId, householdId))) {
+      return res.status(400).json({ error: 'Invalid linkedAccountId' });
+    }
     const acc = await prisma.taxAccount.create({
-      data: { ...parse.data, householdId: req.householdId! },
+      data: { ...parse.data, householdId },
     });
     return res.status(201).json(acc);
   } catch (err) {
@@ -100,6 +113,9 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (!parse.success) return res.status(400).json({ error: parse.error.flatten() });
     const existing = await prisma.taxAccount.findFirst({ where: { id: req.params.id, householdId: req.householdId! } });
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!(await linkedAccountBelongsToHousehold(parse.data.linkedAccountId, req.householdId!))) {
+      return res.status(400).json({ error: 'Invalid linkedAccountId' });
+    }
     const acc = await prisma.taxAccount.update({ where: { id: req.params.id }, data: parse.data });
     return res.json(acc);
   } catch (err) {

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.get('/duplicates', async (req: AuthRequest, res: Response) => {
         householdId,
         isHidden: false,
         isSplit: false,
+        ...NOT_DELETED,
         date: { gte: since },
       },
       include: {
@@ -151,6 +153,8 @@ router.post('/duplicates/dismiss', async (req: AuthRequest, res: Response) => {
       where: {
         id: { in: [transactionId1, transactionId2] },
         householdId,
+        isHidden: false,
+        ...NOT_DELETED,
       },
       select: { id: true },
     });
@@ -197,6 +201,8 @@ router.post('/duplicates/merge', async (req: AuthRequest, res: Response) => {
       where: {
         id: { in: [keepId, removeId] },
         householdId,
+        isHidden: false,
+        ...NOT_DELETED,
       },
     });
     if (journals.length !== 2) {
@@ -215,7 +221,7 @@ router.post('/duplicates/merge', async (req: AuthRequest, res: Response) => {
     // Soft-delete the duplicate
     await prisma.transactionJournal.update({
       where: { id: removeId },
-      data: { isHidden: true },
+      data: { isHidden: true, isDeleted: true },
     });
 
     // Also record as dismissed so it doesn't reappear

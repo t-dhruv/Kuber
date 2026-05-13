@@ -1,8 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { waitForToast } from './helpers';
 
 test.describe('Settings', () => {
-  test('settings page loads', async ({ page }) => {
+  test('settings page loads @smoke', async ({ page }) => {
     await page.goto('/settings');
     await page.waitForLoadState('networkidle');
     await expect(page.getByText(/settings/i).first()).toBeVisible();

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { getQuotes, getQuote, getLiveBenchmarks, BenchmarkPeriod } from '../lib/priceCache';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
 
 const router = Router();
 
@@ -61,7 +62,7 @@ async function generatePendingLots(householdId: string): Promise<number> {
     where: {
       status: 'active',
       nextRunAt: { lte: now },
-      holding: { account: { householdId } },
+      holding: { account: { householdId, ...NOT_DELETED } },
     },
     include: { holding: true },
   });
@@ -217,7 +218,7 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
     // Generate any overdue pending lots first
     await generatePendingLots(householdId).catch(() => {});
 
-    const where: Record<string, unknown> = { account: { householdId } };
+    const where: Record<string, unknown> = { account: { householdId, ...NOT_DELETED } };
     if (accountId) where.accountId = accountId;
 
     const rawHoldings = await prisma.investmentHolding.findMany({
@@ -290,7 +291,7 @@ router.get('/pending', async (req: AuthRequest, res: Response) => {
     const lots = await prisma.holdingLot.findMany({
       where: {
         status: 'pending',
-        holding: { account: { householdId } },
+        holding: { account: { householdId, ...NOT_DELETED } },
       },
       include: {
         holding: {
@@ -324,7 +325,7 @@ router.get('/allocation', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
 
     const rawHoldings = await prisma.investmentHolding.findMany({
-      where: { account: { householdId } },
+      where: { account: { householdId, ...NOT_DELETED } },
       include: { account: { select: { id: true, name: true } } },
     });
 
@@ -401,7 +402,7 @@ router.get('/performance', async (req: AuthRequest, res: Response) => {
     const months = periodMap[period] ?? 12;
 
     const rawHoldings = await prisma.investmentHolding.findMany({
-      where: { account: { householdId } },
+      where: { account: { householdId, ...NOT_DELETED } },
       include: { account: { select: { id: true } } },
     });
 
@@ -472,7 +473,7 @@ router.post('/holdings', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'accountId, ticker, name, shares, and pricePerShare are required' });
     }
 
-    const account = await prisma.account.findFirst({ where: { id: accountId, householdId } });
+    const account = await prisma.account.findFirst({ where: { id: accountId, householdId, ...NOT_DELETED } });
     if (!account) return res.status(400).json({ error: 'Account not found in this household' });
     if (!['INVESTMENT', 'investment'].includes(account.type)) {
       return res.status(400).json({ error: 'Account must be of type INVESTMENT' });
@@ -529,7 +530,7 @@ router.put('/holdings/:id', async (req: AuthRequest, res: Response) => {
     const { shares, costBasis } = req.body;
 
     const existing = await prisma.investmentHolding.findFirst({
-      where: { id, account: { householdId } },
+      where: { id, account: { householdId, ...NOT_DELETED } },
       include: {
         account: { select: { name: true } },
         lots: true,
@@ -586,7 +587,7 @@ router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
     // Validate all accountIds belong to this household
     const accountIds = [...new Set(rows.map((r) => r.accountId))];
     const accounts = await prisma.account.findMany({
-      where: { id: { in: accountIds }, householdId },
+      where: { id: { in: accountIds }, householdId, ...NOT_DELETED },
       select: { id: true },
     });
     const validIds = new Set(accounts.map((a) => a.id));
@@ -667,7 +668,7 @@ router.delete('/holdings/:id', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const existing = await prisma.investmentHolding.findFirst({ where: { id, account: { householdId } } });
+    const existing = await prisma.investmentHolding.findFirst({ where: { id, account: { householdId, ...NOT_DELETED } } });
     if (!existing) return res.status(404).json({ error: 'Holding not found' });
 
     await prisma.investmentHolding.delete({ where: { id } });
@@ -690,7 +691,7 @@ router.post('/holdings/:id/lots', async (req: AuthRequest, res: Response) => {
     }
 
     const holding = await prisma.investmentHolding.findFirst({
-      where: { id, account: { householdId } },
+      where: { id, account: { householdId, ...NOT_DELETED } },
     });
     if (!holding) return res.status(404).json({ error: 'Holding not found' });
 
@@ -737,7 +738,7 @@ router.delete('/lots/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const lot = await prisma.holdingLot.findFirst({
-      where: { id, holding: { account: { householdId } } },
+      where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
     });
     if (!lot) return res.status(404).json({ error: 'Lot not found' });
 
@@ -769,7 +770,7 @@ router.get('/holdings/:id/recurring', async (req: AuthRequest, res: Response) =>
     const { id } = req.params;
 
     const holding = await prisma.investmentHolding.findFirst({
-      where: { id, account: { householdId } },
+      where: { id, account: { householdId, ...NOT_DELETED } },
     });
     if (!holding) return res.status(404).json({ error: 'Holding not found' });
 
@@ -813,7 +814,7 @@ router.post('/holdings/:id/recurring', async (req: AuthRequest, res: Response) =
     }
 
     const holding = await prisma.investmentHolding.findFirst({
-      where: { id, account: { householdId } },
+      where: { id, account: { householdId, ...NOT_DELETED } },
     });
     if (!holding) return res.status(404).json({ error: 'Holding not found' });
 
@@ -855,7 +856,7 @@ router.put('/recurring/:id', async (req: AuthRequest, res: Response) => {
     const { amount, frequency, dayOfMonth, status } = req.body;
 
     const schedule = await prisma.recurringInvestment.findFirst({
-      where: { id, holding: { account: { householdId } } },
+      where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
     });
     if (!schedule) return res.status(404).json({ error: 'Recurring schedule not found' });
 
@@ -896,7 +897,7 @@ router.delete('/recurring/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const schedule = await prisma.recurringInvestment.findFirst({
-      where: { id, holding: { account: { householdId } } },
+      where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
     });
     if (!schedule) return res.status(404).json({ error: 'Recurring schedule not found' });
 
@@ -915,7 +916,7 @@ router.post('/lots/:id/confirm', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const lot = await prisma.holdingLot.findFirst({
-      where: { id, holding: { account: { householdId } } },
+      where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
       include: { holding: true },
     });
     if (!lot) return res.status(404).json({ error: 'Lot not found' });
@@ -967,7 +968,7 @@ router.post('/lots/:id/skip', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const lot = await prisma.holdingLot.findFirst({
-      where: { id, holding: { account: { householdId } } },
+      where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
     });
     if (!lot) return res.status(404).json({ error: 'Lot not found' });
 
@@ -993,7 +994,7 @@ router.patch('/holdings/prices', async (req: AuthRequest, res: Response) => {
   let updated = 0;
   for (const { symbol, price } of parse.data) {
     const result = await prisma.investmentHolding.updateMany({
-      where: { symbol: { equals: symbol, mode: 'insensitive' }, account: { householdId } },
+      where: { symbol: { equals: symbol, mode: 'insensitive' }, account: { householdId, ...NOT_DELETED } },
       data: { currentPrice: price, updatedAt: new Date() },
     });
     updated += result.count;
@@ -1009,7 +1010,7 @@ router.get('/dividend-forecast', async (req: AuthRequest, res: Response) => {
     const numYears = Math.min(Math.max(parseInt(years) || 3, 1), 10);
 
     const holdings = await prisma.investmentHolding.findMany({
-      where: { account: { householdId } },
+      where: { account: { householdId, ...NOT_DELETED } },
       select: { symbol: true, shares: true, currentPrice: true, name: true },
     });
 
@@ -1051,7 +1052,7 @@ router.get('/retirement-simulation', async (req: AuthRequest, res: Response) => 
 
     // Get portfolio value and holdings data
     const holdings = await prisma.investmentHolding.findMany({
-      where: { account: { householdId } },
+      where: { account: { householdId, ...NOT_DELETED } },
       select: { shares: true, currentPrice: true, costBasis: true },
     });
 

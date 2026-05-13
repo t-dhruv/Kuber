@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['html'], ['list']],
   use: {
-    baseURL: 'http://localhost:9001',
+    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:9001',
     trace: 'on-first-retry',
     storageState: 'tests/e2e/.auth/user.json',
     screenshot: 'only-on-failure',
