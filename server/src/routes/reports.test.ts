@@ -16,20 +16,6 @@ vi.mock('../lib/prisma', () => ({
       create: vi.fn(),
       delete: vi.fn(),
     },
-    transaction: {
-      findMany: vi.fn(() => {
-        throw new Error('legacy transaction reports should not be used');
-      }),
-      aggregate: vi.fn(() => {
-        throw new Error('legacy transaction reports should not be used');
-      }),
-      count: vi.fn(() => {
-        throw new Error('legacy transaction reports should not be used');
-      }),
-      groupBy: vi.fn(() => {
-        throw new Error('legacy transaction reports should not be used');
-      }),
-    },
     category: { findMany: vi.fn() },
     tag: { findMany: vi.fn() },
   },

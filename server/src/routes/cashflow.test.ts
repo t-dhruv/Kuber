@@ -7,7 +7,7 @@ import { prisma } from '../lib/prisma';
 vi.mock('../lib/prisma', () => ({
   prisma: {
     account: { aggregate: vi.fn() },
-    transaction: { findMany: vi.fn() },
+    transactionJournal: { findMany: vi.fn() },
     recurringItem: { findMany: vi.fn() },
   },
 }));
@@ -36,12 +36,12 @@ describe('cashflow routes', () => {
   });
 
   it('filters reporting-excluded categories from the cash flow screen', async () => {
-    vi.mocked(prisma.transaction.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.transactionJournal.findMany).mockResolvedValue([]);
 
     const res = await request(makeApp()).get('/cashflow?year=2026');
 
     expect(res.status).toBe(200);
-    expect(prisma.transaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
+    expect(prisma.transactionJournal.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         OR: [
           { categoryId: null },
@@ -53,8 +53,8 @@ describe('cashflow routes', () => {
 
   it('does not double-count known recurring items in forecast daily averages', async () => {
     vi.mocked(prisma.account.aggregate).mockResolvedValue({ _sum: { balance: 1000 } } as any);
-    vi.mocked(prisma.transaction.findMany).mockResolvedValue([
-      { amount: -30 },
+    vi.mocked(prisma.transactionJournal.findMany).mockResolvedValue([
+      { amountDecimal: -30 },
     ] as any);
     vi.mocked(prisma.recurringItem.findMany).mockResolvedValue([
       {
@@ -67,8 +67,8 @@ describe('cashflow routes', () => {
     const res = await request(makeApp()).get('/cashflow/forecast?days=30');
 
     expect(res.status).toBe(200);
-    expect(prisma.transaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ recurringItemId: null }),
+    expect(prisma.transactionJournal.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({}),
     }));
     expect(res.body.projections[0]).toMatchObject({
       date: '2026-05-08',

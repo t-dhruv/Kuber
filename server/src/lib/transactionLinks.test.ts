@@ -12,9 +12,6 @@ vi.mock('../lib/prisma', () => ({
     transactionLinkType: {
       findMany: vi.fn(),
     },
-    transaction: {
-      findFirst: vi.fn(),
-    },
   },
 }));
 import { listLinkTypes, createLink, deleteLink, getLinksForTransaction } from './transactionLinks';

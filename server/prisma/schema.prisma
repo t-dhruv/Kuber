@@ -35,55 +35,55 @@ model User {
 }
 
 model Household {
-  id                      String                   @id @default(cuid())
-  name                    String
-  currency                String                   @default("USD")
-  fiscalYearStart         Int                      @default(1)
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  members                 HouseholdMember[]
-  accounts                Account[]
-  categories              Category[]
-  budgets                 Budget[]
-  bills                   Bill[]
-  recurringItems          RecurringItem[]
-  goals                   Goal[]
-  rules                   Rule[]
-  merchants               Merchant[]
-  tags                    Tag[]
-  invites                 HouseholdInvite[]
-  aiConfig                AiConfig?
-  conversations           Conversation[]
-  netWorthSnapshots       NetWorthSnapshot[]
-  accountBalanceSnapshots AccountBalanceSnapshot[]
-  reportingSnapshots      ReportingSnapshot[]
-  reportingRollups        ReportingRollup[]
-  savedReports            SavedReport[]
-  wealthAiCache           WealthAiCache?
-  duplicateDismissals     DuplicateDismissal[]
-  reportSchedule          ReportSchedule?
-  importHistory           ImportHistory[]
-  operationCheckpoints    OperationCheckpoint[]
-  notifications           Notification[]
-  manualAssets            ManualAsset[]
-  manualLiabilities       ManualLiability[]
-  taxAccounts             TaxAccount[]
-  apiTokens               ApiToken[]
-  investmentIntel         InvestmentIntel[]
-  pushSubscriptions       PushSubscription[]
-  webhooks                Webhook[]
-  providerConnections     ProviderConnection[]
-  transferGroups          TransferGroup[]
-  transactionGroups       TransactionGroup[]
-  transactionJournals     TransactionJournal[]
-  ruleExecutionLogs       RuleExecutionLog[]
+  id                       String                    @id @default(cuid())
+  name                     String
+  currency                 String                    @default("USD")
+  fiscalYearStart          Int                       @default(1)
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  members                  HouseholdMember[]
+  accounts                 Account[]
+  categories               Category[]
+  budgets                  Budget[]
+  bills                    Bill[]
+  recurringItems           RecurringItem[]
+  goals                    Goal[]
+  rules                    Rule[]
+  merchants                Merchant[]
+  tags                     Tag[]
+  invites                  HouseholdInvite[]
+  aiConfig                 AiConfig?
+  conversations            Conversation[]
+  netWorthSnapshots        NetWorthSnapshot[]
+  accountBalanceSnapshots  AccountBalanceSnapshot[]
+  reportingSnapshots       ReportingSnapshot[]
+  reportingRollups         ReportingRollup[]
+  savedReports             SavedReport[]
+  wealthAiCache            WealthAiCache?
+  duplicateDismissals      DuplicateDismissal[]
+  reportSchedule           ReportSchedule?
+  importHistory            ImportHistory[]
+  operationCheckpoints     OperationCheckpoint[]
+  notifications            Notification[]
+  manualAssets             ManualAsset[]
+  manualLiabilities        ManualLiability[]
+  taxAccounts              TaxAccount[]
+  apiTokens                ApiToken[]
+  investmentIntel          InvestmentIntel[]
+  pushSubscriptions        PushSubscription[]
+  webhooks                 Webhook[]
+  providerConnections      ProviderConnection[]
+  transferGroups           TransferGroup[]
+  transactionGroups        TransactionGroup[]
+  transactionJournals      TransactionJournal[]
+  ruleExecutionLogs        RuleExecutionLog[]
   categoryLearningExamples CategoryLearningExample[]
-  ruleGroups              RuleGroup[]
-  reconciliations         Reconciliation[]
-  availableBudgets        AvailableBudget[]
-  attachments             Attachment[]
-  transactionLinks        TransactionLink[]
-  objectGroups            ObjectGroup[]
+  ruleGroups               RuleGroup[]
+  reconciliations          Reconciliation[]
+  availableBudgets         AvailableBudget[]
+  attachments              Attachment[]
+  transactionLinks         TransactionLink[]
+  objectGroups             ObjectGroup[]
 
   @@map("households")
 }
@@ -95,7 +95,7 @@ model AiConfig {
   model           String    @default("")
   encryptedApiKey String    @default("")
   baseUrl         String?
-  headers         String?   // JSON: {"key": "value"} for custom provider
+  headers         String? // JSON: {"key": "value"} for custom provider
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
@@ -104,16 +104,16 @@ model AiConfig {
 }
 
 model EmailConfig {
-  id               String   @id @default("singleton")
-  provider         String   @default("none") // "resend" | "smtp" | "none"
-  resendApiKey     String   @default("") // encrypted
-  resendFrom       String   @default("")
-  smtpHost         String   @default("")
-  smtpPort         Int      @default(587)
-  smtpUser         String   @default("")
-  smtpPass         String   @default("") // encrypted
-  smtpFrom         String   @default("")
-  updatedAt        DateTime @updatedAt
+  id           String   @id @default("singleton")
+  provider     String   @default("none") // "resend" | "smtp" | "none"
+  resendApiKey String   @default("") // encrypted
+  resendFrom   String   @default("")
+  smtpHost     String   @default("")
+  smtpPort     Int      @default(587)
+  smtpUser     String   @default("")
+  smtpPass     String   @default("") // encrypted
+  smtpFrom     String   @default("")
+  updatedAt    DateTime @updatedAt
 
   @@map("email_config")
 }
@@ -186,100 +186,39 @@ model RefreshToken {
 }
 
 model Account {
-  id                  String                   @id @default(cuid())
-  householdId         String
-  name                String
-  type                String
-  institution         String?
-  institutionLogo     String?
-  lastFour            String?
-  balance               Float                    @default(0)
-  balanceDecimal        Decimal?                 @db.Decimal(19, 4)
-  currency              String                   @default("USD")
-  creditLimit           Float?
-  creditLimitDecimal    Decimal?                 @db.Decimal(19, 4)
-  providerConnectionId  String?
-  isHidden              Boolean                  @default(false)
-  excludeFromNetWorth   Boolean                  @default(false)
+  id                   String                   @id @default(cuid())
+  householdId          String
+  name                 String
+  type                 String
+  institution          String?
+  institutionLogo      String?
+  lastFour             String?
+  balance              Float                    @default(0)
+  balanceDecimal       Decimal?                 @db.Decimal(19, 4)
+  currency             String                   @default("USD")
+  creditLimit          Float?
+  creditLimitDecimal   Decimal?                 @db.Decimal(19, 4)
+  providerConnectionId String?
+  isHidden             Boolean                  @default(false)
+  excludeFromNetWorth  Boolean                  @default(false)
   excludeFromReports   Boolean                  @default(false)
-  isDeleted             Boolean                  @default(false)
-  lastSynced            DateTime?
+  isDeleted            Boolean                  @default(false)
+  lastSynced           DateTime?
   objectGroupId        String?
-  createdAt             DateTime                 @default(now())
-  updatedAt             DateTime                 @updatedAt
-  household             Household                @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  providerConnection    ProviderConnection?      @relation(fields: [providerConnectionId], references: [id], onDelete: SetNull)
-  objectGroup           ObjectGroup?             @relation(fields: [objectGroupId], references: [id], onDelete: SetNull)
-  transactions          Transaction[]
-  transactionEntries    TransactionEntry[]
-  recurringItems        RecurringItem[]
-  goals                 Goal[]
-  investmentHoldings    InvestmentHolding[]
-  balanceSnapshots      AccountBalanceSnapshot[]
-  taxAccounts           TaxAccount[]
-  reconciliations       Reconciliation[]
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  household            Household                @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  providerConnection   ProviderConnection?      @relation(fields: [providerConnectionId], references: [id], onDelete: SetNull)
+  objectGroup          ObjectGroup?             @relation(fields: [objectGroupId], references: [id], onDelete: SetNull)
+  transactionEntries   TransactionEntry[]
+  recurringItems       RecurringItem[]
+  goals                Goal[]
+  investmentHoldings   InvestmentHolding[]
+  balanceSnapshots     AccountBalanceSnapshot[]
+  taxAccounts          TaxAccount[]
+  reconciliations      Reconciliation[]
 
   @@map("accounts")
-}
-
-model Transaction {
-  id                  String           @id @default(cuid())
-  householdId         String
-  accountId           String
-  date                DateTime
-  description         String
-  originalDescription String
-  amount              Float
-  amountDecimal       Decimal?         @db.Decimal(19, 4)
-  currencyCode        String           @default("CAD")
-  originalAmount      Decimal?         @db.Decimal(19, 4)
-  fxRate              Decimal?         @db.Decimal(19, 6)
-  categoryId          String?
-  merchantId          String?
-  notes               String?
-  isRecurring         Boolean          @default(false)
-  needsReview         Boolean          @default(false)
-  aiSuggestedCategoryId   String?
-  aiSuggestedCategoryName String?
-  aiSuggestionConfidence  Float?
-  aiSuggestedCategory     Category? @relation("AiSuggestedCategory", fields: [aiSuggestedCategoryId], references: [id], onDelete: SetNull)
-  isHidden            Boolean          @default(false)
-  isPending           Boolean          @default(false)
-  isSplit             Boolean          @default(false)
-  splitDetails        Json?
-  isTransfer          Boolean          @default(false)
-  transferId          String?
-  transferGroupId     String?
-  isRefund            Boolean          @default(false)
-  isCleared           Boolean          @default(false)
-  clearedDate         DateTime?
-  reconcileId         String?
-  refundedTransactionId String?
-  isDeleted           Boolean          @default(false)
-  refundedTransaction   Transaction? @relation("RefundLink", fields: [refundedTransactionId], references: [id], onDelete: SetNull)
-  refunds               Transaction[] @relation("RefundLink")
-  recurringItemId   String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  account             Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  category            Category?        @relation(fields: [categoryId], references: [id])
-  merchant            Merchant?        @relation(fields: [merchantId], references: [id], onDelete: SetNull)
-  transferGroup       TransferGroup?   @relation(fields: [transferGroupId], references: [id], onDelete: SetNull)
-  tags                TransactionTag[]
-  goalAllocations     GoalAllocation[]
-  splits              TransactionSplit[]
-  billPaidPeriods     BillPaidPeriod[]
-  attachments         Attachment[]
-  linksFrom           TransactionLink[]  @relation("LinksFrom")
-  linksTo             TransactionLink[]  @relation("LinksTo")
-
-  @@index([householdId, date])
-  @@index([householdId, date, amount])
-  @@index([householdId, categoryId, date])
-  @@index([householdId, needsReview])
-  @@index([accountId])
-  @@index([categoryId])
-  @@map("transactions")
 }
 
 model TransactionGroup {
@@ -296,40 +235,47 @@ model TransactionGroup {
 }
 
 model TransactionJournal {
-  id              String                   @id @default(cuid())
-  householdId     String
-  groupId         String
-  transactionType String
-  date            DateTime
-  description     String
-  amountDecimal   Decimal                  @db.Decimal(19, 4)
-  currencyCode    String                   @default("USD")
-  categoryId      String?
-  merchantId      String?
-  notes           String?
-  isPending       Boolean                  @default(false)
-  isReconciled    Boolean                  @default(false)
-  reconciledAt    DateTime?
-  needsReview     Boolean                  @default(false)
-  isHidden        Boolean                  @default(false)
-  isRecurring     Boolean                  @default(false)
-  isSplit         Boolean                  @default(false)
-  isDeleted       Boolean                  @default(false)
-  aiSuggestedCategoryId     String?
-  aiSuggestedCategoryName   String?
-  aiSuggestionConfidence    Float?
-  order           Int                      @default(0)
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-  household       Household                @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  group           TransactionGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  category        Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  merchant        Merchant?                @relation(fields: [merchantId], references: [id], onDelete: SetNull)
-  aiSuggestedCategory Category?             @relation("JournalAiSuggestedCategory", fields: [aiSuggestedCategoryId], references: [id], onDelete: SetNull)
-  entries         TransactionEntry[]
-  tags            JournalTag[]
-  meta            TransactionJournalMeta[]
-  ruleExecutionLogs RuleExecutionLog[]
+  id                      String                   @id @default(cuid())
+  householdId             String
+  groupId                 String
+  transactionType         String
+  date                    DateTime
+  description             String
+  amountDecimal           Decimal                  @db.Decimal(19, 4)
+  currencyCode            String                   @default("USD")
+  categoryId              String?
+  merchantId              String?
+  notes                   String?
+  isPending               Boolean                  @default(false)
+  isReconciled            Boolean                  @default(false)
+  reconciledAt            DateTime?
+  needsReview             Boolean                  @default(false)
+  isHidden                Boolean                  @default(false)
+  isRecurring             Boolean                  @default(false)
+  isSplit                 Boolean                  @default(false)
+  isDeleted               Boolean                  @default(false)
+  aiSuggestedCategoryId   String?
+  aiSuggestedCategoryName String?
+  aiSuggestionConfidence  Float?
+  order                   Int                      @default(0)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  household               Household                @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  group                   TransactionGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  category                Category?                @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  merchant                Merchant?                @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  aiSuggestedCategory     Category?                @relation("JournalAiSuggestedCategory", fields: [aiSuggestedCategoryId], references: [id], onDelete: SetNull)
+  entries                 TransactionEntry[]
+  tags                    JournalTag[]
+  meta                    TransactionJournalMeta[]
+  ruleExecutionLogs       RuleExecutionLog[]
+  attachments             Attachment[]
+  billPaidPeriods         BillPaidPeriod[]
+  transactionTags         TransactionTag[]
+  splits                  TransactionSplit[]
+  linksFrom               TransactionLink[]        @relation("LinksFrom")
+  linksTo                 TransactionLink[]        @relation("LinksTo")
+  goalAllocations         GoalAllocation[]
 
   @@index([householdId, date])
   @@index([householdId, transactionType, date])
@@ -368,32 +314,30 @@ model TransactionJournalMeta {
 }
 
 model Category {
-  id             String          @id @default(cuid())
-  householdId    String
-  name           String
-  icon          String?
-  type           String
-  groupId        String?
-  group          CategoryGroup?  @relation(fields: [groupId], references: [id])
-  objectGroupId  String?
-  sortOrder      Int             @default(0)
-  isSystem          Boolean         @default(false)
-  bucketType        String          @default("uncategorized") // needs | wants | savings | uncategorized
-  isTaxDeductible   Boolean         @default(false)
-  excludeFromReports   Boolean         @default(false)
-  isDeleted      Boolean         @default(false)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  household      Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  objectGroup     ObjectGroup?       @relation(fields: [objectGroupId], references: [id], onDelete: SetNull)
-  transactions        Transaction[]
+  id                  String                    @id @default(cuid())
+  householdId         String
+  name                String
+  icon                String?
+  type                String
+  groupId             String?
+  group               CategoryGroup?            @relation(fields: [groupId], references: [id])
+  objectGroupId       String?
+  sortOrder           Int                       @default(0)
+  isSystem            Boolean                   @default(false)
+  bucketType          String                    @default("uncategorized") // needs | wants | savings | uncategorized
+  isTaxDeductible     Boolean                   @default(false)
+  excludeFromReports  Boolean                   @default(false)
+  isDeleted           Boolean                   @default(false)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  household           Household                 @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  objectGroup         ObjectGroup?              @relation(fields: [objectGroupId], references: [id], onDelete: SetNull)
   transactionJournals TransactionJournal[]
   budgets             Budget[]
   recurringItems      RecurringItem[]
   transactionSplits   TransactionSplit[]
-  aiSuggestedTransactions Transaction[] @relation("AiSuggestedCategory")
-  journalsAiSuggested TransactionJournal[] @relation("JournalAiSuggestedCategory")
-  learningExamples        CategoryLearningExample[]
+  journalsAiSuggested TransactionJournal[]      @relation("JournalAiSuggestedCategory")
+  learningExamples    CategoryLearningExample[]
 
   @@map("categories")
 }
@@ -410,37 +354,38 @@ model CategoryGroup {
 }
 
 model Budget {
-  id          String    @id @default(cuid())
-  householdId String
-  categoryId  String?
-  name        String?   // label for catch-all/uncategorized budgets
-  amount         Float
-  amountDecimal  Decimal?  @db.Decimal(19, 4)
-  period         String    @default("monthly")
-  rollover    Boolean   @default(false)
-  startDate   DateTime  @default(now())
-  budgetType        String    @default("FLEXIBLE") // FIXED | FLEXIBLE | NON_MONTHLY
-  autoBudgetType    String?
-  autoBudgetAmount  Decimal?  @db.Decimal(19, 4)
-  groupId      String?
-  isDeleted    Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  household   Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  category    Category?     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  objectGroup ObjectGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  limits      BudgetLimit[]
+  id               String        @id @default(cuid())
+  householdId      String
+  categoryId       String?
+  name             String? // label for catch-all/uncategorized budgets
+  amount           Float
+  amountDecimal    Decimal?      @db.Decimal(19, 4)
+  period           String        @default("monthly")
+  rollover         Boolean       @default(false)
+  startDate        DateTime      @default(now())
+  budgetType       String        @default("FLEXIBLE") // FIXED | FLEXIBLE | NON_MONTHLY
+  autoBudgetType   String?
+  autoBudgetAmount Decimal?      @db.Decimal(19, 4)
+  groupId          String?
+  isDeleted        Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  household        Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category         Category?     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  objectGroup      ObjectGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  limits           BudgetLimit[]
+
   @@map("budgets")
 }
 
 model AvailableBudget {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   householdId  String
-  amount       Decimal  @db.Decimal(19, 4)
-  currencyCode String   @default("USD")
+  amount       Decimal   @db.Decimal(19, 4)
+  currencyCode String    @default("USD")
   periodKey    String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@unique([householdId, periodKey])
@@ -448,32 +393,32 @@ model AvailableBudget {
 }
 
 model Attachment {
-  id            String      @id @default(cuid())
+  id            String             @id @default(cuid())
   householdId   String
   transactionId String
   filename      String
   mimeType      String
   sizeBytes     Int
   storagePath   String
-  uploadedAt    DateTime    @default(now())
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  household     Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  uploadedAt    DateTime           @default(now())
+  journal       TransactionJournal @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  household     Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@index([transactionId])
   @@map("attachments")
 }
 
 model BudgetLimit {
-  id              String   @id @default(cuid())
-  householdId     String
-  budgetId        String
-  periodKey       String   // e.g. "2024-01" for monthly, "2024-W03" for weekly, "2024-Q1" for quarterly
-  limitAmount     Decimal  @db.Decimal(19, 4)
-  spentAmount     Decimal  @default(0) @db.Decimal(19, 4)
-  rolloverAmount  Decimal  @default(0) @db.Decimal(19, 4)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  budget          Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  householdId    String
+  budgetId       String
+  periodKey      String // e.g. "2024-01" for monthly, "2024-W03" for weekly, "2024-Q1" for quarterly
+  limitAmount    Decimal  @db.Decimal(19, 4)
+  spentAmount    Decimal  @default(0) @db.Decimal(19, 4)
+  rolloverAmount Decimal  @default(0) @db.Decimal(19, 4)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  budget         Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
 
   @@unique([budgetId, periodKey])
   @@index([householdId, periodKey])
@@ -497,69 +442,69 @@ model Reconciliation {
 }
 
 model Bill {
-  id           String          @id @default(cuid())
-  householdId  String
-  name         String
-  amountMin    Decimal?        @db.Decimal(19, 4)
-  amountMax    Decimal?        @db.Decimal(19, 4)
-  currency     String          @default("USD")
-  startDate    DateTime
-  endDate      DateTime?
-  repeatFreq   String
-  skipPeriods  Int             @default(0)
-  isActive     Boolean         @default(true)
-  notes        String?
-  isDeleted    Boolean         @default(false)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  paidPeriods  BillPaidPeriod[]
-  household    Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  id          String           @id @default(cuid())
+  householdId String
+  name        String
+  amountMin   Decimal?         @db.Decimal(19, 4)
+  amountMax   Decimal?         @db.Decimal(19, 4)
+  currency    String           @default("USD")
+  startDate   DateTime
+  endDate     DateTime?
+  repeatFreq  String
+  skipPeriods Int              @default(0)
+  isActive    Boolean          @default(true)
+  notes       String?
+  isDeleted   Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  paidPeriods BillPaidPeriod[]
+  household   Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@index([householdId])
   @@map("bills")
 }
 
 model BillPaidPeriod {
-  id            String      @id @default(cuid())
+  id            String             @id @default(cuid())
   billId        String
   transactionId String
   periodKey     String
-  createdAt     DateTime    @default(now())
-  bill          Bill        @relation(fields: [billId], references: [id], onDelete: Cascade)
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  createdAt     DateTime           @default(now())
+  bill          Bill               @relation(fields: [billId], references: [id], onDelete: Cascade)
+  journal       TransactionJournal @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
   @@unique([billId, periodKey])
   @@map("bill_paid_periods")
 }
 
 model RecurringItem {
-  id             String    @id @default(cuid())
-  householdId    String
-  name           String
-  amount         Float
-  amountDecimal  Decimal?  @db.Decimal(19, 4)
-  frequency      String
-  nextDate    DateTime
-  accountId   String
-  categoryId  String?
-  isAutopay   Boolean   @default(false)
-  isActive    Boolean   @default(true)
-  isDeleted   Boolean   @default(false)
-  lastProcessedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  account     Account   @relation(fields: [accountId], references: [id])
-  category    Category? @relation(fields: [categoryId], references: [id])
+  id              String    @id @default(cuid())
+  householdId     String
+  name            String
+  amount          Float
+  amountDecimal   Decimal?  @db.Decimal(19, 4)
+  frequency       String
+  nextDate        DateTime
+  accountId       String
+  categoryId      String?
+  isAutopay       Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  isDeleted       Boolean   @default(false)
+  lastProcessedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  account         Account   @relation(fields: [accountId], references: [id])
+  category        Category? @relation(fields: [categoryId], references: [id])
 
   @@map("recurring_items")
 }
 
 model Goal {
-  id                  String           @id @default(cuid())
-  householdId         String
-  name                String
-  type                String
+  id                         String           @id @default(cuid())
+  householdId                String
+  name                       String
+  type                       String
   targetAmount               Float
   targetAmountDecimal        Decimal?         @db.Decimal(19, 4)
   currentAmount              Float            @default(0)
@@ -567,27 +512,27 @@ model Goal {
   targetDate                 DateTime?
   monthlyContribution        Float            @default(0)
   monthlyContributionDecimal Decimal?         @db.Decimal(19, 4)
-  accountId           String?
-  icon                String?
-  imageUrl            String?
-  isDeleted           Boolean          @default(false)
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  household           Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  account             Account?         @relation(fields: [accountId], references: [id])
-  allocations         GoalAllocation[]
+  accountId                  String?
+  icon                       String?
+  imageUrl                   String?
+  isDeleted                  Boolean          @default(false)
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
+  household                  Household        @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  account                    Account?         @relation(fields: [accountId], references: [id])
+  allocations                GoalAllocation[]
 
   @@map("goals")
 }
 
 model GoalAllocation {
-  id            String      @id @default(cuid())
+  id            String             @id @default(cuid())
   goalId        String
   transactionId String
   amount        Float
-  amountDecimal Decimal?    @db.Decimal(19, 4)
-  goal          Goal        @relation(fields: [goalId], references: [id], onDelete: Cascade)
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  amountDecimal Decimal?           @db.Decimal(19, 4)
+  goal          Goal               @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  journal       TransactionJournal @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
   @@map("goal_allocations")
 }
@@ -615,17 +560,17 @@ model InvestmentHolding {
 }
 
 model HoldingLot {
-  id            String            @id @default(cuid())
-  holdingId     String
-  date          DateTime          @default(now())
+  id                   String            @id @default(cuid())
+  holdingId            String
+  date                 DateTime          @default(now())
   shares               Float
   sharesDecimal        Decimal?          @db.Decimal(19, 4)
   pricePerShare        Float
   pricePerShareDecimal Decimal?          @db.Decimal(19, 4)
-  note          String?
-  status        String            @default("confirmed") // "confirmed" | "pending"
-  createdAt     DateTime          @default(now())
-  holding       InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  note                 String?
+  status               String            @default("confirmed") // "confirmed" | "pending"
+  createdAt            DateTime          @default(now())
+  holding              InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
 
   @@map("holding_lots")
 }
@@ -635,95 +580,95 @@ model RecurringInvestment {
   holdingId     String
   amount        Float
   amountDecimal Decimal?          @db.Decimal(19, 4)
-  frequency  String // "weekly" | "biweekly" | "monthly" | "quarterly"
-  dayOfMonth Int               @default(1)
-  status     String            @default("active") // "active" | "paused"
-  lastRunAt  DateTime?
-  nextRunAt  DateTime
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  holding    InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  frequency     String // "weekly" | "biweekly" | "monthly" | "quarterly"
+  dayOfMonth    Int               @default(1)
+  status        String            @default("active") // "active" | "paused"
+  lastRunAt     DateTime?
+  nextRunAt     DateTime
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  holding       InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
 
   @@map("recurring_investments")
 }
 
 model ManualAsset {
-  id            String               @id @default(cuid())
-  householdId   String
-  name          String
-  type          String               @default("other") // real_estate | vehicle | crypto | collectible | other
+  id                   String                @id @default(cuid())
+  householdId          String
+  name                 String
+  type                 String                @default("other") // real_estate | vehicle | crypto | collectible | other
   currentValue         Float
-  currentValueDecimal  Decimal?             @db.Decimal(19, 4)
+  currentValueDecimal  Decimal?              @db.Decimal(19, 4)
   purchaseValue        Float?
-  purchaseValueDecimal Decimal?             @db.Decimal(19, 4)
-  purchaseDate  DateTime?
-  notes         String?
-  currency      String               @default("USD")
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  household     Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  snapshots     ManualAssetSnapshot[]
+  purchaseValueDecimal Decimal?              @db.Decimal(19, 4)
+  purchaseDate         DateTime?
+  notes                String?
+  currency             String                @default("USD")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  household            Household             @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  snapshots            ManualAssetSnapshot[]
 
   @@index([householdId])
   @@map("manual_assets")
 }
 
 model ManualLiability {
-  id              String    @id @default(cuid())
-  householdId     String
-  name            String
-  type            String    @default("other") // mortgage | auto_loan | student_loan | credit_card | other
-  originalAmount         Float
-  originalAmountDecimal  Decimal?  @db.Decimal(19, 4)
-  currentBalance         Float
-  currentBalanceDecimal  Decimal?  @db.Decimal(19, 4)
-  interestRate           Float?
-  interestRateDecimal    Decimal?  @db.Decimal(19, 4)
-  monthlyPayment         Float?
-  monthlyPaymentDecimal  Decimal?  @db.Decimal(19, 4)
-  maturityDate    DateTime?
-  notes           String?
-  currency        String    @default("USD")
+  id                    String    @id @default(cuid())
+  householdId           String
+  name                  String
+  type                  String    @default("other") // mortgage | auto_loan | student_loan | credit_card | other
+  originalAmount        Float
+  originalAmountDecimal Decimal?  @db.Decimal(19, 4)
+  currentBalance        Float
+  currentBalanceDecimal Decimal?  @db.Decimal(19, 4)
+  interestRate          Float?
+  interestRateDecimal   Decimal?  @db.Decimal(19, 4)
+  monthlyPayment        Float?
+  monthlyPaymentDecimal Decimal?  @db.Decimal(19, 4)
+  maturityDate          DateTime?
+  notes                 String?
+  currency              String    @default("USD")
 
   // Amortization metadata (all nullable — zero risk to existing rows)
-  region            String?   // 'US' | 'CA'
-  rateType          String?   // 'fixed' | 'variable'
-  primeRate         Float?    // lender prime rate (variable only, e.g. 6.70)
-  primeDiscount     Float?    // discount off prime (variable only, e.g. 0.90)
+  region            String? // 'US' | 'CA'
+  rateType          String? // 'fixed' | 'variable'
+  primeRate         Float? // lender prime rate (variable only, e.g. 6.70)
+  primeDiscount     Float? // discount off prime (variable only, e.g. 0.90)
   termStartDate     DateTime?
   termEndDate       DateTime? // renewal / balloon date
-  amortizationYears Int?      // e.g. 25 or 30
-  paymentFrequency  String?   // 'monthly' | 'biweekly' | 'weekly'
+  amortizationYears Int? // e.g. 25 or 30
+  paymentFrequency  String? // 'monthly' | 'biweekly' | 'weekly'
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@index([householdId])
   @@map("manual_liabilities")
 }
 
 model TaxAccount {
-  id               String    @id @default(cuid())
-  householdId      String
-  name             String
-  type             String          // "TFSA" | "RRSP" | "FHSA" | "RESP" | "401k" | "IRA"
-  linkedAccountId  String?         // FK to Account (optional)
-  memberName       String?         // household member name for display
-  birthYear        Int?            // for TFSA age-gating (must be 18+)
-  annualRoomCad            Float           @default(0)  // CRA-set room for current year
-  annualRoomCadDecimal     Decimal?        @db.Decimal(19, 4)
-  totalRoomEver            Float           @default(0)  // cumulative room since account type inception
-  totalRoomEverDecimal     Decimal?        @db.Decimal(19, 4)
-  contributionsYtd         Float           @default(0)  // contributions this calendar year
-  contributionsYtdDecimal  Decimal?        @db.Decimal(19, 4)
-  withdrawalsYtd           Float           @default(0)  // withdrawals (TFSA room restored next Jan 1)
-  withdrawalsYtdDecimal    Decimal?        @db.Decimal(19, 4)
-  notes            String?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  household        Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  linkedAccount    Account?        @relation(fields: [linkedAccountId], references: [id])
+  id                      String    @id @default(cuid())
+  householdId             String
+  name                    String
+  type                    String // "TFSA" | "RRSP" | "FHSA" | "RESP" | "401k" | "IRA"
+  linkedAccountId         String? // FK to Account (optional)
+  memberName              String? // household member name for display
+  birthYear               Int? // for TFSA age-gating (must be 18+)
+  annualRoomCad           Float     @default(0) // CRA-set room for current year
+  annualRoomCadDecimal    Decimal?  @db.Decimal(19, 4)
+  totalRoomEver           Float     @default(0) // cumulative room since account type inception
+  totalRoomEverDecimal    Decimal?  @db.Decimal(19, 4)
+  contributionsYtd        Float     @default(0) // contributions this calendar year
+  contributionsYtdDecimal Decimal?  @db.Decimal(19, 4)
+  withdrawalsYtd          Float     @default(0) // withdrawals (TFSA room restored next Jan 1)
+  withdrawalsYtdDecimal   Decimal?  @db.Decimal(19, 4)
+  notes                   String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  household               Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  linkedAccount           Account?  @relation(fields: [linkedAccountId], references: [id])
 
   @@index([householdId])
   @@map("tax_accounts")
@@ -734,23 +679,22 @@ model ManualAssetSnapshot {
   assetId      String
   value        Float
   valueDecimal Decimal?    @db.Decimal(19, 4)
-  date      DateTime    @default(now())
-  asset     ManualAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  date         DateTime    @default(now())
+  asset        ManualAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
   @@index([assetId, date])
   @@map("manual_asset_snapshots")
 }
 
 model Merchant {
-  id           String        @id @default(cuid())
-  householdId  String
-  name         String
-  displayName  String
-  logoUrl      String?
-  createdAt    DateTime      @default(now())
-  household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
-  journals     TransactionJournal[]
+  id          String               @id @default(cuid())
+  householdId String
+  name        String
+  displayName String
+  logoUrl     String?
+  createdAt   DateTime             @default(now())
+  household   Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  journals    TransactionJournal[]
 
   @@map("merchants")
 }
@@ -771,8 +715,8 @@ model Tag {
 model TransactionTag {
   transactionId String
   tagId         String
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  tag           Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  journal       TransactionJournal @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  tag           Tag                @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([transactionId, tagId])
   @@map("transaction_tags")
@@ -789,39 +733,39 @@ model JournalTag {
 }
 
 model RuleGroup {
-  id              String    @id @default(cuid())
-  householdId     String
-  name            String
-  sortOrder       Int       @default(0)
-  stopProcessing  Boolean   @default(false)
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  rules           Rule[]
-  household       Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  id             String    @id @default(cuid())
+  householdId    String
+  name           String
+  sortOrder      Int       @default(0)
+  stopProcessing Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  rules          Rule[]
+  household      Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@index([householdId])
   @@map("rule_groups")
 }
 
 model Rule {
-  id          String     @id @default(cuid())
-  householdId String
-  name        String?
-  conditions  Json
-  actions     Json
-  strict      Boolean    @default(true)
-  stopProcessing Boolean @default(false)
-  sortOrder   Int        @default(0)
-  isActive    Boolean    @default(true)
-  ruleGroupId String?
-  ruleGroup   RuleGroup? @relation(fields: [ruleGroupId], references: [id], onDelete: SetNull)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  household   Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  triggers    RuleTrigger[]
-  ruleActions RuleActionRecord[]
-  executionLogs RuleExecutionLog[]
+  id             String             @id @default(cuid())
+  householdId    String
+  name           String?
+  conditions     Json
+  actions        Json
+  strict         Boolean            @default(true)
+  stopProcessing Boolean            @default(false)
+  sortOrder      Int                @default(0)
+  isActive       Boolean            @default(true)
+  ruleGroupId    String?
+  ruleGroup      RuleGroup?         @relation(fields: [ruleGroupId], references: [id], onDelete: SetNull)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  household      Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  triggers       RuleTrigger[]
+  ruleActions    RuleActionRecord[]
+  executionLogs  RuleExecutionLog[]
 
   @@index([householdId, isActive, sortOrder])
   @@index([ruleGroupId])
@@ -859,17 +803,17 @@ model RuleActionRecord {
 }
 
 model RuleExecutionLog {
-  id             String              @id @default(cuid())
+  id             String             @id @default(cuid())
   householdId    String
   ruleId         String
   journalId      String
-  status         String              @default("applied")
-  actionsApplied Int                 @default(0)
+  status         String             @default("applied")
+  actionsApplied Int                @default(0)
   message        String?
-  createdAt      DateTime            @default(now())
-  household      Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  rule           Rule                @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  journal        TransactionJournal  @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  createdAt      DateTime           @default(now())
+  household      Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  rule           Rule               @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  journal        TransactionJournal @relation(fields: [journalId], references: [id], onDelete: Cascade)
 
   @@index([householdId, createdAt])
   @@index([ruleId, createdAt])
@@ -878,14 +822,14 @@ model RuleExecutionLog {
 }
 
 model CategoryLearningExample {
-  id                 String   @id @default(cuid())
+  id                 String    @id @default(cuid())
   householdId        String
   descriptionPattern String
   correctCategoryId  String
-  correctCategory    Category @relation(fields: [correctCategoryId], references: [id], onDelete: Cascade)
+  correctCategory    Category  @relation(fields: [correctCategoryId], references: [id], onDelete: Cascade)
   household          Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@index([householdId])
   @@map("category_learning_examples")
@@ -895,13 +839,13 @@ model Notification {
   id               String    @id @default(cuid())
   householdId      String
   userId           String?
-  type             String    // "anomaly" | "subscription" | "missed_payment" | "over_budget" | "info"
+  type             String // "anomaly" | "subscription" | "missed_payment" | "over_budget" | "info"
   severity         String    @default("info") // "info" | "warning" | "alert"
   title            String
   body             String
   read             Boolean   @default(false)
-  linkedEntityId   String?   // transaction ID, account ID, etc.
-  linkedEntityType String?   // "transaction" | "account" | "goal"
+  linkedEntityId   String? // transaction ID, account ID, etc.
+  linkedEntityType String? // "transaction" | "account" | "goal"
   createdAt        DateTime  @default(now())
   household        Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
@@ -920,17 +864,17 @@ model UserPreference {
 }
 
 model NetWorthSnapshot {
-  id          String    @id @default(cuid())
-  householdId String
-  date        DateTime  @db.Date
-  assets              Float
-  assetsDecimal       Decimal?  @db.Decimal(19, 4)
-  liabilities         Float
-  liabilitiesDecimal  Decimal?  @db.Decimal(19, 4)
-  netWorth            Float
-  netWorthDecimal     Decimal?  @db.Decimal(19, 4)
-  createdAt   DateTime  @default(now())
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  id                 String    @id @default(cuid())
+  householdId        String
+  date               DateTime  @db.Date
+  assets             Float
+  assetsDecimal      Decimal?  @db.Decimal(19, 4)
+  liabilities        Float
+  liabilitiesDecimal Decimal?  @db.Decimal(19, 4)
+  netWorth           Float
+  netWorthDecimal    Decimal?  @db.Decimal(19, 4)
+  createdAt          DateTime  @default(now())
+  household          Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@unique([householdId, date])
   @@index([householdId, date])
@@ -1033,9 +977,9 @@ model AccountBalanceSnapshot {
   date           DateTime  @db.Date
   balance        Float
   balanceDecimal Decimal?  @db.Decimal(19, 4)
-  createdAt   DateTime  @default(now())
-  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdAt      DateTime  @default(now())
+  account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  household      Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@unique([accountId, date])
   @@index([householdId, date])
@@ -1043,17 +987,17 @@ model AccountBalanceSnapshot {
 }
 
 model ReportingSnapshot {
-  id          String   @id @default(cuid())
-  householdId String
-  kind        String
-  snapshotDate DateTime @db.Date
-  periodKey   String
-  subjectId   String?
-  payload     Json
-  source      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  id           String    @id @default(cuid())
+  householdId  String
+  kind         String
+  snapshotDate DateTime  @db.Date
+  periodKey    String
+  subjectId    String?
+  payload      Json
+  source       String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@unique([householdId, kind, snapshotDate, subjectId])
   @@index([householdId, kind, snapshotDate])
@@ -1061,15 +1005,15 @@ model ReportingSnapshot {
 }
 
 model ReportingRollup {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   householdId String
   kind        String
   periodKey   String
   subjectId   String?
   payload     Json
   source      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@unique([householdId, kind, periodKey, subjectId])
@@ -1142,15 +1086,15 @@ model InvestmentIntel {
 }
 
 model OperationCheckpoint {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   householdId String
-  type        String   // "bulk-import" | "rule-apply-all" | "bulk-categorize" | "bulk-delete"
-  label       String   // human-readable description e.g. "Imported 47 rows from td-statement.csv"
-  snapshot    Json     // array of { id, amount, description, categoryId, merchantId, isHidden, date }
+  type        String // "bulk-import" | "rule-apply-all" | "bulk-categorize" | "bulk-delete"
+  label       String // human-readable description e.g. "Imported 47 rows from td-statement.csv"
+  snapshot    Json // array of { id, amount, description, categoryId, merchantId, isHidden, date }
   txnCount    Int
-  rolledBack  Boolean  @default(false)
+  rolledBack  Boolean   @default(false)
   expiresAt   DateTime // now + 7 days
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
   household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@index([householdId, createdAt])
@@ -1158,30 +1102,30 @@ model OperationCheckpoint {
 }
 
 model PushSubscription {
-  id           String   @id @default(cuid())
-  householdId  String
-  userId       String
-  endpoint     String   @unique
-  p256dh       String
-  auth         String
-  createdAt    DateTime @default(now())
-  household    Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  householdId String
+  userId      String
+  endpoint    String    @unique
+  p256dh      String
+  auth        String
+  createdAt   DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@index([householdId])
   @@map("push_subscriptions")
 }
 
 model Webhook {
-  id          String   @id @default(cuid())
+  id          String            @id @default(cuid())
   householdId String
   name        String
   url         String
   events      String[] // e.g. ["transaction.created", "transaction.updated"]
-  secret      String?  // HMAC-SHA256 signing secret
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  secret      String? // HMAC-SHA256 signing secret
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  household   Household         @relation(fields: [householdId], references: [id], onDelete: Cascade)
   deliveries  WebhookDelivery[]
 
   @@index([householdId])
@@ -1206,14 +1150,14 @@ model WebhookDelivery {
 }
 
 model TransactionSplit {
-  id            String      @id @default(cuid())
+  id            String             @id @default(cuid())
   transactionId String
-  amountDecimal Decimal     @db.Decimal(19, 4)
+  amountDecimal Decimal            @db.Decimal(19, 4)
   categoryId    String?
   notes         String?
-  createdAt     DateTime    @default(now())
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  category      Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt     DateTime           @default(now())
+  journal       TransactionJournal @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  category      Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([transactionId])
   @@index([categoryId])
@@ -1238,12 +1182,11 @@ model ProviderConnection {
 }
 
 model TransferGroup {
-  id           String        @id @default(cuid())
-  householdId  String
-  status       String        @default("matched")
-  createdAt    DateTime      @default(now())
-  household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
+  id          String    @id @default(cuid())
+  householdId String
+  status      String    @default("matched")
+  createdAt   DateTime  @default(now())
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@map("transfer_groups")
 }
@@ -1259,17 +1202,17 @@ model TransactionLinkType {
 }
 
 model TransactionLink {
-  id          String              @id @default(cuid())
+  id          String   @id @default(cuid())
   householdId String
   linkTypeId  String
   fromId      String
   toId        String
-  createdAt   DateTime            @default(now())
+  createdAt   DateTime @default(now())
 
-  household   Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  linkType    TransactionLinkType @relation(fields: [linkTypeId], references: [id])
-  from       Transaction         @relation("LinksFrom", fields: [fromId], references: [id], onDelete: Cascade)
-  to         Transaction         @relation("LinksTo",   fields: [toId],   references: [id], onDelete: Cascade)
+  household Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  linkType  TransactionLinkType @relation(fields: [linkTypeId], references: [id])
+  from      TransactionJournal  @relation("LinksFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to        TransactionJournal  @relation("LinksTo", fields: [toId], references: [id], onDelete: Cascade)
 
   @@unique([fromId, toId, linkTypeId])
   @@index([householdId])
@@ -1277,19 +1220,19 @@ model TransactionLink {
 }
 
 model ObjectGroup {
-  id          String     @id @default(cuid())
+  id          String    @id @default(cuid())
   householdId String
-  household   Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   name        String
-  entityType  String     // "account" | "category" | "budget"
+  entityType  String // "account" | "category" | "budget"
   color       String?
-  sortOrder   Int        @default(0)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  accounts    Account[]
-  categories  Category[]
-  budgets     Budget[]
+  accounts   Account[]
+  categories Category[]
+  budgets    Budget[]
 
   @@index([householdId, entityType])
   @@map("object_groups")
@@ -1297,11 +1240,11 @@ model ObjectGroup {
 
 model LogoCache {
   id        String   @id @default(cuid())
-  type      String   // "bank" | "merchant"
-  key       String   // normalized name (lowercase, trimmed)
-  logoData  Bytes?   // null = confirmed no logo found (negative cache)
+  type      String // "bank" | "merchant"
+  key       String // normalized name (lowercase, trimmed)
+  logoData  Bytes? // null = confirmed no logo found (negative cache)
   mimeType  String?
-  source    String?  // "clearbit" | "duckduckgo"
+  source    String? // "clearbit" | "duckduckgo"
   fetchedAt DateTime @default(now())
 
   @@unique([type, key])
