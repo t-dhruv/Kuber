@@ -597,7 +597,6 @@ export async function fetchJournalReportRows(
   const journalRows = journals
     .map(mapJournalToReportRow)
     .filter((row) => !row.category?.excludeFromReports);
-  const legacyRows = await fetchUnlinkedLegacyReportRows(input, prisma);
 
-  return [...journalRows, ...legacyRows].sort((a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id));
+  return journalRows.sort((a, b) => a.date.getTime() - b.date.getTime() || a.id.localeCompare(b.id));
 }

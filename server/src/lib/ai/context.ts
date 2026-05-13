@@ -33,8 +33,8 @@ export async function getChatContext(prisma: PrismaClient, householdId: string):
   const [household, accounts, transactions, budgets, goals, holdings, latestTransactions] = await Promise.all([
     prisma.household.findUnique({ where: { id: householdId } }),
     prisma.account.findMany({ where: { householdId, isHidden: false } }),
-    prisma.transaction.findMany({
-      where: { householdId, date: { gte: monthStart, lte: monthEnd } },
+    prisma.transactionJournal.findMany({
+      where: { householdId, date: { gte: monthStart, lte: monthEnd }, isDeleted: false },
       include: { category: true },
     }),
     prisma.budget.findMany({
@@ -43,8 +43,8 @@ export async function getChatContext(prisma: PrismaClient, householdId: string):
     }),
     prisma.goal.findMany({ where: { householdId } }),
     prisma.investmentHolding.findMany({ where: { account: { householdId } } }),
-    prisma.transaction.findMany({
-      where: { householdId, isHidden: false },
+    prisma.transactionJournal.findMany({
+      where: { householdId, isHidden: false, isDeleted: false },
       orderBy: { date: 'desc' },
       take: 10,
       include: { category: true },
@@ -57,11 +57,12 @@ export async function getChatContext(prisma: PrismaClient, householdId: string):
   let income = 0; let expenses = 0;
   const categorySpend = new Map<string, { name: string; spent: number }>();
   for (const tx of transactions) {
-    if (tx.amount > 0) income += tx.amount;
-    else expenses += Math.abs(tx.amount);
-    if (tx.category && tx.amount < 0) {
+    const amount = Number(tx.amountDecimal);
+    if (amount > 0) income += amount;
+    else expenses += Math.abs(amount);
+    if (tx.category && amount < 0) {
       const prev = categorySpend.get(tx.categoryId!) ?? { name: tx.category.name, spent: 0 };
-      categorySpend.set(tx.categoryId!, { name: prev.name, spent: prev.spent + Math.abs(tx.amount) });
+      categorySpend.set(tx.categoryId!, { name: prev.name, spent: prev.spent + Math.abs(amount) });
     }
   }
 
@@ -109,7 +110,7 @@ export async function getChatContext(prisma: PrismaClient, householdId: string):
   const recentTransactions = latestTransactions.map(t => ({
     date: t.date.toISOString().split('T')[0],
     description: t.description,
-    amount: Math.round(t.amount * 100) / 100,
+    amount: Math.round(Number(t.amountDecimal) * 100) / 100,
     category: t.category?.name,
   }));
 
@@ -159,18 +160,19 @@ export async function getSpendingContext(
   for (let i = months - 1; i >= 0; i--) {
     const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const end   = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
-    const txns  = await prisma.transaction.findMany({
-      where: { householdId, date: { gte: start, lte: end }, isHidden: false },
+    const txns  = await prisma.transactionJournal.findMany({
+      where: { householdId, date: { gte: start, lte: end }, isHidden: false, isDeleted: false },
       include: { category: true },
     });
     const catMap = new Map<string, number>();
     let income = 0; let expenses = 0;
     for (const tx of txns) {
-      if (tx.amount > 0) income += tx.amount;
+      const amount = Number(tx.amountDecimal);
+      if (amount > 0) income += amount;
       else {
-        expenses += Math.abs(tx.amount);
+        expenses += Math.abs(amount);
         if (tx.category) {
-          catMap.set(tx.category.name, (catMap.get(tx.category.name) ?? 0) + Math.abs(tx.amount));
+          catMap.set(tx.category.name, (catMap.get(tx.category.name) ?? 0) + Math.abs(amount));
         }
       }
     }

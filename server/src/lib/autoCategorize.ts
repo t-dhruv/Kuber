@@ -421,20 +421,15 @@ export async function detectRuleSuggestions(
     })
   );
 
-  const reviewQueue = await prisma.transaction.findMany({
+  const reviewQueue = await prisma.transactionJournal.findMany({
     where: {
       householdId,
       needsReview: true,
-      OR: [
-        { aiSuggestedCategoryId: { not: null } },
-        { aiSuggestedCategoryName: { not: null } },
-      ],
+      isDeleted: false,
     },
     select: {
       description: true,
-      aiSuggestedCategoryId: true,
-      aiSuggestedCategoryName: true,
-      aiSuggestedCategory: { select: { name: true } },
+      category: { select: { name: true } },
     },
   });
 
@@ -449,9 +444,8 @@ export async function detectRuleSuggestions(
     const firstToken = txn.description.toLowerCase().split(/[\s_-]/)[0].trim();
     if (!firstToken || firstToken.length < 3) continue;
 
-    const catId = txn.aiSuggestedCategoryId ?? null;
-    const catName = txn.aiSuggestedCategory?.name ?? txn.aiSuggestedCategoryName ?? '';
-    const key = `${firstToken}::${catId ?? catName}`;
+    const catName = txn.category?.name ?? '';
+    const key = `${firstToken}::${catName}`;
 
     const existing = groups.get(key);
     if (existing) {
@@ -459,7 +453,7 @@ export async function detectRuleSuggestions(
     } else {
       groups.set(key, {
         value: firstToken,
-        suggestedCategoryId: catId,
+        suggestedCategoryId: null,
         suggestedCategoryName: catName,
         count: 1,
       });

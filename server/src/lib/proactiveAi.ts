@@ -28,34 +28,44 @@ export async function detectAnomalies(
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   // Get recent transactions (last 7 days) with categories
-  const recentTxns = await prisma.transaction.findMany({
-    where: { householdId, date: { gte: sevenDaysAgo }, amount: { lt: 0 }, isHidden: false },
+  const recentTxns = await prisma.transactionJournal.findMany({
+    where: { householdId, date: { gte: sevenDaysAgo }, amountDecimal: { lt: 0 }, isHidden: false, isDeleted: false },
     include: { category: { select: { name: true } } },
   });
 
-  // Get 90-day averages per category
-  const historicalTxns = await prisma.transaction.groupBy({
-    by: ['categoryId'],
-    where: { householdId, date: { gte: ninetyDaysAgo, lt: sevenDaysAgo }, amount: { lt: 0 }, isHidden: false },
-    _avg: { amount: true },
-    _count: true,
+  // Get 90-day averages per category (fetch all and group in memory)
+  const historicalTxns = await prisma.transactionJournal.findMany({
+    where: { householdId, date: { gte: ninetyDaysAgo, lt: sevenDaysAgo }, amountDecimal: { lt: 0 }, isHidden: false, isDeleted: false },
+    select: { categoryId: true, amountDecimal: true },
   });
 
-  const avgByCategory = new Map(
-    historicalTxns.map((h) => [h.categoryId, Math.abs(h._avg.amount ?? 0)])
-  );
+  // Group by category and compute averages
+  const avgByCategory = new Map<string | null, number>();
+  const countByCategory = new Map<string | null, number>();
+  for (const tx of historicalTxns) {
+    const count = (countByCategory.get(tx.categoryId) ?? 0) + 1;
+    const sum = (avgByCategory.get(tx.categoryId) ?? 0) + Math.abs(Number(tx.amountDecimal));
+    countByCategory.set(tx.categoryId, count);
+    avgByCategory.set(tx.categoryId, sum);
+  }
+  // Convert sums to averages
+  for (const [catId, sum] of avgByCategory) {
+    const count = countByCategory.get(catId) ?? 1;
+    avgByCategory.set(catId, sum / count);
+  }
 
   for (const txn of recentTxns) {
     if (!txn.categoryId) continue;
     const avg = avgByCategory.get(txn.categoryId);
     if (!avg || avg < 10) continue; // ignore tiny averages
-    const ratio = Math.abs(txn.amount) / avg;
+    const amount = Math.abs(Number(txn.amountDecimal));
+    const ratio = amount / avg;
     if (ratio >= 3) {
       insights.push({
         type: 'anomaly',
         severity: ratio >= 5 ? 'alert' : 'warning',
         title: `Unusual ${txn.category?.name ?? 'expense'} transaction`,
-        body: `$${Math.abs(txn.amount).toFixed(0)} is ${ratio.toFixed(1)}× your 90-day average of $${avg.toFixed(0)} for ${txn.category?.name ?? 'this category'}.`,
+        body: `$${amount.toFixed(0)} is ${ratio.toFixed(1)}× your 90-day average of $${avg.toFixed(0)} for ${txn.category?.name ?? 'this category'}.`,
         linkedEntityId: txn.id,
         linkedEntityType: 'transaction',
       });
@@ -75,31 +85,32 @@ export async function detectSubscriptions(
   const insights: ProactiveInsight[] = [];
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
-  const txns = await prisma.transaction.findMany({
-    where: { householdId, date: { gte: ninetyDaysAgo }, amount: { lt: 0 }, isHidden: false, merchantId: { not: null } },
-    include: { merchant: { select: { name: true } } },
+  const txns = await prisma.transactionJournal.findMany({
+    where: { householdId, date: { gte: ninetyDaysAgo }, amountDecimal: { lt: 0 }, isHidden: false },
+    include: { entries: { select: { accountId: true } } },
     orderBy: { date: 'asc' },
   });
 
-  // Group by merchantId
-  const byMerchant = new Map<string, typeof txns>();
+  // Group by first entry's account (for finding repeating patterns)
+  const byAccount = new Map<string, typeof txns>();
   for (const t of txns) {
-    if (!t.merchantId) continue;
-    if (!byMerchant.has(t.merchantId)) byMerchant.set(t.merchantId, []);
-    byMerchant.get(t.merchantId)!.push(t);
+    const accountId = t.entries?.[0]?.accountId;
+    if (!accountId) continue;
+    if (!byAccount.has(accountId)) byAccount.set(accountId, []);
+    byAccount.get(accountId)!.push(t);
   }
 
-  for (const [, merchantTxns] of byMerchant) {
-    if (merchantTxns.length < 2) continue;
+  for (const [, accountTxns] of byAccount) {
+    if (accountTxns.length < 2) continue;
     // Check if amounts are similar and intervals are ~monthly
-    const amounts = merchantTxns.map((t) => Math.abs(t.amount));
+    const amounts = accountTxns.map((t) => Math.abs(Number(t.amountDecimal)));
     const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
     const amountConsistent = amounts.every((a) => Math.abs(a - avgAmount) / avgAmount < 0.1);
     if (!amountConsistent) continue;
 
     const intervals: number[] = [];
-    for (let i = 1; i < merchantTxns.length; i++) {
-      const days = (merchantTxns[i].date.getTime() - merchantTxns[i - 1].date.getTime()) / (24 * 60 * 60 * 1000);
+    for (let i = 1; i < accountTxns.length; i++) {
+      const days = (accountTxns[i].date.getTime() - accountTxns[i - 1].date.getTime()) / (24 * 60 * 60 * 1000);
       intervals.push(days);
     }
     const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
@@ -108,9 +119,9 @@ export async function detectSubscriptions(
 
     if (isMonthly || isWeekly) {
       const freq = isMonthly ? 'monthly' : 'weekly';
-      const name = merchantTxns[0].merchant?.name ?? 'Unknown merchant';
+      const name = accountTxns[0].description ?? 'Subscription';
       // Check if already detected (last txn was recent)
-      const lastDate = merchantTxns[merchantTxns.length - 1].date;
+      const lastDate = accountTxns[accountTxns.length - 1].date;
       const daysSinceLast = (Date.now() - lastDate.getTime()) / (24 * 60 * 60 * 1000);
       if (daysSinceLast < 35) { // only surface if subscription is still active
         insights.push({
@@ -118,7 +129,7 @@ export async function detectSubscriptions(
           severity: 'info',
           title: `Subscription detected: ${name}`,
           body: `You have a ${freq} charge of ~$${avgAmount.toFixed(2)} from ${name}. Add it as a recurring item to track it.`,
-          linkedEntityId: merchantTxns[merchantTxns.length - 1].id,
+          linkedEntityId: accountTxns[accountTxns.length - 1].id,
           linkedEntityType: 'transaction',
         });
       }
