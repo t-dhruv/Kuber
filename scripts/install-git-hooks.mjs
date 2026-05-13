@@ -7,7 +7,7 @@ import path from 'node:path';
 const hooksPath = '.githooks';
 const repoRoot = process.cwd();
 
-if (!fs.existsSync(path.join(repoRoot, '.git'))) {
+if (process.env.CI || !fs.existsSync(path.join(repoRoot, '.git'))) {
   process.exit(0);
 }
 
