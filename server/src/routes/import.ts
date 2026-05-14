@@ -368,7 +368,7 @@ router.post('/detect-mapping', upload.single('file'), async (req: AuthRequest, r
     });
 
     const investmentHints = {
-      transactionTypeColumn: headers.find((h) => /^(action|type|transaction.?type|buy.?sell|side|trade.?type|activity.?type)$/i.test(h)) ?? null,
+      transactionTypeColumn: headers.find((h) => /^(action|type|transaction.?type|buy.?sell|side|trade.?type|activity.?sub.?type|activity.?type)$/i.test(h)) ?? null,
       sharesColumn: headers.find((h) => /^(shares?|quantity|qty|units?|num.?shares?|volume)$/i.test(h)) ?? null,
       priceColumn: headers.find((h) => /^(price|share.?price|unit.?price|exec.?price|trade.?price|cost.?per.?share|avg.?price)$/i.test(h)) ?? null,
       tickerColumn: headers.find((h) => /^(symbol|ticker|security|instrument|stock|scrip)$/i.test(h)) ?? null,
@@ -453,7 +453,7 @@ router.post('/parse-with-mapping', upload.single('file'), async (req: AuthReques
       const part1 = get(row, descriptionColumn).trim();
       const part2 = descriptionColumn2 ? get(row, descriptionColumn2).trim() : '';
       const separator = descriptionSeparator ?? ' – ';
-      const description = part2 ? `${part1}${separator}${part2}` : part1;
+      const description = part1 && part2 ? `${part1}${separator}${part2}` : (part1 || part2);
       const parsedDate = rawDate ? parseDate(rawDate) : null;
 
       let amount: number | null = null;

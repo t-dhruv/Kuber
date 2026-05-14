@@ -33,11 +33,11 @@ const ALIASES: Record<StandardField, string[]> = {
     'description', 'desc', 'narration', 'memo', 'details', 'particulars',
     'payee', 'merchant', 'narrative', 'transaction description', 'transaction details',
     'reference', 'remarks', 'note', 'notes', 'text', 'transaction narrative',
-    'activity', 'transaction type', 'type',
+    'activity', 'transaction type', 'type', 'name',
   ],
   amount: [
     'amount', 'transaction amount', 'txn amount', 'trx amount', 'net amount',
-    'value', 'sum', 'total', 'money', 'price', 'proceeds',
+    'net cash amount', 'value', 'sum', 'total', 'money', 'price', 'proceeds',
   ],
   debit: [
     'debit', 'debit amount', 'withdrawal', 'withdrawals', 'dr', 'money out',
@@ -86,8 +86,8 @@ function levenshtein(a: string, b: string): number {
  * Returns 0–1 (1 = exact match).
  */
 function scoreMatch(header: string, alias: string): number {
-  const h = header.toLowerCase().trim();
-  const a = alias.toLowerCase().trim();
+  const h = header.toLowerCase().trim().replace(/_/g, ' ');
+  const a = alias.toLowerCase().trim().replace(/_/g, ' ');
 
   // Exact match
   if (h === a) return 1.0;

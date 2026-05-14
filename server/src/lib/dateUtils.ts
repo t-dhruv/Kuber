@@ -9,6 +9,19 @@ const MONTH_ABBR: Record<string, number> = {
   jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
 };
 
+function isValidIsoDate(iso: string): boolean {
+  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+
+  const [, y, m, d] = match;
+  const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  return date.toISOString().slice(0, 10) === iso;
+}
+
+function validIsoOrNull(iso: string): string | null {
+  return isValidIsoDate(iso) ? iso : null;
+}
+
 /**
  * Attempt to parse a date string using common bank formats.
  * Returns an ISO date string (YYYY-MM-DD) or null if unparseable.
@@ -18,16 +31,16 @@ export function parseDate(raw: string): string | null {
   if (!s) return null;
 
   // ISO: 2026-01-15
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return validIsoOrNull(s);
 
   // ISO with time: 2026-01-15T...
-  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return validIsoOrNull(s.slice(0, 10));
 
   // MM/DD/YYYY or M/D/YYYY
   const mdySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (mdySlash) {
     const [, m, d, y] = mdySlash;
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    return validIsoOrNull(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`);
   }
 
   // MM/DD/YY
@@ -35,7 +48,7 @@ export function parseDate(raw: string): string | null {
   if (mdyShort) {
     const [, m, d, y] = mdyShort;
     const year = parseInt(y) >= 50 ? `19${y}` : `20${y}`;
-    return `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    return validIsoOrNull(`${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`);
   }
 
   // DD/MM/YYYY (European, less common for CA/US but included)
@@ -45,7 +58,7 @@ export function parseDate(raw: string): string | null {
   const mdyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
   if (mdyDash) {
     const [, m, d, y] = mdyDash;
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    return validIsoOrNull(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`);
   }
 
   // Jan 15 (no year — assume current year)
@@ -54,7 +67,7 @@ export function parseDate(raw: string): string | null {
     const mon = MONTH_ABBR[monDay[1].toLowerCase()];
     if (mon) {
       const year = new Date().getFullYear();
-      return `${year}-${String(mon).padStart(2, '0')}-${monDay[2].padStart(2, '0')}`;
+      return validIsoOrNull(`${year}-${String(mon).padStart(2, '0')}-${monDay[2].padStart(2, '0')}`);
     }
   }
 
@@ -63,7 +76,7 @@ export function parseDate(raw: string): string | null {
   if (monDayYear) {
     const mon = MONTH_ABBR[monDayYear[1].toLowerCase()];
     if (mon) {
-      return `${monDayYear[3]}-${String(mon).padStart(2, '0')}-${monDayYear[2].padStart(2, '0')}`;
+      return validIsoOrNull(`${monDayYear[3]}-${String(mon).padStart(2, '0')}-${monDayYear[2].padStart(2, '0')}`);
     }
   }
 
@@ -72,7 +85,7 @@ export function parseDate(raw: string): string | null {
   if (dayMonYear) {
     const mon = MONTH_ABBR[dayMonYear[2].toLowerCase()];
     if (mon) {
-      return `${dayMonYear[3]}-${String(mon).padStart(2, '0')}-${dayMonYear[1].padStart(2, '0')}`;
+      return validIsoOrNull(`${dayMonYear[3]}-${String(mon).padStart(2, '0')}-${dayMonYear[1].padStart(2, '0')}`);
     }
   }
 
@@ -166,8 +179,7 @@ export function detectDateFormat(
       const m = s.match(candidate.regex);
       if (!m) return false;
       const iso = candidate.parse(m as unknown as RegExpMatchArray);
-      const d = new Date(iso);
-      return !isNaN(d.getTime());
+      return isValidIsoDate(iso);
     });
 
     if (!allValid) continue;
@@ -190,7 +202,7 @@ export function detectDateFormat(
         const m = raw.trim().match(candidate.regex);
         if (!m) return null;
         try {
-          return candidate.parse(m as unknown as RegExpMatchArray);
+          return validIsoOrNull(candidate.parse(m as unknown as RegExpMatchArray));
         } catch {
           return null;
         }
