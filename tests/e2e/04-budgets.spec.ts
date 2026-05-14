@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { waitForToast } from './helpers';
 
 async function addBudget(
@@ -27,11 +27,11 @@ test.describe('Budgets', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('budget page loads', async ({ page }) => {
+  test('budget page loads @smoke', async ({ page }) => {
     await expect(page.getByText(/budget/i).first()).toBeVisible();
   });
 
-  test('create Groceries budget $400', async ({ page }) => {
+  test('create Groceries budget $400 @smoke', async ({ page }) => {
     await addBudget(page, /groceries/i, '400');
     await page.waitForLoadState('networkidle');
     await expect(page.getByText(/groceries/i).first()).toBeVisible({ timeout: 8000 });

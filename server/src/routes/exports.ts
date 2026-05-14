@@ -108,6 +108,14 @@ router.get('/pdf', async (req: AuthRequest, res: Response) => {
     }
     const { type, from, to, year: yearStr } = parsed.data;
     const householdId = req.householdId!;
+    const range = type === 'spending' || type === 'cashflow' ? parseDateRange(from, to) : null;
+    if ((type === 'spending' || type === 'cashflow') && !range) {
+      return res.status(400).json({ error: `from and to are required for ${type} export` });
+    }
+    const year = type === 'tax' ? (yearStr ? parseInt(yearStr, 10) : new Date().getFullYear()) : null;
+    if (type === 'tax' && year !== null && isNaN(year)) {
+      return res.status(400).json({ error: 'Invalid year' });
+    }
 
     const doc = new PDFDocument({ margin: 50 });
     res.setHeader('Content-Type', 'application/pdf');
@@ -135,9 +143,7 @@ router.get('/pdf', async (req: AuthRequest, res: Response) => {
     }
 
     if (type === 'spending') {
-      const range = parseDateRange(from, to);
-      if (!range) { doc.end(); return res.status(400).json({ error: 'from and to are required for spending export' }); }
-      const { items, total } = await getSpendingData(householdId, range.start, range.end);
+      const { items, total } = await getSpendingData(householdId, range!.start, range!.end);
 
       addTitle(`Spending Report: ${from} – ${to}`);
       doc.fontSize(10).fillColor(GRAY).text(`Generated ${new Date().toLocaleDateString()}`, { align: 'right' });
@@ -169,9 +175,7 @@ router.get('/pdf', async (req: AuthRequest, res: Response) => {
       addRow('Total', fmtCurrency(total), true);
 
     } else if (type === 'cashflow') {
-      const range = parseDateRange(from, to);
-      if (!range) { doc.end(); return res.status(400).json({ error: 'from and to are required for cashflow export' }); }
-      const data = await getCashFlowData(householdId, range.start, range.end);
+      const data = await getCashFlowData(householdId, range!.start, range!.end);
 
       addTitle(`Cash Flow: ${from} – ${to}`);
       doc.fontSize(10).fillColor(GRAY).text(`Generated ${new Date().toLocaleDateString()}`, { align: 'right' });
@@ -186,8 +190,7 @@ router.get('/pdf', async (req: AuthRequest, res: Response) => {
       addRow('Savings Rate', `${data.savingsRate}%`);
 
     } else if (type === 'tax') {
-      const year = yearStr ? parseInt(yearStr, 10) : new Date().getFullYear();
-      const data = await getTaxData(householdId, year);
+      const data = await getTaxData(householdId, year!);
 
       addTitle(`Tax Summary: ${year}`);
       doc.fontSize(10).fillColor(GRAY).text(`Generated ${new Date().toLocaleDateString()}`, { align: 'right' });

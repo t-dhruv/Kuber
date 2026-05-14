@@ -648,7 +648,7 @@ router.post('/import/preview', upload.single('file'), async (req: AuthRequest, r
     }
 
     const householdId = req.householdId!;
-    const account = await prisma.account.findFirst({ where: { id: accountId, householdId } });
+    const account = await prisma.account.findFirst({ where: { id: accountId, householdId, ...NOT_DELETED } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     const text = req.file.buffer.toString('utf-8').replace(/^\uFEFF/, ''); // strip BOM
@@ -704,7 +704,7 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
     }
 
     const householdId = req.householdId!;
-    const account = await prisma.account.findFirst({ where: { id: accountId, householdId } });
+    const account = await prisma.account.findFirst({ where: { id: accountId, householdId, ...NOT_DELETED } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     const text = req.file.buffer.toString('utf-8').replace(/^\uFEFF/, '');
@@ -738,11 +738,8 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
     // Merchant cache to avoid redundant DB calls within this import
     const merchantCache = new Map<string, string>(); // name -> id
 
-    // Get virtual accounts for journal creation
+    // Reuse existing virtual accounts when present; journal creation will create missing ones.
     const virtualAccounts = await getVirtualAccountsByType(householdId);
-    if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
-      return res.status(500).json({ error: 'Missing virtual accounts for import' });
-    }
 
     // Run all inserts in a transaction (including balance update for atomicity)
     const [created, createdJournals] = await prisma.$transaction(async (tx) => {
@@ -790,8 +787,8 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
             notes: row.notes ?? null,
             merchantId,
           },
-          row.amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
-          row.amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+          row.amount < 0 ? (virtualAccounts.expenseAccountId ?? undefined) : undefined,
+          row.amount > 0 ? (virtualAccounts.revenueAccountId ?? undefined) : undefined,
         );
         journals.push(journal);
         results.push(journal.journalId);
@@ -943,12 +940,12 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const categoryId = bodyParsed.data.categoryId || null;
 
     // IDOR: verify account belongs to household
-    const account = await prisma.account.findFirst({ where: { id: accountId, householdId } });
+    const account = await prisma.account.findFirst({ where: { id: accountId, householdId, ...NOT_DELETED } });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
     // Validate categoryId if provided
     if (categoryId) {
-      const cat = await prisma.category.findFirst({ where: { id: categoryId, householdId } });
+      const cat = await prisma.category.findFirst({ where: { id: categoryId, householdId, ...NOT_DELETED } });
       if (!cat) return res.status(404).json({ error: 'Category not found' });
     }
 
@@ -1128,7 +1125,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     if (description) data.description = description;
     if (merchantName) data.description = merchantName; // merchantName maps to description in journals
     if (categoryId) {
-      const cat = await prisma.category.findFirst({ where: { id: categoryId, householdId } });
+      const cat = await prisma.category.findFirst({ where: { id: categoryId, householdId, ...NOT_DELETED } });
       if (!cat) return res.status(404).json({ error: 'Category not found' });
       data.categoryId = categoryId;
     }
@@ -1353,7 +1350,7 @@ router.post('/bulk', async (req: AuthRequest, res: Response) => {
         if (!categoryId || typeof categoryId !== 'string') {
           return res.status(400).json({ error: 'categoryId is required for recategorize action' });
         }
-        const cat = await prisma.category.findFirst({ where: { id: categoryId, householdId } });
+        const cat = await prisma.category.findFirst({ where: { id: categoryId, householdId, ...NOT_DELETED } });
         if (!cat) return res.status(404).json({ error: 'Category not found' });
         await prisma.transactionJournal.updateMany({
           where: { id: { in: ids }, householdId },

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ const reconcileSchema = z.object({
 router.get('/:accountId/reconcile', async (req: AuthRequest, res: Response) => {
   try {
     const account = await prisma.account.findFirst({
-      where: { id: req.params.accountId, householdId: req.householdId! },
+      where: { id: req.params.accountId, householdId: req.householdId!, ...NOT_DELETED },
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
@@ -45,7 +46,7 @@ router.get('/:accountId/reconcile', async (req: AuthRequest, res: Response) => {
 router.post('/:accountId/reconcile', async (req: AuthRequest, res: Response) => {
   try {
     const account = await prisma.account.findFirst({
-      where: { id: req.params.accountId, householdId: req.householdId! },
+      where: { id: req.params.accountId, householdId: req.householdId!, ...NOT_DELETED },
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
@@ -55,13 +56,23 @@ router.post('/:accountId/reconcile', async (req: AuthRequest, res: Response) => 
 
     // Mark journals as reconciled
     await prisma.transactionJournal.updateMany({
-      where: { id: { in: clearedTransactionIds }, householdId: req.householdId! },
+      where: {
+        id: { in: clearedTransactionIds },
+        householdId: req.householdId!,
+        entries: { some: { accountId: req.params.accountId } },
+        ...NOT_DELETED,
+      },
       data:  { isReconciled: true, reconciledAt: new Date(statementDate) },
     });
 
     // Aggregate reconciled journal amounts
     const clearedAgg = await prisma.transactionJournal.aggregate({
-      where: { householdId: req.householdId!, isReconciled: true },
+      where: {
+        householdId: req.householdId!,
+        entries: { some: { accountId: req.params.accountId } },
+        isReconciled: true,
+        ...NOT_DELETED,
+      },
       _sum:  { amountDecimal: true },
     });
     const clearedTotal = Number(clearedAgg._sum.amountDecimal ?? 0);
@@ -128,7 +139,7 @@ router.post('/:accountId/reconcile', async (req: AuthRequest, res: Response) => 
 router.get('/:accountId/reconcile/history', async (req: AuthRequest, res: Response) => {
   try {
     const account = await prisma.account.findFirst({
-      where: { id: req.params.accountId, householdId: req.householdId! },
+      where: { id: req.params.accountId, householdId: req.householdId!, ...NOT_DELETED },
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 

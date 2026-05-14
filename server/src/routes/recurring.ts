@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
 
 const normalizeFrequency = (val: string) => {
   const map: Record<string, string> = {
@@ -63,7 +64,7 @@ router.post('/detect', async (req: AuthRequest, res: Response) => {
     }
 
     const existing = await prisma.recurringItem.findMany({
-      where: { householdId },
+      where: { householdId, ...NOT_DELETED },
       select: { name: true, amount: true },
     });
     const existingKeys = new Set(
@@ -98,11 +99,11 @@ router.post('/detect', async (req: AuthRequest, res: Response) => {
       // Estimate next date based on frequency from last transaction
       const lastDate = new Date(lastTxn.date);
       const nextDate = new Date(lastDate);
-      if (frequency === 'weekly') nextDate.setDate(nextDate.getDate() + 7);
-      else if (frequency === 'biweekly') nextDate.setDate(nextDate.getDate() + 14);
-      else if (frequency === 'monthly') nextDate.setMonth(nextDate.getMonth() + 1);
-      else if (frequency === 'quarterly') nextDate.setMonth(nextDate.getMonth() + 3);
-      else nextDate.setFullYear(nextDate.getFullYear() + 1);
+      if (frequency === 'weekly') nextDate.setUTCDate(nextDate.getUTCDate() + 7);
+      else if (frequency === 'biweekly') nextDate.setUTCDate(nextDate.getUTCDate() + 14);
+      else if (frequency === 'monthly') nextDate.setUTCMonth(nextDate.getUTCMonth() + 1);
+      else if (frequency === 'quarterly') nextDate.setUTCMonth(nextDate.getUTCMonth() + 3);
+      else nextDate.setUTCFullYear(nextDate.getUTCFullYear() + 1);
 
       suggestions.push({ name, amount: -amt, frequency, detectedCount: items.length, nextDate: nextDate.toISOString().split('T')[0] });
     }
@@ -120,7 +121,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { month, year } = req.query;
 
-    const where: Record<string, unknown> = { householdId, isActive: true };
+    const where: Record<string, unknown> = { householdId, isActive: true, ...NOT_DELETED };
 
     if (month && year) {
       const m = parseInt(month as string, 10);
@@ -133,7 +134,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     }
 
     const items = await prisma.recurringItem.findMany({
-      where: where as any, // TODO: replace with proper Prisma where type once recurring filters are typed
+      where: where as any,
       include: {
         category: { select: { id: true, name: true, icon: true } },
         account: { select: { id: true, name: true } },
@@ -175,7 +176,7 @@ router.get('/monthly-summary', async (req: AuthRequest, res: Response) => {
     const monthEnd = new Date(yearParam, monthParam, 1);
 
     const items = await prisma.recurringItem.findMany({
-      where: { householdId },
+      where: { householdId, ...NOT_DELETED },
       include: {
         category: { select: { id: true, name: true, icon: true } },
         account: { select: { id: true, name: true } },
@@ -256,7 +257,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const { name, amount, frequency, nextDate, categoryId, accountId } = parse.data;
 
     // Verify account belongs to household
-    const account = await prisma.account.findFirst({ where: { id: accountId, householdId } });
+    const account = await prisma.account.findFirst({ where: { id: accountId, householdId, ...NOT_DELETED } });
     if (!account) {
       return res.status(400).json({ error: 'Invalid accountId' });
     }
@@ -304,7 +305,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const existing = await prisma.recurringItem.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing || existing.isDeleted) return res.status(404).json({ error: 'Not found' });
     if (existing.householdId !== householdId) return res.status(403).json({ error: 'Forbidden' });
 
     const parse = recurringUpdateSchema.extend({ isActive: z.boolean().optional() }).safeParse(req.body);
@@ -313,7 +314,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 
     // If accountId provided, verify it belongs to household
     if (accountId && accountId !== existing.accountId) {
-      const account = await prisma.account.findFirst({ where: { id: accountId, householdId } });
+      const account = await prisma.account.findFirst({ where: { id: accountId, householdId, ...NOT_DELETED } });
       if (!account) return res.status(400).json({ error: 'Invalid accountId' });
     }
 
@@ -361,10 +362,13 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const existing = await prisma.recurringItem.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing || existing.isDeleted) return res.status(404).json({ error: 'Not found' });
     if (existing.householdId !== householdId) return res.status(403).json({ error: 'Forbidden' });
 
-    await prisma.recurringItem.delete({ where: { id } });
+    await prisma.recurringItem.update({
+      where: { id },
+      data: { isDeleted: true, isActive: false },
+    });
 
     return res.json({ success: true });
   } catch (err) {
@@ -385,7 +389,7 @@ router.post('/:id/toggle', async (req: AuthRequest, res: Response) => {
     }
 
     const existing = await prisma.recurringItem.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing || existing.isDeleted) return res.status(404).json({ error: 'Not found' });
     if (existing.householdId !== householdId) return res.status(403).json({ error: 'Forbidden' });
 
     const updated = await prisma.recurringItem.update({

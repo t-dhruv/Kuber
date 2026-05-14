@@ -1,16 +1,16 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import * as fs from 'fs';
 import * as path from 'path';
 
 const CREDS_PATH = path.join(__dirname, '.auth', 'credentials.json');
 
 test.describe('Auth', () => {
-  test('login page loads', async ({ page }) => {
+  test('login page loads @smoke', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByRole('heading', { name: /kuber/i })).toBeVisible();
   });
 
-  test('already logged in — lands on dashboard', async ({ page }) => {
+  test('already logged in — lands on dashboard @smoke', async ({ page }) => {
     await page.goto('/');
     await expect(page).not.toHaveURL(/login/);
     await expect(page.getByText(/dashboard|net worth|accounts/i).first()).toBeVisible();

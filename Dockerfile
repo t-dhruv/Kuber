@@ -6,12 +6,13 @@ FROM node:25-alpine AS base
 RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY scripts ./scripts
 COPY shared ./shared
 
 # ─── Server: install + build ──────────────────────────────────────────────────
 FROM base AS server-builder
 COPY server/package.json ./server/
-RUN npm ci --workspace=server
+RUN CI=true npm ci --workspace=server
 COPY server/prisma ./server/prisma
 COPY server/src ./server/src
 COPY server/tsconfig.json ./server/
@@ -22,9 +23,10 @@ FROM node:25-alpine AS server-runner
 RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY scripts ./scripts
 COPY shared ./shared
 COPY server/package.json ./server/
-RUN npm ci --workspace=server --omit=dev
+RUN CI=true npm ci --workspace=server --omit=dev
 COPY --from=server-builder /app/server/dist ./server/dist
 COPY --from=server-builder /app/server/prisma ./server/prisma
 COPY --from=server-builder /app/node_modules/.prisma ./node_modules/.prisma
@@ -37,7 +39,7 @@ CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
 # ─── Client: install + build ──────────────────────────────────────────────────
 FROM base AS client-builder
 COPY client/package.json ./client/
-RUN npm ci --workspace=client
+RUN CI=true npm ci --workspace=client
 COPY client/index.html ./client/
 COPY client/vite.config.ts ./client/
 COPY client/tsconfig.json ./client/

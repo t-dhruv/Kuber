@@ -136,7 +136,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     // Fetch all budgets for the household with their categories and groups
     const budgets = await prisma.budget.findMany({
-      where: { householdId },
+      where: { householdId, isDeleted: false },
       include: {
         category: {
           include: {
@@ -430,7 +430,10 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    await prisma.budget.delete({ where: { id } });
+    await prisma.budget.update({
+      where: { id },
+      data: { isDeleted: true },
+    });
     logAudit({ householdId, userId: req.userId!, action: 'DELETE', entity: 'BUDGET', entityId: id, before: { amount: budget.amount } });
 
     return res.json({ success: true });

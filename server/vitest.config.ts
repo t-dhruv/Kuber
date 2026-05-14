@@ -8,8 +8,14 @@ export default defineConfig({
     setupFiles: ['src/test-setup.ts'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'lcov'],
+      reporter: ['text', 'lcov', 'json-summary'],
       include: ['src/lib/**', 'src/routes/**'],
+      thresholds: {
+        statements: 33,
+        branches: 26,
+        functions: 40,
+        lines: 35,
+      },
     },
   },
 });

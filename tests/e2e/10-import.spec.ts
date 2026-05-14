@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import * as path from 'path';
 
 const CSV_PATH = path.join(__dirname, 'fixtures', 'sample-import.csv');

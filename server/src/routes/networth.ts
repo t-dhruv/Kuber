@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { takeNetWorthSnapshot } from '../lib/netWorthJob';
 import { summarizeNetWorth } from '../lib/reporting';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
 
 const router = Router();
 
@@ -44,7 +45,7 @@ router.get('/history', async (req: AuthRequest, res: Response) => {
 
     // Compute current net worth from live account balances
     const accounts = await prisma.account.findMany({
-      where: { householdId, isHidden: false, excludeFromNetWorth: false },
+      where: { householdId, isHidden: false, excludeFromNetWorth: false, ...NOT_DELETED },
       select: { balance: true, type: true, excludeFromNetWorth: true },
     });
     const current = summarizeNetWorth(accounts);

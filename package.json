@@ -11,10 +11,17 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "prepare": "node scripts/install-git-hooks.mjs",
+    "hooks:install": "node scripts/install-git-hooks.mjs",
     "lint": "turbo lint",
     "test": "turbo test",
+    "test:coverage": "npm run test:coverage --workspace=server",
     "test:e2e": "playwright test",
     "test:smoke": "playwright test --grep @smoke",
+    "qa:code-coverage:release": "npm run test:coverage --workspace=server && node scripts/check-code-coverage.mjs --release",
+    "qa:feature-coverage": "node scripts/check-feature-coverage.mjs",
+    "qa:feature-coverage:release": "node scripts/check-feature-coverage.mjs --release",
+    "qa:release-gate": "npm run qa:code-coverage:release && npm run qa:feature-coverage:release",
     "db:migrate": "turbo run db:migrate --filter=server",
     "db:seed": "turbo run db:seed --filter=server",
     "db:studio": "turbo run db:studio --filter=server"

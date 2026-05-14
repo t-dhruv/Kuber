@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { waitForToast } from './helpers';
 
 test.describe('Accounts', () => {
@@ -7,11 +7,11 @@ test.describe('Accounts', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('accounts page loads', async ({ page }) => {
+  test('accounts page loads @smoke', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /accounts/i })).toBeVisible();
   });
 
-  test('create Main Checking account ($5,000)', async ({ page }) => {
+  test('create Main Checking account ($5,000) @smoke', async ({ page }) => {
     await page.getByRole('button', { name: /add account/i }).first().click();
     const dialog = page.getByRole('dialog');
     await dialog.waitFor({ timeout: 5000 });

@@ -84,12 +84,15 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const existing = await prisma.category.findFirst({
-      where: { id: req.params.id, householdId },
+      where: { id: req.params.id, householdId, ...NOT_DELETED },
     });
     if (!existing) return res.status(404).json({ error: 'Category not found' });
     if (existing.isSystem) return res.status(403).json({ error: 'Cannot delete system categories' });
 
-    await prisma.category.delete({ where: { id: req.params.id } });
+    await prisma.category.update({
+      where: { id: req.params.id },
+      data: { isDeleted: true },
+    });
     return res.json({ message: 'Deleted' });
   } catch (err) {
     req.log.error({ err }, 'categories/DELETE');

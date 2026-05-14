@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
+import { NOT_DELETED } from '../lib/softDeleteWhere';
 
 const router = Router();
 
@@ -44,13 +45,14 @@ router.get('/net-worth-breakdown', async (req: AuthRequest, res: Response) => {
         type: { not: 'investment' },
         isHidden: false,
         excludeFromNetWorth: false,
+        ...NOT_DELETED,
       },
       _sum: { balance: true },
     });
 
     // Investment holdings: sum currentPrice * shares for accounts in household
     const investmentAccounts = await prisma.account.findMany({
-      where: { householdId, type: 'investment' },
+      where: { householdId, type: 'investment', ...NOT_DELETED },
       select: { id: true },
     });
     const investmentAccountIds = investmentAccounts.map((a) => a.id);

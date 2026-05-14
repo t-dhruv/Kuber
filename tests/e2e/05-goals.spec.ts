@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { waitForToast } from './helpers';
 
 test.describe('Goals', () => {
@@ -7,11 +7,11 @@ test.describe('Goals', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('goals page loads', async ({ page }) => {
+  test('goals page loads @smoke', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /goals/i })).toBeVisible();
   });
 
-  test('create Emergency Fund savings goal ($20,000 target)', async ({ page }) => {
+  test('create Emergency Fund savings goal ($20,000 target) @smoke', async ({ page }) => {
     await page.getByRole('button', { name: /add goal|new goal|create goal/i }).first().click();
     const dialog = page.getByRole('dialog');
     await dialog.waitFor({ timeout: 5000 });

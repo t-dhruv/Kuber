@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { waitForToast } from './helpers';
 
 async function addTx(
@@ -28,11 +28,11 @@ test.describe('Transactions', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('transactions page loads', async ({ page }) => {
+  test('transactions page loads @smoke', async ({ page }) => {
     await expect(page.getByRole('heading', { name: /transactions/i })).toBeVisible();
   });
 
-  test('add expense: Whole Foods Market -$85.50', async ({ page }) => {
+  test('add expense: Whole Foods Market -$85.50 @smoke', async ({ page }) => {
     await addTx(page, 'Whole Foods Market', '-85.50');
     await expect(page.getByText('Whole Foods Market').first()).toBeVisible({ timeout: 8000 });
   });

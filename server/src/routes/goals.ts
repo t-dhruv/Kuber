@@ -137,6 +137,7 @@ router.get('/accounts-for-debt', async (req: AuthRequest, res: Response) => {
         householdId,
         type: { in: ['CREDIT_CARD', 'LOAN'] },
         isHidden: false,
+        isDeleted: false,
       },
       select: {
         id: true,
@@ -160,7 +161,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
 
     const goals = await prisma.goal.findMany({
-      where: { householdId },
+      where: { householdId, isDeleted: false },
       orderBy: { createdAt: 'asc' },
     });
 
@@ -172,7 +173,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     let accountMap: Record<string, LinkedAccount> = {};
     if (debtAccountIds.length > 0) {
       const accounts = await prisma.account.findMany({
-        where: { id: { in: debtAccountIds }, householdId },
+        where: { id: { in: debtAccountIds }, householdId, isDeleted: false },
         select: { id: true, name: true, type: true, balance: true, institution: true },
       });
       accountMap = Object.fromEntries(accounts.map((a) => [a.id, a]));
@@ -201,7 +202,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     let linkedAccount: LinkedAccount | null = null;
     if (accountId) {
       const account = await prisma.account.findFirst({
-        where: { id: accountId, householdId },
+        where: { id: accountId, householdId, isDeleted: false },
         select: { id: true, name: true, type: true, balance: true, institution: true },
       });
       if (!account) return res.status(400).json({ error: 'Invalid accountId' });
@@ -237,7 +238,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const existing = await prisma.goal.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing || existing.isDeleted) return res.status(404).json({ error: 'Not found' });
     if (existing.householdId !== householdId) return res.status(403).json({ error: 'Forbidden' });
 
     const parse = goalUpdateSchema.safeParse({ ...req.body, type: typeof req.body.type === 'string' ? req.body.type.toLowerCase() : req.body.type });
@@ -247,7 +248,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     let linkedAccount: LinkedAccount | null = null;
     if (accountId && accountId !== existing.accountId) {
       const account = await prisma.account.findFirst({
-        where: { id: accountId, householdId },
+        where: { id: accountId, householdId, isDeleted: false },
         select: { id: true, name: true, type: true, balance: true, institution: true },
       });
       if (!account) return res.status(400).json({ error: 'Invalid accountId' });
@@ -255,7 +256,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     } else if (existing.accountId && accountId !== null) {
       // Keep existing linked account
       const account = await prisma.account.findFirst({
-        where: { id: existing.accountId, householdId },
+        where: { id: existing.accountId, householdId, isDeleted: false },
         select: { id: true, name: true, type: true, balance: true, institution: true },
       });
       linkedAccount = account ?? null;
@@ -290,10 +291,13 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     const existing = await prisma.goal.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing || existing.isDeleted) return res.status(404).json({ error: 'Not found' });
     if (existing.householdId !== householdId) return res.status(403).json({ error: 'Forbidden' });
 
-    await prisma.goal.delete({ where: { id } });
+    await prisma.goal.update({
+      where: { id },
+      data: { isDeleted: true },
+    });
     logAudit({ householdId, userId: req.userId!, action: 'DELETE', entity: 'GOAL', entityId: id, before: { name: existing.name } });
 
     return res.json({ success: true });
@@ -313,7 +317,7 @@ router.post('/:id/contribute', async (req: AuthRequest, res: Response) => {
     const { amount } = parse.data;
 
     const existing = await prisma.goal.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!existing || existing.isDeleted) return res.status(404).json({ error: 'Not found' });
     if (existing.householdId !== householdId) return res.status(403).json({ error: 'Forbidden' });
 
     const newAmount = existing.currentAmount + amount;
@@ -326,7 +330,7 @@ router.post('/:id/contribute', async (req: AuthRequest, res: Response) => {
     let linkedAccount: LinkedAccount | null = null;
     if (updated.type === 'debt' && updated.accountId) {
       const account = await prisma.account.findFirst({
-        where: { id: updated.accountId, householdId },
+        where: { id: updated.accountId, householdId, isDeleted: false },
         select: { id: true, name: true, type: true, balance: true, institution: true },
       });
       linkedAccount = account ?? null;

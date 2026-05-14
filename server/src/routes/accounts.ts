@@ -515,12 +515,15 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    // Soft-delete all journals with entries for this account, then delete the account
+    // Soft-delete all journals with entries for this account, then soft-delete the account.
     await prisma.transactionJournal.updateMany({
       where: { entries: { some: { accountId: id } }, householdId },
       data: { isHidden: true },
     });
-    await prisma.account.delete({ where: { id } });
+    await prisma.account.update({
+      where: { id },
+      data: { isDeleted: true, isHidden: true },
+    });
 
     return res.json({ success: true });
   } catch (err) {

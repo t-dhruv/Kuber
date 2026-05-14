@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test.describe('Dashboard', () => {
   test.beforeEach(async ({ page }) => {
@@ -6,7 +6,7 @@ test.describe('Dashboard', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('dashboard loads without JS errors', async ({ page }) => {
+  test('dashboard loads without JS errors @smoke', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await page.reload();
@@ -14,7 +14,7 @@ test.describe('Dashboard', () => {
     expect(errors.filter((e) => !e.includes('ResizeObserver'))).toHaveLength(0);
   });
 
-  test('net worth widget visible', async ({ page }) => {
+  test('net worth widget visible @smoke', async ({ page }) => {
     await expect(page.getByText(/net worth/i).first()).toBeVisible();
   });
 
