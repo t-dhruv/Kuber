@@ -75,6 +75,7 @@ type TransactionClient = Parameters<Parameters<PrismaLike['$transaction']>[0]>[0
 
 const JOURNAL_GROUP_INCLUDE = {
   journals: {
+    where: { isDeleted: false },
     orderBy: [{ order: 'asc' }, { date: 'asc' }, { id: 'asc' }],
     include: {
       category: { select: { id: true, name: true, icon: true } },
@@ -424,89 +425,13 @@ export async function deleteLegacyTransactionJournal(
   });
 }
 
+// Legacy Transaction model has been removed — migration to TransactionJournal is complete.
+// This function is retained for API compatibility but is a no-op.
 export async function backfillLegacyTransactionJournals(
-  input: BackfillLegacyTransactionJournalsInput = {},
-  prisma: PrismaLike = defaultPrisma,
+  _input: BackfillLegacyTransactionJournalsInput = {},
+  _prisma: PrismaLike = defaultPrisma,
 ) {
-  const limit = Math.min(Math.max(input.limit ?? 500, 1), 5000);
-
-  return prisma.$transaction(async (tx) => {
-    const transactions: LegacyTransactionForJournal[] = [];
-
-    let created = 0;
-    let skipped = 0;
-    const processedTransferIds = new Set<string>();
-    const transferGroups = new Map<string, LegacyTransactionForJournal[]>();
-
-    for (const transaction of transactions) {
-      if (transaction.isTransfer && transaction.transferId) {
-        const group = transferGroups.get(transaction.transferId) ?? [];
-        group.push(transaction);
-        transferGroups.set(transaction.transferId, group);
-      }
-    }
-
-    for (const transaction of transactions) {
-      if (transaction.isTransfer && transaction.transferId) {
-        if (processedTransferIds.has(transaction.transferId)) {
-          continue;
-        }
-
-        processedTransferIds.add(transaction.transferId);
-        const transferPair = transferGroups.get(transaction.transferId) ?? [];
-        const debit = transferPair.find((item) => item.amount < 0);
-        const credit = transferPair.find((item) => item.amount > 0);
-
-        if (!debit || !credit) {
-          skipped += transferPair.length || 1;
-          continue;
-        }
-
-        const existingTransfer = await findJournalMetaLink(tx, 'legacyTransferId', transaction.transferId);
-        if (existingTransfer?.journal) {
-          skipped += transferPair.length;
-          continue;
-        }
-
-        await createTransactionJournalInTransaction(tx, {
-          householdId: transaction.householdId,
-          type: 'transfer',
-          amount: Math.abs(debit.amount),
-          sourceAccountId: debit.accountId,
-          destinationAccountId: credit.accountId,
-          description: `${debit.description} / ${credit.description}`,
-          date: debit.date,
-          currencyCode: debit.currencyCode ?? credit.currencyCode ?? 'USD',
-          notes: debit.notes ?? credit.notes ?? undefined,
-          isPending: Boolean(debit.isPending || credit.isPending),
-          isReconciled: Boolean(debit.isCleared && credit.isCleared),
-          meta: {
-            legacyTransferId: transaction.transferId,
-            legacyDebitTransactionId: debit.id,
-            legacyCreditTransactionId: credit.id,
-          },
-          groupTitle: `${debit.description} / ${credit.description}`,
-        });
-        created += 1;
-        continue;
-      }
-
-      const existing = await findLegacyJournalLink(tx, transaction.id);
-      if (existing?.journal) {
-        skipped += 1;
-        continue;
-      }
-
-      await createTransactionJournalInTransaction(tx, buildJournalInputFromLegacyTransaction(transaction));
-      created += 1;
-    }
-
-    return {
-      scanned: transactions.length,
-      created,
-      skipped,
-    };
-  }, { timeout: 60_000 });
+  return { scanned: 0, created: 0, skipped: 0 };
 }
 
 function toNumber(value: unknown) {
@@ -528,16 +453,24 @@ export interface JournalFormatOptions {
 }
 
 export function formatJournalAsTransaction(journal: any, options: JournalFormatOptions = {}) {
-  const mainEntry = journal.entries?.[0];
+  // For withdrawals the real account is the source (negative amountDecimal entry).
+  // For deposits the real account is the destination (positive amountDecimal entry).
+  const isWithdrawal = journal.transactionType === 'withdrawal';
+  const mainEntry = journal.entries?.find((e: any) =>
+    isWithdrawal ? e.amountDecimal < 0 : e.amountDecimal > 0
+  ) ?? journal.entries?.[0];
   const mainAccountId = mainEntry?.accountId ?? null;
   const mainAccountName = mainEntry?.account?.name ?? null;
+
+  const absAmount = toNumber(journal.amountDecimal);
+  const signedAmount = isWithdrawal ? -absAmount : absAmount;
 
   return {
     id: journal.id,
     date: toIso(journal.date),
     merchantName: journal.description,
     originalDescription: journal.description,
-    amount: toNumber(journal.amountDecimal),
+    amount: signedAmount,
     currencyCode: journal.currencyCode ?? 'CAD',
     originalAmount: null,
     fxRate: null,
@@ -657,7 +590,7 @@ export async function listTransactionJournalGroups(
 ) {
   const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
   const groups = await prisma.transactionGroup.findMany({
-    where: { householdId: input.householdId },
+    where: { householdId: input.householdId, journals: { some: { isDeleted: false } } },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
     ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),

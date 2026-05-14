@@ -66,6 +66,8 @@ const bulkRowSchema = z.object({
 
 const router = Router();
 
+const VIRTUAL_ACCOUNT_TYPES = ['expense', 'revenue', 'equity'];
+
 const VALID_ACCOUNT_TYPES = [
   'CHECKING', 'SAVINGS', 'CREDIT_CARD', 'INVESTMENT', 'LOAN', 'OTHER',
   // Canadian registered accounts
@@ -117,7 +119,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
 
     const accounts = await prisma.account.findMany({
-      where: { householdId, ...NOT_DELETED },
+      where: { householdId, ...NOT_DELETED, type: { notIn: VIRTUAL_ACCOUNT_TYPES } },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     });
 
@@ -171,7 +173,7 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
 
     const accounts = await prisma.account.findMany({
-      where: { householdId, ...NOT_DELETED },
+      where: { householdId, ...NOT_DELETED, type: { notIn: VIRTUAL_ACCOUNT_TYPES } },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     });
 
@@ -259,9 +261,9 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const account = await prisma.account.findUnique({ where: { id } });
+    const account = await prisma.account.findFirst({ where: { id, householdId, ...NOT_DELETED } });
 
-    if (!account || account.householdId !== householdId) {
+    if (!account) {
       return res.status(404).json({ error: 'Account not found' });
     }
 
@@ -271,9 +273,11 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
     const journals = await prisma.transactionJournal.findMany({
       where: {
+        householdId,
         entries: { some: { accountId: id } },
         date: { gte: twelveMonthsAgo },
         isHidden: false,
+        isDeleted: false,
       },
       select: { date: true, amountDecimal: true },
       orderBy: { date: 'asc' },
@@ -301,7 +305,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
     // Recent journals (last 10)
     const recentJournals = await prisma.transactionJournal.findMany({
-      where: { entries: { some: { accountId: id } }, isHidden: false },
+      where: { householdId, entries: { some: { accountId: id } }, isHidden: false, isDeleted: false },
       orderBy: { date: 'desc' },
       take: 10,
       include: {
@@ -339,7 +343,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'name is required' });
     }
-    const normalizedType = typeof type === 'string' ? type.toUpperCase().replace(' ', '_') : type;
+    const normalizedType = typeof type === 'string' ? type.toUpperCase().replace(/\s+/g, '_') : type;
     if (!normalizedType || !VALID_ACCOUNT_TYPES.includes(normalizedType)) {
       return res.status(400).json({ error: `type must be one of: ${VALID_ACCOUNT_TYPES.join(', ')}` });
     }
@@ -557,15 +561,13 @@ router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
       if (!isNaN(d.getTime())) dateFilter.lte = d;
     }
 
-    const where = {
-      accountId: id,
+    const journalWhere = {
+      householdId,
+      entries: { some: { accountId: id } },
       isHidden: false,
+      isDeleted: false,
       ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {}),
     };
-
-    // Filter by account via entries relation
-    const accountFilter = { entries: { some: { accountId: id } } };
-    const journalWhere = { ...where, ...accountFilter };
 
     const [total, journals] = await Promise.all([
       prisma.transactionJournal.count({ where: journalWhere }),
@@ -638,7 +640,7 @@ router.post('/bulk-import/preview', csvUpload.single('file'), async (req: AuthRe
 
     // Fetch existing accounts so we can resolve update targets and detect name conflicts
     const existingAccounts = await prisma.account.findMany({
-      where: { householdId },
+      where: { householdId, ...NOT_DELETED },
       select: { id: true, name: true, type: true },
     });
     const existingById   = new Map(existingAccounts.map((a) => [a.id, a]));

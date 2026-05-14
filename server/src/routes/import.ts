@@ -93,6 +93,8 @@ interface ParsedRow {
   error?: string;
   investmentType?: InvestmentRowType;
   ticker?: string | null;
+  shares?: number;
+  pricePerShare?: number;
 }
 
 async function parseUploadedFile(
@@ -202,11 +204,32 @@ type InvestmentRowType = 'buy' | 'sell' | 'dividend' | 'transfer' | 'fee' | 'oth
 function detectInvestmentType(description: string, amount: number): InvestmentRowType {
   const d = description.toLowerCase();
   if (/\bbuy\b|purchase|bought/.test(d) || (amount < 0 && /shares?|units?/.test(d))) return 'buy';
-  if (/\bsell\b|sold|proceeds/.test(d) || (amount > 0 && /shares?|units?/.test(d))) return 'sell';
+  if (/\bsell\b|sold|proceeds|sale\b|disposition|redemption/.test(d) || (amount > 0 && /shares?|units?/.test(d))) return 'sell';
   if (/dividend|dist(ribution)?|reinvest/.test(d)) return 'dividend';
   if (/transfer|deposit|withdrawal/.test(d)) return 'transfer';
   if (/fee|commission|expense|mgmt/.test(d)) return 'fee';
   return 'other';
+}
+
+// Priority: explicit type column → shares sign → description keywords → amount sign
+function resolveInvestmentType(
+  txTypeValue: string | null,
+  sharesValue: number | null,
+  description: string,
+  amount: number,
+): InvestmentRowType {
+  if (txTypeValue) {
+    const v = txTypeValue.toLowerCase().trim();
+    if (/^(buy|purchase|bought|long|b)$/.test(v) || v.startsWith('buy')) return 'buy';
+    if (/^(sell|sold|sale|short|s|redemption|disposition)$/.test(v) || v.startsWith('sell') || v.startsWith('sale')) return 'sell';
+    if (/^(div|dividend|distribution|reinvest)/.test(v)) return 'dividend';
+    if (/^(transfer|deposit|withdrawal|contrib|withdraw)/.test(v)) return 'transfer';
+    if (/^(fee|commission|expense|mgmt|management)/.test(v)) return 'fee';
+  }
+  if (sharesValue !== null && sharesValue !== 0) {
+    return sharesValue < 0 ? 'sell' : 'buy';
+  }
+  return detectInvestmentType(description, amount);
 }
 
 // Simple ticker extraction from description (e.g. "BUY 10 VFV.TO @ $120.00" → "VFV.TO")
@@ -344,6 +367,13 @@ router.post('/detect-mapping', upload.single('file'), async (req: AuthRequest, r
       };
     });
 
+    const investmentHints = {
+      transactionTypeColumn: headers.find((h) => /^(action|type|transaction.?type|buy.?sell|side|trade.?type|activity.?type)$/i.test(h)) ?? null,
+      sharesColumn: headers.find((h) => /^(shares?|quantity|qty|units?|num.?shares?|volume)$/i.test(h)) ?? null,
+      priceColumn: headers.find((h) => /^(price|share.?price|unit.?price|exec.?price|trade.?price|cost.?per.?share|avg.?price)$/i.test(h)) ?? null,
+      tickerColumn: headers.find((h) => /^(symbol|ticker|security|instrument|stock|scrip)$/i.test(h)) ?? null,
+    };
+
     return res.json({
       headers,
       mappings: detection.mappings,
@@ -351,6 +381,7 @@ router.post('/detect-mapping', upload.single('file'), async (req: AuthRequest, r
       amountStrategy: detection.amountStrategy,
       localeFormat,
       preview,
+      investmentHints,
     });
   } catch (err) {
     req.log.error({ err }, 'import/detect-mapping');
@@ -374,6 +405,11 @@ const ParseWithMappingSchema = z.object({
   debitColumn: z.string().optional(),
   creditColumn: z.string().optional(),
   localeFormat: z.enum(['us', 'eu']).default('us'),
+  // Investment-specific optional columns
+  transactionTypeColumn: z.string().optional(),
+  sharesColumn: z.string().optional(),
+  priceColumn: z.string().optional(),
+  tickerColumn: z.string().optional(),
 });
 
 router.post('/parse-with-mapping', upload.single('file'), async (req: AuthRequest, res) => {
@@ -384,7 +420,7 @@ router.post('/parse-with-mapping', upload.single('file'), async (req: AuthReques
   );
   if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
 
-  const { accountId, dateColumn, descriptionColumn, descriptionColumn2, descriptionSeparator, amountStrategy, amountColumn, debitColumn, creditColumn, localeFormat } = parsed.data;
+  const { accountId, dateColumn, descriptionColumn, descriptionColumn2, descriptionSeparator, amountStrategy, amountColumn, debitColumn, creditColumn, localeFormat, transactionTypeColumn, sharesColumn, priceColumn, tickerColumn } = parsed.data;
 
   try {
     const account = await prisma.account.findFirst({
@@ -438,7 +474,18 @@ router.post('/parse-with-mapping', upload.single('file'), async (req: AuthReques
       const hash = computeDedupHash(parsedDate, description, amount);
       const status = hashSet.has(hash) ? 'duplicate' as const : 'new' as const;
 
-      return { status, date: parsedDate, description, amount, hash };
+      const parsed: ParsedRow = { status, date: parsedDate, description, amount, hash, isDuplicate: hashSet.has(hash) };
+      if (account.type === 'investment') {
+        const txTypeVal = transactionTypeColumn ? get(row, transactionTypeColumn) || null : null;
+        const sharesRaw = sharesColumn ? parseFloat(get(row, sharesColumn)) : NaN;
+        const sharesVal = !isNaN(sharesRaw) ? sharesRaw : null;
+        const priceRaw = priceColumn ? parseFloat(get(row, priceColumn).replace(/[$,]/g, '')) : NaN;
+        parsed.investmentType = resolveInvestmentType(txTypeVal, sharesVal, description, amount);
+        parsed.ticker = tickerColumn ? (get(row, tickerColumn) || null) : extractTicker(description);
+        if (sharesVal !== null) parsed.shares = Math.abs(sharesVal);
+        if (!isNaN(priceRaw)) parsed.pricePerShare = priceRaw;
+      }
+      return parsed;
     });
 
     const newCount = parsedRows.filter((r) => r.status === 'new').length;

@@ -43,9 +43,10 @@ async function computeAvgCostBasis(holdingId: string): Promise<number> {
     where: { holdingId, status: 'confirmed' },
   });
   if (lots.length === 0) return 0;
-  const totalShares = lots.reduce((s, l) => s + l.shares, 0);
+  const buyLots = lots.filter((l) => l.shares > 0);
+  const totalShares = buyLots.reduce((s, l) => s + l.shares, 0);
   if (totalShares === 0) return 0;
-  const totalCost = lots.reduce((s, l) => s + l.shares * l.pricePerShare, 0);
+  const totalCost = buyLots.reduce((s, l) => s + l.shares * l.pricePerShare, 0);
   const avg = Math.round((totalCost / totalShares) * 10000) / 10000;
   // Update holding costBasis
   await prisma.investmentHolding.update({
@@ -131,6 +132,12 @@ type RawHolding = {
   }>;
 };
 
+function computeRealizedGain(lots: RawHolding['lots'], avgCostBasis: number): number {
+  return lots
+    .filter((l) => l.status === 'confirmed' && l.shares < 0)
+    .reduce((s, l) => s + Math.abs(l.shares) * (l.pricePerShare - avgCostBasis), 0);
+}
+
 function buildHolding(
   h: RawHolding,
   livePrice: number,
@@ -138,11 +145,16 @@ function buildHolding(
   dayChangePercent: number,
   shortName: string,
   avgCostBasis: number,
+  dividendYield = 0,
 ) {
   const currentValue = Math.round(h.shares * livePrice * 100) / 100;
   const totalCost = Math.round(h.shares * avgCostBasis * 100) / 100;
-  const gain = Math.round((currentValue - totalCost) * 100) / 100;
+  const unrealizedGain = Math.round((currentValue - totalCost) * 100) / 100;
+  const unrealizedGainPercent = totalCost !== 0 ? Math.round((unrealizedGain / totalCost) * 10000) / 100 : 0;
+  const realizedGain = Math.round(computeRealizedGain(h.lots, avgCostBasis) * 100) / 100;
+  const gain = Math.round((unrealizedGain + realizedGain) * 100) / 100;
   const gainPercent = totalCost !== 0 ? Math.round((gain / totalCost) * 10000) / 100 : 0;
+  const estimatedAnnualDividend = Math.round(h.shares * livePrice * dividendYield * 100) / 100;
 
   return {
     id: h.id,
@@ -157,6 +169,10 @@ function buildHolding(
     totalCost,
     gain,
     gainPercent,
+    unrealizedGain,
+    unrealizedGainPercent,
+    realizedGain,
+    estimatedAnnualDividend,
     dayChange: Math.round(dayChange * h.shares * 100) / 100,
     dayChangePercent,
     priceSource: 'live',
@@ -176,7 +192,10 @@ function buildHoldingFallback(h: RawHolding, avgCostBasis: number) {
   const livePrice = h.currentPrice || avgCostBasis || h.costBasis;
   const currentValue = Math.round(h.shares * livePrice * 100) / 100;
   const totalCost = Math.round(h.shares * avgCostBasis * 100) / 100;
-  const gain = Math.round((currentValue - totalCost) * 100) / 100;
+  const unrealizedGain = Math.round((currentValue - totalCost) * 100) / 100;
+  const unrealizedGainPercent = totalCost !== 0 ? Math.round((unrealizedGain / totalCost) * 10000) / 100 : 0;
+  const realizedGain = Math.round(computeRealizedGain(h.lots, avgCostBasis) * 100) / 100;
+  const gain = Math.round((unrealizedGain + realizedGain) * 100) / 100;
   const gainPercent = totalCost !== 0 ? Math.round((gain / totalCost) * 10000) / 100 : 0;
 
   return {
@@ -192,6 +211,10 @@ function buildHoldingFallback(h: RawHolding, avgCostBasis: number) {
     totalCost,
     gain,
     gainPercent,
+    unrealizedGain,
+    unrealizedGainPercent,
+    realizedGain,
+    estimatedAnnualDividend: 0,
     dayChange: 0,
     dayChangePercent: 0,
     priceSource: 'cached',
@@ -229,13 +252,13 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    // Compute avgCostBasis per holding from confirmed lots
+    // Compute avgCostBasis per holding from confirmed BUY lots only (positive shares)
     const avgMap = new Map<string, number>();
     for (const h of rawHoldings) {
-      const confirmedLots = h.lots.filter((l) => l.status === 'confirmed');
-      const totalShares = confirmedLots.reduce((s, l) => s + l.shares, 0);
-      const avg = totalShares > 0
-        ? confirmedLots.reduce((s, l) => s + l.shares * l.pricePerShare, 0) / totalShares
+      const buyLots = h.lots.filter((l) => l.status === 'confirmed' && l.shares > 0);
+      const totalBuyShares = buyLots.reduce((s, l) => s + l.shares, 0);
+      const avg = totalBuyShares > 0
+        ? buyLots.reduce((s, l) => s + l.shares * l.pricePerShare, 0) / totalBuyShares
         : h.costBasis;
       avgMap.set(h.id, Math.round(avg * 10000) / 10000);
     }
@@ -248,7 +271,7 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
       const avg = avgMap.get(h.id) ?? h.costBasis;
       const q = quotes.get(h.symbol.toUpperCase());
       if (q) {
-        return buildHolding(h as RawHolding, q.price, q.dayChange, q.dayChangePercent, q.shortName, avg);
+        return buildHolding(h as RawHolding, q.price, q.dayChange, q.dayChangePercent, q.shortName, avg, q.dividendYield ?? 0);
       }
       return buildHoldingFallback(h as RawHolding, avg);
     });
@@ -268,6 +291,9 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
       ? Math.round((totalGain / totalCostBasis) * 10000) / 100
       : 0;
     const totalDayChange = holdings.reduce((s, h) => s + h.dayChange, 0);
+    const totalUnrealizedGain = Math.round(holdings.reduce((s, h) => s + h.unrealizedGain, 0) * 100) / 100;
+    const totalRealizedGain = Math.round(holdings.reduce((s, h) => s + h.realizedGain, 0) * 100) / 100;
+    const totalAnnualDividend = Math.round(holdings.reduce((s, h) => s + h.estimatedAnnualDividend, 0) * 100) / 100;
 
     return res.json({
       totalValue: Math.round(totalValue * 100) / 100,
@@ -275,6 +301,9 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
       totalGain,
       totalGainPercent,
       totalDayChange: Math.round(totalDayChange * 100) / 100,
+      totalUnrealizedGain,
+      totalRealizedGain,
+      totalAnnualDividend,
       holdings,
     });
   } catch (err) {
@@ -658,6 +687,51 @@ router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
     return res.json({ created, updated, total: created + updated });
   } catch (err) {
     req.log.error({ err }, 'investments/holdings/import POST');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/v1/investments/holdings — bulk delete by IDs or entire account
+router.delete('/holdings', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const body = z.object({
+      ids: z.array(z.string()).max(500).optional(),
+      accountId: z.string().optional(),
+    }).refine((d) => d.ids?.length || d.accountId, { message: 'Provide ids or accountId' })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ error: body.error.errors[0].message });
+
+    const { ids, accountId } = body.data;
+
+    if (accountId) {
+      // Clear all holdings for an account (scoped to household)
+      const account = await prisma.account.findFirst({ where: { id: accountId, householdId, ...NOT_DELETED } });
+      if (!account) return res.status(404).json({ error: 'Account not found' });
+      const holdings = await prisma.investmentHolding.findMany({ where: { accountId }, select: { id: true } });
+      const holdingIds = holdings.map((h) => h.id);
+      await prisma.$transaction([
+        prisma.holdingLot.deleteMany({ where: { holdingId: { in: holdingIds } } }),
+        prisma.recurringInvestment.deleteMany({ where: { holdingId: { in: holdingIds } } }),
+        prisma.investmentHolding.deleteMany({ where: { id: { in: holdingIds } } }),
+      ]);
+      return res.json({ deleted: holdingIds.length });
+    }
+
+    // Bulk delete by IDs (scoped to household)
+    const verified = await prisma.investmentHolding.findMany({
+      where: { id: { in: ids! }, account: { householdId, ...NOT_DELETED } },
+      select: { id: true },
+    });
+    const verifiedIds = verified.map((h) => h.id);
+    await prisma.$transaction([
+      prisma.holdingLot.deleteMany({ where: { holdingId: { in: verifiedIds } } }),
+      prisma.recurringInvestment.deleteMany({ where: { holdingId: { in: verifiedIds } } }),
+      prisma.investmentHolding.deleteMany({ where: { id: { in: verifiedIds } } }),
+    ]);
+    return res.json({ deleted: verifiedIds.length });
+  } catch (err) {
+    req.log.error({ err }, 'investments/holdings DELETE bulk');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

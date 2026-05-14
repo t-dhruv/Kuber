@@ -75,7 +75,7 @@ describe('accounts route integration', () => {
 
     expect(res.status).toBe(200);
     expect(prisma.account.findMany).toHaveBeenCalledWith({
-      where: { householdId: 'household-1', isDeleted: false },
+      where: { householdId: 'household-1', isDeleted: false, type: { notIn: ['expense', 'revenue', 'equity'] } },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     });
     expect(res.body.netWorth).toEqual({

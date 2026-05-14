@@ -252,7 +252,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       if (ids.length > 0) where.tags = { some: { tagId: { in: ids } } };
     }
 
-    const sortField = sort === 'amount' ? 'amount' : 'date';
+    const sortField = sort === 'amount' ? 'amountDecimal' : 'date';
     const sortOrder = order === 'asc' ? 'asc' : 'desc';
     // Always add id as tiebreaker for stable cursor pagination
     const orderBy: any = [{ [sortField]: sortOrder }, { id: 'desc' }];
@@ -280,12 +280,19 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           { date: cursorDate, id: { gt: cursor.id } },
         ];
       }
-
-      const rows = await queryJournalsWithRelations({
-        ...where,
-        limit: limit + 1,
-        orderBy: sort === 'amount' ? 'amount' : 'date',
-        orderDirection: order === 'asc' ? 'asc' : 'desc',
+      const rows = await prisma.transactionJournal.findMany({
+        where: journalWhere,
+        include: {
+          category: { select: { id: true, name: true, icon: true } },
+          aiSuggestedCategory: { select: { id: true, name: true, icon: true } },
+          entries: {
+            select: { accountId: true, amountDecimal: true, account: { select: { id: true, name: true } } },
+          },
+          tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+          meta: true,
+        },
+        orderBy,
+        take: limit + 1,
       });
 
       const hasMore = rows.length > limit;
@@ -304,15 +311,36 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     // ── Offset-based path (journal) ────────────────────────────────────────────
     const skip = (page - 1) * limit;
+
+    // Build journal where directly from parsed filter vars (mirrors cursor path)
+    const journalOffsetWhere: any = { householdId, isDeleted: false };
+    if (accountId) journalOffsetWhere.entries = { some: { accountId } };
+    if (categoryId) journalOffsetWhere.categoryId = categoryId;
+    if (where.date) journalOffsetWhere.date = where.date;
+    if (where.amount) journalOffsetWhere.amountDecimal = where.amount;
+    if (where.isPending !== undefined) journalOffsetWhere.isPending = where.isPending;
+    if (where.isRecurring !== undefined) journalOffsetWhere.isRecurring = where.isRecurring;
+    if (where.needsReview !== undefined) journalOffsetWhere.needsReview = where.needsReview;
+    if (where.tags) journalOffsetWhere.tags = where.tags;
+    if (where.OR) journalOffsetWhere.OR = where.OR;
+
     const [transactions, total] = await Promise.all([
-      queryJournalsWithRelations({
-        ...where,
+      prisma.transactionJournal.findMany({
+        where: journalOffsetWhere,
+        include: {
+          category: { select: { id: true, name: true, icon: true } },
+          aiSuggestedCategory: { select: { id: true, name: true, icon: true } },
+          entries: {
+            select: { accountId: true, amountDecimal: true, account: { select: { id: true, name: true } } },
+          },
+          tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+          meta: true,
+        },
+        orderBy: [{ [sortField]: sortOrder }, { id: 'desc' }],
         skip,
-        limit,
-        orderBy: sort === 'amount' ? 'amount' : 'date',
-        orderDirection: order === 'asc' ? 'asc' : 'desc',
+        take: limit,
       }),
-      prisma.transactionJournal.count({ where: { ...where, isDeleted: false } }),
+      prisma.transactionJournal.count({ where: journalOffsetWhere }),
     ]);
 
     const lastRow = transactions[transactions.length - 1];
@@ -960,11 +988,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Get virtual accounts for journal creation
+    // Virtual accounts are auto-created on demand inside createJournalFromLegacyTransaction
     const virtualAccounts = await getVirtualAccountsByType(householdId);
-    if (!virtualAccounts.expenseAccountId || !virtualAccounts.revenueAccountId) {
-      throw new Error('Missing virtual accounts for transaction');
-    }
 
     // Create journal directly (no legacy TX)
     const journal = await prisma.$transaction(async (tx) => {
@@ -985,8 +1010,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
           isRefund: isRefund ?? false,
           tagIds,
         },
-        amount < 0 ? (virtualAccounts.expenseAccountId ?? '') : undefined,
-        amount > 0 ? (virtualAccounts.revenueAccountId ?? '') : undefined,
+        amount < 0 ? (virtualAccounts.expenseAccountId ?? undefined) : undefined,
+        amount > 0 ? (virtualAccounts.revenueAccountId ?? undefined) : undefined,
       );
 
       // Update account balance
@@ -1430,9 +1455,9 @@ router.post('/:id/convert-transfer', async (req: AuthRequest, res: Response) => 
     });
     if (!existing) return res.status(404).json({ error: 'Transaction not found' });
 
-    // Check if journal is already a transfer (has multiple entries with opposite signs or transfer type)
-    const hasTransferMeta = existing.entries && existing.entries.length >= 2;
-    if (hasTransferMeta) return res.status(400).json({ error: 'Transaction is already a transfer' });
+    if (existing.transactionType === 'transfer') {
+      return res.status(400).json({ error: 'Transaction is already a transfer' });
+    }
 
     const { fromAccountId, toAccountId, amount, date, notes } = parsed.data;
     if (fromAccountId === toAccountId) {
@@ -1603,7 +1628,7 @@ router.post('/transfer', async (req: AuthRequest, res: Response) => {
     // Verify both accounts belong to this household
     const accounts = await prisma.account.findMany({
       where: { id: { in: [fromAccountId, toAccountId] }, householdId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, currency: true },
     });
     if (accounts.length !== 2) {
       return res.status(404).json({ error: 'One or both accounts not found' });
@@ -1630,7 +1655,7 @@ router.post('/transfer', async (req: AuthRequest, res: Response) => {
         destinationAccountId: toAccountId,
         description: `Transfer from ${accounts.find(a => a.id === fromAccountId)!.name} to ${accounts.find(a => a.id === toAccountId)!.name}`,
         date: txDate,
-        currencyCode: 'CAD',
+        currencyCode: accounts.find(a => a.id === fromAccountId)!.currency ?? 'USD',
         notes: notes ?? undefined,
       });
     });

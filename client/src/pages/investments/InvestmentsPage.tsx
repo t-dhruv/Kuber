@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import { Plus, ChevronRight, ChevronDown, Trash2, RefreshCw, Newspaper, Loader2, Upload } from 'lucide-react';
@@ -58,6 +58,10 @@ interface Holding {
   totalCost: number;
   gain: number;
   gainPercent: number;
+  unrealizedGain: number;
+  unrealizedGainPercent: number;
+  realizedGain: number;
+  estimatedAnnualDividend: number;
   dayChange: number;
   dayChangePercent: number;
   priceSource: 'live' | 'cached';
@@ -71,6 +75,9 @@ interface HoldingsData {
   totalCostBasis: number;
   totalGain: number;
   totalGainPercent: number;
+  totalUnrealizedGain: number;
+  totalRealizedGain: number;
+  totalAnnualDividend: number;
 }
 
 interface AssetClassSegment {
@@ -163,6 +170,12 @@ const ALLOCATION_COLORS = [
   '#E5622A', '#2f9e44', '#1971c2', '#9c36b5',
   '#e67700', '#0c8599', '#c2255c', '#74b816',
 ];
+
+function getTickerColor(ticker: string): string {
+  let hash = 0;
+  for (let i = 0; i < ticker.length; i++) hash = ticker.charCodeAt(i) + ((hash << 5) - hash);
+  return ALLOCATION_COLORS[Math.abs(hash) % ALLOCATION_COLORS.length];
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -308,19 +321,17 @@ function PerformanceCards({ performanceData, period, isLoading }: {
     : benchmarksToCards(performanceData).map((b, i) => ({ ...b, key: i }));
 
   return (
-    <div style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
       {cards.map((card, idx) => (
         <div
           key={card.key}
           style={{
-            minWidth: 160,
-            flexShrink: 0,
             backgroundColor: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
+            border: idx === 0 ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
             borderRadius: 'var(--radius-lg)',
             padding: '0.875rem 1rem',
-            boxShadow: 'var(--shadow-sm)',
-            transition: 'box-shadow 0.15s',
+            boxShadow: idx === 0 ? '0 0 0 1px var(--color-accent)20' : 'var(--shadow-sm)',
+            transition: 'box-shadow 0.15s, transform 0.15s',
             cursor: 'default',
           }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-md)'; }}
@@ -370,42 +381,49 @@ function PerformanceChart({ data, isLoading, hasHoldings }: { data?: HistoryPoin
       ) : hasHoldings ? (
         <>
           <div role="img" aria-label="Portfolio performance chart">
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={data ?? []} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-                tickFormatter={fmtDate}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-                tickFormatter={(v: number) => fmtCurrency(v)}
-                width={72}
-              />
-              <Tooltip
-                formatter={(value: number) => [fmtCurrency(value), 'Portfolio Value']}
-                labelFormatter={(label: string) => fmtDate(label)}
-                contentStyle={{
-                  backgroundColor: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.8125rem',
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke={getColorToken('accent')}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-            </LineChart>
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={data ?? []} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="portfolioAreaFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={getColorToken('accent')} stopOpacity={0.22} />
+                    <stop offset="95%" stopColor={getColorToken('accent')} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+                  tickFormatter={fmtDate}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+                  tickFormatter={(v: number) => fmtCurrency(v)}
+                  width={72}
+                />
+                <Tooltip
+                  formatter={(value: number) => [fmtCurrency(value), 'Portfolio Value']}
+                  labelFormatter={(label: string) => fmtDate(label)}
+                  contentStyle={{
+                    backgroundColor: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '0.8125rem',
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke={getColorToken('accent')}
+                  strokeWidth={2}
+                  fill="url(#portfolioAreaFill)"
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
           <div style={{
@@ -430,22 +448,24 @@ function PerformanceChart({ data, isLoading, hasHoldings }: { data?: HistoryPoin
 
 // ─── Ticker Avatar ────────────────────────────────────────────────────────────
 
-function TickerAvatar({ ticker, positive }: { ticker: string; positive: boolean }) {
+function TickerAvatar({ ticker }: { ticker: string }) {
+  const color = getTickerColor(ticker);
   return (
     <div style={{
       width: 36,
       height: 36,
-      borderRadius: 'var(--radius-full)',
-      backgroundColor: positive ? 'var(--color-success-light)' : 'var(--color-danger-light)',
-      border: `1.5px solid ${positive ? 'var(--color-success)' : 'var(--color-danger)'}`,
+      borderRadius: 'var(--radius-md)',
+      backgroundColor: `${color}20`,
+      border: `1.5px solid ${color}55`,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      fontSize: '0.625rem',
+      fontSize: '0.5625rem',
       fontWeight: 800,
-      color: positive ? 'var(--color-success)' : 'var(--color-danger)',
+      color,
       flexShrink: 0,
-      letterSpacing: '-0.02em',
+      letterSpacing: '-0.01em',
+      fontFamily: 'var(--font-mono)',
     }}>
       {ticker.slice(0, 4)}
     </div>
@@ -733,14 +753,14 @@ function ExpandedHolding({
             letterSpacing: '0.04em',
             marginBottom: '0.5rem',
           }}>
-            Purchase Lots
+            Transaction Lots
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
             <thead>
               <tr>
-                {['Date', 'Shares', 'Price/Share', 'Total Cost', ''].map((h) => (
+                {['Date', 'Type', 'Shares', 'Price/Share', 'Amount', ''].map((h) => (
                   <th key={h} style={{
-                    textAlign: h === 'Date' || h === '' ? (h === '' ? 'right' : 'left') : 'right',
+                    textAlign: h === 'Date' || h === 'Type' || h === '' ? (h === '' ? 'right' : 'left') : 'right',
                     padding: '0.25rem 0.5rem',
                     fontSize: '0.75rem',
                     fontWeight: 600,
@@ -753,49 +773,100 @@ function ExpandedHolding({
               </tr>
             </thead>
             <tbody>
-              {confirmedLots.map((lot) => (
-                <tr key={lot.id}>
-                  <td style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
-                    {fmtDateFull(lot.date)}
-                  </td>
-                  <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
-                    {lot.shares.toLocaleString('en-US', { maximumFractionDigits: 5 })}
-                  </td>
-                  <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
-                    {fmtCurrency(lot.pricePerShare)}
-                  </td>
-                  <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                    {fmtCurrency(lot.shares * lot.pricePerShare)}
-                  </td>
-                  <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right' }}>
-                    <button
-                      onClick={() => setLotDeleteTarget(lot)}
-                      disabled={deleteLotMutation.isPending}
-                      title="Delete lot"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: 'var(--color-text-muted)',
-                        padding: '0.125rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {confirmedLots.map((lot) => {
+                const isSell = lot.shares < 0;
+                const absShares = Math.abs(lot.shares);
+                return (
+                  <tr key={lot.id}>
+                    <td style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+                      {fmtDateFull(lot.date)}
+                    </td>
+                    <td style={{ padding: '0.375rem 0.5rem' }}>
+                      <span style={{
+                        fontSize: '0.6875rem',
+                        fontWeight: 600,
+                        padding: '0.125rem 0.375rem',
+                        borderRadius: 4,
+                        backgroundColor: isSell ? 'var(--color-danger-subtle, rgba(239,68,68,0.12))' : 'var(--color-success-subtle, rgba(34,197,94,0.12))',
+                        color: isSell ? 'var(--color-danger)' : 'var(--color-success)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                      }}>
+                        {isSell ? 'Sell' : 'Buy'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                      {absShares.toLocaleString('en-US', { maximumFractionDigits: 5 })}
+                    </td>
+                    <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
+                      {fmtCurrency(lot.pricePerShare)}
+                    </td>
+                    <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                      {fmtCurrency(absShares * lot.pricePerShare)}
+                    </td>
+                    <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right' }}>
+                      <button
+                        onClick={() => setLotDeleteTarget(lot)}
+                        disabled={deleteLotMutation.isPending}
+                        title="Delete lot"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--color-text-muted)',
+                          padding: '0.125rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
+      {/* Gain summary row */}
+      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+        <div>
+          <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>Unrealized Gain</div>
+          <span style={{ fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-mono)', color: holding.unrealizedGain >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+            {holding.unrealizedGain >= 0 ? '+' : ''}{fmtCurrency(holding.unrealizedGain)}
+            <span style={{ fontSize: '0.75rem', opacity: 0.8, marginLeft: 4 }}>({fmtPct(holding.unrealizedGainPercent)})</span>
+          </span>
+        </div>
+        {holding.realizedGain !== 0 && (
+          <div>
+            <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>Realized Gain</div>
+            <span style={{ fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-mono)', color: holding.realizedGain >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+              {holding.realizedGain >= 0 ? '+' : ''}{fmtCurrency(holding.realizedGain)}
+            </span>
+          </div>
+        )}
+        {holding.estimatedAnnualDividend > 0 && (
+          <div>
+            <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>Est. Annual Dividend</div>
+            <span style={{ fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--color-accent)' }}>
+              {fmtCurrency(holding.estimatedAnnualDividend)}/yr
+            </span>
+          </div>
+        )}
+        <div>
+          <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>Avg Cost Basis</div>
+          <span style={{ fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--color-text-secondary)' }}>
+            {fmtCurrency(holding.avgCostBasis)}/sh
+          </span>
+        </div>
+      </div>
+
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <Button size="sm" variant="secondary" icon={<Plus size={13} />} onClick={onAddLot}>
-          Add Purchase
+          Add Transaction
         </Button>
         <Button size="sm" variant="secondary" icon={<RefreshCw size={13} />} onClick={onSetRecurring}>
           Set Recurring
@@ -958,7 +1029,7 @@ function ExpandedHolding({
 
 // ─── Holdings Table ───────────────────────────────────────────────────────────
 
-const TABLE_HEADERS = ['', 'Security', 'Ticker', 'Shares', 'Avg Cost', 'Current Price', 'Value', 'Day Change', 'Total Return'];
+const TABLE_HEADERS = ['', 'Security', 'Ticker', 'Shares', 'Avg Cost', 'Current Price', 'Value', 'Weight', 'Day Change', 'Total Return'];
 
 function HoldingsTable({
   data,
@@ -967,23 +1038,100 @@ function HoldingsTable({
   data?: HoldingsData;
   isLoading: boolean;
 }) {
+  const queryClient = useQueryClient();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [addLotHolding, setAddLotHolding] = useState<Holding | null>(null);
   const [recurringHolding, setRecurringHolding] = useState<Holding | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [page, setPage] = useState(0);
 
+  const PAGE_SIZE = 20;
   const sorted = [...(data?.holdings ?? [])].sort((a, b) => b.currentValue - a.currentValue);
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids: string[]) => api.delete('/investments/holdings', { data: { ids } }).then((r) => r.data),
+    onSuccess: (data: { deleted: number }) => {
+      notify.success(`Deleted ${data.deleted} holding${data.deleted !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      setSelectMode(false);
+      setConfirmBulkDelete(false);
+      queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
+      queryClient.invalidateQueries({ queryKey: ['investments-allocation'] });
+    },
+    onError: () => notify.error('Bulk delete failed'),
+  });
 
   function toggleRow(id: string) {
+    if (selectMode) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+      });
+      return;
+    }
     setExpandedId((prev) => (prev === id ? null : id));
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === paged.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paged.map((h) => h.id)));
+    }
   }
 
   return (
     <>
+      {/* Bulk action toolbar */}
+      {selectMode && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0', marginBottom: '0.5rem' }}>
+          <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+            {selectedIds.size} selected
+          </span>
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={selectedIds.size === 0}
+            onClick={() => setConfirmBulkDelete(true)}
+            icon={<Trash2 size={14} />}
+          >
+            Delete selected
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => { setSelectMode(false); setSelectedIds(new Set()); }}>
+            Cancel
+          </Button>
+        </div>
+      )}
+
       <Card padding="lg">
+        {/* Select mode toggle */}
+        {!selectMode && sorted.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+            <Button variant="ghost" size="sm" icon={<Trash2 size={13} />} onClick={() => setSelectMode(true)}>
+              Select to delete
+            </Button>
+          </div>
+        )}
+
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 740 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
             <thead>
               <tr>
+                {selectMode && (
+                  <th style={{ width: 36, padding: '0 0.5rem 0.625rem', borderBottom: '1px solid var(--color-border)' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size === paged.length && paged.length > 0}
+                      onChange={toggleSelectAll}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </th>
+                )}
                 {TABLE_HEADERS.map((h) => (
                   <th
                     key={h}
@@ -1008,14 +1156,14 @@ function HoldingsTable({
               {isLoading ? (
                 Array.from({ length: 4 }, (_, i) => (
                   <tr key={i}>
-                    <td colSpan={9} style={{ padding: 0 }}>
+                    <td colSpan={10} style={{ padding: 0 }}>
                       <SkeletonRow />
                     </td>
                   </tr>
                 ))
-              ) : sorted.length === 0 ? (
+              ) : paged.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{
+                  <td colSpan={10} style={{
                     padding: '2rem',
                     textAlign: 'center',
                     color: 'var(--color-text-muted)',
@@ -1025,24 +1173,34 @@ function HoldingsTable({
                   </td>
                 </tr>
               ) : (
-                sorted.flatMap((h) => {
+                paged.flatMap((h) => {
                   const isExpanded = expandedId === h.id;
                   const rows = [
                     <tr
                       key={h.id}
-                      style={{ transition: 'background 0.1s', cursor: 'pointer' }}
+                      style={{ transition: 'background 0.1s', cursor: 'pointer', backgroundColor: selectedIds.has(h.id) ? 'var(--color-surface-hover)' : undefined }}
                       onClick={() => toggleRow(h.id)}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'var(--color-surface-hover)'; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'transparent'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = selectedIds.has(h.id) ? 'var(--color-surface-hover)' : 'transparent'; }}
                     >
+                      {selectMode && (
+                        <td style={{ padding: '0.625rem 0.5rem', width: 36 }} onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(h.id)}
+                            onChange={() => toggleRow(h.id)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        </td>
+                      )}
                       <td style={{ padding: '0.625rem 0.5rem 0.625rem 0.75rem', width: 24 }}>
-                        {isExpanded
+                        {selectMode ? null : isExpanded
                           ? <ChevronDown size={14} style={{ color: 'var(--color-text-secondary)' }} />
                           : <ChevronRight size={14} style={{ color: 'var(--color-text-secondary)' }} />}
                       </td>
                       <td style={{ padding: '0.625rem 0.75rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                          <TickerAvatar ticker={h.ticker} positive={h.dayChange >= 0} />
+                          <TickerAvatar ticker={h.ticker} />
                           <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
                             {h.name}
                           </span>
@@ -1073,6 +1231,20 @@ function HoldingsTable({
                       <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         {fmtCurrency(h.currentValue)}
                       </td>
+                      <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right', minWidth: 72 }}>
+                        {data && data.totalValue > 0 ? (() => {
+                          const pct = (h.currentValue / data.totalValue) * 100;
+                          const color = getTickerColor(h.ticker);
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>{pct.toFixed(1)}%</span>
+                              <div style={{ width: 48, height: 3, backgroundColor: 'var(--color-border)', borderRadius: 2, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, backgroundColor: color, borderRadius: 2 }} />
+                              </div>
+                            </div>
+                          );
+                        })() : null}
+                      </td>
                       <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
                         <GainBadge amount={h.dayChange} pct={h.dayChangePercent} chip />
                       </td>
@@ -1085,7 +1257,7 @@ function HoldingsTable({
                   if (isExpanded) {
                     rows.push(
                       <tr key={`${h.id}-expanded`}>
-                        <td colSpan={9} style={{ padding: 0 }}>
+                        <td colSpan={10} style={{ padding: 0 }}>
                           <ExpandedHolding
                             holding={h}
                             onAddLot={() => { setAddLotHolding(h); }}
@@ -1111,6 +1283,7 @@ function HoldingsTable({
                     {fmtCurrency(data.totalValue)}
                   </td>
                   <td />
+                  <td />
                   <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
                     <GainBadge amount={data.totalGain} pct={data.totalGainPercent} showArrow={false} />
                   </td>
@@ -1119,6 +1292,30 @@ function HoldingsTable({
             )}
           </table>
         </div>
+
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)', marginTop: '0.5rem' }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              ← Prev
+            </Button>
+            <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+              {page + 1} / {totalPages}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={page >= totalPages - 1}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next →
+            </Button>
+          </div>
+        )}
       </Card>
 
       {addLotHolding && (
@@ -1135,6 +1332,17 @@ function HoldingsTable({
           onClose={() => setRecurringHolding(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        onClose={() => setConfirmBulkDelete(false)}
+        onConfirm={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+        title="Delete holdings"
+        confirmLabel="Delete"
+        variant="danger"
+        loading={bulkDeleteMutation.isPending}
+        message={<>Permanently delete <strong>{selectedIds.size}</strong> holding{selectedIds.size !== 1 ? 's' : ''} and all their lots? This cannot be undone.</>}
+      />
     </>
   );
 }
@@ -1189,27 +1397,41 @@ function AllocationDonut({ data, isLoading }: { data?: AllocationData; isLoading
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', flex: 1, minWidth: 180 }}>
-          {segments.map((seg, idx) => (
-            <div key={seg.assetClass} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-              <div style={{
-                width: 10,
-                height: 10,
-                borderRadius: 'var(--radius-full)',
-                backgroundColor: ALLOCATION_COLORS[idx % ALLOCATION_COLORS.length],
-                flexShrink: 0,
-              }} />
-              <span style={{ fontSize: '0.8125rem', color: 'var(--color-text)', flex: 1, whiteSpace: 'nowrap' }}>
-                {seg.assetClass}
-              </span>
-              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
-                {fmtCurrency(seg.value)}
-              </span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 44, textAlign: 'right' }}>
-                {seg.percent.toFixed(1)}%
-              </span>
-            </div>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1, minWidth: 180 }}>
+          {segments.map((seg, idx) => {
+            const color = ALLOCATION_COLORS[idx % ALLOCATION_COLORS.length];
+            return (
+              <div key={seg.assetClass}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                  <div style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 'var(--radius-full)',
+                    backgroundColor: color,
+                    flexShrink: 0,
+                  }} />
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--color-text)', flex: 1, whiteSpace: 'nowrap' }}>
+                    {seg.assetClass}
+                  </span>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtCurrency(seg.value)}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', width: 40, textAlign: 'right' }}>
+                    {seg.percent.toFixed(1)}%
+                  </span>
+                </div>
+                <div style={{ height: 4, backgroundColor: 'var(--color-border)', borderRadius: 4, overflow: 'hidden', marginLeft: 16 }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.min(seg.percent, 100)}%`,
+                    backgroundColor: color,
+                    borderRadius: 4,
+                    transition: 'width 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+                  }} />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </Card>
@@ -1485,6 +1707,7 @@ interface AddLotForm {
   shares: string;
   pricePerShare: string;
   note: string;
+  txType: 'buy' | 'sell';
 }
 
 function AddLotModal({
@@ -1498,8 +1721,10 @@ function AddLotModal({
 }) {
   const queryClient = useQueryClient();
   const today = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState<AddLotForm>({ date: today, shares: '', pricePerShare: '', note: '' });
+  const [form, setForm] = useState<AddLotForm>({ date: today, shares: '', pricePerShare: '', note: '', txType: 'buy' });
   const [errors, setErrors] = useState<Partial<AddLotForm>>({});
+
+  const isSell = form.txType === 'sell';
 
   const mutation = useMutation({
     mutationFn: (payload: object) =>
@@ -1507,11 +1732,11 @@ function AddLotModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['investments-holdings'] });
       queryClient.invalidateQueries({ queryKey: ['investments-allocation'] });
-      notify.success('Purchase added');
-      setForm({ date: today, shares: '', pricePerShare: '', note: '' });
+      notify.success(isSell ? 'Sell recorded' : 'Purchase added');
+      setForm({ date: today, shares: '', pricePerShare: '', note: '', txType: 'buy' });
       onClose();
     },
-    onError: () => notify.error('Failed to add purchase'),
+    onError: () => notify.error(isSell ? 'Failed to record sell' : 'Failed to add purchase'),
   });
 
   function validate(): boolean {
@@ -1526,17 +1751,50 @@ function AddLotModal({
 
   function handleSubmit() {
     if (!validate()) return;
+    const shares = Number(form.shares);
     mutation.mutate({
       date: form.date,
-      shares: Number(form.shares),
+      shares: isSell ? -shares : shares,
       pricePerShare: Number(form.pricePerShare),
       note: form.note.trim() || undefined,
     });
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Add Purchase — ${holding.ticker}`} size="sm">
+    <Modal open={open} onClose={onClose} title={`Add Transaction — ${holding.ticker}`} size="sm">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {/* Buy / Sell toggle */}
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {(['buy', 'sell'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setForm((p) => ({ ...p, txType: t }))}
+              style={{
+                flex: 1,
+                padding: '0.5rem',
+                borderRadius: 6,
+                border: '1px solid',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                textTransform: 'capitalize',
+                transition: 'all 0.15s',
+                borderColor: form.txType === t
+                  ? (t === 'sell' ? 'var(--color-danger)' : 'var(--color-success)')
+                  : 'var(--color-border)',
+                backgroundColor: form.txType === t
+                  ? (t === 'sell' ? 'var(--color-danger-subtle, rgba(239,68,68,0.12))' : 'var(--color-success-subtle, rgba(34,197,94,0.12))')
+                  : 'transparent',
+                color: form.txType === t
+                  ? (t === 'sell' ? 'var(--color-danger)' : 'var(--color-success)')
+                  : 'var(--color-text-secondary)',
+              }}
+            >
+              {t === 'buy' ? '↑ Buy' : '↓ Sell'}
+            </button>
+          ))}
+        </div>
+
         <Input
           label="Date"
           type="date"
@@ -1565,14 +1823,20 @@ function AddLotModal({
         />
         <Input
           label="Note (optional)"
-          placeholder="e.g. Dividend reinvestment"
+          placeholder={isSell ? 'e.g. Profit taking' : 'e.g. Dividend reinvestment'}
           value={form.note}
           onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))}
         />
       </div>
       <ModalFooter>
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSubmit} loading={mutation.isPending}>Add Purchase</Button>
+        <Button
+          onClick={handleSubmit}
+          loading={mutation.isPending}
+          variant={isSell ? 'danger' : 'primary'}
+        >
+          {isSell ? 'Record Sell' : 'Add Purchase'}
+        </Button>
       </ModalFooter>
     </Modal>
   );
@@ -2037,19 +2301,89 @@ export default function InvestmentsPage() {
         <>
           {/* Portfolio total hero */}
           {holdingsData && (
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
-              <span style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '2.5rem',
-                fontWeight: 700,
-                letterSpacing: '-0.02em',
-                fontVariantNumeric: 'tabular-nums',
-                color: 'var(--color-text)',
-                lineHeight: 1.1,
-              }}>
-                {fmtCurrency(holdingsData.totalValue)}
-              </span>
-              <GainBadge amount={holdingsData.totalGain} pct={holdingsData.totalGainPercent} chip showArrow={false} />
+            <div style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-xl, var(--radius-lg))',
+              padding: '1.25rem 1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2.5rem',
+              flexWrap: 'wrap',
+              boxShadow: 'var(--shadow-sm)',
+            }}>
+              <div>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                  Portfolio Value
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: '2.25rem',
+                  fontWeight: 700,
+                  letterSpacing: '-0.02em',
+                  fontVariantNumeric: 'tabular-nums',
+                  color: 'var(--color-text)',
+                  lineHeight: 1.1,
+                }}>
+                  {fmtCurrency(holdingsData.totalValue)}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                    Total Return
+                  </div>
+                  <GainBadge amount={holdingsData.totalGain} pct={holdingsData.totalGainPercent} showArrow={false} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                    Unrealized
+                  </div>
+                  <span style={{
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    fontFamily: 'var(--font-mono)',
+                    fontVariantNumeric: 'tabular-nums',
+                    color: holdingsData.totalUnrealizedGain >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+                  }}>
+                    {holdingsData.totalUnrealizedGain >= 0 ? '+' : ''}{fmtCurrency(holdingsData.totalUnrealizedGain)}
+                  </span>
+                </div>
+                {holdingsData.totalRealizedGain !== 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                      Realized
+                    </div>
+                    <span style={{
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      fontFamily: 'var(--font-mono)',
+                      fontVariantNumeric: 'tabular-nums',
+                      color: holdingsData.totalRealizedGain >= 0 ? 'var(--color-success)' : 'var(--color-danger)',
+                    }}>
+                      {holdingsData.totalRealizedGain >= 0 ? '+' : ''}{fmtCurrency(holdingsData.totalRealizedGain)}
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                    Cost Basis
+                  </div>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text-secondary)' }}>
+                    {fmtCurrency(holdingsData.totalCostBasis)}
+                  </span>
+                </div>
+                {holdingsData.totalAnnualDividend > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                      Est. Annual Income
+                    </div>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--color-accent)' }}>
+                      {fmtCurrency(holdingsData.totalAnnualDividend)}/yr
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           <PerformanceCards

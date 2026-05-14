@@ -76,7 +76,7 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
           amount: r.amount,
           hash: r.hash,
           ...(categoryMap.get(r.hash) ? { categoryId: categoryMap.get(r.hash) } : {}),
-          ...(r.investmentType ? { investmentType: r.investmentType, ticker: r.ticker } : {}),
+          ...(r.investmentType ? { investmentType: r.investmentType, ticker: r.ticker, ...(r.shares !== undefined ? { shares: r.shares } : {}), ...(r.pricePerShare !== undefined ? { pricePerShare: r.pricePerShare } : {}) } : {}),
         }));
       const res = await api.post('/import/confirm', {
         accountId,
