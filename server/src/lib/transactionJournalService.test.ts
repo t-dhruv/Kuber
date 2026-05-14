@@ -456,7 +456,7 @@ describe('journal group reads', () => {
     const result = await listTransactionJournalGroups({ householdId: 'hh-1', limit: 1 }, prisma as any);
 
     expect(tx.transactionGroup.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { householdId: 'hh-1' },
+      where: { householdId: 'hh-1', journals: { some: { isDeleted: false } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 2,
     }));

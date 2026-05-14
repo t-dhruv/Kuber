@@ -13,6 +13,7 @@ vi.mock('../lib/prisma', () => ({
     $transaction: vi.fn(),
     transactionJournal: {
       count: vi.fn(),
+      findMany: vi.fn(),
       findFirst: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
@@ -90,26 +91,26 @@ describe('transactions route integration', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('lists active household journals with pagination metadata', async () => {
-    vi.mocked(queryJournalsWithRelations).mockResolvedValue([journal] as any);
+    vi.mocked(prisma.transactionJournal.findMany).mockResolvedValue([journal] as any);
     vi.mocked(prisma.transactionJournal.count).mockResolvedValue(1);
 
     const res = await request(makeApp()).get('/?limit=10&page=1&type=expense');
 
     expect(res.status).toBe(200);
-    expect(queryJournalsWithRelations).toHaveBeenCalledWith(expect.objectContaining({
-      householdId: 'household-1',
-      isDeleted: false,
-      amount: { lt: 0 },
+    expect(prisma.transactionJournal.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        householdId: 'household-1',
+        isDeleted: false,
+        amountDecimal: { lt: 0 },
+      }),
       skip: 0,
-      limit: 10,
-      orderBy: 'date',
-      orderDirection: 'desc',
+      take: 10,
     }));
     expect(prisma.transactionJournal.count).toHaveBeenCalledWith({
       where: expect.objectContaining({
         householdId: 'household-1',
         isDeleted: false,
-        amount: { lt: 0 },
+        amountDecimal: { lt: 0 },
       }),
     });
     expect(formatJournalAsTransaction).toHaveBeenCalledWith(journal);

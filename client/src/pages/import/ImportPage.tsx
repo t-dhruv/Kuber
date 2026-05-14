@@ -146,6 +146,7 @@ export default function ImportPage() {
       {view === 'upload' && step === 'mapping' && mappingData && (
         <MappingConfirmStep
           result={mappingData.result}
+          accountType={accounts.find((a) => a.id === mappingData.accountId)?.type}
           onConfirm={handleMappingConfirmed}
           onCancel={handleCancel}
         />
@@ -178,6 +179,8 @@ export interface ParsedRow {
   error?: string;
   investmentType?: 'buy' | 'sell' | 'dividend' | 'transfer' | 'fee' | 'other';
   ticker?: string | null;
+  shares?: number;
+  pricePerShare?: number;
   suggestedCategoryId?: string | null;
   suggestedCategoryName?: string | null;
 }

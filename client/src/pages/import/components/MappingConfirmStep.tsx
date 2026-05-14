@@ -30,6 +30,12 @@ export interface DetectMappingResult {
     description: string;
     amount: number | null;
   }>;
+  investmentHints?: {
+    transactionTypeColumn: string | null;
+    sharesColumn: string | null;
+    priceColumn: string | null;
+    tickerColumn: string | null;
+  };
 }
 
 export interface ConfirmedMapping {
@@ -42,10 +48,16 @@ export interface ConfirmedMapping {
   debitColumn?: string;
   creditColumn?: string;
   localeFormat: LocaleFormat;
+  // Investment-specific (only sent when account is investment type)
+  transactionTypeColumn?: string;
+  sharesColumn?: string;
+  priceColumn?: string;
+  tickerColumn?: string;
 }
 
 interface Props {
   result: DetectMappingResult;
+  accountType?: string;
   onConfirm: (mapping: ConfirmedMapping) => void;
   onCancel: () => void;
 }
@@ -67,7 +79,10 @@ function ConfidenceIcon({ confidence }: { confidence: number }) {
   return <XCircle size={14} className="text-red-500 shrink-0" />;
 }
 
-export default function MappingConfirmStep({ result, onConfirm, onCancel }: Props) {
+export default function MappingConfirmStep({ result, accountType, onConfirm, onCancel }: Props) {
+  const isInvestment = accountType === 'investment';
+  const hints = result.investmentHints;
+
   const headerOptions = [
     { value: '', label: '— Skip —' },
     ...result.headers.map((h) => ({ value: h, label: h })),
@@ -89,6 +104,12 @@ export default function MappingConfirmStep({ result, onConfirm, onCancel }: Prop
     credit: getDetected('credit'),
   });
 
+  // Investment-specific columns
+  const [invTxTypeCol, setInvTxTypeCol] = useState(hints?.transactionTypeColumn ?? '');
+  const [invSharesCol, setInvSharesCol] = useState(hints?.sharesColumn ?? '');
+  const [invPriceCol, setInvPriceCol] = useState(hints?.priceColumn ?? '');
+  const [invTickerCol, setInvTickerCol] = useState(hints?.tickerColumn ?? '');
+
   const getConfidence = (field: StandardField) =>
     result.mappings.find((m) => m.field === field)?.confidence ?? 0;
 
@@ -106,6 +127,10 @@ export default function MappingConfirmStep({ result, onConfirm, onCancel }: Prop
       debitColumn: amountStrategy === 'debit-credit' ? cols.debit : undefined,
       creditColumn: amountStrategy === 'debit-credit' ? cols.credit : undefined,
       localeFormat,
+      ...(isInvestment && invTxTypeCol ? { transactionTypeColumn: invTxTypeCol } : {}),
+      ...(isInvestment && invSharesCol ? { sharesColumn: invSharesCol } : {}),
+      ...(isInvestment && invPriceCol ? { priceColumn: invPriceCol } : {}),
+      ...(isInvestment && invTickerCol ? { tickerColumn: invTickerCol } : {}),
     });
   }
 
@@ -253,6 +278,50 @@ export default function MappingConfirmStep({ result, onConfirm, onCancel }: Prop
           </p>
         )}
       </div>
+
+      {/* Investment columns — shown only for investment accounts */}
+      {isInvestment && (
+        <div className="p-3 rounded-lg border border-[color:var(--color-border)] space-y-3">
+          <p className="text-sm font-medium">
+            Investment columns <span className="text-[color:var(--color-text-secondary)] font-normal">(optional — improves buy/sell detection)</span>
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              id="inv-tx-type"
+              label="Transaction type (Buy/Sell)"
+              value={invTxTypeCol}
+              onChange={(e) => setInvTxTypeCol(e.target.value)}
+              options={headerOptions}
+            />
+            <Select
+              id="inv-shares"
+              label="Shares / Quantity"
+              value={invSharesCol}
+              onChange={(e) => setInvSharesCol(e.target.value)}
+              options={headerOptions}
+            />
+            <Select
+              id="inv-price"
+              label="Price per share"
+              value={invPriceCol}
+              onChange={(e) => setInvPriceCol(e.target.value)}
+              options={headerOptions}
+            />
+            <Select
+              id="inv-ticker"
+              label="Ticker / Symbol"
+              value={invTickerCol}
+              onChange={(e) => setInvTickerCol(e.target.value)}
+              options={headerOptions}
+            />
+          </div>
+          {invSharesCol && (
+            <p className="text-xs text-[color:var(--color-text-secondary)]">
+              Negative share quantity = sell; positive = buy. Overrides description detection.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Preview sample */}
       {result.preview.length > 0 && (
