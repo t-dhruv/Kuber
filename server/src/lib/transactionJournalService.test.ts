@@ -7,6 +7,7 @@ import {
   createTransactionJournal,
   deleteLegacyTransactionJournal,
   formatTransactionJournalGroup,
+  formatJournalAsTransaction,
   buildRuleMatchInputFromJournal,
   getTransactionJournalGroup,
   listTransactionJournalGroups,
@@ -481,5 +482,59 @@ describe('journal group reads', () => {
       where: { id: 'group-1', householdId: 'hh-1' },
     }));
     expect(result?.id).toBe('group-1');
+  });
+});
+
+describe('formatJournalAsTransaction', () => {
+  it('includes needsReview and AI suggestion fields from journal', () => {
+    const journal = {
+      id: 'j-1',
+      date: new Date('2026-01-15T12:00:00.000Z'),
+      description: 'Amazon',
+      amountDecimal: '-49.99',
+      transactionType: 'withdrawal',
+      currencyCode: 'CAD',
+      categoryId: null,
+      category: null,
+      aiSuggestedCategoryId: 'cat-shopping',
+      aiSuggestedCategoryName: null,
+      aiSuggestionConfidence: 0.87,
+      needsReview: true,
+      isPending: false,
+      notes: null,
+      entries: [{ accountId: 'acc-1', amountDecimal: -49.99, account: { id: 'acc-1', name: 'Chequing' } }],
+      tags: [],
+    };
+
+    const result = formatJournalAsTransaction(journal as any);
+
+    expect(result.needsReview).toBe(true);
+    expect(result.aiSuggestedCategoryId).toBe('cat-shopping');
+    expect(result.aiSuggestedCategoryName).toBeNull();
+    expect(result.aiSuggestionConfidence).toBe(0.87);
+  });
+
+  it('defaults needsReview and AI fields to false/null when absent', () => {
+    const journal = {
+      id: 'j-2',
+      date: new Date('2026-01-15T12:00:00.000Z'),
+      description: 'Coffee',
+      amountDecimal: '-4.50',
+      transactionType: 'withdrawal',
+      currencyCode: 'CAD',
+      categoryId: null,
+      category: null,
+      isPending: false,
+      notes: null,
+      entries: [{ accountId: 'acc-1', amountDecimal: -4.50, account: { id: 'acc-1', name: 'Chequing' } }],
+      tags: [],
+    };
+
+    const result = formatJournalAsTransaction(journal as any);
+
+    expect(result.needsReview).toBe(false);
+    expect(result.aiSuggestedCategoryId).toBeNull();
+    expect(result.aiSuggestedCategoryName).toBeNull();
+    expect(result.aiSuggestionConfidence).toBeNull();
   });
 });

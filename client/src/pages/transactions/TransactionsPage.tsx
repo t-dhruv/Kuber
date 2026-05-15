@@ -58,6 +58,9 @@ interface Transaction {
   tags: Tag[];
   isRecurring: boolean;
   needsReview: boolean;
+  aiSuggestedCategoryId?: string | null;
+  aiSuggestedCategoryName?: string | null;
+  aiSuggestionConfidence?: number | null;
   isHidden: boolean;
   isPending: boolean;
   isSplit: boolean;
