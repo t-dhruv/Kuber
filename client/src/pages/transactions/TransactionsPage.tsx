@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -93,6 +93,30 @@ interface TransactionListResponse {
   total?: number;
   page?: number;
   totalPages?: number;
+}
+
+interface BudgetCategoryEntry {
+  categoryId: string;
+  budgeted: number;
+  actual: number;
+}
+
+interface BudgetVarianceData {
+  categories: BudgetCategoryEntry[];
+}
+
+type BudgetStatus = 'under' | 'warning' | 'over' | null;
+
+export function getBudgetStatus(
+  categoryId: string,
+  budgetMap: Map<string, { budgeted: number; actual: number }>,
+): BudgetStatus {
+  const entry = budgetMap.get(categoryId);
+  if (!entry || entry.budgeted <= 0) return null;
+  const pct = entry.actual / entry.budgeted;
+  if (pct >= 1) return 'over';
+  if (pct >= 0.8) return 'warning';
+  return 'under';
 }
 
 type TxType = 'expense' | 'income' | 'transfer';
@@ -1306,9 +1330,10 @@ interface TransactionRowProps {
   onToggleReview: (id: string) => void;
   onReviewDone: (id: string) => void;
   categories: Category[];
+  budgetStatus: BudgetStatus;
 }
 
-function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSplit, expandedReviewId, onToggleReview, onReviewDone, categories }: TransactionRowProps) {
+function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSplit, expandedReviewId, onToggleReview, onReviewDone, categories, budgetStatus }: TransactionRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(txn.merchantName);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1382,7 +1407,23 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
 
       {/* Category name — hidden on mobile */}
       <div className="hidden sm:block flex-[0_0_150px] overflow-hidden">
-        <CategoryPill name={txn.categoryName} color={txn.categoryColor ?? undefined} />
+        <div
+          style={{
+            display: 'inline-flex',
+            borderRadius: 'var(--radius-sm)',
+            outline:
+              budgetStatus === 'over'
+                ? '2px solid var(--color-danger)'
+                : budgetStatus === 'warning'
+                  ? '2px solid var(--color-warning)'
+                  : budgetStatus === 'under'
+                    ? '2px solid var(--color-success)'
+                    : 'none',
+            outlineOffset: '1px',
+          }}
+        >
+          <CategoryPill name={txn.categoryName} color={txn.categoryColor ?? undefined} />
+        </div>
       </div>
 
       {/* Account — hidden on mobile and tablet */}
@@ -1564,6 +1605,33 @@ export default function TransactionsPage() {
     staleTime: 60_000,
     retry: false,
   });
+
+  const budgetMonthStart = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  }, []);
+  const budgetMonthEnd = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  }, []);
+
+  const { data: budgetVariance } = useQuery<BudgetVarianceData>({
+    queryKey: ['reports', 'budget-variance', budgetMonthStart],
+    queryFn: () =>
+      api
+        .get(`/reports/budget-variance?from=${budgetMonthStart}&to=${budgetMonthEnd}`)
+        .then((r) => r.data),
+  });
+
+  const budgetMap = useMemo(() => {
+    const map = new Map<string, { budgeted: number; actual: number }>();
+    for (const entry of budgetVariance?.categories ?? []) {
+      if (entry.budgeted > 0) {
+        map.set(entry.categoryId, { budgeted: entry.budgeted, actual: entry.actual });
+      }
+    }
+    return map;
+  }, [budgetVariance]);
 
   const [autoCatProgress, setAutoCatProgress] = useState<{
     processed: number; total: number; queued: number; done: boolean;
@@ -2108,6 +2176,7 @@ export default function TransactionsPage() {
                       queryClient.invalidateQueries({ queryKey: ['transactions'] });
                     }}
                     categories={categories}
+                    budgetStatus={getBudgetStatus(txn.categoryId, budgetMap)}
                   />
                   {idx < group.transactions.length - 1 && (
                     <div className="h-px bg-[var(--color-border)] ml-3" />
