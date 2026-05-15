@@ -1243,7 +1243,7 @@ function CategoryTab({
             `/reports/${mode}/monthly?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}${extraParams}`,
           )
           .then((r) => r.data),
-      enabled: viewMode === "change",
+      enabled: true,
     });
 
   const categories = reportData?.items ?? [];
@@ -1761,6 +1761,31 @@ function CategoryTab({
           )}
         </Card>
       </div>
+
+      {/* Always-visible monthly trend */}
+      {(monthlyData?.months.length ?? 0) > 1 && (monthlyData?.series.length ?? 0) > 0 && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <div
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              color: 'var(--color-text-secondary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              marginBottom: '0.75rem',
+            }}
+          >
+            Monthly Trend
+          </div>
+          <Card padding="lg">
+            <MonthlyView
+              data={monthlyData}
+              isLoading={monthlyLoading}
+              grouping={monthlyGrouping}
+            />
+          </Card>
+        </div>
+      )}
 
       {/* Transaction list */}
       <Card padding="lg">
