@@ -26,12 +26,34 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
     const thisMonth = getMonthBounds(now);
     const lastMonth = getPrevMonthBounds(now);
 
-    // Net worth: sum all non-excluded account balances
+    // Net worth: sum all non-excluded account balances; investment accounts use holdings value
     const accounts = await prisma.account.findMany({
       where: { householdId, isHidden: false, excludeFromNetWorth: false, ...NOT_DELETED },
-      select: { balance: true },
+      select: {
+        balance: true,
+        type: true,
+        investmentHoldings: { select: { shares: true, currentPrice: true } },
+      },
     });
-    const netWorthCurrent = Math.round(accounts.reduce((sum, a) => sum + a.balance, 0) * 100) / 100;
+
+    const LIABILITY_TYPES = new Set(['credit_card', 'loan']);
+    let cashValue = 0, investmentValue = 0, otherAssetsValue = 0, liabilitiesTotal = 0;
+    for (const a of accounts) {
+      const t = a.type.toLowerCase();
+      if (LIABILITY_TYPES.has(t)) { liabilitiesTotal += Math.abs(a.balance); continue; }
+      let val = a.balance;
+      if (t.includes('investment') && a.investmentHoldings.length > 0) {
+        val = a.investmentHoldings.reduce((s, h) => s + h.shares * h.currentPrice, 0);
+        investmentValue += val;
+      } else if (t === 'checking' || t === 'savings') {
+        cashValue += val;
+      } else {
+        otherAssetsValue += val;
+      }
+    }
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    cashValue = r2(cashValue); investmentValue = r2(investmentValue); otherAssetsValue = r2(otherAssetsValue);
+    const netWorthCurrent = r2(cashValue + investmentValue + otherAssetsValue - liabilitiesTotal);
 
     // Transactions this month and last month from journal (scoped to household)
     const [thisMonthTxns, lastMonthTxns] = await Promise.all([
@@ -47,7 +69,6 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
       }),
     ]);
 
-    const r2 = (n: number) => Math.round(n * 100) / 100;
     const incomeThisMonth = r2(thisMonthTxns.filter(t => Number(t.amountDecimal) > 0).reduce((s, t) => s + Number(t.amountDecimal), 0));
     const expensesThisMonth = r2(thisMonthTxns.filter(t => Number(t.amountDecimal) < 0).reduce((s, t) => s + Math.abs(Number(t.amountDecimal)), 0));
     const incomeLastMonth = r2(lastMonthTxns.filter(t => Number(t.amountDecimal) > 0).reduce((s, t) => s + Number(t.amountDecimal), 0));
@@ -72,6 +93,10 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
         current: netWorthCurrent,
         changeAmount: netWorthChangeAmount,
         changePercent: netWorthChangePercent,
+        cashValue,
+        investmentValue,
+        otherAssetsValue,
+        liabilities: r2(liabilitiesTotal),
       },
       spending: {
         thisMonth: expensesThisMonth,
@@ -297,39 +322,27 @@ router.get('/recurring-summary', async (req: AuthRequest, res: Response) => {
 router.get('/net-worth-chart', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const now = new Date();
+    const months = Number(req.query.months) || 12;
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - months + 1);
+    cutoff.setDate(1);
+    cutoff.setHours(0, 0, 0, 0);
 
-    // Current net worth
-    const accounts = await prisma.account.findMany({
-      where: { householdId, isHidden: false, excludeFromNetWorth: false, ...NOT_DELETED },
-      select: { balance: true },
-    });
-    const netWorthCurrent = accounts.reduce((sum, a) => sum + a.balance, 0);
-
-    // Monthly savings rate estimate from last 3 months of transactions
-    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-    const txns = await queryJournalAmounts({
-      householdId,
-      dateFrom: threeMonthsAgo,
+    const snapshots = await prisma.netWorthSnapshot.findMany({
+      where: { householdId, date: { gte: cutoff } },
+      orderBy: { date: 'asc' },
+      select: { date: true, netWorth: true, cashValue: true, investmentValue: true, otherAssetsValue: true, liabilities: true, assets: true },
     });
 
-    const totalIncome = txns.filter(t => Number(t.amountDecimal) > 0).reduce((s, t) => s + Number(t.amountDecimal), 0);
-    const totalExpenses = txns.filter(t => Number(t.amountDecimal) < 0).reduce((s, t) => s + Math.abs(Number(t.amountDecimal)), 0);
-    const avgMonthlySavings = (totalIncome - totalExpenses) / 3;
-
-    // Build 12 monthly data points going back 11 months from now
-    const dataPoints: Array<{ date: string; value: number }> = [];
-    for (let i = 11; i >= 0; i--) {
-      const pointDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      // Estimate: current net worth minus savings accumulated since that point
-      const estimatedValue = netWorthCurrent - avgMonthlySavings * i;
-      dataPoints.push({
-        date: pointDate.toISOString().slice(0, 10),
-        value: Math.round(estimatedValue * 100) / 100,
-      });
-    }
-
-    return res.json(dataPoints);
+    return res.json(snapshots.map((s) => ({
+      date: s.date.toISOString().slice(0, 10),
+      value: s.netWorth,
+      cashValue: s.cashValue,
+      investmentValue: s.investmentValue,
+      otherAssetsValue: s.otherAssetsValue,
+      liabilities: s.liabilities,
+      assets: s.assets,
+    })));
   } catch (err) {
     req.log.error({ err }, 'dashboard/net-worth-chart');
     return res.status(500).json({ error: 'Internal server error' });

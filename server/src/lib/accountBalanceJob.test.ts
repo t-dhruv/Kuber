@@ -18,14 +18,20 @@ describe('runAccountBalanceSnapshot', () => {
 
     expect(prisma.account.findMany).toHaveBeenCalledWith({
       where: { isHidden: false, isDeleted: false },
-      select: { id: true, householdId: true, balance: true },
+      select: {
+        id: true,
+        householdId: true,
+        balance: true,
+        type: true,
+        investmentHoldings: { select: { shares: true, currentPrice: true } },
+      },
     });
   });
 
   it('upserts account balance, reporting snapshot, and monthly rollup for each account', async () => {
     vi.mocked(prisma.account.findMany).mockResolvedValue([
-      { id: 'account-1', householdId: 'household-1', balance: 123.45 },
-      { id: 'account-2', householdId: 'household-2', balance: -50 },
+      { id: 'account-1', householdId: 'household-1', balance: 123.45, type: 'checking', investmentHoldings: [] },
+      { id: 'account-2', householdId: 'household-2', balance: -50, type: 'savings', investmentHoldings: [] },
     ] as never);
 
     await runAccountBalanceSnapshot();

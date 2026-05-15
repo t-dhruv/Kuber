@@ -896,6 +896,9 @@ model NetWorthSnapshot {
   liabilitiesDecimal Decimal?  @db.Decimal(19, 4)
   netWorth           Float
   netWorthDecimal    Decimal?  @db.Decimal(19, 4)
+  cashValue          Float     @default(0)
+  investmentValue    Float     @default(0)
+  otherAssetsValue   Float     @default(0)
   createdAt          DateTime  @default(now())
   household          Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 

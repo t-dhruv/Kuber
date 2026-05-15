@@ -37,7 +37,10 @@ describe('dashboard route integration', () => {
   });
 
   it('returns summary metrics from active accounts and scoped journal amounts', async () => {
-    vi.mocked(prisma.account.findMany).mockResolvedValue([{ balance: 1000 }, { balance: -250 }] as any);
+    vi.mocked(prisma.account.findMany).mockResolvedValue([
+      { balance: 1000, type: 'checking', investmentHoldings: [] },
+      { balance: -250, type: 'credit_card', investmentHoldings: [] },
+    ] as any);
     vi.mocked(queryJournalAmounts)
       .mockResolvedValueOnce([{ amountDecimal: 3000 }, { amountDecimal: -900 }] as any)
       .mockResolvedValueOnce([{ amountDecimal: 2500 }, { amountDecimal: -800 }] as any);
@@ -52,7 +55,7 @@ describe('dashboard route integration', () => {
         excludeFromNetWorth: false,
         isDeleted: false,
       },
-      select: { balance: true },
+      select: expect.objectContaining({ balance: true, type: true }),
     });
     expect(queryJournalAmounts).toHaveBeenCalledWith(expect.objectContaining({
       householdId: 'household-1',
@@ -165,18 +168,17 @@ describe('dashboard route integration', () => {
     });
   });
 
-  it('returns a 12 point net worth chart', async () => {
-    vi.mocked(prisma.account.findMany).mockResolvedValue([{ balance: 1000 }] as any);
-    vi.mocked(queryJournalAmounts).mockResolvedValue([
-      { amountDecimal: 900 },
-      { amountDecimal: -300 },
+  it('returns net worth chart from snapshots with breakdown', async () => {
+    vi.mocked(prisma.netWorthSnapshot.findMany).mockResolvedValue([
+      { date: new Date('2026-04-01'), netWorth: 900, cashValue: 900, investmentValue: 0, otherAssetsValue: 0, liabilities: 0, assets: 900 },
+      { date: new Date('2026-05-01'), netWorth: 1000, cashValue: 800, investmentValue: 200, otherAssetsValue: 0, liabilities: 0, assets: 1000 },
     ] as any);
 
     const res = await request(makeApp()).get('/net-worth-chart');
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(12);
-    expect(res.body.at(-1)).toEqual({ date: '2026-05-01', value: 1000 });
+    expect(res.body).toHaveLength(2);
+    expect(res.body.at(-1)).toMatchObject({ date: '2026-05-01', value: 1000, investmentValue: 200 });
   });
 
   it('returns active goals summary with status', async () => {
