@@ -10,7 +10,7 @@
 
 import { Router } from 'express';
 import multer from 'multer';
-import { createCheckpoint } from '../lib/checkpoint.js';
+import { createCheckpoint, rollbackCheckpoint } from '../lib/checkpoint.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.js';
@@ -22,6 +22,7 @@ import { detectColumnMapping } from '../lib/csvColumnDetector.js';
 import { detectLocaleFormat, parseAmount, mergeDebitCredit } from '../lib/amountParser.js';
 import { transactionsImportedTotal } from '../lib/metrics.js';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration.js';
+import { normalizeMerchant, buildLearningMap } from '../lib/autoCategorize.js';
 
 const router = Router();
 
@@ -147,17 +148,12 @@ async function parseUploadedFile(
     hash: computeDedupHash(row.date, row.description, row.amount),
   }));
 
-  // Fetch existing hashes for this account and compute dedup set
-  const existingJournals = await prisma.transactionJournal.findMany({
-    where: { entries: { some: { accountId } }, householdId, isHidden: false },
-    select: { date: true, description: true, amountDecimal: true },
+  // Fetch stored import hashes for this account (written by confirm endpoint)
+  const storedMeta = await prisma.transactionJournalMeta.findMany({
+    where: { name: 'importHash', journal: { entries: { some: { accountId } }, householdId } },
+    select: { value: true },
   });
-
-  const existingHashes = new Set(
-    existingJournals.map((j) =>
-      computeDedupHash(j.date.toISOString().slice(0, 10), j.description, Number(j.amountDecimal))
-    )
-  );
+  const existingHashes = new Set(storedMeta.map((m) => m.value));
 
   type RawWithHash = { date: string; description: string; amount: number; reference?: string; hash: string };
   const dedupedRows = markDuplicates(withHashes, existingHashes) as Array<RawWithHash & { isDuplicate: boolean }>;
@@ -607,12 +603,13 @@ router.post('/confirm', async (req: AuthRequest, res) => {
     });
     if (!account) return res.status(404).json({ error: 'Account not found' });
 
-    // Pre-load categories for matching
-    const categories = await prisma.category.findMany({
-      where: { householdId: req.householdId! },
-      select: { id: true, name: true },
-    });
-    const categoryMap = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
+    // Pre-load rule-based category suggestions (replaces naive name-match)
+    const ruleSuggestions = await suggestCategoriesForRows(
+      rows.map((r) => ({ ...r, status: 'new' as const, isDuplicate: false })),
+      req.householdId!,
+    );
+
+    const importedJournalIds: string[] = [];
 
     // Pre-load existing merchants to avoid N+1 inside transaction
     const existingMerchants = await prisma.merchant.findMany({
@@ -620,6 +617,9 @@ router.post('/confirm', async (req: AuthRequest, res) => {
       select: { id: true, name: true },
     });
     const merchantCache = new Map(existingMerchants.map((m) => [m.name.toLowerCase(), m.id]));
+
+    // Load merchant learning examples once for the entire import batch
+    const learningMap = await buildLearningMap(prisma, req.householdId!);
 
     let imported = 0;
     let skipped = 0;
@@ -717,17 +717,12 @@ router.post('/confirm', async (req: AuthRequest, res) => {
           }
 
           // Always create a transaction record (for cash flow tracking regardless of type)
-          // Resolve category
-          let resolvedCategoryId = row.categoryId ?? null;
-          if (!resolvedCategoryId) {
-            const descLower = row.description.toLowerCase();
-            for (const [name, id] of categoryMap) {
-              if (descLower.includes(name)) {
-                resolvedCategoryId = id;
-                break;
-              }
-            }
-          }
+          // Resolve category: user override → rules engine → learning map → uncategorized
+          const resolvedCategoryId =
+            row.categoryId ??
+            ruleSuggestions.get(row.hash)?.categoryId ??
+            learningMap.get(normalizeMerchant(row.description)) ??
+            null;
 
           // Resolve merchant from pre-loaded cache — create only if genuinely new
           const merchantName = row.description.split(/[#\d]/)[0].trim();
@@ -780,6 +775,12 @@ router.post('/confirm', async (req: AuthRequest, res) => {
             });
           }
 
+          // Persist dedup hash so future imports can fingerprint-check against it
+          await tx.transactionJournalMeta.create({
+            data: { journalId: journalResult.journalId, name: 'importHash', value: row.hash },
+          });
+
+          importedJournalIds.push(journalResult.journalId);
           importedAmountSum += row.amount;
           imported++;
         } catch (err) {
@@ -796,14 +797,6 @@ router.post('/confirm', async (req: AuthRequest, res) => {
         data: { balance: { increment: importedAmountSum } },
       });
     }
-
-    // Collect created journal IDs (used for checkpoint + history)
-    const importedJournalIds = imported > 0
-      ? (await prisma.transactionJournal.findMany({
-          where: { householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
-          select: { id: true },
-        })).map((t) => t.id)
-      : [];
 
     // Create rollback checkpoint
     if (imported > 0) {
@@ -986,6 +979,23 @@ router.post('/webhook', async (req: AuthRequest, res) => {
   } catch (err) {
     req.log.error({ err }, 'Import webhook error');
     return res.status(500).json({ error: 'Webhook import failed' });
+  }
+});
+
+// POST /api/v1/import/undo/:checkpointId — roll back a bulk import within its 7-day window
+router.post('/undo/:checkpointId', async (req: AuthRequest, res) => {
+  try {
+    await rollbackCheckpoint(prisma, req.householdId!, req.params.checkpointId);
+    return res.json({ message: 'Import rolled back successfully' });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    if (err instanceof Error && err.message.includes('expired')) {
+      return res.status(410).json({ error: err.message });
+    }
+    req.log.error({ err }, 'Import undo error');
+    return res.status(500).json({ error: 'Failed to undo import' });
   }
 });
 
