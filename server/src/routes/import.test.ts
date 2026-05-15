@@ -81,7 +81,7 @@ describe('POST /confirm — merchant learning lookup', () => {
 
     // Default journal creation
     const { createJournalFromLegacyTransaction } = await import('../lib/legacyToJournalMigration');
-    vi.mocked(createJournalFromLegacyTransaction).mockResolvedValue({ journalId: 'j-1' });
+    vi.mocked(createJournalFromLegacyTransaction).mockResolvedValue({ journalId: 'j-1', type: 'withdrawal', meta: {} });
   });
 
   it('applies learning example category to uncategorized row with matching merchant', async () => {
@@ -90,7 +90,7 @@ describe('POST /confirm — merchant learning lookup', () => {
 
     vi.mocked(createJournalFromLegacyTransaction).mockImplementation(async (_tx, input) => {
       capturedCategoryId = input.categoryId ?? null;
-      return { journalId: 'j-1' };
+      return { journalId: 'j-1', type: 'withdrawal', meta: {} };
     });
 
     await request(makeApp())
@@ -120,7 +120,7 @@ describe('POST /confirm — merchant learning lookup', () => {
 
     vi.mocked(createJournalFromLegacyTransaction).mockImplementation(async (_tx, input) => {
       capturedCategoryId = input.categoryId ?? null;
-      return { journalId: 'j-1' };
+      return { journalId: 'j-1', type: 'withdrawal', meta: {} };
     });
 
     await request(makeApp())
