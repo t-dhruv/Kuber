@@ -17,6 +17,7 @@ import { SplitTransactionModal } from './components/SplitTransactionModal';
 import { DuplicateReviewModal } from './components/DuplicateReviewModal';
 import { ReceiptOcrModal } from './components/ReceiptOcrModal';
 import { InstitutionLogo } from '@/components/ui';
+import { InlineSuggestionStrip } from './components/InlineSuggestionStrip';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1301,9 +1302,13 @@ interface TransactionRowProps {
   onOpen: (txn: Transaction) => void;
   onMerchantEdit: (id: string, merchant: string) => void;
   onSplit: (txn: Transaction) => void;
+  expandedReviewId: string | null;
+  onToggleReview: (id: string) => void;
+  onReviewDone: (id: string) => void;
+  categories: Category[];
 }
 
-function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSplit }: TransactionRowProps) {
+function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSplit, expandedReviewId, onToggleReview, onReviewDone, categories }: TransactionRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(txn.merchantName);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1328,13 +1333,14 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
   };
 
   return (
-    <div
-      className="flex items-center h-[52px] px-3 gap-3 cursor-pointer transition-colors duration-150"
-      style={{ backgroundColor: selected ? 'var(--color-accent-light)' : 'transparent' }}
-      onMouseEnter={(e) => { if (!selected && !editing) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'; }}
-      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.backgroundColor = 'transparent'; }}
-      onClick={handleRowClick}
-    >
+    <>
+      <div
+        className="flex items-center h-[52px] px-3 gap-3 cursor-pointer transition-colors duration-150"
+        style={{ backgroundColor: selected ? 'var(--color-accent-light)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!selected && !editing) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'; }}
+        onMouseLeave={(e) => { if (!selected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+        onClick={handleRowClick}
+      >
       {/* Checkbox */}
       <input
         type="checkbox"
@@ -1392,9 +1398,12 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       <div className="flex gap-1 flex-[0_0_auto]">
         {/* On mobile: only show Review badge */}
         {txn.needsReview && (
-          <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-warning-light)] text-[var(--color-warning)]">
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleReview(txn.id); }}
+            className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-warning-light)] text-[var(--color-warning)] hover:opacity-80 cursor-pointer"
+          >
             Review
-          </span>
+          </button>
         )}
 
         {/* On sm+: show all badges */}
@@ -1451,6 +1460,21 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
         <ChevronRight size={16} />
       </div>
     </div>
+
+    {expandedReviewId === txn.id && txn.needsReview && (
+      <div className="px-3 py-2 w-full">
+        <InlineSuggestionStrip
+          transactionId={txn.id}
+          aiSuggestedCategoryId={txn.aiSuggestedCategoryId ?? null}
+          aiSuggestedCategoryName={txn.aiSuggestedCategoryName ?? null}
+          aiSuggestionConfidence={txn.aiSuggestionConfidence ?? null}
+          currentCategoryId={txn.categoryId ?? null}
+          categories={categories}
+          onDone={onReviewDone}
+        />
+      </div>
+    )}
+    </>
   );
 }
 
@@ -1471,6 +1495,7 @@ export default function TransactionsPage() {
   const autoCatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [splitTxn, setSplitTxn] = useState<Transaction | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const search = searchParams.get('search') ?? '';
@@ -2074,6 +2099,15 @@ export default function TransactionsPage() {
                     onOpen={setDrawerTxn}
                     onMerchantEdit={handleMerchantEdit}
                     onSplit={setSplitTxn}
+                    expandedReviewId={expandedReviewId}
+                    onToggleReview={(id) =>
+                      setExpandedReviewId((prev) => (prev === id ? null : id))
+                    }
+                    onReviewDone={(id) => {
+                      setExpandedReviewId(null);
+                      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+                    }}
+                    categories={categories}
                   />
                   {idx < group.transactions.length - 1 && (
                     <div className="h-px bg-[var(--color-border)] ml-3" />
