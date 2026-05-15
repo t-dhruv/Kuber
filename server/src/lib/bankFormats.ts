@@ -257,6 +257,14 @@ function scoreFormat(format: BankFormat, headers: string[]): number {
   return matched / Math.max(allPatterns.length, 1);
 }
 
+function countFormatMatches(format: BankFormat, headers: string[]): number {
+  const lowerHeaders = headers.map((h) => h.toLowerCase().trim());
+  return Object.values(format.mapping)
+    .flat()
+    .filter((pattern) => lowerHeaders.some((h) => h.includes(pattern) || pattern.includes(h)))
+    .length;
+}
+
 /**
  * Detect the best matching bank format for the given CSV headers.
  * Returns the format and confidence score, or 'generic' as fallback.
@@ -280,25 +288,62 @@ function hasAllRequiredFields(format: BankFormat, lowerHeaders: string[]): boole
   return hasDate && hasDesc && hasAmount;
 }
 
+function matchesAnyHeader(patterns: string[], header: string): boolean {
+  return patterns.some((p) => header.includes(p) || p.includes(header));
+}
+
+function hasOnlyGenericSingleAmountHeaders(lowerHeaders: string[]): boolean {
+  const generic = BANK_FORMATS.find((f) => f.id === 'generic')!;
+  const genericSingleAmountPatterns = [
+    ...generic.mapping.date,
+    ...generic.mapping.description,
+    ...(generic.mapping.amount ?? []),
+  ];
+
+  const hasDate = lowerHeaders.some((h) => matchesAnyHeader(generic.mapping.date, h));
+  const hasDesc = lowerHeaders.some((h) => matchesAnyHeader(generic.mapping.description, h));
+  const hasAmount = lowerHeaders.some((h) => matchesAnyHeader(generic.mapping.amount ?? [], h));
+
+  return (
+    hasDate &&
+    hasDesc &&
+    hasAmount &&
+    lowerHeaders.every((h) => matchesAnyHeader(genericSingleAmountPatterns, h))
+  );
+}
+
 export function detectBankFormat(headers: string[]): { format: BankFormat; confidence: number } {
   const lowerHeaders = headers.map((h) => h.toLowerCase().trim());
-  let best: BankFormat = BANK_FORMATS.find((f) => f.id === 'generic')!;
+  const generic = BANK_FORMATS.find((f) => f.id === 'generic')!;
+
+  if (hasOnlyGenericSingleAmountHeaders(lowerHeaders)) {
+    return { format: generic, confidence: 0 };
+  }
+
+  let best: BankFormat = generic;
   let bestScore = 0;
+  let bestMatched = 0;
+  let ambiguousBest = false;
 
   for (const format of BANK_FORMATS) {
     if (format.id === 'generic') continue;
     // A format must cover all required fields AND score above a minimum threshold
     if (!hasAllRequiredFields(format, lowerHeaders)) continue;
     const score = scoreFormat(format, headers);
+    const matched = countFormatMatches(format, headers);
     // Use a higher threshold (0.6) so ambiguous CSVs fall back to generic
-    if (score > bestScore && score >= 0.6) {
+    if (score >= 0.6 && (score > bestScore || (score === bestScore && matched > bestMatched))) {
       bestScore = score;
+      bestMatched = matched;
       best = format;
+      ambiguousBest = false;
+    } else if (score >= 0.6 && score === bestScore && matched === bestMatched) {
+      ambiguousBest = true;
     }
   }
 
-  if (bestScore < 0.6) {
-    return { format: BANK_FORMATS.find((f) => f.id === 'generic')!, confidence: bestScore };
+  if (bestScore < 0.6 || ambiguousBest) {
+    return { format: generic, confidence: bestScore };
   }
 
   return { format: best, confidence: bestScore };

@@ -370,7 +370,7 @@ router.post('/detect-mapping', upload.single('file'), async (req: AuthRequest, r
     const investmentHints = {
       transactionTypeColumn: headers.find((h) => /^(action|type|transaction.?type|buy.?sell|side|trade.?type|activity.?sub.?type|activity.?type)$/i.test(h)) ?? null,
       sharesColumn: headers.find((h) => /^(shares?|quantity|qty|units?|num.?shares?|volume)$/i.test(h)) ?? null,
-      priceColumn: headers.find((h) => /^(price|share.?price|unit.?price|exec.?price|trade.?price|cost.?per.?share|avg.?price)$/i.test(h)) ?? null,
+      priceColumn: headers.find((h) => /^(price|share.?price|unit.?price|exec.?price|trade.?price|cost.?per.?share|avg.?price|market.?price|per.?share.?price)$/i.test(h)) ?? null,
       tickerColumn: headers.find((h) => /^(symbol|ticker|security|instrument|stock|scrip)$/i.test(h)) ?? null,
     };
 
@@ -643,12 +643,25 @@ router.post('/confirm', async (req: AuthRequest, res) => {
             continue;
           }
 
+          let dividendHoldingId: string | null = null;
+          if (isInvestmentAccount && row.investmentType === 'dividend') {
+            // ── Investment dividend: find/create holding, create DividendRecord linked to journal ──
+            const ticker = row.ticker ?? extractTicker(row.description) ?? 'UNKNOWN';
+            let holding = await tx.investmentHolding.findFirst({ where: { accountId, symbol: ticker } });
+            if (!holding) {
+              holding = await tx.investmentHolding.create({
+                data: { accountId, symbol: ticker, name: ticker, shares: 0, costBasis: 0, currentPrice: 0 },
+              });
+            }
+            dividendHoldingId = holding.id;
+          }
+
           if (isInvestmentAccount && (row.investmentType === 'buy' || row.investmentType === 'sell')) {
             // ── Investment buy/sell: upsert holding + create lot ──────────────
             const ticker = row.ticker ?? extractTicker(row.description) ?? 'UNKNOWN';
             const isBuy = row.investmentType === 'buy';
-            const shareDelta = row.shares ?? 1; // fallback: 1 share if not specified
-            const price = row.pricePerShare ?? Math.abs(row.amount) / shareDelta;
+            const shareDelta = Math.abs(row.shares ?? 1);
+            const price = row.pricePerShare ?? (shareDelta > 0 ? Math.abs(row.amount) / shareDelta : 0);
 
             let holding = await tx.investmentHolding.findFirst({
               where: { accountId, symbol: ticker },
@@ -667,27 +680,37 @@ router.post('/confirm', async (req: AuthRequest, res) => {
               });
             }
 
-            const newShares = isBuy ? holding.shares + shareDelta : holding.shares - shareDelta;
-            const newCostBasis = isBuy
-              ? holding.costBasis + shareDelta * price
-              : holding.costBasis - (holding.shares > 0 ? (shareDelta / holding.shares) * holding.costBasis : 0);
+            // ACB method: per-share cost basis
+            const currentACB = holding.costBasis; // per-share ACB
+            const newTotalShares = isBuy
+              ? holding.shares + shareDelta
+              : Math.max(0, holding.shares - shareDelta);
+            const newACB = isBuy && newTotalShares > 0
+              ? (holding.shares * currentACB + shareDelta * price) / newTotalShares
+              : currentACB; // sell doesn't change per-share ACB
 
             await tx.investmentHolding.update({
               where: { id: holding.id },
               data: {
-                shares: Math.max(0, newShares),
-                costBasis: Math.max(0, newCostBasis),
+                shares: newTotalShares,
+                costBasis: Math.round(newACB * 10000) / 10000,
                 currentPrice: price,
               },
             });
 
+            const lotNote = [row.description, batchId ? `[batch:${batchId}]` : null].filter(Boolean).join(' ');
+            const realizedGain = !isBuy ? Math.round(shareDelta * (price - currentACB) * 10000) / 10000 : null;
+
             await tx.holdingLot.create({
               data: {
                 holdingId: holding.id,
+                transactionType: isBuy ? 'buy' : 'sell',
                 date: txDate,
                 shares: isBuy ? shareDelta : -shareDelta,
                 pricePerShare: price,
-                note: [row.description, batchId ? `[batch:${batchId}]` : null].filter(Boolean).join(' '),
+                acbPerShareAtSale: !isBuy ? currentACB : null,
+                realizedGainDecimal: realizedGain,
+                note: lotNote || null,
                 status: 'confirmed',
               },
             });
@@ -730,7 +753,7 @@ router.post('/confirm', async (req: AuthRequest, res) => {
           if (bankSource) meta.bankSource = bankSource;
           if (batchId) meta.batchId = batchId;
 
-          await createJournalFromLegacyTransaction(
+          const journalResult = await createJournalFromLegacyTransaction(
             tx,
             {
               householdId: req.householdId!,
@@ -744,6 +767,18 @@ router.post('/confirm', async (req: AuthRequest, res) => {
             row.amount < 0 ? (virtualAccounts.expenseAccountId ?? undefined) : undefined,
             row.amount > 0 ? (virtualAccounts.revenueAccountId ?? undefined) : undefined,
           );
+
+          if (dividendHoldingId) {
+            await tx.dividendRecord.create({
+              data: {
+                holdingId: dividendHoldingId,
+                date: txDate,
+                amountDecimal: Math.abs(row.amount),
+                currencyCode: 'CAD',
+                journalId: journalResult.journalId,
+              },
+            });
+          }
 
           importedAmountSum += row.amount;
           imported++;
@@ -762,20 +797,22 @@ router.post('/confirm', async (req: AuthRequest, res) => {
       });
     }
 
+    // Collect created journal IDs (used for checkpoint + history)
+    const importedJournalIds = imported > 0
+      ? (await prisma.transactionJournal.findMany({
+          where: { householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
+          select: { id: true },
+        })).map((t) => t.id)
+      : [];
+
     // Create rollback checkpoint
     if (imported > 0) {
-      // We need the IDs of newly created journals — re-query by createdAt
-      // Simplest: query journals created in the last few seconds
-      const recentIds = await prisma.transactionJournal.findMany({
-        where: { householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
-        select: { id: true },
-      });
       await createCheckpoint(
         prisma,
         req.householdId!,
         'bulk-import',
         `Imported ${imported} rows from ${filename ?? 'unknown'}`,
-        recentIds.map((t) => t.id)
+        importedJournalIds,
       );
     }
 
@@ -790,6 +827,7 @@ router.post('/confirm', async (req: AuthRequest, res) => {
         rowsDuplicate: 0,
         rowsSkipped: skipped,
         status: errors.length > 0 ? 'partial' : 'completed',
+        journalIds: importedJournalIds,
       },
     });
 
@@ -923,6 +961,13 @@ router.post('/webhook', async (req: AuthRequest, res) => {
       });
     }
 
+    const webhookJournalIds = imported > 0
+      ? (await prisma.transactionJournal.findMany({
+          where: { householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
+          select: { id: true },
+        })).map((t) => t.id)
+      : [];
+
     await prisma.importHistory.create({
       data: {
         householdId: req.householdId!,
@@ -933,6 +978,7 @@ router.post('/webhook', async (req: AuthRequest, res) => {
         rowsDuplicate: skipped,
         rowsSkipped: 0,
         status: 'completed',
+        journalIds: webhookJournalIds,
       },
     });
 

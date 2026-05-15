@@ -41,19 +41,14 @@ function nextRunDate(frequency: string, dayOfMonth: number, from: Date): Date {
 async function computeAvgCostBasis(holdingId: string): Promise<number> {
   const lots = await prisma.holdingLot.findMany({
     where: { holdingId, status: 'confirmed' },
+    orderBy: { date: 'asc' },
   });
   if (lots.length === 0) return 0;
-  const buyLots = lots.filter((l) => l.shares > 0);
+  const buyLots = lots.filter((l) => l.transactionType === 'buy');
   const totalShares = buyLots.reduce((s, l) => s + l.shares, 0);
   if (totalShares === 0) return 0;
   const totalCost = buyLots.reduce((s, l) => s + l.shares * l.pricePerShare, 0);
-  const avg = Math.round((totalCost / totalShares) * 10000) / 10000;
-  // Update holding costBasis
-  await prisma.investmentHolding.update({
-    where: { id: holdingId },
-    data: { costBasis: avg },
-  });
-  return avg;
+  return Math.round((totalCost / totalShares) * 10000) / 10000;
 }
 
 async function generatePendingLots(householdId: string): Promise<number> {
@@ -90,6 +85,7 @@ async function generatePendingLots(householdId: string): Promise<number> {
     await prisma.holdingLot.create({
       data: {
         holdingId: schedule.holdingId,
+        transactionType: 'buy',
         date: now,
         shares: Math.round(shares * 100000) / 100000,
         pricePerShare: price,
@@ -124,9 +120,12 @@ type RawHolding = {
   account: { name: string };
   lots: Array<{
     id: string;
+    transactionType: string;
     date: Date;
     shares: number;
     pricePerShare: number;
+    acbPerShareAtSale: { toNumber(): number } | null;
+    realizedGainDecimal: { toNumber(): number } | null;
     note: string | null;
     status: string;
   }>;
@@ -134,8 +133,13 @@ type RawHolding = {
 
 function computeRealizedGain(lots: RawHolding['lots'], avgCostBasis: number): number {
   return lots
-    .filter((l) => l.status === 'confirmed' && l.shares < 0)
-    .reduce((s, l) => s + Math.abs(l.shares) * (l.pricePerShare - avgCostBasis), 0);
+    .filter((l) => l.status === 'confirmed' && l.transactionType === 'sell')
+    .reduce((s, l) => {
+      if (l.realizedGainDecimal !== null) return s + l.realizedGainDecimal.toNumber();
+      // fallback for legacy lots without stored realized gain
+      const acb = l.acbPerShareAtSale !== null ? l.acbPerShareAtSale.toNumber() : avgCostBasis;
+      return s + Math.abs(l.shares) * (l.pricePerShare - acb);
+    }, 0);
 }
 
 function buildHolding(
@@ -179,9 +183,12 @@ function buildHolding(
     priceUpdatedAt: new Date().toISOString(),
     lots: h.lots.map((l) => ({
       id: l.id,
+      transactionType: l.transactionType,
       date: l.date.toISOString(),
       shares: l.shares,
       pricePerShare: l.pricePerShare,
+      acbPerShareAtSale: l.acbPerShareAtSale?.toNumber() ?? null,
+      realizedGain: l.realizedGainDecimal?.toNumber() ?? null,
       note: l.note,
       status: l.status,
     })),
@@ -221,9 +228,12 @@ function buildHoldingFallback(h: RawHolding, avgCostBasis: number) {
     priceUpdatedAt: h.updatedAt.toISOString(),
     lots: h.lots.map((l) => ({
       id: l.id,
+      transactionType: l.transactionType,
       date: l.date.toISOString(),
       shares: l.shares,
       pricePerShare: l.pricePerShare,
+      acbPerShareAtSale: l.acbPerShareAtSale?.toNumber() ?? null,
+      realizedGain: l.realizedGainDecimal?.toNumber() ?? null,
       note: l.note,
       status: l.status,
     })),
@@ -252,10 +262,10 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    // Compute avgCostBasis per holding from confirmed BUY lots only (positive shares)
+    // Compute avgCostBasis per holding from confirmed BUY lots only
     const avgMap = new Map<string, number>();
     for (const h of rawHoldings) {
-      const buyLots = h.lots.filter((l) => l.status === 'confirmed' && l.shares > 0);
+      const buyLots = h.lots.filter((l) => l.status === 'confirmed' && l.transactionType === 'buy');
       const totalBuyShares = buyLots.reduce((s, l) => s + l.shares, 0);
       const avg = totalBuyShares > 0
         ? buyLots.reduce((s, l) => s + l.shares * l.pricePerShare, 0) / totalBuyShares
@@ -295,6 +305,22 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
     const totalRealizedGain = Math.round(holdings.reduce((s, h) => s + h.realizedGain, 0) * 100) / 100;
     const totalAnnualDividend = Math.round(holdings.reduce((s, h) => s + h.estimatedAnnualDividend, 0) * 100) / 100;
 
+    // Total return = unrealized + realized + dividends
+    // Uses recorded DividendRecord totals if available, else estimated annual dividend as proxy
+    const dividendRecordTotals = await prisma.dividendRecord.groupBy({
+      by: ['holdingId'],
+      where: { holding: { account: { householdId, ...NOT_DELETED } } },
+      _sum: { amountDecimal: true },
+    });
+    const totalRecordedDividends = dividendRecordTotals.reduce(
+      (s, r) => s + (r._sum.amountDecimal ? Number(r._sum.amountDecimal) : 0),
+      0,
+    );
+    const totalReturn = Math.round((totalUnrealizedGain + totalRealizedGain + totalRecordedDividends) * 100) / 100;
+    const totalReturnPercent = totalCostBasis !== 0
+      ? Math.round((totalReturn / totalCostBasis) * 10000) / 100
+      : 0;
+
     return res.json({
       totalValue: Math.round(totalValue * 100) / 100,
       totalCostBasis: Math.round(totalCostBasis * 100) / 100,
@@ -303,7 +329,10 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
       totalDayChange: Math.round(totalDayChange * 100) / 100,
       totalUnrealizedGain,
       totalRealizedGain,
+      totalRecordedDividends: Math.round(totalRecordedDividends * 100) / 100,
       totalAnnualDividend,
+      totalReturn,
+      totalReturnPercent,
       holdings,
     });
   } catch (err) {
@@ -522,6 +551,7 @@ router.post('/holdings', async (req: AuthRequest, res: Response) => {
         currentPrice: livePrice,
         lots: {
           create: {
+            transactionType: 'buy',
             date: new Date(),
             shares: Number(shares),
             pricePerShare: costBasisNum,
@@ -650,6 +680,7 @@ router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
         await prisma.holdingLot.create({
           data: {
             holdingId: existing.id,
+            transactionType: 'buy',
             shares,
             pricePerShare: costBasis,
             date: row.date ? new Date(row.date) : new Date(),
@@ -673,6 +704,7 @@ router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
         await prisma.holdingLot.create({
           data: {
             holdingId: holding.id,
+            transactionType: 'buy',
             shares,
             pricePerShare: costBasis,
             date: row.date ? new Date(row.date) : new Date(),
@@ -758,44 +790,82 @@ router.post('/holdings/:id/lots', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const { id } = req.params;
-    const { date, shares, pricePerShare, note } = req.body;
+    const { date, shares, pricePerShare, note, transactionType = 'buy' } = req.body;
 
     if (shares == null || pricePerShare == null) {
       return res.status(400).json({ error: 'shares and pricePerShare are required' });
     }
+    if (!['buy', 'sell', 'dividend'].includes(transactionType)) {
+      return res.status(400).json({ error: 'transactionType must be buy, sell, or dividend' });
+    }
+
+    const sharesNum = Math.abs(Number(shares));
+    const priceNum = Number(pricePerShare);
 
     const holding = await prisma.investmentHolding.findFirst({
       where: { id, account: { householdId, ...NOT_DELETED } },
     });
     if (!holding) return res.status(404).json({ error: 'Holding not found' });
 
-    const lot = await prisma.holdingLot.create({
-      data: {
-        holdingId: id,
-        date: date ? new Date(date) : new Date(),
-        shares: Number(shares),
-        pricePerShare: Number(pricePerShare),
-        note: note ?? null,
-        status: 'confirmed',
-      },
-    });
+    // Validate sell quantity
+    if (transactionType === 'sell') {
+      const existingLots = await prisma.holdingLot.findMany({
+        where: { holdingId: id, status: 'confirmed' },
+      });
+      const currentShares = existingLots.reduce(
+        (s, l) => s + (l.transactionType === 'buy' ? l.shares : -l.shares),
+        0,
+      );
+      if (sharesNum > currentShares + 0.000001) {
+        return res.status(400).json({
+          error: `Cannot sell ${sharesNum} shares — only ${currentShares.toFixed(6)} held`,
+        });
+      }
+    }
 
-    // Update shares total and avg cost basis on the holding
+    // Compute ACB before creating the lot (needed for sell realized gain)
+    const acbBeforeLot = await computeAvgCostBasis(id);
+
+    const lotData: Parameters<typeof prisma.holdingLot.create>[0]['data'] = {
+      holdingId: id,
+      transactionType,
+      date: date ? new Date(date) : new Date(),
+      shares: transactionType === 'sell' ? -sharesNum : sharesNum,
+      pricePerShare: priceNum,
+      note: note ?? null,
+      status: 'confirmed',
+    };
+
+    if (transactionType === 'sell') {
+      const realizedGain = sharesNum * (priceNum - acbBeforeLot);
+      lotData.acbPerShareAtSale = acbBeforeLot;
+      lotData.realizedGainDecimal = Math.round(realizedGain * 10000) / 10000;
+    }
+
+    const lot = await prisma.holdingLot.create({ data: lotData });
+
+    // Recompute holding totals
     const allConfirmedLots = await prisma.holdingLot.findMany({
       where: { holdingId: id, status: 'confirmed' },
     });
-    const totalShares = allConfirmedLots.reduce((s, l) => s + l.shares, 0);
-    const avg = await computeAvgCostBasis(id);
+    const totalShares = allConfirmedLots.reduce(
+      (s, l) => s + (l.transactionType === 'buy' ? l.shares : l.transactionType === 'sell' ? -Math.abs(l.shares) : 0),
+      0,
+    );
+    const newAvg = await computeAvgCostBasis(id);
     await prisma.investmentHolding.update({
       where: { id },
-      data: { shares: totalShares, costBasis: avg },
+      data: { shares: totalShares, costBasis: newAvg },
     });
 
     return res.status(201).json({
       id: lot.id,
+      transactionType: lot.transactionType,
       date: lot.date.toISOString(),
       shares: lot.shares,
       pricePerShare: lot.pricePerShare,
+      acbPerShareAtSale: lot.acbPerShareAtSale?.toNumber() ?? null,
+      realizedGain: lot.realizedGainDecimal?.toNumber() ?? null,
       note: lot.note,
       status: lot.status,
     });
@@ -823,7 +893,10 @@ router.delete('/lots/:id', async (req: AuthRequest, res: Response) => {
     const remaining = await prisma.holdingLot.findMany({
       where: { holdingId, status: 'confirmed' },
     });
-    const totalShares = remaining.reduce((s, l) => s + l.shares, 0);
+    const totalShares = remaining.reduce(
+      (s, l) => s + (l.transactionType === 'buy' ? l.shares : l.transactionType === 'sell' ? -Math.abs(l.shares) : 0),
+      0,
+    );
     const avg = await computeAvgCostBasis(holdingId);
     await prisma.investmentHolding.update({
       where: { id: holdingId },

@@ -28,6 +28,9 @@ vi.mock('../lib/prisma', () => ({
       delete: vi.fn(),
       update: vi.fn(),
     },
+    dividendRecord: {
+      groupBy: vi.fn(),
+    },
     account: {
       findFirst: vi.fn(),
     },
@@ -53,9 +56,12 @@ const holding = {
   lots: [
     {
       id: 'lot-1',
+      transactionType: 'buy',
       date: new Date('2026-01-01T00:00:00.000Z'),
       shares: 10,
       pricePerShare: 100,
+      acbPerShareAtSale: null,
+      realizedGainDecimal: null,
       note: null,
       status: 'confirmed',
     },
@@ -78,6 +84,7 @@ describe('investments route integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(prisma.recurringInvestment.findMany).mockResolvedValue([] as any);
+    vi.mocked(prisma.dividendRecord.groupBy).mockResolvedValue([] as any);
   });
 
   it('lists holdings with live prices and account scoping', async () => {

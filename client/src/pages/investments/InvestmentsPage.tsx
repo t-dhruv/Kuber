@@ -43,6 +43,9 @@ interface HoldingLot {
   pricePerShare: number;
   note?: string | null;
   status: 'confirmed' | 'pending';
+  transactionType: 'buy' | 'sell' | 'dividend';
+  acbPerShareAtSale?: number | null;
+  realizedGain?: number | null;
 }
 
 interface Holding {
@@ -78,6 +81,9 @@ interface HoldingsData {
   totalUnrealizedGain: number;
   totalRealizedGain: number;
   totalAnnualDividend: number;
+  totalRecordedDividends: number;
+  totalReturn: number;
+  totalReturnPercent: number;
 }
 
 interface AssetClassSegment {

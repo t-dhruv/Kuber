@@ -9,7 +9,7 @@ export async function runAccountBalanceSnapshot(): Promise<void> {
   today.setUTCHours(0, 0, 0, 0);
 
   const accounts = await prisma.account.findMany({
-    where: { isHidden: false },
+    where: { isHidden: false, isDeleted: false },
     select: { id: true, householdId: true, balance: true },
   });
 
