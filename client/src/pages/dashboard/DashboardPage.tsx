@@ -104,6 +104,14 @@ interface GoalsData {
   goals: Goal[];
 }
 
+interface SpendingCategoryItem {
+  id: string;
+  name: string;
+  icon: string | null;
+  amount: number;
+  percent: number;
+}
+
 interface WeeklyRecapData {
   period: { start: string; end: string; label: string };
   spending: { total: number; change: number; changePercent: number };
@@ -491,7 +499,19 @@ function ChecklistWidget() {
 
 // ─── Widget: Spending ─────────────────────────────────────────────────────────
 
-function SpendingWidget({ data, isLoading, isError }: { data?: SpendingChart; isLoading: boolean; isError: boolean }) {
+export function SpendingWidget({
+  data,
+  isLoading,
+  isError,
+  categories,
+  categoriesLoading,
+}: {
+  data?: SpendingChart;
+  isLoading: boolean;
+  isError: boolean;
+  categories?: SpendingCategoryItem[];
+  categoriesLoading?: boolean;
+}) {
   return (
     <Card padding="lg">
       <WidgetHeader
@@ -533,6 +553,39 @@ function SpendingWidget({ data, isLoading, isError }: { data?: SpendingChart; is
           </ResponsiveContainer>
         </div>
       )}
+
+      {/* Top spending categories */}
+      {categoriesLoading ? (
+        <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="animate-pulse" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: 18, height: 14, borderRadius: 4, backgroundColor: 'var(--color-border)' }} />
+              <div style={{ flex: 1, height: 14, borderRadius: 4, backgroundColor: 'var(--color-border)' }} />
+              <div style={{ width: 56, height: 14, borderRadius: 4, backgroundColor: 'var(--color-border)' }} />
+            </div>
+          ))}
+        </div>
+      ) : categories && categories.length > 0 ? (
+        <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>
+            Top categories
+          </div>
+          {categories.slice(0, 3).map((cat) => (
+            <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.875rem', minWidth: 18, textAlign: 'center' }}>{cat.icon ?? '•'}</span>
+              <span style={{ flex: 1, fontSize: '0.8125rem', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {cat.name}
+              </span>
+              <div style={{ width: 60, height: 4, borderRadius: 2, backgroundColor: 'var(--color-border)', overflow: 'hidden', flexShrink: 0 }}>
+                <div style={{ height: '100%', width: `${Math.min(100, cat.percent)}%`, backgroundColor: 'var(--color-accent)', borderRadius: 2 }} />
+              </div>
+              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', whiteSpace: 'nowrap', minWidth: 56, textAlign: 'right' }}>
+                {fmtCurrency(cat.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -1242,6 +1295,18 @@ export default function DashboardPage() {
       }),
     });
 
+  const budgetMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+  const budgetMonthEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10);
+
+  const { data: spendingCategories, isLoading: spendingCategoriesLoading } =
+    useQuery<{ items: SpendingCategoryItem[]; total: number }>({
+      queryKey: ['dashboard', 'spending-categories', budgetMonthStart],
+      queryFn: () =>
+        api
+          .get(`/reports/spending?groupBy=category&startDate=${budgetMonthStart}&endDate=${budgetMonthEnd}`)
+          .then((r) => r.data),
+    });
+
   const { data: recentTxns, isLoading: txnsLoading, isError: txnsError } =
     useQuery<RecentTxns>({
       queryKey: ['dashboard', 'recent-transactions'],
@@ -1331,6 +1396,8 @@ export default function DashboardPage() {
             data={spendingChart}
             isLoading={spendingLoading}
             isError={spendingError}
+            categories={spendingCategories?.items}
+            categoriesLoading={spendingCategoriesLoading}
           />
         );
       case 'recentTransactions':
