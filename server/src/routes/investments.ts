@@ -2,243 +2,32 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
-import { getQuotes, getQuote, getLiveBenchmarks, BenchmarkPeriod } from '../lib/priceCache';
 import { NOT_DELETED } from '../lib/softDeleteWhere';
+import {
+  getHoldings,
+  createHolding,
+  updateHolding,
+  deleteHolding,
+  deleteHoldingsByAccountId,
+  deleteHoldingsByIds,
+  importHoldings,
+  createLot,
+  deleteLot,
+  confirmLot,
+  skipLot,
+  getPendingLots,
+  getAllocation,
+  getPerformance,
+  getQuoteBySymbol,
+  updatePrices,
+  getDividendForecast,
+  getHoldingRecurring,
+  createHoldingRecurring,
+  updateHoldingRecurring,
+  deleteHoldingRecurring,
+} from '../services/investmentService';
 
 const router = Router();
-
-// ─── Asset class heuristic ────────────────────────────────────────────────────
-
-function inferAssetClass(symbol: string, shortName: string): string {
-  const s = symbol.toUpperCase();
-  const n = shortName.toLowerCase();
-  if (n.includes('bond') || n.includes('treasury') || n.includes('fixed') || ['BND', 'AGG', 'TLT', 'IEF', 'SHY', 'VGIT', 'VGSH', 'VGLT', 'LQD', 'HYG'].includes(s)) return 'Bonds';
-  if (n.includes('international') || n.includes('emerging') || n.includes('world ex') || ['VXUS', 'EFA', 'EEM', 'VEA', 'VWO', 'IEFA', 'IXUS'].includes(s)) return 'International Stocks';
-  if (n.includes('real estate') || n.includes('reit') || ['VNQ', 'VNQI', 'IYR'].includes(s)) return 'Real Estate';
-  if (n.includes('commodity') || n.includes('gold') || n.includes('oil') || ['GLD', 'SLV', 'GSG', 'DJP', 'IAU'].includes(s)) return 'Commodities';
-  if (n.includes('cash') || n.includes('money market') || n.includes('savings')) return 'Cash';
-  return 'US Stocks';
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function nextRunDate(frequency: string, dayOfMonth: number, from: Date): Date {
-  const d = new Date(from);
-  if (frequency === 'weekly') {
-    d.setDate(d.getDate() + 7);
-  } else if (frequency === 'biweekly') {
-    d.setDate(d.getDate() + 14);
-  } else if (frequency === 'monthly') {
-    d.setMonth(d.getMonth() + 1);
-    d.setDate(Math.min(dayOfMonth, 28));
-  } else if (frequency === 'quarterly') {
-    d.setMonth(d.getMonth() + 3);
-    d.setDate(Math.min(dayOfMonth, 28));
-  }
-  return d;
-}
-
-async function computeAvgCostBasis(holdingId: string): Promise<number> {
-  const lots = await prisma.holdingLot.findMany({
-    where: { holdingId, status: 'confirmed' },
-    orderBy: { date: 'asc' },
-  });
-  if (lots.length === 0) return 0;
-  const buyLots = lots.filter((l) => l.transactionType === 'buy');
-  const totalShares = buyLots.reduce((s, l) => s + l.shares, 0);
-  if (totalShares === 0) return 0;
-  const totalCost = buyLots.reduce((s, l) => s + l.shares * l.pricePerShare, 0);
-  return Math.round((totalCost / totalShares) * 10000) / 10000;
-}
-
-async function generatePendingLots(householdId: string): Promise<number> {
-  const now = new Date();
-
-  const schedules = await prisma.recurringInvestment.findMany({
-    where: {
-      status: 'active',
-      nextRunAt: { lte: now },
-      holding: { account: { householdId, ...NOT_DELETED } },
-    },
-    include: { holding: true },
-  });
-
-  let count = 0;
-  for (const schedule of schedules) {
-    // Check if a pending lot already exists for this schedule's current period
-    const existingPending = await prisma.holdingLot.findFirst({
-      where: {
-        holdingId: schedule.holdingId,
-        status: 'pending',
-        createdAt: { gte: schedule.lastRunAt ?? new Date(0) },
-      },
-    });
-    if (existingPending) continue;
-
-    // Fetch live price
-    const quote = await getQuote(schedule.holding.symbol);
-    const price = quote?.price ?? schedule.holding.currentPrice ?? schedule.holding.costBasis;
-    if (price <= 0) continue;
-
-    const shares = schedule.amount / price;
-
-    await prisma.holdingLot.create({
-      data: {
-        holdingId: schedule.holdingId,
-        transactionType: 'buy',
-        date: now,
-        shares: Math.round(shares * 100000) / 100000,
-        pricePerShare: price,
-        note: `Recurring buy — ${schedule.frequency}`,
-        status: 'pending',
-      },
-    });
-
-    // Advance nextRunAt and update lastRunAt
-    const next = nextRunDate(schedule.frequency, schedule.dayOfMonth, now);
-    await prisma.recurringInvestment.update({
-      where: { id: schedule.id },
-      data: { lastRunAt: now, nextRunAt: next },
-    });
-
-    count++;
-  }
-  return count;
-}
-
-// ─── Holdings builder ─────────────────────────────────────────────────────────
-
-type RawHolding = {
-  id: string;
-  accountId: string;
-  symbol: string;
-  name: string;
-  shares: number;
-  costBasis: number;
-  currentPrice: number;
-  updatedAt: Date;
-  account: { name: string };
-  lots: Array<{
-    id: string;
-    transactionType: string;
-    date: Date;
-    shares: number;
-    pricePerShare: number;
-    acbPerShareAtSale: { toNumber(): number } | null;
-    realizedGainDecimal: { toNumber(): number } | null;
-    note: string | null;
-    status: string;
-  }>;
-};
-
-function computeRealizedGain(lots: RawHolding['lots'], avgCostBasis: number): number {
-  return lots
-    .filter((l) => l.status === 'confirmed' && l.transactionType === 'sell')
-    .reduce((s, l) => {
-      if (l.realizedGainDecimal !== null) return s + l.realizedGainDecimal.toNumber();
-      // fallback for legacy lots without stored realized gain
-      const acb = l.acbPerShareAtSale !== null ? l.acbPerShareAtSale.toNumber() : avgCostBasis;
-      return s + Math.abs(l.shares) * (l.pricePerShare - acb);
-    }, 0);
-}
-
-function buildHolding(
-  h: RawHolding,
-  livePrice: number,
-  dayChange: number,
-  dayChangePercent: number,
-  shortName: string,
-  avgCostBasis: number,
-  dividendYield = 0,
-) {
-  const currentValue = Math.round(h.shares * livePrice * 100) / 100;
-  const totalCost = Math.round(h.shares * avgCostBasis * 100) / 100;
-  const unrealizedGain = Math.round((currentValue - totalCost) * 100) / 100;
-  const unrealizedGainPercent = totalCost !== 0 ? Math.round((unrealizedGain / totalCost) * 10000) / 100 : 0;
-  const realizedGain = Math.round(computeRealizedGain(h.lots, avgCostBasis) * 100) / 100;
-  const gain = Math.round((unrealizedGain + realizedGain) * 100) / 100;
-  const gainPercent = totalCost !== 0 ? Math.round((gain / totalCost) * 10000) / 100 : 0;
-  const estimatedAnnualDividend = Math.round(h.shares * livePrice * dividendYield * 100) / 100;
-
-  return {
-    id: h.id,
-    accountId: h.accountId,
-    accountName: h.account.name,
-    ticker: h.symbol,
-    name: shortName || h.name,
-    shares: h.shares,
-    avgCostBasis,
-    currentPrice: livePrice,
-    currentValue,
-    totalCost,
-    gain,
-    gainPercent,
-    unrealizedGain,
-    unrealizedGainPercent,
-    realizedGain,
-    estimatedAnnualDividend,
-    dayChange: Math.round(dayChange * h.shares * 100) / 100,
-    dayChangePercent,
-    priceSource: 'live',
-    priceUpdatedAt: new Date().toISOString(),
-    lots: h.lots.map((l) => ({
-      id: l.id,
-      transactionType: l.transactionType,
-      date: l.date.toISOString(),
-      shares: l.shares,
-      pricePerShare: l.pricePerShare,
-      acbPerShareAtSale: l.acbPerShareAtSale?.toNumber() ?? null,
-      realizedGain: l.realizedGainDecimal?.toNumber() ?? null,
-      note: l.note,
-      status: l.status,
-    })),
-  };
-}
-
-function buildHoldingFallback(h: RawHolding, avgCostBasis: number) {
-  const livePrice = h.currentPrice || avgCostBasis || h.costBasis;
-  const currentValue = Math.round(h.shares * livePrice * 100) / 100;
-  const totalCost = Math.round(h.shares * avgCostBasis * 100) / 100;
-  const unrealizedGain = Math.round((currentValue - totalCost) * 100) / 100;
-  const unrealizedGainPercent = totalCost !== 0 ? Math.round((unrealizedGain / totalCost) * 10000) / 100 : 0;
-  const realizedGain = Math.round(computeRealizedGain(h.lots, avgCostBasis) * 100) / 100;
-  const gain = Math.round((unrealizedGain + realizedGain) * 100) / 100;
-  const gainPercent = totalCost !== 0 ? Math.round((gain / totalCost) * 10000) / 100 : 0;
-
-  return {
-    id: h.id,
-    accountId: h.accountId,
-    accountName: h.account.name,
-    ticker: h.symbol,
-    name: h.name,
-    shares: h.shares,
-    avgCostBasis,
-    currentPrice: livePrice,
-    currentValue,
-    totalCost,
-    gain,
-    gainPercent,
-    unrealizedGain,
-    unrealizedGainPercent,
-    realizedGain,
-    estimatedAnnualDividend: 0,
-    dayChange: 0,
-    dayChangePercent: 0,
-    priceSource: 'cached',
-    priceUpdatedAt: h.updatedAt.toISOString(),
-    lots: h.lots.map((l) => ({
-      id: l.id,
-      transactionType: l.transactionType,
-      date: l.date.toISOString(),
-      shares: l.shares,
-      pricePerShare: l.pricePerShare,
-      acbPerShareAtSale: l.acbPerShareAtSale?.toNumber() ?? null,
-      realizedGain: l.realizedGainDecimal?.toNumber() ?? null,
-      note: l.note,
-      status: l.status,
-    })),
-  };
-}
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -247,94 +36,8 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const { accountId } = req.query as { accountId?: string };
-
-    // Generate any overdue pending lots first
-    await generatePendingLots(householdId).catch(() => {});
-
-    const where: Record<string, unknown> = { account: { householdId, ...NOT_DELETED } };
-    if (accountId) where.accountId = accountId;
-
-    const rawHoldings = await prisma.investmentHolding.findMany({
-      where,
-      include: {
-        account: { select: { name: true, householdId: true } },
-        lots: { orderBy: { date: 'asc' } },
-      },
-    });
-
-    // Compute avgCostBasis per holding from confirmed BUY lots only
-    const avgMap = new Map<string, number>();
-    for (const h of rawHoldings) {
-      const buyLots = h.lots.filter((l) => l.status === 'confirmed' && l.transactionType === 'buy');
-      const totalBuyShares = buyLots.reduce((s, l) => s + l.shares, 0);
-      const avg = totalBuyShares > 0
-        ? buyLots.reduce((s, l) => s + l.shares * l.pricePerShare, 0) / totalBuyShares
-        : h.costBasis;
-      avgMap.set(h.id, Math.round(avg * 10000) / 10000);
-    }
-
-    // Batch-fetch all live prices
-    const symbols = rawHoldings.map((h) => h.symbol);
-    const quotes = await getQuotes(symbols);
-
-    const holdings = rawHoldings.map((h) => {
-      const avg = avgMap.get(h.id) ?? h.costBasis;
-      const q = quotes.get(h.symbol.toUpperCase());
-      if (q) {
-        return buildHolding(h as RawHolding, q.price, q.dayChange, q.dayChangePercent, q.shortName, avg, q.dividendYield ?? 0);
-      }
-      return buildHoldingFallback(h as RawHolding, avg);
-    });
-
-    // Persist live prices back to DB (fire-and-forget)
-    for (const h of rawHoldings) {
-      const q = quotes.get(h.symbol.toUpperCase());
-      if (q && Math.abs(q.price - h.currentPrice) > 0.001) {
-        prisma.investmentHolding.update({ where: { id: h.id }, data: { currentPrice: q.price } }).catch(() => {});
-      }
-    }
-
-    const totalValue = holdings.reduce((s, h) => s + h.currentValue, 0);
-    const totalCostBasis = holdings.reduce((s, h) => s + h.totalCost, 0);
-    const totalGain = Math.round((totalValue - totalCostBasis) * 100) / 100;
-    const totalGainPercent = totalCostBasis !== 0
-      ? Math.round((totalGain / totalCostBasis) * 10000) / 100
-      : 0;
-    const totalDayChange = holdings.reduce((s, h) => s + h.dayChange, 0);
-    const totalUnrealizedGain = Math.round(holdings.reduce((s, h) => s + h.unrealizedGain, 0) * 100) / 100;
-    const totalRealizedGain = Math.round(holdings.reduce((s, h) => s + h.realizedGain, 0) * 100) / 100;
-    const totalAnnualDividend = Math.round(holdings.reduce((s, h) => s + h.estimatedAnnualDividend, 0) * 100) / 100;
-
-    // Total return = unrealized + realized + dividends
-    // Uses recorded DividendRecord totals if available, else estimated annual dividend as proxy
-    const dividendRecordTotals = await prisma.dividendRecord.groupBy({
-      by: ['holdingId'],
-      where: { holding: { account: { householdId, ...NOT_DELETED } } },
-      _sum: { amountDecimal: true },
-    });
-    const totalRecordedDividends = dividendRecordTotals.reduce(
-      (s, r) => s + (r._sum.amountDecimal ? Number(r._sum.amountDecimal) : 0),
-      0,
-    );
-    const totalReturn = Math.round((totalUnrealizedGain + totalRealizedGain + totalRecordedDividends) * 100) / 100;
-    const totalReturnPercent = totalCostBasis !== 0
-      ? Math.round((totalReturn / totalCostBasis) * 10000) / 100
-      : 0;
-
-    return res.json({
-      totalValue: Math.round(totalValue * 100) / 100,
-      totalCostBasis: Math.round(totalCostBasis * 100) / 100,
-      totalGain,
-      totalGainPercent,
-      totalDayChange: Math.round(totalDayChange * 100) / 100,
-      totalUnrealizedGain,
-      totalRealizedGain,
-      totalRecordedDividends: Math.round(totalRecordedDividends * 100) / 100,
-      totalAnnualDividend,
-      totalReturn,
-      totalReturnPercent,
-      holdings,
-    });
+    const result = await getHoldings(householdId, accountId);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/holdings GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -345,32 +48,8 @@ router.get('/holdings', async (req: AuthRequest, res: Response) => {
 router.get('/pending', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-
-    const lots = await prisma.holdingLot.findMany({
-      where: {
-        status: 'pending',
-        holding: { account: { householdId, ...NOT_DELETED } },
-      },
-      include: {
-        holding: {
-          select: { symbol: true, name: true },
-        },
-      },
-      orderBy: { date: 'desc' },
-    });
-
-    return res.json(
-      lots.map((l) => ({
-        id: l.id,
-        holdingId: l.holdingId,
-        ticker: l.holding.symbol,
-        name: l.holding.name,
-        date: l.date.toISOString(),
-        shares: l.shares,
-        pricePerShare: l.pricePerShare,
-        note: l.note,
-      })),
-    );
+    const lots = await getPendingLots(householdId);
+    return res.json(lots);
   } catch (err) {
     req.log.error({ err }, 'investments/pending');
     return res.status(500).json({ error: 'Internal server error' });
@@ -381,65 +60,8 @@ router.get('/pending', async (req: AuthRequest, res: Response) => {
 router.get('/allocation', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-
-    const rawHoldings = await prisma.investmentHolding.findMany({
-      where: { account: { householdId, ...NOT_DELETED } },
-      include: { account: { select: { id: true, name: true } } },
-    });
-
-    const symbols = rawHoldings.map((h) => h.symbol);
-    const quotes = await getQuotes(symbols);
-
-    const holdings = rawHoldings.map((h) => {
-      const q = quotes.get(h.symbol.toUpperCase());
-      const price = q?.price ?? h.currentPrice ?? h.costBasis;
-      const shortName = q?.shortName ?? h.name;
-      return {
-        ...h,
-        currentValue: Math.round(h.shares * price * 100) / 100,
-        assetClassLabel: inferAssetClass(h.symbol, shortName),
-      };
-    });
-
-    const totalValue = holdings.reduce((s, h) => s + h.currentValue, 0);
-
-    const assetClassMap = new Map<string, number>();
-    for (const h of holdings) {
-      assetClassMap.set(h.assetClassLabel, (assetClassMap.get(h.assetClassLabel) ?? 0) + h.currentValue);
-    }
-    const byAssetClass = Array.from(assetClassMap.entries()).map(([assetClass, value]) => ({
-      assetClass,
-      value: Math.round(value * 100) / 100,
-      percent: totalValue > 0 ? Math.round((value / totalValue) * 10000) / 100 : 0,
-    }));
-
-    const accountMap = new Map<string, { name: string; value: number }>();
-    for (const h of holdings) {
-      const existing = accountMap.get(h.accountId);
-      if (existing) { existing.value += h.currentValue; }
-      else { accountMap.set(h.accountId, { name: h.account.name, value: h.currentValue }); }
-    }
-    const byAccount = Array.from(accountMap.entries()).map(([accountId, { name, value }]) => ({
-      accountId,
-      accountName: name,
-      value: Math.round(value * 100) / 100,
-      percent: totalValue > 0 ? Math.round((value / totalValue) * 10000) / 100 : 0,
-    }));
-
-    const holdingsList = holdings.map((h) => ({
-      ticker: h.symbol,
-      name: h.name,
-      value: h.currentValue,
-      percent: totalValue > 0 ? Math.round((h.currentValue / totalValue) * 10000) / 100 : 0,
-      type: h.assetClassLabel,
-    }));
-
-    return res.json({
-      totalValue: Math.round(totalValue * 100) / 100,
-      byAssetClass,
-      byAccount,
-      holdings: holdingsList,
-    });
+    const result = await getAllocation(householdId);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/allocation');
     return res.status(500).json({ error: 'Internal server error' });
@@ -451,57 +73,8 @@ router.get('/performance', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const { period = '1Y' } = req.query as { period?: string };
-
-    const benchmarks = await getLiveBenchmarks();
-
-    const periodMap: Record<string, number> = {
-      '1M': 1, '3M': 3, '6M': 6, 'YTD': 12, '1Y': 12, '5Y': 60,
-    };
-    const months = periodMap[period] ?? 12;
-
-    const rawHoldings = await prisma.investmentHolding.findMany({
-      where: { account: { householdId, ...NOT_DELETED } },
-      include: { account: { select: { id: true } } },
-    });
-
-    const symbols = rawHoldings.map((h) => h.symbol);
-    const quotes = await getQuotes(symbols);
-
-    const totalCurrentValue = rawHoldings.reduce((s, h) => {
-      const q = quotes.get(h.symbol.toUpperCase());
-      const price = q?.price ?? h.currentPrice ?? h.costBasis;
-      return s + h.shares * price;
-    }, 0);
-    const totalCostBasis = rawHoldings.reduce((s, h) => s + h.shares * h.costBasis, 0);
-
-    const portfolioReturnValue = Math.round((totalCurrentValue - totalCostBasis) * 100) / 100;
-    const portfolioReturn = totalCostBasis > 0
-      ? Math.round((portfolioReturnValue / totalCostBasis) * 10000) / 100
-      : 0;
-
-    const now = new Date();
-    const history: Array<{ date: string; value: number }> = [];
-    const totalCurrent = Math.round(totalCurrentValue * 100) / 100;
-
-    for (let i = months; i >= 0; i--) {
-      const pointDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const progressFraction = (months - i) / months;
-      const baseValue = totalCostBasis + (totalCurrentValue - totalCostBasis) * progressFraction;
-      const wobble = 1 + (((i * 7) % 5) - 2) / 100;
-      history.push({
-        date: pointDate.toISOString().slice(0, 10),
-        value: Math.round(baseValue * wobble * 100) / 100,
-      });
-    }
-    if (history.length > 0) history[history.length - 1].value = totalCurrent;
-
-    return res.json({
-      period,
-      portfolioReturn,
-      portfolioReturnValue,
-      benchmarks: benchmarks[period as BenchmarkPeriod] ?? benchmarks['1Y'],
-      history,
-    });
+    const result = await getPerformance(householdId, period);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/performance');
     return res.status(500).json({ error: 'Internal server error' });
@@ -512,7 +85,7 @@ router.get('/performance', async (req: AuthRequest, res: Response) => {
 router.get('/quote/:symbol', async (req: AuthRequest, res: Response) => {
   try {
     const { symbol } = req.params;
-    const quote = await getQuote(symbol.toUpperCase());
+    const quote = await getQuoteBySymbol(symbol);
     if (!quote) return res.status(404).json({ error: 'Symbol not found or unavailable' });
     return res.json(quote);
   } catch (err) {
@@ -531,51 +104,13 @@ router.post('/holdings', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'accountId, ticker, name, shares, and pricePerShare are required' });
     }
 
-    const account = await prisma.account.findFirst({ where: { id: accountId, householdId, ...NOT_DELETED } });
-    if (!account) return res.status(400).json({ error: 'Account not found in this household' });
-    if (!['INVESTMENT', 'investment'].includes(account.type)) {
-      return res.status(400).json({ error: 'Account must be of type INVESTMENT' });
-    }
-
-    const quote = await getQuote(ticker.toUpperCase());
-    const livePrice = quote?.price ?? Number(pricePerShare);
-    const costBasisNum = Number(pricePerShare);
-
-    const holding = await prisma.investmentHolding.create({
-      data: {
-        accountId,
-        symbol: ticker.toUpperCase(),
-        name: quote?.shortName || name,
-        shares: Number(shares),
-        costBasis: costBasisNum,
-        currentPrice: livePrice,
-        lots: {
-          create: {
-            transactionType: 'buy',
-            date: new Date(),
-            shares: Number(shares),
-            pricePerShare: costBasisNum,
-            status: 'confirmed',
-          },
-        },
-      },
-      include: {
-        account: { select: { name: true } },
-        lots: true,
-      },
-    });
-
-    // Recompute avg from the freshly created lot
-    const avg = await computeAvgCostBasis(holding.id);
-
-    const holdingWithAvg = { ...holding } as typeof holding & { costBasis: number };
-    holdingWithAvg.costBasis = avg;
-
-    if (quote) {
-      return res.status(201).json(buildHolding(holdingWithAvg as unknown as RawHolding, quote.price, quote.dayChange, quote.dayChangePercent, quote.shortName, avg));
-    }
-    return res.status(201).json(buildHoldingFallback(holdingWithAvg as unknown as RawHolding, avg));
+    const result = await createHolding(householdId, accountId, ticker, name, shares, pricePerShare);
+    if (!result) return res.status(400).json({ error: 'Account not found in this household' });
+    return res.status(201).json(result);
   } catch (err) {
+    if (err instanceof Error && err.message.includes('must be of type')) {
+      return res.status(400).json({ error: err.message });
+    }
     req.log.error({ err }, 'investments/holdings POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -588,36 +123,9 @@ router.put('/holdings/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { shares, costBasis } = req.body;
 
-    const existing = await prisma.investmentHolding.findFirst({
-      where: { id, account: { householdId, ...NOT_DELETED } },
-      include: {
-        account: { select: { name: true } },
-        lots: true,
-      },
-    });
-    if (!existing) return res.status(404).json({ error: 'Holding not found' });
-
-    const updatedShares = shares != null ? Number(shares) : existing.shares;
-    const updatedCostBasis = costBasis != null ? Number(costBasis) : existing.costBasis;
-
-    const quote = await getQuote(existing.symbol);
-    const livePrice = quote?.price ?? existing.currentPrice ?? updatedCostBasis;
-
-    const updated = await prisma.investmentHolding.update({
-      where: { id },
-      data: { shares: updatedShares, costBasis: updatedCostBasis, currentPrice: livePrice },
-      include: {
-        account: { select: { name: true } },
-        lots: { orderBy: { date: 'asc' } },
-      },
-    });
-
-    const avg = await computeAvgCostBasis(id);
-
-    if (quote) {
-      return res.json(buildHolding(updated as unknown as RawHolding, quote.price, quote.dayChange, quote.dayChangePercent, quote.shortName, avg));
-    }
-    return res.json(buildHoldingFallback(updated as unknown as RawHolding, avg));
+    const result = await updateHolding(householdId, id, shares, costBasis);
+    if (!result) return res.status(404).json({ error: 'Holding not found' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/holdings PUT');
     return res.status(500).json({ error: 'Internal server error' });
@@ -639,85 +147,12 @@ router.post('/holdings/import', async (req: AuthRequest, res: Response) => {
       batchId?: string;
     }>;
 
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return res.status(400).json({ error: 'Provide an array of holdings' });
-    }
-
-    // Validate all accountIds belong to this household
-    const accountIds = [...new Set(rows.map((r) => r.accountId))];
-    const accounts = await prisma.account.findMany({
-      where: { id: { in: accountIds }, householdId, ...NOT_DELETED },
-      select: { id: true },
-    });
-    const validIds = new Set(accounts.map((a) => a.id));
-    const invalid = accountIds.filter((id) => !validIds.has(id));
-    if (invalid.length > 0) {
-      return res.status(400).json({ error: `Unknown accountId(s): ${invalid.join(', ')}` });
-    }
-
-    let created = 0;
-    let updated = 0;
-
-    for (const row of rows) {
-      const symbol = row.symbol.toUpperCase().trim();
-      const shares = Number(row.shares);
-      const costBasis = Number(row.costBasis);
-      if (!symbol || isNaN(shares) || shares <= 0 || isNaN(costBasis) || costBasis < 0) continue;
-
-      const lotNote = row.batchId ? `[batch:${row.batchId}]` : undefined;
-
-      const existing = await prisma.investmentHolding.findFirst({
-        where: { accountId: row.accountId, symbol },
-      });
-
-      if (existing) {
-        const newShares = existing.shares + shares;
-        const newCost = (existing.costBasis * existing.shares + costBasis * shares) / newShares;
-        await prisma.investmentHolding.update({
-          where: { id: existing.id },
-          data: { shares: newShares, costBasis: newCost },
-        });
-        await prisma.holdingLot.create({
-          data: {
-            holdingId: existing.id,
-            transactionType: 'buy',
-            shares,
-            pricePerShare: costBasis,
-            date: row.date ? new Date(row.date) : new Date(),
-            note: lotNote,
-            status: 'confirmed',
-          },
-        });
-        updated++;
-      } else {
-        const holding = await prisma.investmentHolding.create({
-          data: {
-            accountId: row.accountId,
-            symbol,
-            name: row.name?.trim() || symbol,
-            shares,
-            costBasis,
-            currentPrice: costBasis,
-            assetClass: row.assetClass ?? 'us_stock',
-          },
-        });
-        await prisma.holdingLot.create({
-          data: {
-            holdingId: holding.id,
-            transactionType: 'buy',
-            shares,
-            pricePerShare: costBasis,
-            date: row.date ? new Date(row.date) : new Date(),
-            note: lotNote,
-            status: 'confirmed',
-          },
-        });
-        created++;
-      }
-    }
-
-    return res.json({ created, updated, total: created + updated });
+    const result = await importHoldings(householdId, rows);
+    return res.json(result);
   } catch (err) {
+    if (err instanceof Error) {
+      return res.status(400).json({ error: err.message });
+    }
     req.log.error({ err }, 'investments/holdings/import POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -737,31 +172,13 @@ router.delete('/holdings', async (req: AuthRequest, res: Response) => {
     const { ids, accountId } = body.data;
 
     if (accountId) {
-      // Clear all holdings for an account (scoped to household)
-      const account = await prisma.account.findFirst({ where: { id: accountId, householdId, ...NOT_DELETED } });
-      if (!account) return res.status(404).json({ error: 'Account not found' });
-      const holdings = await prisma.investmentHolding.findMany({ where: { accountId }, select: { id: true } });
-      const holdingIds = holdings.map((h) => h.id);
-      await prisma.$transaction([
-        prisma.holdingLot.deleteMany({ where: { holdingId: { in: holdingIds } } }),
-        prisma.recurringInvestment.deleteMany({ where: { holdingId: { in: holdingIds } } }),
-        prisma.investmentHolding.deleteMany({ where: { id: { in: holdingIds } } }),
-      ]);
-      return res.json({ deleted: holdingIds.length });
+      const result = await deleteHoldingsByAccountId(householdId, accountId);
+      if (!result) return res.status(404).json({ error: 'Account not found' });
+      return res.json(result);
     }
 
-    // Bulk delete by IDs (scoped to household)
-    const verified = await prisma.investmentHolding.findMany({
-      where: { id: { in: ids! }, account: { householdId, ...NOT_DELETED } },
-      select: { id: true },
-    });
-    const verifiedIds = verified.map((h) => h.id);
-    await prisma.$transaction([
-      prisma.holdingLot.deleteMany({ where: { holdingId: { in: verifiedIds } } }),
-      prisma.recurringInvestment.deleteMany({ where: { holdingId: { in: verifiedIds } } }),
-      prisma.investmentHolding.deleteMany({ where: { id: { in: verifiedIds } } }),
-    ]);
-    return res.json({ deleted: verifiedIds.length });
+    const result = await deleteHoldingsByIds(householdId, ids!);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/holdings DELETE bulk');
     return res.status(500).json({ error: 'Internal server error' });
@@ -774,11 +191,9 @@ router.delete('/holdings/:id', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const existing = await prisma.investmentHolding.findFirst({ where: { id, account: { householdId, ...NOT_DELETED } } });
-    if (!existing) return res.status(404).json({ error: 'Holding not found' });
-
-    await prisma.investmentHolding.delete({ where: { id } });
-    return res.json({ success: true });
+    const result = await deleteHolding(householdId, id);
+    if (!result) return res.status(404).json({ error: 'Holding not found' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/holdings DELETE');
     return res.status(500).json({ error: 'Internal server error' });
@@ -792,84 +207,13 @@ router.post('/holdings/:id/lots', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { date, shares, pricePerShare, note, transactionType = 'buy' } = req.body;
 
-    if (shares == null || pricePerShare == null) {
-      return res.status(400).json({ error: 'shares and pricePerShare are required' });
-    }
-    if (!['buy', 'sell', 'dividend'].includes(transactionType)) {
-      return res.status(400).json({ error: 'transactionType must be buy, sell, or dividend' });
-    }
-
-    const sharesNum = Math.abs(Number(shares));
-    const priceNum = Number(pricePerShare);
-
-    const holding = await prisma.investmentHolding.findFirst({
-      where: { id, account: { householdId, ...NOT_DELETED } },
-    });
-    if (!holding) return res.status(404).json({ error: 'Holding not found' });
-
-    // Validate sell quantity
-    if (transactionType === 'sell') {
-      const existingLots = await prisma.holdingLot.findMany({
-        where: { holdingId: id, status: 'confirmed' },
-      });
-      const currentShares = existingLots.reduce(
-        (s, l) => s + (l.transactionType === 'buy' ? l.shares : -l.shares),
-        0,
-      );
-      if (sharesNum > currentShares + 0.000001) {
-        return res.status(400).json({
-          error: `Cannot sell ${sharesNum} shares — only ${currentShares.toFixed(6)} held`,
-        });
-      }
-    }
-
-    // Compute ACB before creating the lot (needed for sell realized gain)
-    const acbBeforeLot = await computeAvgCostBasis(id);
-
-    const lotData: Parameters<typeof prisma.holdingLot.create>[0]['data'] = {
-      holdingId: id,
-      transactionType,
-      date: date ? new Date(date) : new Date(),
-      shares: transactionType === 'sell' ? -sharesNum : sharesNum,
-      pricePerShare: priceNum,
-      note: note ?? null,
-      status: 'confirmed',
-    };
-
-    if (transactionType === 'sell') {
-      const realizedGain = sharesNum * (priceNum - acbBeforeLot);
-      lotData.acbPerShareAtSale = acbBeforeLot;
-      lotData.realizedGainDecimal = Math.round(realizedGain * 10000) / 10000;
-    }
-
-    const lot = await prisma.holdingLot.create({ data: lotData });
-
-    // Recompute holding totals
-    const allConfirmedLots = await prisma.holdingLot.findMany({
-      where: { holdingId: id, status: 'confirmed' },
-    });
-    const totalShares = allConfirmedLots.reduce(
-      (s, l) => s + (l.transactionType === 'buy' ? l.shares : l.transactionType === 'sell' ? -Math.abs(l.shares) : 0),
-      0,
-    );
-    const newAvg = await computeAvgCostBasis(id);
-    await prisma.investmentHolding.update({
-      where: { id },
-      data: { shares: totalShares, costBasis: newAvg },
-    });
-
-    return res.status(201).json({
-      id: lot.id,
-      transactionType: lot.transactionType,
-      date: lot.date.toISOString(),
-      shares: lot.shares,
-      pricePerShare: lot.pricePerShare,
-      acbPerShareAtSale: lot.acbPerShareAtSale?.toNumber() ?? null,
-      realizedGain: lot.realizedGainDecimal?.toNumber() ?? null,
-      note: lot.note,
-      status: lot.status,
-    });
+    const result = await createLot(householdId, id, date, shares, pricePerShare, note, transactionType);
+    if (!result) return res.status(404).json({ error: 'Holding not found' });
+    return res.status(201).json(result);
   } catch (err) {
+    if (err instanceof Error) {
+      return res.status(400).json({ error: err.message });
+    }
     req.log.error({ err }, 'investments/holdings/:id/lots POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -881,29 +225,9 @@ router.delete('/lots/:id', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const lot = await prisma.holdingLot.findFirst({
-      where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
-    });
-    if (!lot) return res.status(404).json({ error: 'Lot not found' });
-
-    const holdingId = lot.holdingId;
-    await prisma.holdingLot.delete({ where: { id } });
-
-    // Recompute avg and total shares
-    const remaining = await prisma.holdingLot.findMany({
-      where: { holdingId, status: 'confirmed' },
-    });
-    const totalShares = remaining.reduce(
-      (s, l) => s + (l.transactionType === 'buy' ? l.shares : l.transactionType === 'sell' ? -Math.abs(l.shares) : 0),
-      0,
-    );
-    const avg = await computeAvgCostBasis(holdingId);
-    await prisma.investmentHolding.update({
-      where: { id: holdingId },
-      data: { shares: totalShares, costBasis: avg },
-    });
-
-    return res.json({ message: 'Deleted' });
+    const result = await deleteLot(householdId, id);
+    if (!result) return res.status(404).json({ error: 'Lot not found' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/lots DELETE');
     return res.status(500).json({ error: 'Internal server error' });
@@ -916,29 +240,9 @@ router.get('/holdings/:id/recurring', async (req: AuthRequest, res: Response) =>
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const holding = await prisma.investmentHolding.findFirst({
-      where: { id, account: { householdId, ...NOT_DELETED } },
-    });
-    if (!holding) return res.status(404).json({ error: 'Holding not found' });
-
-    const schedules = await prisma.recurringInvestment.findMany({
-      where: { holdingId: id },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    return res.json(
-      schedules.map((s) => ({
-        id: s.id,
-        holdingId: s.holdingId,
-        amount: s.amount,
-        frequency: s.frequency,
-        dayOfMonth: s.dayOfMonth,
-        status: s.status,
-        lastRunAt: s.lastRunAt?.toISOString() ?? null,
-        nextRunAt: s.nextRunAt.toISOString(),
-        createdAt: s.createdAt.toISOString(),
-      })),
-    );
+    const result = await getHoldingRecurring(householdId, id);
+    if (!result) return res.status(404).json({ error: 'Holding not found' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/holdings/:id/recurring GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -952,44 +256,13 @@ router.post('/holdings/:id/recurring', async (req: AuthRequest, res: Response) =
     const { id } = req.params;
     const { amount, frequency, dayOfMonth } = req.body;
 
-    if (!amount || !frequency) {
-      return res.status(400).json({ error: 'amount and frequency are required' });
-    }
-    const validFreqs = ['weekly', 'biweekly', 'monthly', 'quarterly'];
-    if (!validFreqs.includes(frequency)) {
-      return res.status(400).json({ error: 'frequency must be one of: weekly, biweekly, monthly, quarterly' });
-    }
-
-    const holding = await prisma.investmentHolding.findFirst({
-      where: { id, account: { householdId, ...NOT_DELETED } },
-    });
-    if (!holding) return res.status(404).json({ error: 'Holding not found' });
-
-    const dom = dayOfMonth ? Math.min(Math.max(Number(dayOfMonth), 1), 28) : 1;
-    const nextRun = nextRunDate(frequency, dom, new Date());
-
-    const schedule = await prisma.recurringInvestment.create({
-      data: {
-        holdingId: id,
-        amount: Number(amount),
-        frequency,
-        dayOfMonth: dom,
-        nextRunAt: nextRun,
-      },
-    });
-
-    return res.status(201).json({
-      id: schedule.id,
-      holdingId: schedule.holdingId,
-      amount: schedule.amount,
-      frequency: schedule.frequency,
-      dayOfMonth: schedule.dayOfMonth,
-      status: schedule.status,
-      lastRunAt: schedule.lastRunAt?.toISOString() ?? null,
-      nextRunAt: schedule.nextRunAt.toISOString(),
-      createdAt: schedule.createdAt.toISOString(),
-    });
+    const result = await createHoldingRecurring(householdId, id, amount, frequency, dayOfMonth);
+    if (!result) return res.status(404).json({ error: 'Holding not found' });
+    return res.status(201).json(result);
   } catch (err) {
+    if (err instanceof Error) {
+      return res.status(400).json({ error: err.message });
+    }
     req.log.error({ err }, 'investments/holdings/:id/recurring POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -1002,35 +275,9 @@ router.put('/recurring/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { amount, frequency, dayOfMonth, status } = req.body;
 
-    const schedule = await prisma.recurringInvestment.findFirst({
-      where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
-    });
-    if (!schedule) return res.status(404).json({ error: 'Recurring schedule not found' });
-
-    const updatedFreq = frequency ?? schedule.frequency;
-    const updatedDom = dayOfMonth != null ? Math.min(Math.max(Number(dayOfMonth), 1), 28) : schedule.dayOfMonth;
-
-    const updated = await prisma.recurringInvestment.update({
-      where: { id },
-      data: {
-        amount: amount != null ? Number(amount) : schedule.amount,
-        frequency: updatedFreq,
-        dayOfMonth: updatedDom,
-        status: status ?? schedule.status,
-      },
-    });
-
-    return res.json({
-      id: updated.id,
-      holdingId: updated.holdingId,
-      amount: updated.amount,
-      frequency: updated.frequency,
-      dayOfMonth: updated.dayOfMonth,
-      status: updated.status,
-      lastRunAt: updated.lastRunAt?.toISOString() ?? null,
-      nextRunAt: updated.nextRunAt.toISOString(),
-      createdAt: updated.createdAt.toISOString(),
-    });
+    const result = await updateHoldingRecurring(householdId, id, amount, frequency, dayOfMonth, status);
+    if (!result) return res.status(404).json({ error: 'Recurring schedule not found' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/recurring PUT');
     return res.status(500).json({ error: 'Internal server error' });
@@ -1043,13 +290,9 @@ router.delete('/recurring/:id', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const schedule = await prisma.recurringInvestment.findFirst({
-      where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
-    });
-    if (!schedule) return res.status(404).json({ error: 'Recurring schedule not found' });
-
-    await prisma.recurringInvestment.delete({ where: { id } });
-    return res.json({ message: 'Deleted' });
+    const result = await deleteHoldingRecurring(householdId, id);
+    if (!result) return res.status(404).json({ error: 'Recurring schedule not found' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/recurring DELETE');
     return res.status(500).json({ error: 'Internal server error' });
@@ -1062,46 +305,9 @@ router.post('/lots/:id/confirm', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const lot = await prisma.holdingLot.findFirst({
-      where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
-      include: { holding: true },
-    });
-    if (!lot) return res.status(404).json({ error: 'Lot not found' });
-
-    // Fetch live price for confirmation
-    const quote = await getQuote(lot.holding.symbol);
-    const confirmPrice = quote?.price ?? lot.pricePerShare;
-
-    const updated = await prisma.holdingLot.update({
-      where: { id },
-      data: {
-        status: 'confirmed',
-        pricePerShare: confirmPrice,
-        shares: Math.round((lot.holding.costBasis > 0
-          ? (lot.shares * lot.pricePerShare) / confirmPrice
-          : lot.shares) * 100000) / 100000,
-      },
-    });
-
-    // Update total shares and avg on holding
-    const allConfirmed = await prisma.holdingLot.findMany({
-      where: { holdingId: lot.holdingId, status: 'confirmed' },
-    });
-    const totalShares = allConfirmed.reduce((s, l) => s + l.shares, 0);
-    const avg = await computeAvgCostBasis(lot.holdingId);
-    await prisma.investmentHolding.update({
-      where: { id: lot.holdingId },
-      data: { shares: totalShares, costBasis: avg },
-    });
-
-    return res.json({
-      id: updated.id,
-      date: updated.date.toISOString(),
-      shares: updated.shares,
-      pricePerShare: updated.pricePerShare,
-      note: updated.note,
-      status: updated.status,
-    });
+    const result = await confirmLot(householdId, id);
+    if (!result) return res.status(404).json({ error: 'Lot not found' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/lots/:id/confirm');
     return res.status(500).json({ error: 'Internal server error' });
@@ -1114,13 +320,9 @@ router.post('/lots/:id/skip', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const lot = await prisma.holdingLot.findFirst({
-      where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
-    });
-    if (!lot) return res.status(404).json({ error: 'Lot not found' });
-
-    await prisma.holdingLot.delete({ where: { id } });
-    return res.json({ message: 'Lot skipped' });
+    const result = await skipLot(householdId, id);
+    if (!result) return res.status(404).json({ error: 'Lot not found' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/lots/:id/skip');
     return res.status(500).json({ error: 'Internal server error' });
@@ -1138,16 +340,9 @@ router.patch('/holdings/prices', async (req: AuthRequest, res: Response) => {
   const parse = priceUpdateSchema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: parse.error.issues[0]?.message });
   const householdId = req.householdId!;
-  let updated = 0;
-  for (const { symbol, price } of parse.data) {
-    const result = await prisma.investmentHolding.updateMany({
-      where: { symbol: { equals: symbol, mode: 'insensitive' }, account: { householdId, ...NOT_DELETED } },
-      data: { currentPrice: price, updatedAt: new Date() },
-    });
-    updated += result.count;
-  }
-    return res.json({ updated });
-  });
+  const result = await updatePrices(householdId, parse.data);
+  return res.json(result);
+});
 
 // ─── GET /api/v1/investments/dividend-forecast ──────────────────────────────
 router.get('/dividend-forecast', async (req: AuthRequest, res: Response) => {
@@ -1156,36 +351,8 @@ router.get('/dividend-forecast', async (req: AuthRequest, res: Response) => {
     const { years = '3' } = req.query as { years?: string };
     const numYears = Math.min(Math.max(parseInt(years) || 3, 1), 10);
 
-    const holdings = await prisma.investmentHolding.findMany({
-      where: { account: { householdId, ...NOT_DELETED } },
-      select: { symbol: true, shares: true, currentPrice: true, name: true },
-    });
-
-    const symbols = holdings.map((h) => h.symbol);
-    const quotes = await getQuotes(symbols);
-
-    const currentYear = new Date().getFullYear();
-    const forecast = [];
-
-    for (let i = 0; i < numYears; i++) {
-      const year = currentYear + i;
-      let yearIncome = 0;
-
-      for (const h of holdings) {
-        const q = quotes.get(h.symbol.toUpperCase());
-        const price = q?.price ?? h.currentPrice ?? 0;
-        const dividendYield = q?.dividendYield ?? 0; // e.g. 0.025 for 2.5%
-        const shares = h.shares;
-        yearIncome += shares * price * dividendYield;
-      }
-
-      forecast.push({
-        year,
-        income: Math.round(yearIncome * 100) / 100,
-      });
-    }
-
-    return res.json({ forecast, basedOn: `${holdings.length} holdings, live prices + dividend yields` });
+    const result = await getDividendForecast(householdId, numYears);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'investments/dividend-forecast');
     return res.status(500).json({ error: 'Internal server error' });

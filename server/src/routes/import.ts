@@ -10,7 +10,6 @@
 
 import { Router } from 'express';
 import multer from 'multer';
-import { createCheckpoint, rollbackCheckpoint } from '../lib/checkpoint.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.js';
@@ -20,9 +19,8 @@ import { parsePdfStatement } from '../lib/pdfParser.js';
 import { parseDate } from '../lib/dateUtils.js';
 import { detectColumnMapping } from '../lib/csvColumnDetector.js';
 import { detectLocaleFormat, parseAmount, mergeDebitCredit } from '../lib/amountParser.js';
-import { transactionsImportedTotal } from '../lib/metrics.js';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration.js';
-import { normalizeMerchant, buildLearningMap } from '../lib/autoCategorize.js';
+import { saveImport, getImportSessions, getImportSession, deleteImportSession, undoImportSession } from '../services/importService.js';
 
 const router = Router();
 
@@ -597,238 +595,9 @@ router.post('/confirm', async (req: AuthRequest, res) => {
     if (!body.success) return res.status(400).json({ error: body.error.flatten() });
 
     const { accountId, rows, filename, bankSource, batchId } = body.data;
-
-    const account = await prisma.account.findFirst({
-      where: { id: accountId, householdId: req.householdId! },
-    });
-    if (!account) return res.status(404).json({ error: 'Account not found' });
-
-    // Pre-load rule-based category suggestions (replaces naive name-match)
-    const ruleSuggestions = await suggestCategoriesForRows(
-      rows.map((r) => ({ ...r, status: 'new' as const, isDuplicate: false })),
-      req.householdId!,
-    );
-
-    const importedJournalIds: string[] = [];
-
-    // Pre-load existing merchants to avoid N+1 inside transaction
-    const existingMerchants = await prisma.merchant.findMany({
-      where: { householdId: req.householdId! },
-      select: { id: true, name: true },
-    });
-    const merchantCache = new Map(existingMerchants.map((m) => [m.name.toLowerCase(), m.id]));
-
-    // Load merchant learning examples once for the entire import batch
-    const learningMap = await buildLearningMap(prisma, req.householdId!);
-
-    let imported = 0;
-    let skipped = 0;
-    let importedAmountSum = 0;
-    const errors: Array<{ index: number; error: string }> = [];
-
-    const isInvestmentAccount = account.type === 'investment';
-
-    await prisma.$transaction(async (tx) => {
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        try {
-          // Anchor to noon UTC to avoid timezone off-by-one-day issues
-          const rawDate = /^\d{4}-\d{2}-\d{2}$/.test(row.date)
-            ? row.date + 'T12:00:00.000Z'
-            : row.date;
-          const txDate = new Date(rawDate);
-          if (isNaN(txDate.getTime())) {
-            errors.push({ index: i, error: `Invalid date: ${row.date}` });
-            skipped++;
-            continue;
-          }
-
-          let dividendHoldingId: string | null = null;
-          if (isInvestmentAccount && row.investmentType === 'dividend') {
-            // ── Investment dividend: find/create holding, create DividendRecord linked to journal ──
-            const ticker = row.ticker ?? extractTicker(row.description) ?? 'UNKNOWN';
-            let holding = await tx.investmentHolding.findFirst({ where: { accountId, symbol: ticker } });
-            if (!holding) {
-              holding = await tx.investmentHolding.create({
-                data: { accountId, symbol: ticker, name: ticker, shares: 0, costBasis: 0, currentPrice: 0 },
-              });
-            }
-            dividendHoldingId = holding.id;
-          }
-
-          if (isInvestmentAccount && (row.investmentType === 'buy' || row.investmentType === 'sell')) {
-            // ── Investment buy/sell: upsert holding + create lot ──────────────
-            const ticker = row.ticker ?? extractTicker(row.description) ?? 'UNKNOWN';
-            const isBuy = row.investmentType === 'buy';
-            const shareDelta = Math.abs(row.shares ?? 1);
-            const price = row.pricePerShare ?? (shareDelta > 0 ? Math.abs(row.amount) / shareDelta : 0);
-
-            let holding = await tx.investmentHolding.findFirst({
-              where: { accountId, symbol: ticker },
-            });
-
-            if (!holding) {
-              holding = await tx.investmentHolding.create({
-                data: {
-                  accountId,
-                  symbol: ticker,
-                  name: ticker,
-                  shares: 0,
-                  costBasis: 0,
-                  currentPrice: price,
-                },
-              });
-            }
-
-            // ACB method: per-share cost basis
-            const currentACB = holding.costBasis; // per-share ACB
-            const newTotalShares = isBuy
-              ? holding.shares + shareDelta
-              : Math.max(0, holding.shares - shareDelta);
-            const newACB = isBuy && newTotalShares > 0
-              ? (holding.shares * currentACB + shareDelta * price) / newTotalShares
-              : currentACB; // sell doesn't change per-share ACB
-
-            await tx.investmentHolding.update({
-              where: { id: holding.id },
-              data: {
-                shares: newTotalShares,
-                costBasis: Math.round(newACB * 10000) / 10000,
-                currentPrice: price,
-              },
-            });
-
-            const lotNote = [row.description, batchId ? `[batch:${batchId}]` : null].filter(Boolean).join(' ');
-            const realizedGain = !isBuy ? Math.round(shareDelta * (price - currentACB) * 10000) / 10000 : null;
-
-            await tx.holdingLot.create({
-              data: {
-                holdingId: holding.id,
-                transactionType: isBuy ? 'buy' : 'sell',
-                date: txDate,
-                shares: isBuy ? shareDelta : -shareDelta,
-                pricePerShare: price,
-                acbPerShareAtSale: !isBuy ? currentACB : null,
-                realizedGainDecimal: realizedGain,
-                note: lotNote || null,
-                status: 'confirmed',
-              },
-            });
-          }
-
-          // Always create a transaction record (for cash flow tracking regardless of type)
-          // Resolve category: user override → rules engine → learning map → uncategorized
-          const resolvedCategoryId =
-            row.categoryId ??
-            ruleSuggestions.get(row.hash)?.categoryId ??
-            learningMap.get(normalizeMerchant(row.description)) ??
-            null;
-
-          // Resolve merchant from pre-loaded cache — create only if genuinely new
-          const merchantName = row.description.split(/[#\d]/)[0].trim();
-          const merchantKey = merchantName.toLowerCase();
-          let merchantId: string | null = merchantCache.get(merchantKey) ?? null;
-          if (!merchantId && merchantName.length > 2) {
-            const created = await tx.merchant.create({
-              data: { householdId: req.householdId!, name: merchantName, displayName: merchantName },
-            });
-            merchantId = created.id;
-            merchantCache.set(merchantKey, merchantId);
-          }
-
-          const batchNote = batchId ? `[batch:${batchId}]` : null;
-          const notes = [row.notes, batchNote].filter(Boolean).join(' ') || null;
-
-          // Reuse existing virtual accounts when present; journal creation will create missing ones.
-          const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
-
-          // Create journal instead of legacy transaction
-          const meta: Record<string, string> = {};
-          if (merchantId) meta.legacyMerchantId = merchantId;
-          if (bankSource) meta.bankSource = bankSource;
-          if (batchId) meta.batchId = batchId;
-
-          const journalResult = await createJournalFromLegacyTransaction(
-            tx,
-            {
-              householdId: req.householdId!,
-              accountId,
-              date: txDate,
-              description: row.description,
-              amount: row.amount,
-              categoryId: resolvedCategoryId ?? undefined,
-              notes: notes ?? undefined,
-            },
-            row.amount < 0 ? (virtualAccounts.expenseAccountId ?? undefined) : undefined,
-            row.amount > 0 ? (virtualAccounts.revenueAccountId ?? undefined) : undefined,
-          );
-
-          if (dividendHoldingId) {
-            await tx.dividendRecord.create({
-              data: {
-                holdingId: dividendHoldingId,
-                date: txDate,
-                amountDecimal: Math.abs(row.amount),
-                currencyCode: 'CAD',
-                journalId: journalResult.journalId,
-              },
-            });
-          }
-
-          // Persist dedup hash so future imports can fingerprint-check against it
-          await tx.transactionJournalMeta.create({
-            data: { journalId: journalResult.journalId, name: 'importHash', value: row.hash },
-          });
-
-          importedJournalIds.push(journalResult.journalId);
-          importedAmountSum += row.amount;
-          imported++;
-        } catch (err) {
-          errors.push({ index: i, error: err instanceof Error ? err.message : 'Unknown error' });
-          skipped++;
-        }
-      }
-    });
-
-    // Update account running balance with sum of imported transaction amounts
-    if (imported > 0) {
-      await prisma.account.update({
-        where: { id: accountId },
-        data: { balance: { increment: importedAmountSum } },
-      });
-    }
-
-    // Create rollback checkpoint
-    if (imported > 0) {
-      await createCheckpoint(
-        prisma,
-        req.householdId!,
-        'bulk-import',
-        `Imported ${imported} rows from ${filename ?? 'unknown'}`,
-        importedJournalIds,
-      );
-    }
-
-    // Record import history
-    await prisma.importHistory.create({
-      data: {
-        householdId: req.householdId!,
-        filename: filename ?? 'unknown',
-        bankSource: bankSource ?? 'generic',
-        rowsTotal: rows.length,
-        rowsImported: imported,
-        rowsDuplicate: 0,
-        rowsSkipped: skipped,
-        status: errors.length > 0 ? 'partial' : 'completed',
-        journalIds: importedJournalIds,
-      },
-    });
-
-    if (imported > 0) {
-      transactionsImportedTotal.inc({ household_id: req.householdId!, source: bankSource ?? 'generic' });
-    }
-
-    return res.json({ imported, skipped, errors });
+    const result = await saveImport(req.householdId!, req.userId!, accountId, rows, filename, bankSource, batchId);
+    if (!result) return res.status(404).json({ error: 'Account not found' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'Import confirm error');
     return res.status(500).json({ error: 'Import failed' });
@@ -842,19 +611,9 @@ router.get('/history', async (req: AuthRequest, res) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
-    const skip = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
-      prisma.importHistory.findMany({
-        where: { householdId: req.householdId! },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.importHistory.count({ where: { householdId: req.householdId! } }),
-    ]);
-
-    return res.json({ items, total, page, limit });
+    const result = await getImportSessions(req.householdId!, page, limit);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'Import history error');
     return res.status(500).json({ error: 'Failed to fetch import history' });
@@ -985,8 +744,8 @@ router.post('/webhook', async (req: AuthRequest, res) => {
 // POST /api/v1/import/undo/:checkpointId — roll back a bulk import within its 7-day window
 router.post('/undo/:checkpointId', async (req: AuthRequest, res) => {
   try {
-    await rollbackCheckpoint(prisma, req.householdId!, req.params.checkpointId);
-    return res.json({ message: 'Import rolled back successfully' });
+    const result = await undoImportSession(req.householdId!, req.params.checkpointId);
+    return res.json(result);
   } catch (err) {
     if (err instanceof Error && err.message.includes('not found')) {
       return res.status(404).json({ error: err.message });
