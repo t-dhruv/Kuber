@@ -15,6 +15,9 @@ import {
   Newspaper,
   Loader2,
 } from 'lucide-react';
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from 'recharts';
 import { api } from '@/lib/api';
 import { Card, CardHeader, Button, Input, Skeleton, notify } from '@/components/ui';
 import type { AxiosError } from 'axios';
@@ -650,6 +653,43 @@ interface NewsItem {
   description: string;
 }
 
+// ─── Types: Net Worth Breakdown ───────────────────────────────────────────────
+
+interface BreakdownAccount {
+  id: string;
+  name: string;
+  type: string;
+  balance?: number;
+  value?: number;
+  institution?: string | null;
+}
+
+interface BreakdownSection {
+  total: number;
+  accounts: BreakdownAccount[];
+  manualAssets?: { id: string; name: string; type: string; value: number }[];
+  manualLiabilities?: { id: string; name: string; type: string; balance: number }[];
+}
+
+interface BreakdownHistory {
+  date: string;
+  netWorth: number;
+  cashValue: number;
+  investmentValue: number;
+  otherAssetsValue: number;
+  liabilities: number;
+}
+
+interface BreakdownData {
+  netWorth: number;
+  totalAssets: number;
+  liquid: BreakdownSection;
+  investments: BreakdownSection;
+  otherAssets: BreakdownSection;
+  liabilities: BreakdownSection;
+  history: BreakdownHistory[];
+}
+
 // ─── Portfolio Projections ────────────────────────────────────────────────────
 
 function PortfolioProjections() {
@@ -820,9 +860,227 @@ function WealthSkeleton() {
   );
 }
 
+// ─── Net Worth Breakdown ──────────────────────────────────────────────────────
+
+const CHART_COLORS = {
+  cash: 'var(--color-success, #22c55e)',
+  investments: 'var(--color-accent, #e5622a)',
+  other: '#a78bfa',
+  liabilities: 'var(--color-danger, #ef4444)',
+};
+
+function fmtDate(iso: string) {
+  const [y, m] = iso.split('-');
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+}
+
+function StatCard({ label, value, sub, positive }: { label: string; value: string; sub?: string; positive?: boolean }) {
+  return (
+    <div className="flex flex-col gap-0.5 px-5 py-4 rounded-[var(--radius-md)] bg-[var(--color-surface-hover)]">
+      <span className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wide">{label}</span>
+      <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: positive === false ? 'var(--color-danger, #ef4444)' : 'var(--color-text)' }}>
+        {value}
+      </span>
+      {sub && <span className="text-xs text-[var(--color-text-muted)]">{sub}</span>}
+    </div>
+  );
+}
+
+function AccountRow({ name, institution, amount, type }: { name: string; institution?: string | null; amount: number; type?: string }) {
+  return (
+    <div className="flex items-center gap-3 py-2 border-b border-[var(--color-border)] last:border-0 text-sm">
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-[var(--color-text)] truncate">{name}</p>
+        {institution && <p className="text-xs text-[var(--color-text-muted)] truncate">{institution}</p>}
+        {!institution && type && <p className="text-xs text-[var(--color-text-muted)] capitalize">{type.replace(/_/g, ' ')}</p>}
+      </div>
+      <span style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+        {fmtCurrency(amount)}
+      </span>
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  emoji,
+  total,
+  colorVar,
+  children,
+}: {
+  title: string;
+  emoji: string;
+  total: number;
+  colorVar: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card className="p-0 overflow-hidden">
+      <button
+        className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-[var(--color-surface-hover)] transition-colors"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="text-xl flex-shrink-0">{emoji}</span>
+        <span className="flex-1 font-semibold text-[var(--color-text)]">{title}</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '1.125rem', fontWeight: 700, color: colorVar }}>
+          {fmtCurrency(total)}
+        </span>
+        {open ? <ChevronUp size={16} className="text-[var(--color-text-muted)] flex-shrink-0" /> : <ChevronDown size={16} className="text-[var(--color-text-muted)] flex-shrink-0" />}
+      </button>
+      {open && <div className="px-5 pb-4">{children}</div>}
+    </Card>
+  );
+}
+
+function NetWorthBreakdown() {
+  const { data, isLoading, isError } = useQuery<BreakdownData>({
+    queryKey: ['wealth', 'breakdown'],
+    queryFn: () => api.get('/wealth/breakdown').then((r) => r.data),
+    staleTime: 2 * 60 * 1000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-[var(--radius-md)]" />)}
+        </div>
+        <Skeleton className="h-52 rounded-[var(--radius-md)]" />
+        {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14 rounded-[var(--radius-md)]" />)}
+      </div>
+    );
+  }
+
+  if (isError || !data) {
+    return <p className="text-sm text-[var(--color-danger,#ef4444)]">Failed to load net worth breakdown.</p>;
+  }
+
+  const chartData = data.history.map((h) => ({
+    date: fmtDate(h.date),
+    Cash: h.cashValue,
+    Investments: h.investmentValue,
+    Other: h.otherAssetsValue,
+    Liabilities: h.liabilities,
+  }));
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Hero stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard label="Net Worth" value={fmtCurrency(data.netWorth)} />
+        <StatCard label="Liquid" value={fmtCurrency(data.liquid.total)} sub="Cash & savings" />
+        <StatCard label="Investments" value={fmtCurrency(data.investments.total)} sub="Portfolio value" />
+        <StatCard label="Liabilities" value={fmtCurrency(data.liabilities.total)} sub="Debt total" positive={false} />
+      </div>
+
+      {/* Stacked area chart */}
+      {chartData.length > 0 && (
+        <Card className="p-5">
+          <CardHeader title="Net Worth History" description="12-month breakdown by asset type" />
+          <div className="mt-4 h-52">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="gradCash" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART_COLORS.cash} stopOpacity={0.35} />
+                    <stop offset="95%" stopColor={CHART_COLORS.cash} stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="gradInv" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART_COLORS.investments} stopOpacity={0.35} />
+                    <stop offset="95%" stopColor={CHART_COLORS.investments} stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="gradOther" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART_COLORS.other} stopOpacity={0.35} />
+                    <stop offset="95%" stopColor={CHART_COLORS.other} stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v) => `$${Math.round(v / 1000)}k`} tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} axisLine={false} tickLine={false} width={48} />
+                <Tooltip
+                  formatter={(val: number, name: string) => [fmtCurrency(val), name]}
+                  contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, fontSize: 12 }}
+                  labelStyle={{ color: 'var(--color-text-muted)', fontWeight: 500 }}
+                />
+                <Area type="monotone" dataKey="Cash" stackId="a" stroke={CHART_COLORS.cash} fill="url(#gradCash)" strokeWidth={2} />
+                <Area type="monotone" dataKey="Investments" stackId="a" stroke={CHART_COLORS.investments} fill="url(#gradInv)" strokeWidth={2} />
+                <Area type="monotone" dataKey="Other" stackId="a" stroke={CHART_COLORS.other} fill="url(#gradOther)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          {/* Legend */}
+          <div className="flex flex-wrap gap-4 mt-3">
+            {([['Cash', CHART_COLORS.cash], ['Investments', CHART_COLORS.investments], ['Other', CHART_COLORS.other]] as [string, string][]).map(([label, color]) => (
+              <div key={label} className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
+                {label}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Sections */}
+      <SectionCard title="Liquid Assets" emoji="💧" total={data.liquid.total} colorVar="var(--color-success, #22c55e)">
+        {data.liquid.accounts.length === 0 ? (
+          <p className="text-sm text-[var(--color-text-muted)] py-2">No liquid accounts.</p>
+        ) : (
+          data.liquid.accounts.map((a) => (
+            <AccountRow key={a.id} name={a.name} institution={a.institution} amount={a.balance ?? 0} type={a.type} />
+          ))
+        )}
+      </SectionCard>
+
+      <SectionCard title="Investments" emoji="📈" total={data.investments.total} colorVar="var(--color-accent, #e5622a)">
+        {data.investments.accounts.length === 0 ? (
+          <p className="text-sm text-[var(--color-text-muted)] py-2">No investment accounts.</p>
+        ) : (
+          data.investments.accounts.map((a) => (
+            <AccountRow key={a.id} name={a.name} institution={a.institution} amount={a.value ?? 0} type={a.type} />
+          ))
+        )}
+      </SectionCard>
+
+      <SectionCard title="Other Assets" emoji="🏠" total={data.otherAssets.total} colorVar="#a78bfa">
+        {data.otherAssets.accounts.length === 0 && (data.otherAssets.manualAssets?.length ?? 0) === 0 ? (
+          <p className="text-sm text-[var(--color-text-muted)] py-2">No other assets.</p>
+        ) : (
+          <>
+            {data.otherAssets.accounts.map((a) => (
+              <AccountRow key={a.id} name={a.name} amount={a.balance ?? 0} type={a.type} />
+            ))}
+            {data.otherAssets.manualAssets?.map((a) => (
+              <AccountRow key={a.id} name={a.name} amount={a.value} type={a.type} />
+            ))}
+          </>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Liabilities" emoji="📉" total={data.liabilities.total} colorVar="var(--color-danger, #ef4444)">
+        {data.liabilities.accounts.length === 0 && (data.liabilities.manualLiabilities?.length ?? 0) === 0 ? (
+          <p className="text-sm text-[var(--color-text-muted)] py-2">No liabilities.</p>
+        ) : (
+          <>
+            {data.liabilities.accounts.map((a) => (
+              <AccountRow key={a.id} name={a.name} amount={a.balance ?? 0} type={a.type} />
+            ))}
+            {data.liabilities.manualLiabilities?.map((l) => (
+              <AccountRow key={l.id} name={l.name} amount={l.balance} type={l.type} />
+            ))}
+          </>
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+type WealthTab = 'networth' | 'strategy';
+
 export default function WealthPage() {
+  const [tab, setTab] = useState<WealthTab>('networth');
   const [month, setMonth] = useState(todayYM);
   const [showAiPanel, setShowAiPanel] = useState(false);
   const queryClient = useQueryClient();
@@ -835,10 +1093,16 @@ export default function WealthPage() {
   const { data: analysis, isLoading } = useQuery<WealthAnalysis>({
     queryKey: ['wealth', 'analysis', month],
     queryFn: () => api.get(`/wealth/analysis?month=${month}`).then((r) => r.data),
+    enabled: tab === 'strategy',
   });
 
   const handlePrev = () => setMonth((m) => addMonths(m, -1));
   const handleNext = () => setMonth((m) => addMonths(m, 1));
+
+  const TAB_ITEMS: { id: WealthTab; label: string }[] = [
+    { id: 'networth', label: 'Net Worth' },
+    { id: 'strategy', label: 'Strategy' },
+  ];
 
   return (
     <div className="py-4 flex flex-col gap-6">
@@ -847,162 +1111,198 @@ export default function WealthPage() {
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <TrendingUp size={20} className="text-[var(--color-accent)]" />
-            <h1 className="text-xl font-bold text-[var(--color-text)]">Wealth Strategy</h1>
+            <h1 className="text-xl font-bold text-[var(--color-text)]">Wealth</h1>
           </div>
-          <p className="text-sm text-[var(--color-text-muted)] mt-0.5">50 / 30 / 20 Rule</p>
+          <p className="text-sm text-[var(--color-text-muted)] mt-0.5">
+            {tab === 'networth' ? 'Asset & liability breakdown' : '50 / 30 / 20 Rule'}
+          </p>
         </div>
 
-        {/* Month selector — pill-segment style */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          background: 'var(--color-surface-alt, var(--color-surface-hover))',
-          borderRadius: 'var(--radius-md)',
-          padding: '3px',
-          gap: '2px',
-        }}>
-          <button
-            onClick={handlePrev}
-            style={{
-              padding: '0.25rem 0.5rem',
-              borderRadius: 'calc(var(--radius-md) - 2px)',
-              border: 'none',
-              background: 'transparent',
-              color: 'var(--color-text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface)'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-            aria-label="Previous month"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span style={{
-            background: 'var(--color-surface)',
-            boxShadow: 'var(--shadow-sm)',
-            borderRadius: 'calc(var(--radius-md) - 2px)',
-            padding: '0.25rem 0.75rem',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            color: 'var(--color-text)',
-            width: '9rem',
-            textAlign: 'center',
-            whiteSpace: 'nowrap',
-          }}>
-            {getMonthLabel(month)}
-          </span>
-          <button
-            onClick={handleNext}
-            style={{
-              padding: '0.25rem 0.5rem',
-              borderRadius: 'calc(var(--radius-md) - 2px)',
-              border: 'none',
-              background: 'transparent',
-              color: 'var(--color-text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface)'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-            aria-label="Next month"
-          >
-            <ChevronRight size={16} />
-          </button>
+        {/* Tab switcher */}
+        <div style={{ display: 'flex', background: 'var(--color-surface-alt, var(--color-surface-hover))', borderRadius: 'var(--radius-md)', padding: 3, gap: 2 }}>
+          {TAB_ITEMS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                padding: '0.25rem 0.875rem',
+                borderRadius: 'calc(var(--radius-md) - 2px)',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: tab === t.id ? 600 : 400,
+                background: tab === t.id ? 'var(--color-surface)' : 'transparent',
+                color: tab === t.id ? 'var(--color-text)' : 'var(--color-text-muted)',
+                boxShadow: tab === t.id ? 'var(--shadow-sm)' : 'none',
+                transition: 'all 0.15s',
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {/* AI Analysis button */}
-        <Button
-          variant={showAiPanel ? 'primary' : 'outline'}
-          size="sm"
-          onClick={() => setShowAiPanel((v) => !v)}
-          className="flex items-center gap-1.5"
-        >
-          <Sparkles size={14} />
-          {showAiPanel ? 'Hide AI Coach' : 'Get AI Analysis'}
-        </Button>
+        {tab === 'strategy' && (
+          <>
+            {/* Month selector — pill-segment style */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: 'var(--color-surface-alt, var(--color-surface-hover))',
+              borderRadius: 'var(--radius-md)',
+              padding: '3px',
+              gap: '2px',
+            }}>
+              <button
+                onClick={handlePrev}
+                style={{
+                  padding: '0.25rem 0.5rem',
+                  borderRadius: 'calc(var(--radius-md) - 2px)',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                aria-label="Previous month"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span style={{
+                background: 'var(--color-surface)',
+                boxShadow: 'var(--shadow-sm)',
+                borderRadius: 'calc(var(--radius-md) - 2px)',
+                padding: '0.25rem 0.75rem',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                color: 'var(--color-text)',
+                width: '9rem',
+                textAlign: 'center',
+                whiteSpace: 'nowrap',
+              }}>
+                {getMonthLabel(month)}
+              </span>
+              <button
+                onClick={handleNext}
+                style={{
+                  padding: '0.25rem 0.5rem',
+                  borderRadius: 'calc(var(--radius-md) - 2px)',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--color-surface)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                aria-label="Next month"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+
+            {/* AI Analysis button */}
+            <Button
+              variant={showAiPanel ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => setShowAiPanel((v) => !v)}
+              className="flex items-center gap-1.5"
+            >
+              <Sparkles size={14} />
+              {showAiPanel ? 'Hide AI Coach' : 'Get AI Analysis'}
+            </Button>
+          </>
+        )}
       </div>
 
-      {/* ── Income setup ── */}
-      {isLoading ? (
-        <Skeleton className="h-16 w-full rounded-[var(--radius-md)]" />
-      ) : (
-        <IncomeSetup
-          incomeData={incomeData}
-          onSaved={() => queryClient.invalidateQueries({ queryKey: ['wealth'] })}
-        />
-      )}
+      {/* ── Net Worth tab ── */}
+      {tab === 'networth' && <NetWorthBreakdown />}
 
-      {/* ── Main content (requires income) ── */}
-      {isLoading ? (
-        <WealthSkeleton />
-      ) : analysis && analysis.income !== null ? (
+      {/* ── Strategy tab ── */}
+      {tab === 'strategy' && (
         <>
-          {/* ── Monthly total hero ── */}
-          {analysis.income !== null && (
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
-              <span style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '2.5rem',
-                fontWeight: 700,
-                letterSpacing: '-0.02em',
-                fontVariantNumeric: 'tabular-nums',
-                color: 'var(--color-text)',
-                lineHeight: 1.1,
-              }}>
-                {fmtCurrency(analysis.income)}
-              </span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>/mo take-home</span>
-              <span style={{
-                background: 'var(--color-accent-light, rgba(229,98,42,0.12))',
-                color: 'var(--color-accent)',
-                padding: '2px 8px',
-                borderRadius: 'var(--radius-full)',
-                fontSize: 12,
-                fontWeight: 500,
-              }}>
-                50 / 30 / 20
-              </span>
+          {/* ── Income setup ── */}
+          {isLoading ? (
+            <Skeleton className="h-16 w-full rounded-[var(--radius-md)]" />
+          ) : (
+            <IncomeSetup
+              incomeData={incomeData}
+              onSaved={() => queryClient.invalidateQueries({ queryKey: ['wealth'] })}
+            />
+          )}
+
+          {/* ── Main content (requires income) ── */}
+          {isLoading ? (
+            <WealthSkeleton />
+          ) : analysis && analysis.income !== null ? (
+            <>
+              {/* ── Monthly total hero ── */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
+                <span style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: '2.5rem',
+                  fontWeight: 700,
+                  letterSpacing: '-0.02em',
+                  fontVariantNumeric: 'tabular-nums',
+                  color: 'var(--color-text)',
+                  lineHeight: 1.1,
+                }}>
+                  {fmtCurrency(analysis.income)}
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>/mo take-home</span>
+                <span style={{
+                  background: 'var(--color-accent-light, rgba(229,98,42,0.12))',
+                  color: 'var(--color-accent)',
+                  padding: '2px 8px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: 12,
+                  fontWeight: 500,
+                }}>
+                  50 / 30 / 20
+                </span>
+              </div>
+
+              {/* ── Three bucket cards ── */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <BucketCard type="needs" bucket={analysis.buckets.needs} income={analysis.income} />
+                <BucketCard type="wants" bucket={analysis.buckets.wants} income={analysis.income} />
+                <BucketCard type="savings" bucket={analysis.buckets.savings} income={analysis.income} />
+              </div>
+
+              {/* ── Alerts ── */}
+              <AlertsSection alerts={analysis.alerts} />
+
+              {/* ── Where to cut ── */}
+              <WhereToCut analysis={analysis} />
+
+              {/* ── Investment ladder ── */}
+              {analysis.investmentLadder.length > 0 && (
+                <InvestmentLadder analysis={analysis} />
+              )}
+
+              {/* ── AI Wealth Coach Panel ── */}
+              {showAiPanel && (
+                <AiAnalysisPanel onDismiss={() => setShowAiPanel(false)} />
+              )}
+
+              {/* ── Portfolio Projections ── */}
+              <PortfolioProjections />
+            </>
+          ) : analysis && analysis.income === null ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center text-[var(--color-text-muted)]">
+              <TrendingUp size={48} className="mb-4 opacity-30" />
+              <p className="text-lg font-medium">Set your income above to unlock your wealth strategy</p>
+              <p className="text-sm mt-1">We'll show your 50/30/20 breakdown once your take-home income is set.</p>
             </div>
-          )}
-
-          {/* ── Three bucket cards ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <BucketCard type="needs" bucket={analysis.buckets.needs} income={analysis.income} />
-            <BucketCard type="wants" bucket={analysis.buckets.wants} income={analysis.income} />
-            <BucketCard type="savings" bucket={analysis.buckets.savings} income={analysis.income} />
-          </div>
-
-          {/* ── Alerts ── */}
-          <AlertsSection alerts={analysis.alerts} />
-
-          {/* ── Where to cut ── */}
-          <WhereToCut analysis={analysis} />
-
-          {/* ── Investment ladder ── */}
-          {analysis.investmentLadder.length > 0 && (
-            <InvestmentLadder analysis={analysis} />
-          )}
-
-          {/* ── AI Wealth Coach Panel ── */}
-          {showAiPanel && (
-            <AiAnalysisPanel onDismiss={() => setShowAiPanel(false)} />
-          )}
-
-          {/* ── Portfolio Projections ── */}
-          <PortfolioProjections />
+          ) : null}
         </>
-      ) : analysis && analysis.income === null ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center text-[var(--color-text-muted)]">
-          <TrendingUp size={48} className="mb-4 opacity-30" />
-          <p className="text-lg font-medium">Set your income above to unlock your wealth strategy</p>
-          <p className="text-sm mt-1">We'll show your 50/30/20 breakdown once your take-home income is set.</p>
-        </div>
-      ) : null}
+      )}
     </div>
   );
 }

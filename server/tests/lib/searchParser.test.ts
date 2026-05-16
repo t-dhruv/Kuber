@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSearchQuery, buildSearchWhere } from './searchParser';
+import { parseSearchQuery, buildSearchWhere } from '../../src/lib/searchParser';
 
 describe('parseSearchQuery', () => {
   it('parses free text as text node', () => {
@@ -64,3 +64,4 @@ describe('buildSearchWhere', () => {
     expect(where).toMatchObject({ AND: [{ categoryId: null }] });
   });
 });
+

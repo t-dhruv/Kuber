@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeAutoBudgetAmount } from './autoBudgetJob';
+import { computeAutoBudgetAmount } from '../../src/lib/autoBudgetJob';
 import { Decimal } from '@prisma/client/runtime/library';
 
 describe('computeAutoBudgetAmount', () => {
@@ -33,3 +33,4 @@ describe('computeAutoBudgetAmount', () => {
     expect(computeAutoBudgetAmount('ADJUSTED', base, prev).toNumber()).toBe(500);
   });
 });
+

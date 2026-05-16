@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { toCSV, setCsvHeaders, CsvColumn } from './csvExport';
+import { toCSV, setCsvHeaders, CsvColumn } from '../../src/lib/csvExport';
 
 // ─── toCSV ────────────────────────────────────────────────────────────────────
 
@@ -146,3 +146,4 @@ describe('setCsvHeaders', () => {
     );
   });
 });
+

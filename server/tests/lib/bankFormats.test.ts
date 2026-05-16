@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BANK_FORMATS, detectBankFormat, mapRowToTransaction } from './bankFormats';
+import { BANK_FORMATS, detectBankFormat, mapRowToTransaction } from '../../src/lib/bankFormats';
 
 describe('detectBankFormat', () => {
   it('detects a TD Canada debit-credit export', () => {
@@ -135,3 +135,4 @@ describe('mapRowToTransaction', () => {
     ).toBeNull();
   });
 });
+

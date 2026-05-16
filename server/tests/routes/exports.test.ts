@@ -3,7 +3,7 @@ import request from 'supertest';
 import PDFDocument from 'pdfkit';
 import exportsRouter from '../../src/routes/exports';
 import { prisma } from '../../src/lib/prisma';
-import { makeRouteTestApp } from '../../src/test/integrationHarness';
+import { makeRouteTestApp } from '../integration/integrationHarness';
 
 const pdfInstances = vi.hoisted(() => [] as any[]);
 

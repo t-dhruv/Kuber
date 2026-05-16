@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 async function loadFxRates() {
   vi.resetModules();
-  return import('./fxRates');
+  return import('../../src/lib/fxRates');
 }
 
 describe('fxRates', () => {
@@ -87,3 +87,4 @@ describe('fxRates', () => {
     ]);
   });
 });
+

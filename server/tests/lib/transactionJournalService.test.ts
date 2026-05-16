@@ -13,7 +13,7 @@ import {
   listTransactionJournalGroups,
   syncLegacyTransactionJournal,
   type CreateTransactionJournalInput,
-} from './transactionJournalService';
+} from '../../src/lib/transactionJournalService';
 
 function makePrismaMock() {
   const tx = {
@@ -538,3 +538,4 @@ describe('formatJournalAsTransaction', () => {
     expect(result.aiSuggestionConfidence).toBeNull();
   });
 });
+

@@ -12,7 +12,7 @@ beforeEach(async () => {
 
 describe('metrics', () => {
   it('exports all required metric objects', async () => {
-    const metrics = await import('./metrics.js');
+    const metrics = await import('../../src/lib/metrics.js');
     expect(metrics.httpRequestsTotal).toBeDefined();
     expect(metrics.httpRequestDurationSeconds).toBeDefined();
     expect(metrics.jobRunsTotal).toBeDefined();
@@ -25,7 +25,7 @@ describe('metrics', () => {
   });
 
   it('/metrics endpoint returns prometheus format', async () => {
-    const { metricsHandler } = await import('./metrics.js');
+    const { metricsHandler } = await import('../../src/lib/metrics.js');
     const app = express();
     app.get('/metrics', metricsHandler);
 
@@ -36,3 +36,4 @@ describe('metrics', () => {
     expect(res.text).toContain('nodejs_version_info');
   });
 });
+

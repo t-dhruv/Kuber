@@ -12,7 +12,7 @@ const { mockHouseholdFindMany, mockAccountFindMany, mockNetWorthSnapshotUpsert, 
   mockReportingRollupUpsert: vi.fn(),
 }));
 
-vi.mock('./prisma', () => ({
+vi.mock('../../src/lib/prisma', () => ({
   prisma: {
     household: { findMany: mockHouseholdFindMany },
     account: { findMany: mockAccountFindMany },
@@ -20,18 +20,18 @@ vi.mock('./prisma', () => ({
   },
 }));
 
-vi.mock('./reporting/snapshots', () => ({
+vi.mock('../../src/lib/reporting/snapshots', () => ({
   upsertDailySnapshot: mockReportingSnapshotUpsert,
   chooseSnapshotSource: vi.fn(),
   listSnapshotDates: vi.fn(),
 }));
 
-vi.mock('./reporting/rollups', () => ({
+vi.mock('../../src/lib/reporting/rollups', () => ({
   upsertMonthlyRollup: mockReportingRollupUpsert,
   buildMonthlyRollupKey: vi.fn(() => '2026-04'),
 }));
 
-import { takeNetWorthSnapshot } from './netWorthJob';
+import { takeNetWorthSnapshot } from '../../src/lib/netWorthJob';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -147,3 +147,5 @@ describe('takeNetWorthSnapshot', () => {
     expect(call.create.netWorth).toBe(-5_000);
   });
 });
+
+

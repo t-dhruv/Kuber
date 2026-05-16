@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeInvestmentPerformance } from './reportInvestments';
+import { summarizeInvestmentPerformance } from '../../src/lib/reportInvestments';
 
 describe('summarizeInvestmentPerformance', () => {
   it('separates contributions from market gains', () => {
@@ -20,3 +20,4 @@ describe('summarizeInvestmentPerformance', () => {
     expect(summary.fees).toBe(50);
   });
 });
+

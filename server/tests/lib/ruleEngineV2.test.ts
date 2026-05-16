@@ -7,7 +7,7 @@ import {
   ruleMatchesMode,
   type NormalizedRuleAction,
   type NormalizedRuleTrigger,
-} from './ruleEngine';
+} from '../../src/lib/ruleEngine';
 
 describe('Firefly-style rule matching', () => {
   const tx = {
@@ -247,3 +247,4 @@ describe('journal-backed active rule execution', () => {
     expect(journalUpdateMany).toHaveBeenCalledTimes(1);
   });
 });
+

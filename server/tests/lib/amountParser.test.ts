@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectLocaleFormat, mergeDebitCredit, parseAmount } from './amountParser';
+import { detectLocaleFormat, mergeDebitCredit, parseAmount } from '../../src/lib/amountParser';
 
 describe('detectLocaleFormat', () => {
   it('detects US thousands and decimal separators', () => {
@@ -54,3 +54,4 @@ describe('mergeDebitCredit', () => {
     expect(mergeDebitCredit('0.00', '0.00')).toBeNull();
   });
 });
+

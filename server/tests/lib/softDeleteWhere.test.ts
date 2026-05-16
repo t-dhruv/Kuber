@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NOT_DELETED, addNotDeletedFilter, addNotDeletedToAnd } from './softDeleteWhere';
+import { NOT_DELETED, addNotDeletedFilter, addNotDeletedToAnd } from '../../src/lib/softDeleteWhere';
 
 describe('soft delete where helpers', () => {
   it('exports the standard not-deleted predicate', () => {
@@ -35,3 +35,4 @@ describe('soft delete where helpers', () => {
     });
   });
 });
+

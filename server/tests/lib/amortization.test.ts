@@ -7,7 +7,7 @@ import {
   payoffSimulator,
   resolveVariableRate,
   triggerRate,
-} from './amortization';
+} from '../../src/lib/amortization';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -109,3 +109,4 @@ describe('triggerRate', () => {
     expect(triggerRate(1500, 0)).toBe(0);
   });
 });
+

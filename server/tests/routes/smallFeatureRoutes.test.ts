@@ -9,7 +9,7 @@ import usersRouter from '../../src/routes/users';
 import { prisma } from '../../src/lib/prisma';
 import { deleteFile, getReadStream, storeFile } from '../../src/lib/storage';
 import { createLink, deleteLink, getLinksForTransaction, listLinkTypes } from '../../src/lib/transactionLinks';
-import { makeRouteTestApp } from '../../src/test/integrationHarness';
+import { makeRouteTestApp } from '../integration/integrationHarness';
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: {

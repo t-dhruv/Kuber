@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { prisma } from './prisma';
-import { runRuleExecutionJob } from './ruleExecutionJob';
+import { prisma } from '../../src/lib/prisma';
+import { runRuleExecutionJob } from '../../src/lib/ruleExecutionJob';
 
-vi.mock('./prisma', () => ({
+vi.mock('../../src/lib/prisma', () => ({
   prisma: {
     transactionJournal: {
       findMany: vi.fn(),
@@ -62,3 +62,5 @@ describe('runRuleExecutionJob', () => {
     }));
   });
 });
+
+

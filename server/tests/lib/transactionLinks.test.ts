@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { prisma } from '../lib/prisma';
+import { prisma } from '../../src/lib/prisma';
 
-vi.mock('../lib/prisma', () => ({
+vi.mock('../../src/lib/prisma', () => ({
   prisma: {
     transactionJournal: {
       findFirst: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock('../lib/prisma', () => ({
     },
   },
 }));
-import { listLinkTypes, createLink, deleteLink, getLinksForTransaction } from './transactionLinks';
+import { listLinkTypes, createLink, deleteLink, getLinksForTransaction } from '../../src/lib/transactionLinks';
 
 describe('listLinkTypes', () => {
   it('returns all link types ordered by name', async () => {
@@ -115,3 +115,5 @@ describe('deleteLink', () => {
     expect(prisma.transactionLink.delete).not.toHaveBeenCalled();
   });
 });
+
+

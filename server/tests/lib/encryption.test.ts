@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 async function loadEncryption() {
-  return import('./encryption');
+  return import('../../src/lib/encryption');
 }
 
 describe('encryption', () => {
@@ -57,8 +57,10 @@ describe('encryption', () => {
     const { decrypt, encrypt } = await loadEncryption();
 
     const [iv, authTag, encrypted] = encrypt('secret-api-key').split(':');
-    const tamperedAuthTag = `${authTag.slice(0, -2)}00`;
+    const lastByte = authTag.slice(-2);
+    const tamperedAuthTag = `${authTag.slice(0, -2)}${lastByte === '00' ? '01' : '00'}`;
 
     expect(() => decrypt(`${iv}:${tamperedAuthTag}:${encrypted}`)).toThrow();
   });
 });
+

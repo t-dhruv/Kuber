@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import reconciliationRouter from '../../src/routes/reconciliation';
 import { prisma } from '../../src/lib/prisma';
-import { makeRouteTestApp } from '../../src/test/integrationHarness';
+import { makeRouteTestApp } from '../integration/integrationHarness';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../../src/lib/legacyToJournalMigration';
 
 vi.mock('../../src/lib/prisma', () => ({

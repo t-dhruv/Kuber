@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createJournalFromLegacyTransaction } from './legacyToJournalMigration';
+import { createJournalFromLegacyTransaction } from '../../src/lib/legacyToJournalMigration';
 
 function makeTransactionClient() {
   return {
@@ -56,3 +56,4 @@ describe('createJournalFromLegacyTransaction', () => {
     }));
   });
 });
+

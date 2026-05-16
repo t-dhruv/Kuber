@@ -32,10 +32,12 @@ The release target is:
 - At least 90% automated code coverage for statements, branches, functions, and lines across production TypeScript code.
 - 100% feature coverage, meaning every shipped user-visible feature and critical backend capability has a mapped automated test at the right level: unit, API integration, e2e, or a documented combination.
 
-Current baseline, measured on 2026-05-13:
+Current release-gate baseline, measured on 2026-05-15:
 
-- Server Vitest coverage: 16.54% statements, 14.98% branches, 23.32% functions, 17.19% lines.
-- Client and shared coverage are not yet enforced as a release gate.
+- Server Vitest release coverage: 98.73% statements, 96.91% branches, 99.08% functions, 99.06% lines across the deterministic in-process business module coverage scope.
+- Client Vitest release coverage: 100% statements, 95.45% branches, 100% functions, 100% lines across the deterministic client utility/store coverage scope.
+- Feature coverage matrix: 39/39 shipped feature rows covered for the release gate.
+- Shared coverage is not yet enforced as a release gate.
 - Smoke e2e now selects a real critical subset, but this is a release-safety smoke layer, not full feature coverage.
 
 Coverage gates should be added in two steps:

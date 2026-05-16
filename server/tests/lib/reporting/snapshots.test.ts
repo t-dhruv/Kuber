@@ -9,7 +9,7 @@ const { mockReportingSnapshotUpsert, mockReportingSnapshotFindFirst, mockReporti
   mockReportingRollupUpsert: vi.fn(),
 }));
 
-vi.mock('../prisma', () => ({
+vi.mock('../../../src/lib/prisma', () => ({
   prisma: {
     household: { findMany: vi.fn() },
     account: { findMany: vi.fn() },
@@ -28,7 +28,7 @@ vi.mock('../prisma', () => ({
   },
 }));
 
-import { chooseSnapshotSource, listSnapshotDates, upsertDailySnapshot } from './snapshots';
+import { chooseSnapshotSource, listSnapshotDates, upsertDailySnapshot } from '../../../src/lib/reporting/snapshots';
 
 describe('reporting snapshots', () => {
   beforeEach(() => {
@@ -136,3 +136,6 @@ describe('reporting snapshots', () => {
     );
   });
 });
+
+
+

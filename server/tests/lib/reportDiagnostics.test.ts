@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDiagnosticsSummary } from './reportDiagnostics';
+import { buildDiagnosticsSummary } from '../../src/lib/reportDiagnostics';
 
 describe('buildDiagnosticsSummary', () => {
   it('counts unmatched transfer groups and missing prices', () => {
@@ -14,3 +14,4 @@ describe('buildDiagnosticsSummary', () => {
     expect(summary.duplicateTransactions).toBe(1);
   });
 });
+

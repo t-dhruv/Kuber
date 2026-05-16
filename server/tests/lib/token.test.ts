@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { prisma } from './prisma';
+import { prisma } from '../../src/lib/prisma';
 import {
   DEFAULT_REFRESH_TTL_MS,
   REMEMBER_ME_REFRESH_TTL_MS,
@@ -7,7 +7,7 @@ import {
   generateRawToken,
   hashToken,
   invalidateFamily,
-} from './token';
+} from '../../src/lib/token';
 
 describe('token helpers', () => {
   beforeEach(() => {
@@ -74,3 +74,4 @@ describe('token helpers', () => {
     expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { familyId: 'family-1' } });
   });
 });
+

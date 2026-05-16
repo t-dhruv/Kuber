@@ -233,7 +233,7 @@ function NetWorthWidget({
         <WidgetError />
       ) : (
         <div style={{ marginBottom: '1rem' }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: '2.25rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
+          <div className="kpi-value">
             {fmtCurrency(summary.netWorth.current)}
           </div>
           <div style={{ marginTop: '0.375rem', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>

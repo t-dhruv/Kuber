@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectColumnMapping } from './csvColumnDetector';
+import { detectColumnMapping } from '../../src/lib/csvColumnDetector';
 
 describe('detectColumnMapping', () => {
   it('maps exact transaction headers to standard fields', () => {
@@ -58,3 +58,4 @@ describe('detectColumnMapping', () => {
     expect(result.unmapped).toEqual(['Completely Unknown', 'Another Mystery']);
   });
 });
+

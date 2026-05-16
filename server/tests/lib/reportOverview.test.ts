@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReportOverview } from './reportOverview';
+import { buildReportOverview } from '../../src/lib/reportOverview';
 
 describe('buildReportOverview', () => {
   it('combines cash flow, net worth, portfolio and diagnostics', () => {
@@ -36,3 +36,4 @@ describe('buildReportOverview', () => {
     expect(overview.duplicateTransactions).toBe(1);
   });
 });
+

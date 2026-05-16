@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import liabilitiesRouter from '../../src/routes/liabilities';
 import { prisma } from '../../src/lib/prisma';
-import { makeRouteTestApp } from '../../src/test/integrationHarness';
+import { makeRouteTestApp } from '../integration/integrationHarness';
 import { buildAmortizationSummary, payoffSimulator, resolveVariableRate, triggerRate } from '../../src/lib/amortization';
 
 vi.mock('../../src/lib/prisma', () => ({

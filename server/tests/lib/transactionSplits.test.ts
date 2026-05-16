@@ -5,7 +5,7 @@ import {
   getTransactionSplitDetails,
   mapDbSplitsToLegacyDetails,
   normalizeLegacySplitDetails,
-} from './transactionSplits';
+} from '../../src/lib/transactionSplits';
 
 describe('transactionSplits', () => {
   it('builds createMany payloads with decimal amounts and normalized notes', () => {
@@ -103,3 +103,4 @@ describe('transactionSplits', () => {
     ]);
   });
 });
+

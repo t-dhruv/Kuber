@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPeriodKey, getExpectedPeriodStart, isBillDueInPeriod } from './billMatcher';
+import { getPeriodKey, getExpectedPeriodStart, isBillDueInPeriod } from '../../src/lib/billMatcher';
 
 describe('getPeriodKey', () => {
   it('formats date as YYYY-MM', () => {
@@ -61,3 +61,4 @@ describe('isBillDueInPeriod', () => {
     expect(isBillDueInPeriod(bill, new Date('2026-04-15'), -100)).toBe(false);
   });
 });
+

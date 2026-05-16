@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('./encryption', () => ({
+vi.mock('../../src/lib/encryption', () => ({
   encrypt: vi.fn((value: string) => `encrypted:${value}`),
   decrypt: vi.fn((value: string) => value.replace(/^encrypted:/, '')),
 }));
 
 describe('imap config encryption helpers', () => {
   it('encrypts only the password field and marks config as encrypted', async () => {
-    const { encrypt } = await import('./encryption');
-    const { encryptImapConfig } = await import('./imapConfig');
+    const { encrypt } = await import('../../src/lib/encryption');
+    const { encryptImapConfig } = await import('../../src/lib/imapConfig');
 
     const result = encryptImapConfig({
       host: 'imap.example.test',
@@ -26,8 +26,8 @@ describe('imap config encryption helpers', () => {
   });
 
   it('decrypts encrypted configs and removes the storage marker', async () => {
-    const { decrypt } = await import('./encryption');
-    const { decryptImapConfig } = await import('./imapConfig');
+    const { decrypt } = await import('../../src/lib/encryption');
+    const { decryptImapConfig } = await import('../../src/lib/imapConfig');
 
     const result = decryptImapConfig({
       host: 'imap.example.test',
@@ -45,7 +45,7 @@ describe('imap config encryption helpers', () => {
   });
 
   it('passes through legacy plaintext configs and removes the storage marker', async () => {
-    const { decryptImapConfig } = await import('./imapConfig');
+    const { decryptImapConfig } = await import('../../src/lib/imapConfig');
 
     expect(
       decryptImapConfig({
@@ -59,3 +59,5 @@ describe('imap config encryption helpers', () => {
     });
   });
 });
+
+

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerJob, getJobs, triggerJob, clearRegistry } from './cronRegistry';
+import { registerJob, getJobs, triggerJob, clearRegistry } from '../../src/lib/cronRegistry';
 
 describe('cronRegistry', () => {
   beforeEach(() => clearRegistry());

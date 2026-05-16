@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import networthRouter from '../../src/routes/networth';
 import { prisma } from '../../src/lib/prisma';
-import { makeRouteTestApp } from '../../src/test/integrationHarness';
+import { makeRouteTestApp } from '../integration/integrationHarness';
 import { takeNetWorthSnapshot } from '../../src/lib/netWorthJob';
 
 vi.mock('../../src/lib/prisma', () => ({

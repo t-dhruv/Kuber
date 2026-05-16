@@ -63,4 +63,34 @@ describe('useAuthStore persistence', () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
     expect(useAuthStore.getState().accessToken).toBeNull();
   });
+
+  it('updates the in-memory access token without persisting it', async () => {
+    const { useAuthStore } = await import('./authStore');
+
+    useAuthStore.getState().setToken('rotated-access-token');
+
+    expect(useAuthStore.getState().accessToken).toBe('rotated-access-token');
+    expect(localStorage.getItem('kuber-auth')).not.toContain('rotated-access-token');
+  });
+
+  it('clears auth state and onboarding marker on logout', async () => {
+    const storage = installLocalStorage();
+    localStorage.setItem('kuber-onboarding-done', 'true');
+    const { useAuthStore } = await import('./authStore');
+
+    useAuthStore.getState().setAuth({
+      id: 'user-1',
+      email: 'ada@example.com',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+    }, 'secret-access-token');
+    useAuthStore.getState().clearAuth();
+
+    expect(useAuthStore.getState()).toMatchObject({
+      user: null,
+      accessToken: null,
+      isAuthenticated: false,
+    });
+    expect(storage.removeItem).toHaveBeenCalledWith('kuber-onboarding-done');
+  });
 });

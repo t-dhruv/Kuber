@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { lookup } from 'dns/promises';
-import { assertSafeOutboundUrl } from './safeOutboundUrl';
+import { assertSafeOutboundUrl } from '../../src/lib/safeOutboundUrl';
 
 vi.mock('dns/promises', () => ({
   lookup: vi.fn(),
@@ -48,3 +48,4 @@ describe('assertSafeOutboundUrl', () => {
     await expect(assertSafeOutboundUrl('https://user:pass@example.com/hook')).rejects.toThrow('embedded credentials');
   });
 });
+

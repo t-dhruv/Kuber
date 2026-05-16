@@ -56,6 +56,13 @@ router.post('/transactions/:txId/attachments', upload.single('file'), async (req
   }
 });
 
+router.use((err: unknown, _req: AuthRequest, res: Response, next: (err?: unknown) => void) => {
+  if (err instanceof Error && err.message?.includes('not allowed')) {
+    return res.status(400).json({ error: err.message });
+  }
+  return next(err);
+});
+
 router.get('/transactions/:txId/attachments', async (req: AuthRequest, res: Response) => {
   try {
     const journal = await prisma.transactionJournal.findFirst({

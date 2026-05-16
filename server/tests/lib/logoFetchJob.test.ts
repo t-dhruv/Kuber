@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { runLogoFetchJob } from './logoFetchJob';
+import { runLogoFetchJob } from '../../src/lib/logoFetchJob';
 
-vi.mock('../lib/prisma', () => ({
+vi.mock('../../src/lib/prisma', () => ({
   prisma: {
     logoCache: {
       findMany: vi.fn(),
@@ -17,13 +17,13 @@ vi.mock('../lib/prisma', () => ({
   },
 }));
 
-vi.mock('../services/logoService', () => ({
+vi.mock('../../src/services/logoService', () => ({
   getOrFetchBankLogo: vi.fn(),
   getOrFetchMerchantLogo: vi.fn(),
 }));
 
-import { prisma } from '../lib/prisma';
-import { getOrFetchBankLogo, getOrFetchMerchantLogo } from '../services/logoService';
+import { prisma } from '../../src/lib/prisma';
+import { getOrFetchBankLogo, getOrFetchMerchantLogo } from '../../src/services/logoService';
 
 const mockPrisma = prisma as unknown as {
   logoCache: { findMany: ReturnType<typeof vi.fn>; upsert: ReturnType<typeof vi.fn>; deleteMany: ReturnType<typeof vi.fn> };
@@ -183,3 +183,5 @@ describe('runLogoFetchJob', () => {
     expect(getOrFetchMerchantLogo).toHaveBeenCalledTimes(2);
   });
 });
+
+

@@ -7,7 +7,7 @@ const { mockReportingRollupUpsert, mockReportingRollupFindFirst, mockReportingRo
   mockReportingRollupCreate: vi.fn(),
 }));
 
-vi.mock('../prisma', () => ({
+vi.mock('../../../src/lib/prisma', () => ({
   prisma: {
     reportingRollup: {
       upsert: mockReportingRollupUpsert,
@@ -18,7 +18,7 @@ vi.mock('../prisma', () => ({
   },
 }));
 
-import { buildMonthlyRollupKey, upsertMonthlyRollup } from './rollups';
+import { buildMonthlyRollupKey, upsertMonthlyRollup } from '../../../src/lib/reporting/rollups';
 
 describe('reporting rollups', () => {
   beforeEach(() => {
@@ -106,3 +106,6 @@ describe('reporting rollups', () => {
     );
   });
 });
+
+
+

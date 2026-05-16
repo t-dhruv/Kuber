@@ -27,7 +27,7 @@ afterEach(async () => {
 
 describe('attachment storage', () => {
   it('stores files under household and transaction directories with sanitized filenames', async () => {
-    const { storeFile } = await import('./storage');
+    const { storeFile } = await import('../../src/lib/storage');
 
     const stored = await storeFile('household-1', 'transaction-1', 'receipt March/2026?.pdf', Buffer.from('pdf-bytes'));
 
@@ -39,7 +39,7 @@ describe('attachment storage', () => {
   });
 
   it('returns a readable stream for existing stored files', async () => {
-    const { getReadStream } = await import('./storage');
+    const { getReadStream } = await import('../../src/lib/storage');
     const storagePath = join('household-1', 'transaction-1', 'receipt.txt');
     await writeFile(join(attachmentsDir, storagePath), 'stored content', { flag: 'w' }).catch(async () => {
       await import('fs/promises').then(({ mkdir }) => mkdir(join(attachmentsDir, 'household-1', 'transaction-1'), { recursive: true }));
@@ -57,13 +57,13 @@ describe('attachment storage', () => {
   });
 
   it('returns null for missing stored files', async () => {
-    const { getReadStream } = await import('./storage');
+    const { getReadStream } = await import('../../src/lib/storage');
 
     expect(getReadStream('missing/file.txt')).toBeNull();
   });
 
   it('deletes files and ignores repeated deletion attempts', async () => {
-    const { deleteFile } = await import('./storage');
+    const { deleteFile } = await import('../../src/lib/storage');
     const dir = join(attachmentsDir, 'household-1', 'transaction-1');
     await import('fs/promises').then(({ mkdir }) => mkdir(dir, { recursive: true }));
     const storagePath = join('household-1', 'transaction-1', 'receipt.txt');
@@ -76,3 +76,4 @@ describe('attachment storage', () => {
     expect(existsSync(fullPath)).toBe(false);
   });
 });
+

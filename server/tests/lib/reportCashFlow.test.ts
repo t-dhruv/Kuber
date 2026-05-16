@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCashFlowSummary } from './reportCashFlow';
+import { buildCashFlowSummary } from '../../src/lib/reportCashFlow';
 
 describe('buildCashFlowSummary', () => {
   it('excludes internal transfers from income and expense totals', () => {
@@ -36,3 +36,4 @@ describe('buildCashFlowSummary', () => {
     expect(summary.transferTotal).toBe(0);
   });
 });
+

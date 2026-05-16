@@ -20,7 +20,7 @@ vi.mock('yahoo-finance2', () => ({
 }));
 
 // Import AFTER mock is established so the module uses our mock constructor.
-import { getQuote, getQuotes, getLiveBenchmarks, clearCacheForTesting } from './priceCache';
+import { getQuote, getQuotes, getLiveBenchmarks, clearCacheForTesting } from '../../src/lib/priceCache';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -296,3 +296,4 @@ describe('getLiveBenchmarks', () => {
     }
   });
 });
+

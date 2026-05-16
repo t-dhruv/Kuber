@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('./encryption', () => ({
+vi.mock('../../src/lib/encryption', () => ({
   encrypt: vi.fn((value: string) => `encrypted:${value}`),
   decrypt: vi.fn((value: string) => {
     if (value === 'broken-ciphertext') throw new Error('cannot decrypt');
@@ -10,15 +10,15 @@ vi.mock('./encryption', () => ({
 
 describe('webhook secret helpers', () => {
   it('trims and encrypts non-empty webhook secrets', async () => {
-    const { encrypt } = await import('./encryption');
-    const { encryptWebhookSecret } = await import('./webhookSecret');
+    const { encrypt } = await import('../../src/lib/encryption');
+    const { encryptWebhookSecret } = await import('../../src/lib/webhookSecret');
 
     expect(encryptWebhookSecret('  super-secret  ')).toBe('encrypted:super-secret');
     expect(encrypt).toHaveBeenCalledWith('super-secret');
   });
 
   it('stores null for blank or missing webhook secrets', async () => {
-    const { encryptWebhookSecret } = await import('./webhookSecret');
+    const { encryptWebhookSecret } = await import('../../src/lib/webhookSecret');
 
     expect(encryptWebhookSecret('   ')).toBeNull();
     expect(encryptWebhookSecret(null)).toBeNull();
@@ -26,21 +26,21 @@ describe('webhook secret helpers', () => {
   });
 
   it('decrypts encrypted webhook secrets', async () => {
-    const { decrypt } = await import('./encryption');
-    const { decryptWebhookSecret } = await import('./webhookSecret');
+    const { decrypt } = await import('../../src/lib/encryption');
+    const { decryptWebhookSecret } = await import('../../src/lib/webhookSecret');
 
     expect(decryptWebhookSecret('encrypted:super-secret')).toBe('super-secret');
     expect(decrypt).toHaveBeenCalledWith('encrypted:super-secret');
   });
 
   it('returns legacy plaintext secret when decrypt fails', async () => {
-    const { decryptWebhookSecret } = await import('./webhookSecret');
+    const { decryptWebhookSecret } = await import('../../src/lib/webhookSecret');
 
     expect(decryptWebhookSecret('broken-ciphertext')).toBe('broken-ciphertext');
   });
 
   it('masks webhook secrets without returning the secret value', async () => {
-    const { maskWebhookSecret } = await import('./webhookSecret');
+    const { maskWebhookSecret } = await import('../../src/lib/webhookSecret');
 
     expect(maskWebhookSecret({ id: 'webhook-1', url: 'https://example.test', secret: 'stored-secret' })).toEqual({
       id: 'webhook-1',
@@ -54,3 +54,5 @@ describe('webhook secret helpers', () => {
     });
   });
 });
+
+

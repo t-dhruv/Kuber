@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Target,
   LineChart,
-  Sparkles,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -37,6 +36,11 @@ interface NavItem {
   end?: boolean;
 }
 
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
 interface SidebarProps {
   mobileOpen?: boolean;
   onMobileClose?: () => void;
@@ -57,6 +61,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, String(collapsed));
+      window.dispatchEvent(new CustomEvent('sidebar-collapse', { detail: collapsed }));
     } catch {
       // ignore
     }
@@ -71,20 +76,45 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   });
   const reviewCount: number = autoCatStatus?.reviewCount ?? 0;
 
-  const navItems: NavItem[] = [
-    { to: '/', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
-    { to: '/accounts', icon: <CreditCard size={18} />, label: 'Accounts', end: true },
-    { to: '/transactions', icon: <ArrowLeftRight size={18} />, label: 'Transactions', end: true },
-    { to: '/transactions/review', icon: <CheckCheck size={18} />, label: 'AI Review', badge: reviewCount > 0 ? reviewCount : undefined },
-    { to: '/import', icon: <Upload size={18} />, label: 'Import' },
-    { to: '/cash-flow', icon: <TrendingUp size={18} />, label: 'Cash Flow' },
-    { to: '/reports', icon: <BarChart2 size={18} />, label: 'Reports' },
-    { to: '/wealth', icon: <Layers size={18} />, label: 'Wealth' },
-    { to: '/budget', icon: <PiggyBank size={18} />, label: 'Budget' },
-    { to: '/recurring', icon: <RefreshCw size={18} />, label: 'Recurring' },
-    { to: '/goals', icon: <Target size={18} />, label: 'Goals' },
-    { to: '/investments', icon: <LineChart size={18} />, label: 'Investments' },
-    { to: '/rules', icon: <Zap size={18} />, label: 'Rules' },
+  const navGroups: NavGroup[] = [
+    {
+      label: 'Overview',
+      items: [
+        { to: '/', icon: <LayoutDashboard size={18} />, label: 'Dashboard', end: true },
+      ],
+    },
+    {
+      label: 'Money',
+      items: [
+        { to: '/accounts', icon: <CreditCard size={18} />, label: 'Accounts', end: true },
+        { to: '/transactions', icon: <ArrowLeftRight size={18} />, label: 'Transactions', end: true },
+        { to: '/transactions/review', icon: <CheckCheck size={18} />, label: 'AI Review', badge: reviewCount > 0 ? reviewCount : undefined },
+        { to: '/import', icon: <Upload size={18} />, label: 'Import' },
+      ],
+    },
+    {
+      label: 'Insights',
+      items: [
+        { to: '/cash-flow', icon: <TrendingUp size={18} />, label: 'Cash Flow' },
+        { to: '/reports', icon: <BarChart2 size={18} />, label: 'Reports' },
+        { to: '/wealth', icon: <Layers size={18} />, label: 'Wealth' },
+        { to: '/investments', icon: <LineChart size={18} />, label: 'Investments' },
+      ],
+    },
+    {
+      label: 'Planning',
+      items: [
+        { to: '/budget', icon: <PiggyBank size={18} />, label: 'Budget' },
+        { to: '/recurring', icon: <RefreshCw size={18} />, label: 'Recurring' },
+        { to: '/goals', icon: <Target size={18} />, label: 'Goals' },
+      ],
+    },
+    {
+      label: 'Automation',
+      items: [
+        { to: '/rules', icon: <Zap size={18} />, label: 'Rules' },
+      ],
+    },
   ];
 
   const handleLogout = () => {
@@ -128,46 +158,55 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       </div>
 
       {/* Nav items */}
-      <nav className="flex-1 overflow-y-auto py-3 flex flex-col gap-0.5 px-2" aria-label="App navigation">
-        {navItems.map((item) => (
-          <Tooltip
-            key={item.to}
-            content={item.label}
-            placement="right"
-            disabled={!collapsed}
-          >
-            <NavLink
-              to={item.to}
-              end={item.to === '/' || !!item.end}
-              onClick={handleNavClick}
-              className={({ isActive }) =>
-                `relative flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm font-medium transition-colors ${
-                  collapsed ? 'justify-center' : ''
-                } ${
-                  isActive
-                    ? 'bg-[var(--color-accent-light)] text-[var(--color-accent)]'
-                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]'
-                }`
-              }
-              aria-label={item.label}
-              title={item.label}
-            >
-              <span className="flex-shrink-0">{item.icon}</span>
-              {!collapsed && (
-                <span className="flex-1 flex items-center justify-between truncate">
-                  <span className="truncate">{item.label}</span>
-                  {item.badge !== undefined && (
-                    <span className="ml-2 flex-shrink-0 text-xs font-bold bg-[var(--color-accent)] text-white rounded-full px-1.5 py-0.5 leading-none">
-                      {item.badge > 99 ? '99+' : item.badge}
-                    </span>
-                  )}
-                </span>
-              )}
-              {collapsed && item.badge !== undefined && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--color-accent)]" />
-              )}
-            </NavLink>
-          </Tooltip>
+      <nav className="flex-1 overflow-y-auto py-2 flex flex-col px-2" aria-label="App navigation">
+        {navGroups.map((group, gi) => (
+          <div key={group.label} className={gi > 0 ? 'mt-1' : ''}>
+            {!collapsed && (
+              <div className="nav-section-label">{group.label}</div>
+            )}
+            <div className="flex flex-col gap-0.5">
+              {group.items.map((item) => (
+                <Tooltip
+                  key={item.to}
+                  content={item.label}
+                  placement="right"
+                  disabled={!collapsed}
+                >
+                  <NavLink
+                    to={item.to}
+                    end={item.to === '/' || !!item.end}
+                    onClick={handleNavClick}
+                    className={({ isActive }) =>
+                      `relative flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm font-medium transition-colors ${
+                        collapsed ? 'justify-center' : ''
+                      } ${
+                        isActive
+                          ? 'nav-item-active bg-[var(--color-accent-light)] text-[var(--color-accent)]'
+                          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]'
+                      }`
+                    }
+                    aria-label={item.label}
+                    title={item.label}
+                  >
+                    <span className="flex-shrink-0">{item.icon}</span>
+                    {!collapsed && (
+                      <span className="flex-1 flex items-center justify-between truncate">
+                        <span className="truncate">{item.label}</span>
+                        {item.badge !== undefined && (
+                          <span className="ml-2 flex-shrink-0 text-xs font-bold bg-[var(--color-accent)] text-white rounded-full px-1.5 py-0.5 leading-none">
+                            {item.badge > 99 ? '99+' : item.badge}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {collapsed && item.badge !== undefined && (
+                      <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--color-accent)]" />
+                    )}
+                  </NavLink>
+                </Tooltip>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 

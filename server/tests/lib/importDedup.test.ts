@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeDedupHash, markDuplicates, normalizeDescription } from './importDedup';
+import { computeDedupHash, markDuplicates, normalizeDescription } from '../../src/lib/importDedup';
 
 describe('normalizeDescription', () => {
   it('lowercases descriptions and collapses repeated whitespace', () => {
@@ -56,3 +56,4 @@ describe('markDuplicates', () => {
     ]);
   });
 });
+

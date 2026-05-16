@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { detectDateFormat, parseDate } from './dateUtils';
+import { detectDateFormat, parseDate } from '../../src/lib/dateUtils';
 
 describe('parseDate', () => {
   it('keeps ISO dates and strips ISO timestamps to YYYY-MM-DD', () => {
@@ -64,3 +64,4 @@ describe('detectDateFormat', () => {
     expect(detectDateFormat(['', '   '])).toBeNull();
   });
 });
+

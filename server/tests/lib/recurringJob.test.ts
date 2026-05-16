@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { processRecurringItems, advanceNextDate } from './recurringJob';
+import { processRecurringItems, advanceNextDate } from '../../src/lib/recurringJob';
 
 describe('advanceNextDate', () => {
   it('advances daily by 1 day', () => {
@@ -92,3 +92,4 @@ describe('processRecurringItems', () => {
     });
   });
 });
+

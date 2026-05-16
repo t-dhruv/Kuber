@@ -3,7 +3,7 @@ import request from 'supertest';
 import billsRouter from '../../src/routes/bills';
 import { prisma } from '../../src/lib/prisma';
 import { logAudit } from '../../src/lib/audit';
-import { makeRouteTestApp } from '../../src/test/integrationHarness';
+import { makeRouteTestApp } from '../integration/integrationHarness';
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: {

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { logAudit } from './audit';
-import { prismaMock } from '../test-setup';
+import { logAudit } from '../../src/lib/audit';
+import { prismaMock } from '../../src/test-setup';
 
-vi.mock('./logger.js', () => ({
+vi.mock('../../src/lib/logger.js', () => ({
   createModuleLogger: vi.fn(() => ({
     error: vi.fn(),
   })),
@@ -78,3 +78,5 @@ describe('logAudit', () => {
     ).not.toThrow();
   });
 });
+
+

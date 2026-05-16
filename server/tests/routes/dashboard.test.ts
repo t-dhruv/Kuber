@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import dashboardRouter from '../../src/routes/dashboard';
 import { prisma } from '../../src/lib/prisma';
-import { makeRouteTestApp } from '../../src/test/integrationHarness';
+import { makeRouteTestApp } from '../integration/integrationHarness';
 import { queryJournalAmounts } from '../../src/lib/transactionJournalService';
 
 vi.mock('../../src/lib/prisma', () => ({

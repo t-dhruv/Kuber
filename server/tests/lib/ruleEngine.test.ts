@@ -7,7 +7,7 @@ import {
   ruleMatches,
   type RuleAction,
   type RuleCondition,
-} from './ruleEngine';
+} from '../../src/lib/ruleEngine';
 
 function createPrismaMock() {
   const transactionUpdateMany = vi.fn().mockResolvedValue({});
@@ -221,3 +221,4 @@ describe('applyActiveRulesToTransactionGrouped', () => {
     expect(txUpdateMany).toHaveBeenCalledTimes(2);
   });
 });
+

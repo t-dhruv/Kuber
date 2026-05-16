@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReportingOverview, buildCashFlowSummary, summarizeNetWorth, summarizePortfolio } from './reporting';
+import { buildReportingOverview, buildCashFlowSummary, summarizeNetWorth, summarizePortfolio } from '../../src/lib/reporting';
 
 describe('reporting', () => {
   it('summarizes net worth using account type and exclusion flags', () => {
@@ -69,3 +69,4 @@ describe('reporting', () => {
     expect(summary.transferTotal).toBe(60);
   });
 });
+

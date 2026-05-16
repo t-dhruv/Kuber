@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateRrspRoom, calculateTfsaRoom, getRrspAnnualLimit } from './taxRoomCalculator';
+import { calculateRrspRoom, calculateTfsaRoom, getRrspAnnualLimit } from '../../src/lib/taxRoomCalculator';
 
 describe('taxRoomCalculator', () => {
   it('calculates TFSA room only for years where the member is at least 18', () => {
@@ -35,3 +35,4 @@ describe('taxRoomCalculator', () => {
     });
   });
 });
+

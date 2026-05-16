@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planTransferConversion } from './transferConversion';
+import { planTransferConversion } from '../../src/lib/transferConversion';
 
 describe('planTransferConversion', () => {
   it('keeps an existing expense as the source leg and creates the destination leg', () => {
@@ -84,3 +84,4 @@ describe('planTransferConversion', () => {
     ).toThrow('Source and destination accounts must differ');
   });
 });
+

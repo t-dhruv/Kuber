@@ -8,7 +8,7 @@ import {
   classifyReportPeriod,
   fetchJournalReportRows,
   type JournalReportRow,
-} from './journalReportingCore';
+} from '../../src/lib/journalReportingCore';
 
 const rows: JournalReportRow[] = [
   {
@@ -213,3 +213,4 @@ describe('journal reporting core', () => {
     expect(prisma.transactionJournal.findMany).toHaveBeenCalled();
   });
 });
+

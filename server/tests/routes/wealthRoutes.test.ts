@@ -3,7 +3,7 @@ import request from 'supertest';
 import wealthRouter from '../../src/routes/wealth';
 import { prisma } from '../../src/lib/prisma';
 import { getAiClientForHousehold } from '../../src/lib/ai';
-import { makeRouteTestApp } from '../../src/test/integrationHarness';
+import { makeRouteTestApp } from '../integration/integrationHarness';
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: {

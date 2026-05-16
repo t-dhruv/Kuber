@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyCashFlowEvent, isExcludedInvestmentFlow, isTransferLike } from './classification';
+import { classifyCashFlowEvent, isExcludedInvestmentFlow, isTransferLike } from '../../../src/lib/reporting/classification';
 
 describe('isTransferLike', () => {
   it('identifies transfer-like events from explicit flags and types', () => {
@@ -30,3 +30,6 @@ describe('classifyCashFlowEvent', () => {
     expect(classifyCashFlowEvent({ amount: -75, type: 'expense' })).toBe('expense');
   });
 });
+
+
+

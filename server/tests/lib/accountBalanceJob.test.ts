@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { prisma } from './prisma';
-import { runAccountBalanceSnapshot } from './accountBalanceJob';
+import { prisma } from '../../src/lib/prisma';
+import { runAccountBalanceSnapshot } from '../../src/lib/accountBalanceJob';
 
 describe('runAccountBalanceSnapshot', () => {
   beforeEach(() => {
@@ -86,3 +86,4 @@ describe('runAccountBalanceSnapshot', () => {
     );
   });
 });
+

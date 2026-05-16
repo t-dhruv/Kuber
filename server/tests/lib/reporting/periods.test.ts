@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { normalizeReportingPeriod, resolveComparisonPeriod } from './periods';
+import { normalizeReportingPeriod, resolveComparisonPeriod } from '../../../src/lib/reporting/periods';
 
 describe('normalizeReportingPeriod', () => {
   afterEach(() => {
@@ -132,3 +132,6 @@ describe('resolveComparisonPeriod', () => {
     });
   });
 });
+
+
+

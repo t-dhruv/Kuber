@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type React from "react";
 import { AssetsLiabilitiesSection } from "./AssetsLiabilitiesSection";
 import { InvestmentPerformanceSection } from "./InvestmentPerformanceSection";
 import { AllocationDriftSection } from "./AllocationDriftSection";
@@ -7,9 +9,36 @@ import { ContributionRoomSection } from "./ContributionRoomSection";
 import { DividendForecastSection } from "./DividendForecastSection";
 import { RetirementSimulationSection } from "./RetirementSimulationSection";
 
+function renderWithClient(element: React.ReactElement, seed?: (client: QueryClient) => void) {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+  seed?.(client);
+
+  return renderToStaticMarkup(
+    <QueryClientProvider client={client}>{element}</QueryClientProvider>,
+  );
+}
+
 describe("wealth and advanced report sections", () => {
   it("renders the assets and liabilities section", () => {
-    const html = renderToStaticMarkup(<AssetsLiabilitiesSection />);
+    const html = renderWithClient(
+      <AssetsLiabilitiesSection
+        data={{
+          bankAccountsTotal: 24000,
+          investmentsTotal: 184000,
+          manualAssetsTotal: 42000,
+          manualLiabilitiesTotal: 0,
+          mortgageTotal: 150000,
+          creditCardTotal: 3200,
+          otherLiabilitiesTotal: 0,
+        }}
+      />,
+    );
     expect(html).toContain("Assets / Liabilities");
     expect(html).toContain("Total Assets");
     expect(html).toContain("Total Liabilities");
@@ -17,7 +46,7 @@ describe("wealth and advanced report sections", () => {
   });
 
   it("renders the investment performance section", () => {
-    const html = renderToStaticMarkup(
+    const html = renderWithClient(
       <InvestmentPerformanceSection
         data={{ portfolioValue: 314800, twr: 11.8, mwr: 9.4, trailingIncome: 6240 }}
       />,
@@ -28,15 +57,26 @@ describe("wealth and advanced report sections", () => {
   });
 
   it("renders the allocation and drift section", () => {
-    const html = renderToStaticMarkup(<AllocationDriftSection />);
+    const html = renderWithClient(<AllocationDriftSection />, (client) => {
+      client.setQueryData(["reports", "investments", "allocation"], {
+        totalValue: 100000,
+        byAssetClass: [
+          { assetClass: "US Stocks", value: 62000, percent: 62 },
+          { assetClass: "Bonds", value: 22000, percent: 22 },
+        ],
+        holdings: [
+          { ticker: "AGG", name: "Aggressive ETFs", value: 62000, percent: 62, type: "US Stocks" },
+        ],
+      });
+    });
     expect(html).toContain("Allocation &amp; Drift");
-    expect(html).toContain("Allocation drift overview");
-    expect(html).toContain("Aggressive ETFs");
+    expect(html).toContain("US Stocks");
+    expect(html).toContain("Bonds");
     expect(html).toContain("vs target");
   });
 
   it("renders the contribution room section", () => {
-    const html = renderToStaticMarkup(
+    const html = renderWithClient(
       <ContributionRoomSection
         data={{
           accounts: [
@@ -51,14 +91,27 @@ describe("wealth and advanced report sections", () => {
   });
 
   it("renders the dividend forecast section", () => {
-    const html = renderToStaticMarkup(<DividendForecastSection />);
+    const html = renderWithClient(<DividendForecastSection />, (client) => {
+      client.setQueryData(["reports", "investments", "dividend-forecast"], {
+        forecast: [{ year: 2027, income: 3200 }],
+        basedOn: "Projected from current holdings",
+      });
+    });
     expect(html).toContain("Dividend Forecast");
-    expect(html).toContain("Placeholder projection");
+    expect(html).toContain("2027");
+    expect(html).toContain("Projected from current holdings");
   });
 
   it("renders the retirement simulation section", () => {
-    const html = renderToStaticMarkup(<RetirementSimulationSection />);
+    const html = renderWithClient(<RetirementSimulationSection />, (client) => {
+      client.setQueryData(["reports", "investments", "retirement-simulation"], {
+        scenarios: [{ label: "Base case", success: 82, endingBalance: 945000 }],
+        portfolioValue: 314800,
+        note: "Projection uses current savings rate",
+      });
+    });
     expect(html).toContain("Retirement Simulation");
     expect(html).toContain("Success probability");
+    expect(html).toContain("Base case");
   });
 });

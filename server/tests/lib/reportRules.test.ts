@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyReportTransaction, shouldExcludeFromCashFlow } from './reportRules';
+import { classifyReportTransaction, shouldExcludeFromCashFlow } from '../../src/lib/reportRules';
 
 describe('shouldExcludeFromCashFlow', () => {
   it('excludes internal transfers from cash flow', () => {
@@ -34,3 +34,4 @@ describe('classifyReportTransaction', () => {
     expect(classifyReportTransaction({ type: 'income', investmentType: 'dividend' }).investmentRelevant).toBe(true);
   });
 });
+

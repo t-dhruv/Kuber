@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseReportSource, resolveFreshnessState } from './freshness';
+import { chooseReportSource, resolveFreshnessState } from '../../../src/lib/reporting/freshness';
 
 describe('chooseReportSource', () => {
   it('prefers live data for current periods and stale snapshots', () => {
@@ -19,3 +19,6 @@ describe('resolveFreshnessState', () => {
     expect(resolveFreshnessState({ source: 'snapshot', snapshotFresh: false })).toBe('stale');
   });
 });
+
+
+

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRolloverAmount, getPeriodKey, parsePeriodKey } from './budgetLimits';
+import { computeRolloverAmount, getPeriodKey, parsePeriodKey } from '../../src/lib/budgetLimits';
 
 describe('getPeriodKey', () => {
   it('returns YYYY-MM for monthly period', () => {
@@ -66,3 +66,4 @@ describe('computeRolloverAmount', () => {
     expect(result).toBeCloseTo(100, 2);
   });
 });
+
