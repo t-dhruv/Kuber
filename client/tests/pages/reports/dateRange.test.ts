@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DATE_PRESETS, computeDateRange } from "./dateRange";
+import { DATE_PRESETS, computeDateRange } from "../../../src/pages/reports/dateRange";
 
 describe("computeDateRange", () => {
   const now = new Date("2026-05-07T12:00:00.000Z");

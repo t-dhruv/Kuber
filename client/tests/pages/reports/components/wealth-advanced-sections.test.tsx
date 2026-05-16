@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type React from "react";
-import { AssetsLiabilitiesSection } from "./AssetsLiabilitiesSection";
-import { InvestmentPerformanceSection } from "./InvestmentPerformanceSection";
-import { AllocationDriftSection } from "./AllocationDriftSection";
-import { ContributionRoomSection } from "./ContributionRoomSection";
-import { DividendForecastSection } from "./DividendForecastSection";
-import { RetirementSimulationSection } from "./RetirementSimulationSection";
+import { AssetsLiabilitiesSection } from "../../../../src/pages/reports/components/AssetsLiabilitiesSection";
+import { InvestmentPerformanceSection } from "../../../../src/pages/reports/components/InvestmentPerformanceSection";
+import { AllocationDriftSection } from "../../../../src/pages/reports/components/AllocationDriftSection";
+import { ContributionRoomSection } from "../../../../src/pages/reports/components/ContributionRoomSection";
+import { DividendForecastSection } from "../../../../src/pages/reports/components/DividendForecastSection";
+import { RetirementSimulationSection } from "../../../../src/pages/reports/components/RetirementSimulationSection";
 
 function renderWithClient(element: React.ReactElement, seed?: (client: QueryClient) => void) {
   const client = new QueryClient({

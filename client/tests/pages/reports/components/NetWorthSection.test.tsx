@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { NetWorthSection } from "./NetWorthSection";
+import { NetWorthSection } from "../../../../src/pages/reports/components/NetWorthSection";
 
 describe("NetWorthSection", () => {
   it("shows liquid and total net worth with history when present", () => {

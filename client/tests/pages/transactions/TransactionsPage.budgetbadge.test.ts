@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getBudgetStatus } from './TransactionsPage';
+import { getBudgetStatus } from '../../../src/pages/transactions/TransactionsPage';
 
 describe('getBudgetStatus', () => {
   const map = new Map([

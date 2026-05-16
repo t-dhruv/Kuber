@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FREQUENCY_OPTIONS, frequencyLabel, normalizeFrequency } from "./frequency";
+import { FREQUENCY_OPTIONS, frequencyLabel, normalizeFrequency } from "../../../src/pages/recurring/frequency";
 
 describe("recurring frequency helpers", () => {
   it("exposes every supported UI frequency option", () => {
