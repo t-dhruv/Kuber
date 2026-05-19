@@ -1,62 +1,17 @@
 import { Router, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { prisma } from '../lib/prisma';
 import { AuthRequest, requireHouseholdRole } from '../middleware/auth';
-import { sendHouseholdInviteEmail, sendTestEmail } from '../lib/email';
-import { encrypt } from '../lib/encryption';
-import { getAiClient, invalidateAiCache } from '../lib/ai';
-import { assertSafeOutboundUrl } from '../lib/safeOutboundUrl';
-import ExcelJS from 'exceljs';
+import * as settingsService from '../services/settingsService';
 
 const router = Router();
 const requireHouseholdAdmin = requireHouseholdRole(['owner', 'admin']);
-
-const DEFAULT_NOTIFICATION_PREFERENCES: Record<string, Record<string, boolean>> = {
-  accountDisconnected: { inApp: true, email: true, push: false },
-  largeExpense: { inApp: true, email: false, push: false },
-  needsReview: { inApp: true, email: false, push: false },
-  overBudget: { inApp: true, email: true, push: false },
-  monthlyRecap: { inApp: true, email: true, push: false },
-  newRecurring: { inApp: true, email: false, push: false },
-  paymentDue: { inApp: true, email: true, push: false },
-  goalMilestone: { inApp: true, email: true, push: false },
-  weeklyDigest: { inApp: false, email: false, push: false },
-};
 
 // GET /api/v1/settings/profile
 router.get('/profile', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        avatar: true,
-        timezone: true,
-      },
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    // Derive currency from household
-    const member = await prisma.householdMember.findFirst({
-      where: { userId },
-      include: { household: { select: { currency: true } } },
-    });
-
-    return res.json({
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      avatarUrl: user.avatar ?? null,
-      timezone: user.timezone ?? null,
-      currency: member?.household.currency ?? 'USD',
-    });
+    const profile = await settingsService.getProfile(userId);
+    return res.json(profile);
   } catch (err) {
     req.log.error({ err }, 'settings/profile GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -68,39 +23,8 @@ router.put('/profile', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
     const { firstName, lastName, timezone } = req.body;
-
-    const updateData: any = {};
-    if (firstName !== undefined) updateData.firstName = firstName;
-    if (lastName !== undefined) updateData.lastName = lastName;
-    if (timezone !== undefined) updateData.timezone = timezone;
-
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        avatar: true,
-        timezone: true,
-      },
-    });
-
-    const member = await prisma.householdMember.findFirst({
-      where: { userId },
-      include: { household: { select: { currency: true } } },
-    });
-
-    return res.json({
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      avatarUrl: user.avatar ?? null,
-      timezone: user.timezone ?? null,
-      currency: member?.household.currency ?? 'USD',
-    });
+    const profile = await settingsService.updateProfile(userId, { firstName, lastName, timezone });
+    return res.json(profile);
   } catch (err) {
     req.log.error({ err }, 'settings/profile PUT');
     return res.status(500).json({ error: 'Internal server error' });
@@ -111,39 +35,13 @@ router.put('/profile', async (req: AuthRequest, res: Response) => {
 router.get('/household', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-
-    const household = await prisma.household.findUnique({
-      where: { id: householdId },
-      include: {
-        members: {
-          include: {
-            user: {
-              select: { id: true, firstName: true, lastName: true, email: true, totpEnabled: true },
-            },
-          },
-        },
-      },
-    });
-    if (!household) return res.status(404).json({ error: 'Household not found' });
-
-    const members = household.members.map(m => ({
-      userId: m.userId,
-      firstName: m.user.firstName,
-      lastName: m.user.lastName,
-      email: m.user.email,
-      role: m.role,
-      joinedAt: m.joinedAt.toISOString(),
-      totpEnabled: m.user.totpEnabled,
-    }));
-
-    return res.json({
-      id: household.id,
-      name: household.name,
-      currency: household.currency,
-      members,
-    });
+    const household = await settingsService.getHousehold(householdId);
+    return res.json(household);
   } catch (err) {
     req.log.error({ err }, 'settings/household GET');
+    if (err instanceof Error && err.message.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -154,51 +52,13 @@ router.put('/household', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const userId = req.userId!;
     const { name, currency } = req.body;
-
-    // Require Owner or Admin role
-    const membership = await prisma.householdMember.findUnique({
-      where: { userId_householdId: { userId, householdId } },
-    });
-    if (!membership || !['owner', 'admin'].includes(membership.role.toLowerCase())) {
-      return res.status(403).json({ error: 'Only owners and admins can update household settings' });
-    }
-
-    const updateData: any = {};
-    if (name !== undefined) updateData.name = name;
-    if (currency !== undefined) updateData.currency = currency;
-
-    const household = await prisma.household.update({
-      where: { id: householdId },
-      data: updateData,
-      include: {
-        members: {
-          include: {
-            user: {
-              select: { id: true, firstName: true, lastName: true, email: true, totpEnabled: true },
-            },
-          },
-        },
-      },
-    });
-
-    const members = household.members.map(m => ({
-      userId: m.userId,
-      firstName: m.user.firstName,
-      lastName: m.user.lastName,
-      email: m.user.email,
-      role: m.role,
-      joinedAt: m.joinedAt.toISOString(),
-      totpEnabled: m.user.totpEnabled,
-    }));
-
-    return res.json({
-      id: household.id,
-      name: household.name,
-      currency: household.currency,
-      members,
-    });
+    const household = await settingsService.updateHousehold(householdId, userId, { name, currency });
+    return res.json(household);
   } catch (err) {
     req.log.error({ err }, 'settings/household PUT');
+    if (err instanceof Error && err.message.includes('Only owners')) {
+      return res.status(403).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -213,50 +73,16 @@ router.post('/household/invite', async (req: AuthRequest, res: Response) => {
     if (!email) {
       return res.status(400).json({ error: 'email is required' });
     }
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const normalizedRole = String(role).trim().toLowerCase();
-    if (!['member', 'admin'].includes(normalizedRole)) {
-      return res.status(400).json({ error: 'role must be member or admin' });
-    }
 
-    // Require Owner or Admin
-    const membership = await prisma.householdMember.findUnique({
-      where: { userId_householdId: { userId, householdId } },
-    });
-    if (!membership || !['owner', 'admin'].includes(membership.role.toLowerCase())) {
-      return res.status(403).json({ error: 'Only owners and admins can invite members' });
-    }
-
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-    const existingMember = await prisma.householdMember.findFirst({
-      where: { householdId, user: { email: normalizedEmail } },
-    });
-    if (existingMember) {
-      return res.status(409).json({ error: 'User is already a member of this household' });
-    }
-
-    const invite = await prisma.householdInvite.create({
-      data: {
-        householdId,
-        email: normalizedEmail,
-        role: normalizedRole,
-        expiresAt,
-      },
-      include: { household: { select: { name: true } } },
-    });
-
-    await sendHouseholdInviteEmail(normalizedEmail, invite.household.name, invite.token);
-
-    return res.json({
-      success: true,
-      message: 'Invitation sent',
-      token: invite.token,
-      inviteUrl: `/signup?invite=${encodeURIComponent(invite.token)}`,
-      expiresAt: invite.expiresAt.toISOString(),
-    });
+    const result = await settingsService.inviteMember(householdId, userId, email, role);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/household/invite POST');
+    if (err instanceof Error) {
+      if (err.message.includes('role must be')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('Only owners')) return res.status(403).json({ error: err.message });
+      if (err.message.includes('already a member')) return res.status(409).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -268,34 +94,15 @@ router.delete('/household/members/:id', async (req: AuthRequest, res: Response) 
     const userId = req.userId!;
     const { id: targetUserId } = req.params;
 
-    // Verify requesting user is the household owner
-    const membership = await prisma.householdMember.findUnique({
-      where: { userId_householdId: { userId, householdId } },
-    });
-    if (!membership || membership.role.toLowerCase() !== 'owner') {
-      return res.status(403).json({ error: 'Only the owner can remove members' });
-    }
-
-    // Prevent owner from removing themselves
-    if (targetUserId === userId) {
-      return res.status(400).json({ error: 'Owner cannot remove themselves from the household' });
-    }
-
-    // Verify target member belongs to this household
-    const targetMembership = await prisma.householdMember.findUnique({
-      where: { userId_householdId: { userId: targetUserId, householdId } },
-    });
-    if (!targetMembership) {
-      return res.status(404).json({ error: 'Member not found in this household' });
-    }
-
-    await prisma.householdMember.delete({
-      where: { userId_householdId: { userId: targetUserId, householdId } },
-    });
-
-    return res.json({ message: 'Member removed' });
+    const result = await settingsService.removeMember(householdId, userId, targetUserId);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/household/members DELETE');
+    if (err instanceof Error) {
+      if (err.message.includes('Only the owner')) return res.status(403).json({ error: err.message });
+      if (err.message.includes('cannot remove themselves')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('not found')) return res.status(404).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -307,32 +114,15 @@ router.post('/household/members/:id/disable-2fa', async (req: AuthRequest, res: 
     const userId = req.userId!;
     const { id: targetUserId } = req.params;
 
-    const membership = await prisma.householdMember.findUnique({
-      where: { userId_householdId: { userId, householdId } },
-    });
-    if (!membership || membership.role.toLowerCase() !== 'owner') {
-      return res.status(403).json({ error: 'Only the owner can reset member 2FA' });
-    }
-
-    if (targetUserId === userId) {
-      return res.status(400).json({ error: 'Use your Security settings to disable your own 2FA' });
-    }
-
-    const targetMembership = await prisma.householdMember.findUnique({
-      where: { userId_householdId: { userId: targetUserId, householdId } },
-    });
-    if (!targetMembership) {
-      return res.status(404).json({ error: 'Member not found in this household' });
-    }
-
-    await prisma.user.update({
-      where: { id: targetUserId },
-      data: { totpSecret: null, totpEnabled: false, backupCodes: [] },
-    });
-
-    return res.json({ message: 'Member two-factor authentication disabled' });
+    const result = await settingsService.disableMember2fa(householdId, userId, targetUserId);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/household/members/disable-2fa POST');
+    if (err instanceof Error) {
+      if (err.message.includes('Only the owner')) return res.status(403).json({ error: err.message });
+      if (err.message.includes('Use your Security')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('not found')) return res.status(404).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -341,13 +131,7 @@ router.post('/household/members/:id/disable-2fa', async (req: AuthRequest, res: 
 router.get('/categories', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-
-    const categories = await prisma.category.findMany({
-      where: { householdId },
-      include: { group: { select: { id: true, name: true } } },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    });
-
+    const categories = await settingsService.getCategories(householdId);
     return res.json(categories);
   } catch (err) {
     req.log.error({ err }, 'settings/categories GET');
@@ -361,37 +145,14 @@ router.post('/categories', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { name, groupId, icon, type = 'expense', bucketType } = req.body;
 
-    if (!name) {
-      return res.status(400).json({ error: 'name is required' });
-    }
-
-    // Validate groupId belongs to household if provided
-    if (groupId) {
-      const group = await prisma.categoryGroup.findFirst({
-        where: { id: groupId, householdId },
-      });
-      if (!group) {
-        return res.status(400).json({ error: 'Category group not found in this household' });
-      }
-    }
-
-    const category = await prisma.category.create({
-      data: {
-        householdId,
-        name,
-        groupId: groupId ?? null,
-        icon: icon ?? null,
-        type,
-        bucketType: (bucketType && ['needs', 'wants', 'savings', 'uncategorized'].includes(bucketType))
-          ? bucketType
-          : 'uncategorized',
-      },
-      include: { group: { select: { id: true, name: true } } },
-    });
-
+    const category = await settingsService.createCategory(householdId, { name, groupId, icon, type, bucketType });
     return res.status(201).json(category);
   } catch (err) {
     req.log.error({ err }, 'settings/categories POST');
+    if (err instanceof Error) {
+      if (err.message.includes('name is required')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('not found')) return res.status(400).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -418,31 +179,21 @@ router.put('/categories/:id', async (req: AuthRequest, res: Response) => {
     }
     const { name, icon, groupId, isTaxDeductible, excludeFromReports, bucketType, type } = parsed.data;
 
-    const existing = await prisma.category.findFirst({
-      where: { id, householdId },
+    const category = await settingsService.updateCategory(householdId, id, {
+      name,
+      icon,
+      groupId,
+      isTaxDeductible,
+      excludeFromReports,
+      bucketType,
+      type,
     });
-    if (!existing) {
-      return res.status(404).json({ error: 'Category not found' });
-    }
-
-    const updateData: any = {};
-    if (name !== undefined) updateData.name = name;
-    if (icon !== undefined) updateData.icon = icon;
-    if (groupId !== undefined) updateData.groupId = groupId;
-    if (isTaxDeductible !== undefined) updateData.isTaxDeductible = isTaxDeductible;
-    if (excludeFromReports !== undefined) updateData.excludeFromReports = excludeFromReports;
-    if (bucketType !== undefined) updateData.bucketType = bucketType;
-    if (type !== undefined) updateData.type = type;
-
-    const category = await prisma.category.update({
-      where: { id },
-      data: updateData,
-      include: { group: { select: { id: true, name: true } } },
-    });
-
     return res.json(category);
   } catch (err) {
     req.log.error({ err }, 'settings/categories PUT');
+    if (err instanceof Error && err.message.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -453,28 +204,14 @@ router.delete('/categories/:id', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const existing = await prisma.category.findFirst({
-      where: { id, householdId },
-    });
-    if (!existing) {
-      return res.status(404).json({ error: 'Category not found' });
-    }
-
-    // Check if any transactions use this category
-    const txCount = await prisma.transactionJournal.count({
-      where: { categoryId: id, householdId, isDeleted: false },
-    });
-    if (txCount > 0) {
-      return res.status(400).json({
-        error: `Cannot delete category: it is used by ${txCount} transaction${txCount !== 1 ? 's' : ''}. Reassign them first.`,
-      });
-    }
-
-    await prisma.category.delete({ where: { id } });
-
-    return res.json({ success: true });
+    const result = await settingsService.deleteCategory(householdId, id);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/categories DELETE');
+    if (err instanceof Error) {
+      if (err.message.includes('not found')) return res.status(404).json({ error: err.message });
+      if (err.message.includes('Cannot delete')) return res.status(400).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -485,19 +222,8 @@ router.delete('/categories/:id', async (req: AuthRequest, res: Response) => {
 router.get('/category-groups', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-
-    const groups = await prisma.categoryGroup.findMany({
-      where: { householdId },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      include: { _count: { select: { categories: true } } },
-    });
-
-    return res.json(groups.map((g) => ({
-      id: g.id,
-      name: g.name,
-      type: g.type,
-      categoryCount: g._count.categories,
-    })));
+    const groups = await settingsService.getCategoryGroups(householdId);
+    return res.json(groups);
   } catch (err) {
     req.log.error({ err }, 'settings/category-groups GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -510,34 +236,15 @@ router.post('/category-groups', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { name, type = 'expense' } = req.body;
 
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return res.status(400).json({ error: 'name is required' });
-    }
-
-    if (!['income', 'expense', 'transfer'].includes(type)) {
-      return res.status(400).json({ error: 'type must be income, expense, or transfer' });
-    }
-
-    // Check if group already exists
-    const existing = await prisma.categoryGroup.findFirst({
-      where: { householdId, name: name.trim() },
-    });
-
-    if (existing) {
-      return res.status(409).json({ error: 'Group with this name already exists' });
-    }
-
-    const group = await prisma.categoryGroup.create({
-      data: {
-        householdId,
-        name: name.trim(),
-        type,
-      },
-    });
-
-    return res.status(201).json({ id: group.id, name: group.name, type: group.type, categoryCount: 0 });
+    const group = await settingsService.createCategoryGroup(householdId, { name, type });
+    return res.status(201).json(group);
   } catch (err) {
     req.log.error({ err }, 'settings/category-groups POST');
+    if (err instanceof Error) {
+      if (err.message.includes('name is required')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('type must be')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('already exists')) return res.status(409).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -548,26 +255,14 @@ router.delete('/category-groups/:id', async (req: AuthRequest, res: Response) =>
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const existing = await prisma.categoryGroup.findFirst({
-      where: { id, householdId },
-      include: { _count: { select: { categories: true } } },
-    });
-
-    if (!existing) {
-      return res.status(404).json({ error: 'Group not found' });
-    }
-
-    if (existing._count.categories > 0) {
-      return res.status(400).json({
-        error: `Cannot delete group: it contains ${existing._count.categories} categor${existing._count.categories !== 1 ? 'ies' : 'y'}. Move or delete them first.`,
-      });
-    }
-
-    await prisma.categoryGroup.delete({ where: { id } });
-
-    return res.json({ success: true });
+    const result = await settingsService.deleteCategoryGroup(householdId, id);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/category-groups DELETE');
+    if (err instanceof Error) {
+      if (err.message.includes('not found')) return res.status(404).json({ error: err.message });
+      if (err.message.includes('Cannot delete')) return res.status(400).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -576,17 +271,8 @@ router.delete('/category-groups/:id', async (req: AuthRequest, res: Response) =>
 router.get('/tags', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const tags = await prisma.tag.findMany({
-      where: { householdId },
-      include: { _count: { select: { transactionTags: true } } },
-      orderBy: { name: 'asc' },
-    });
-    return res.json(tags.map((t) => ({
-      id: t.id,
-      name: t.name,
-      color: t.color,
-      transactionCount: t._count.transactionTags,
-    })));
+    const tags = await settingsService.getTags(householdId);
+    return res.json(tags);
   } catch (err) {
     req.log.error({ err }, 'settings/tags GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -599,21 +285,13 @@ router.post('/tags', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { name, color } = req.body;
 
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return res.status(400).json({ error: 'name is required' });
-    }
-
-    const tag = await prisma.tag.create({
-      data: {
-        householdId,
-        name: name.trim(),
-        color: color ?? '#6366f1',
-      },
-    });
-
-    return res.status(201).json({ id: tag.id, name: tag.name, color: tag.color, transactionCount: 0 });
+    const tag = await settingsService.createTag(householdId, { name, color });
+    return res.status(201).json(tag);
   } catch (err) {
     req.log.error({ err }, 'settings/tags POST');
+    if (err instanceof Error && err.message.includes('name is required')) {
+      return res.status(400).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -625,25 +303,14 @@ router.put('/tags/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { name, color } = req.body;
 
-    const existing = await prisma.tag.findFirst({ where: { id, householdId } });
-    if (!existing) {
-      return res.status(404).json({ error: 'Tag not found' });
-    }
-
-    if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
-      return res.status(400).json({ error: 'name must be a non-empty string' });
-    }
-
-    const updateData: { name?: string; color?: string } = {};
-    if (name !== undefined) updateData.name = name.trim();
-    if (color !== undefined) updateData.color = color;
-
-    const tag = await prisma.tag.update({ where: { id }, data: updateData });
-
-    const count = await prisma.transactionTag.count({ where: { tagId: id } });
-    return res.json({ id: tag.id, name: tag.name, color: tag.color, transactionCount: count });
+    const tag = await settingsService.updateTag(householdId, id, { name, color });
+    return res.json(tag);
   } catch (err) {
     req.log.error({ err }, 'settings/tags PUT');
+    if (err instanceof Error) {
+      if (err.message.includes('not found')) return res.status(404).json({ error: err.message });
+      if (err.message.includes('must be')) return res.status(400).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -654,15 +321,13 @@ router.delete('/tags/:id', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const existing = await prisma.tag.findFirst({ where: { id, householdId } });
-    if (!existing) {
-      return res.status(404).json({ error: 'Tag not found' });
-    }
-
-    await prisma.tag.delete({ where: { id } });
-    return res.json({ message: 'Tag deleted' });
+    const result = await settingsService.deleteTag(householdId, id);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/tags DELETE');
+    if (err instanceof Error && err.message.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -674,35 +339,8 @@ router.get('/merchants', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
     const order = req.query.order === 'NAME' ? 'NAME' : 'TRANSACTION_COUNT';
-
-    const merchants = await prisma.merchant.findMany({
-      where: { householdId },
-      select: {
-        id: true,
-        name: true,
-        displayName: true,
-        logoUrl: true,
-        _count: { select: { journals: true } },
-      },
-      orderBy: order === 'NAME' ? { displayName: 'asc' } : { createdAt: 'asc' },
-    });
-
-    // Sort by transaction count client-side when needed (Prisma doesn't sort by _count directly in older versions)
-    const result = merchants
-      .map(m => ({
-        id: m.id,
-        name: m.name,
-        displayName: m.displayName,
-        logoUrl: m.logoUrl ?? null,
-        transactionCount: m._count.journals,
-      }))
-      .sort((a, b) =>
-        order === 'TRANSACTION_COUNT'
-          ? b.transactionCount - a.transactionCount
-          : a.displayName.localeCompare(b.displayName)
-      );
-
-    return res.json(result);
+    const merchants = await settingsService.getMerchants(householdId, order);
+    return res.json(merchants);
   } catch (err) {
     req.log.error({ err }, 'settings/merchants GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -716,25 +354,15 @@ router.put('/merchants/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const { displayName } = req.body;
 
-    if (!displayName || typeof displayName !== 'string' || displayName.trim().length === 0) {
-      return res.status(400).json({ error: 'displayName is required and must be non-empty' });
-    }
-    if (displayName.trim().length > 100) {
-      return res.status(400).json({ error: 'displayName must be 100 characters or fewer' });
-    }
-
-    const existing = await prisma.merchant.findFirst({ where: { id, householdId } });
-    if (!existing) return res.status(404).json({ error: 'Merchant not found' });
-
-    const updated = await prisma.merchant.update({
-      where: { id },
-      data: { displayName: displayName.trim() },
-      select: { id: true, name: true, displayName: true, logoUrl: true },
-    });
-
-    return res.json({ ...updated, logoUrl: updated.logoUrl ?? null });
+    const updated = await settingsService.updateMerchant(householdId, id, { displayName });
+    return res.json(updated);
   } catch (err) {
     req.log.error({ err }, 'settings/merchants PUT');
+    if (err instanceof Error) {
+      if (err.message.includes('required')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('100 characters')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('not found')) return res.status(404).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -745,19 +373,13 @@ router.delete('/merchants/:id', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const existing = await prisma.merchant.findFirst({ where: { id, householdId } });
-    if (!existing) return res.status(404).json({ error: 'Merchant not found' });
-
-    // Null out merchantId on linked journals before deleting
-    await prisma.transactionJournal.updateMany({
-      where: { merchantId: id, householdId },
-      data: { merchantId: null },
-    });
-
-    await prisma.merchant.delete({ where: { id } });
-    return res.json({ message: 'Merchant deleted' });
+    const result = await settingsService.deleteMerchant(householdId, id);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/merchants DELETE');
+    if (err instanceof Error && err.message.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -766,27 +388,8 @@ router.delete('/merchants/:id', async (req: AuthRequest, res: Response) => {
 router.get('/notifications', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
-
-    const pref = await prisma.userPreference.findUnique({
-      where: { userId_key: { userId, key: 'notification_preferences' } },
-    });
-
-    let preferences: Record<string, Record<string, boolean>>;
-    if (pref) {
-      try {
-        preferences = JSON.parse(pref.value);
-      } catch {
-        preferences = DEFAULT_NOTIFICATION_PREFERENCES;
-      }
-    } else {
-      preferences = DEFAULT_NOTIFICATION_PREFERENCES;
-    }
-
-    const thresholdPref = await prisma.userPreference.findUnique({
-      where: { userId_key: { userId, key: 'low_balance_threshold' } },
-    });
-    const lowBalanceThreshold = thresholdPref ? parseFloat(thresholdPref.value) : null;
-    return res.json({ preferences, lowBalanceThreshold });
+    const result = await settingsService.getNotificationPrefs(userId);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/notifications GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -799,30 +402,13 @@ router.put('/notifications', async (req: AuthRequest, res: Response) => {
     const userId = req.userId!;
     const { preferences, lowBalanceThreshold } = req.body;
 
-    if (!preferences || typeof preferences !== 'object') {
-      return res.status(400).json({ error: 'preferences must be an object' });
-    }
-
-    await prisma.userPreference.upsert({
-      where: { userId_key: { userId, key: 'notification_preferences' } },
-      update: { value: JSON.stringify(preferences) },
-      create: { userId, key: 'notification_preferences', value: JSON.stringify(preferences) },
-    });
-
-    if (lowBalanceThreshold !== undefined) {
-      if (lowBalanceThreshold === null) {
-        await prisma.userPreference.deleteMany({ where: { userId, key: 'low_balance_threshold' } });
-      } else if (typeof lowBalanceThreshold === 'number' && lowBalanceThreshold >= 0) {
-        await prisma.userPreference.upsert({
-          where: { userId_key: { userId, key: 'low_balance_threshold' } },
-          update: { value: String(lowBalanceThreshold) },
-          create: { userId, key: 'low_balance_threshold', value: String(lowBalanceThreshold) },
-        });
-      }
-    }
-    return res.json({ preferences, lowBalanceThreshold: lowBalanceThreshold ?? null });
+    const result = await settingsService.updateNotificationPrefs(userId, { preferences, lowBalanceThreshold });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/notifications PUT');
+    if (err instanceof Error && err.message.includes('must be an object')) {
+      return res.status(400).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -833,33 +419,16 @@ router.put('/password', async (req: AuthRequest, res: Response) => {
     const userId = req.userId!;
     const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'currentPassword and newPassword are required' });
-    }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: 'New password must be at least 8 characters' });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, passwordHash: true },
-    });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
-    if (!isValid) {
-      return res.status(400).json({ error: 'Current password is incorrect' });
-    }
-
-    const newHash = await bcrypt.hash(newPassword, 12);
-    await prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash: newHash },
-    });
-
-    return res.json({ success: true });
+    const result = await settingsService.updatePassword(userId, currentPassword, newPassword);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/password PUT');
+    if (err instanceof Error) {
+      if (err.message.includes('required')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('8 characters')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('not found')) return res.status(404).json({ error: err.message });
+      if (err.message.includes('incorrect')) return res.status(400).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -870,20 +439,8 @@ router.put('/password', async (req: AuthRequest, res: Response) => {
 router.get('/dashboard-layout', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
-
-    const pref = await prisma.userPreference.findUnique({
-      where: { userId_key: { userId, key: 'dashboard_layout' } },
-    });
-
-    if (!pref) {
-      return res.json(null);
-    }
-
-    try {
-      return res.json(JSON.parse(pref.value));
-    } catch {
-      return res.json(null);
-    }
+    const layout = await settingsService.getDashboardLayout(userId);
+    return res.json(layout);
   } catch (err) {
     req.log.error({ err }, 'settings/dashboard-layout GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -896,30 +453,14 @@ router.put('/dashboard-layout', async (req: AuthRequest, res: Response) => {
     const userId = req.userId!;
     const { layout } = req.body;
 
-    if (!Array.isArray(layout)) {
-      return res.status(400).json({ error: 'layout must be an array' });
-    }
-
-    for (const item of layout) {
-      if (
-        typeof item !== 'object' ||
-        typeof item.id !== 'string' ||
-        typeof item.visible !== 'boolean' ||
-        typeof item.order !== 'number'
-      ) {
-        return res.status(400).json({ error: 'Each layout item must have id (string), visible (boolean), order (number)' });
-      }
-    }
-
-    await prisma.userPreference.upsert({
-      where: { userId_key: { userId, key: 'dashboard_layout' } },
-      update: { value: JSON.stringify(layout) },
-      create: { userId, key: 'dashboard_layout', value: JSON.stringify(layout) },
-    });
-
-    return res.json(layout);
+    const result = await settingsService.updateDashboardLayout(userId, layout);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/dashboard-layout PUT');
+    if (err instanceof Error) {
+      if (err.message.includes('must be an array')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('Each layout item')) return res.status(400).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -934,33 +475,12 @@ const aiConfigSchema = z.object({
   headers: z.string().optional(), // JSON string: {"Authorization": "Bearer ..."}
 });
 
-function formatAiConfigResponse(config: {
-  provider: string;
-  model: string;
-  encryptedApiKey: string;
-  baseUrl: string | null;
-  headers?: string | null;
-  updatedAt: Date;
-} | null) {
-  if (!config) {
-    return { provider: 'none', model: '', baseUrl: null, headers: null, hasApiKey: false, updatedAt: null };
-  }
-  return {
-    provider: config.provider,
-    model: config.model,
-    baseUrl: config.baseUrl,
-    headers: config.headers ?? null,
-    hasApiKey: config.encryptedApiKey !== '',
-    updatedAt: config.updatedAt.toISOString(),
-  };
-}
-
 // GET /api/v1/settings/ai-config
 router.get('/ai-config', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const config = await prisma.aiConfig.findUnique({ where: { householdId } });
-    return res.json(formatAiConfigResponse(config));
+    const config = await settingsService.getAiConfig(householdId);
+    return res.json(config);
   } catch (err) {
     req.log.error({ err }, 'settings/ai-config GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -976,56 +496,16 @@ router.put('/ai-config', requireHouseholdAdmin, async (req: AuthRequest, res: Re
       return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
     }
     const { provider, model, apiKey, baseUrl, headers } = parsed.data;
-    let safeBaseUrl = baseUrl?.trim() || null;
 
-    if (safeBaseUrl && provider !== 'ollama') {
-      try {
-        safeBaseUrl = await assertSafeOutboundUrl(safeBaseUrl);
-      } catch (err) {
-        return res.status(400).json({ error: err instanceof Error ? err.message : 'Unsafe AI base URL' });
-      }
-    }
-
-    // Determine encrypted key: if a new apiKey is provided, encrypt it; otherwise keep existing
-    let encryptedApiKey: string | undefined;
-    if (apiKey && apiKey.trim() !== '') {
-      encryptedApiKey = encrypt(apiKey.trim());
-    }
-
-    const existing = encryptedApiKey === undefined
-      ? await prisma.aiConfig.findUnique({ where: { householdId }, select: { encryptedApiKey: true } })
-      : null;
-
-    // Validate headers JSON if provided
-    if (headers && headers.trim() !== '') {
-      try { JSON.parse(headers); } catch {
-        return res.status(400).json({ error: 'Headers must be valid JSON (e.g. {"Authorization": "Bearer sk-..."})' });
-      }
-    }
-
-    const config = await (prisma.aiConfig as any).upsert({
-      where: { householdId },
-      update: {
-        provider,
-        model: model ?? '',
-        ...(encryptedApiKey !== undefined ? { encryptedApiKey } : { encryptedApiKey: existing?.encryptedApiKey ?? '' }),
-        baseUrl: safeBaseUrl,
-        headers: headers?.trim() || null,
-      },
-      create: {
-        householdId,
-        provider,
-        model: model ?? '',
-        encryptedApiKey: encryptedApiKey ?? '',
-        baseUrl: safeBaseUrl,
-        headers: headers?.trim() || null,
-      },
-    });
-
-    invalidateAiCache(householdId);
-    return res.json(formatAiConfigResponse(config));
+    const config = await settingsService.updateAiConfig(householdId, { provider, model, apiKey, baseUrl, headers });
+    return res.json(config);
   } catch (err) {
     req.log.error({ err }, 'settings/ai-config PUT');
+    if (err instanceof Error) {
+      if (err.message.includes('Unsafe') || err.message.includes('Headers')) {
+        return res.status(400).json({ error: err.message });
+      }
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1034,39 +514,41 @@ router.put('/ai-config', requireHouseholdAdmin, async (req: AuthRequest, res: Re
 router.post('/ai-config/test', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const config = await prisma.aiConfig.findUnique({ where: { householdId } });
-
-    if (!config || config.provider === 'none') {
-      return res.json({ valid: false, error: 'No provider configured' });
-    }
-
-    const client = getAiClient(config);
-    const valid = await client.validateApiKey();
-    return res.json({ valid });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Connection test failed';
-    return res.json({ valid: false, error: message });
+    const result = await settingsService.testAiConfig(householdId);
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, 'settings/ai-config/test POST');
+    return res.json({ valid: false, error: 'Connection test failed' });
   }
 });
 
 // GET /api/v1/settings/watch-tickers
 router.get('/watch-tickers', async (req: AuthRequest, res: Response) => {
-  const pref = await prisma.userPreference.findFirst({
-    where: { userId: req.userId!, key: 'watch_tickers' },
-  });
-  return res.json({ tickers: pref?.value ?? '' });
+  try {
+    const userId = req.userId!;
+    const result = await settingsService.getWatchTickers(userId);
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, 'settings/watch-tickers GET');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // PUT /api/v1/settings/watch-tickers
 router.put('/watch-tickers', async (req: AuthRequest, res: Response) => {
-  const parse = z.object({ tickers: z.string().max(500) }).safeParse(req.body);
-  if (!parse.success) return res.status(400).json({ error: 'Invalid tickers' });
-  await prisma.userPreference.upsert({
-    where: { userId_key: { userId: req.userId!, key: 'watch_tickers' } },
-    update: { value: parse.data.tickers },
-    create: { userId: req.userId!, key: 'watch_tickers', value: parse.data.tickers },
-  });
-  return res.json({ tickers: parse.data.tickers });
+  try {
+    const userId = req.userId!;
+    const { tickers } = req.body;
+
+    const result = await settingsService.updateWatchTickers(userId, tickers);
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, 'settings/watch-tickers PUT');
+    if (err instanceof Error && err.message.includes('Invalid')) {
+      return res.status(400).json({ error: err.message });
+    }
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // DELETE /api/v1/settings/account — self-service account deletion
@@ -1079,37 +561,17 @@ router.delete('/account', async (req: AuthRequest, res: Response) => {
     const parse = deleteSchema.safeParse(req.body);
     if (!parse.success) return res.status(400).json({ error: 'confirmPassword is required' });
 
-    // Verify password
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const valid = await bcrypt.compare(parse.data.confirmPassword, user.passwordHash);
-    if (!valid) return res.status(400).json({ error: 'Incorrect password' });
-
-    // Check if owner with other members
-    const membership = await prisma.householdMember.findFirst({ where: { userId, householdId } });
-    if (membership?.role === 'owner') {
-      const memberCount = await prisma.householdMember.count({ where: { householdId } });
-      if (memberCount > 1) {
-        return res.status(400).json({ error: 'Transfer ownership or remove all other members before deleting your account' });
-      }
-    }
-
-    // Invalidate all refresh tokens and API tokens
-    await prisma.refreshToken.deleteMany({ where: { userId } });
-    await prisma.apiToken.deleteMany({ where: { userId } });
-
-    if (membership?.role === 'owner') {
-      // Delete the household and all its data (cascade via Prisma)
-      await prisma.household.delete({ where: { id: householdId } });
-    }
-
-    // Delete user
-    await prisma.user.delete({ where: { id: userId } });
-
+    const result = await settingsService.deleteAccount(userId, householdId, parse.data.confirmPassword);
     res.clearCookie('refreshToken');
-    return res.json({ message: 'Account deleted successfully' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'settings/account DELETE');
+    if (err instanceof Error) {
+      if (err.message.includes('required')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('not found')) return res.status(404).json({ error: err.message });
+      if (err.message.includes('Incorrect')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('Transfer ownership')) return res.status(400).json({ error: err.message });
+    }
     return res.status(500).json({ error: 'Failed to delete account' });
   }
 });
@@ -1118,121 +580,7 @@ router.delete('/account', async (req: AuthRequest, res: Response) => {
 router.get('/export', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Kuber';
-    workbook.created = new Date();
-
-    // Accounts
-    const accounts = await prisma.account.findMany({ where: { householdId }, orderBy: { name: 'asc' } });
-    const accSheet = workbook.addWorksheet('Accounts');
-    accSheet.columns = [
-      { header: 'Name', key: 'name', width: 24 },
-      { header: 'Type', key: 'type', width: 16 },
-      { header: 'Institution', key: 'institution', width: 24 },
-      { header: 'Balance', key: 'balance', width: 14 },
-      { header: 'Currency', key: 'currency', width: 10 },
-      { header: 'Credit Limit', key: 'creditLimit', width: 14 },
-      { header: 'Hidden', key: 'isHidden', width: 10 },
-    ];
-    accounts.forEach(a => accSheet.addRow({ name: a.name, type: a.type, institution: a.institution ?? '', balance: a.balance, currency: a.currency, creditLimit: a.creditLimit ?? '', isHidden: a.isHidden }));
-
-    // Transactions
-    const transactions = await prisma.transactionJournal.findMany({
-      where: { householdId, isHidden: false },
-      include: { category: { select: { name: true } }, entries: { select: { account: { select: { name: true } } } }, merchant: { select: { name: true } } },
-      orderBy: { date: 'desc' },
-    });
-    const txSheet = workbook.addWorksheet('Transactions');
-    txSheet.columns = [
-      { header: 'Date', key: 'date', width: 14 },
-      { header: 'Description', key: 'description', width: 36 },
-      { header: 'Amount', key: 'amount', width: 14 },
-      { header: 'Category', key: 'category', width: 20 },
-      { header: 'Account', key: 'account', width: 20 },
-      { header: 'Merchant', key: 'merchant', width: 20 },
-      { header: 'Notes', key: 'notes', width: 30 },
-    ];
-    transactions.forEach(t => txSheet.addRow({ date: t.date.toISOString().split('T')[0], description: t.description, amount: Number(t.amountDecimal), category: t.category?.name ?? '', account: t.entries[0]?.account?.name ?? '', merchant: t.merchant?.name ?? '', notes: t.notes ?? '' }));
-
-    // Budgets
-    const budgets = await prisma.budget.findMany({ where: { householdId }, include: { category: { select: { name: true } } } });
-    const budgetSheet = workbook.addWorksheet('Budgets');
-    budgetSheet.columns = [
-      { header: 'Category', key: 'category', width: 24 },
-      { header: 'Amount', key: 'amount', width: 14 },
-      { header: 'Period', key: 'period', width: 14 },
-      { header: 'Budget Type', key: 'budgetType', width: 14 },
-    ];
-    budgets.forEach(b => budgetSheet.addRow({ category: b.category?.name ?? b.name ?? '', amount: b.amount, period: b.period, budgetType: b.budgetType }));
-
-    // Goals
-    const goals = await prisma.goal.findMany({ where: { householdId }, orderBy: { createdAt: 'asc' } });
-    const goalsSheet = workbook.addWorksheet('Goals');
-    goalsSheet.columns = [
-      { header: 'Name', key: 'name', width: 24 },
-      { header: 'Type', key: 'type', width: 14 },
-      { header: 'Target Amount', key: 'targetAmount', width: 16 },
-      { header: 'Current Amount', key: 'currentAmount', width: 16 },
-      { header: 'Target Date', key: 'targetDate', width: 14 },
-      { header: 'Monthly Contribution', key: 'monthlyContribution', width: 22 },
-    ];
-    goals.forEach(g => goalsSheet.addRow({ name: g.name, type: g.type, targetAmount: g.targetAmount, currentAmount: g.currentAmount, targetDate: g.targetDate ? g.targetDate.toISOString().split('T')[0] : '', monthlyContribution: g.monthlyContribution }));
-
-    // Recurring
-    const recurring = await prisma.recurringItem.findMany({
-      where: { householdId },
-      include: { category: { select: { name: true } }, account: { select: { name: true } } },
-      orderBy: { nextDate: 'asc' },
-    });
-    const recurringSheet = workbook.addWorksheet('Recurring');
-    recurringSheet.columns = [
-      { header: 'Name', key: 'name', width: 24 },
-      { header: 'Amount', key: 'amount', width: 14 },
-      { header: 'Frequency', key: 'frequency', width: 14 },
-      { header: 'Next Date', key: 'nextDate', width: 14 },
-      { header: 'Account', key: 'account', width: 20 },
-      { header: 'Category', key: 'category', width: 20 },
-      { header: 'Active', key: 'isActive', width: 10 },
-    ];
-    recurring.forEach(r => recurringSheet.addRow({ name: r.name, amount: r.amount, frequency: r.frequency, nextDate: r.nextDate.toISOString().split('T')[0], account: r.account?.name ?? '', category: r.category?.name ?? '', isActive: r.isActive }));
-
-    // Investments
-    const investments = await prisma.investmentHolding.findMany({ where: { account: { householdId } }, orderBy: { symbol: 'asc' } });
-    const investSheet = workbook.addWorksheet('Investments');
-    investSheet.columns = [
-      { header: 'Symbol', key: 'symbol', width: 12 },
-      { header: 'Name', key: 'name', width: 28 },
-      { header: 'Shares', key: 'shares', width: 12 },
-      { header: 'Cost Basis', key: 'costBasis', width: 14 },
-      { header: 'Current Price', key: 'currentPrice', width: 14 },
-      { header: 'Asset Class', key: 'assetClass', width: 16 },
-    ];
-    investments.forEach(i => investSheet.addRow({ symbol: i.symbol, name: i.name, shares: i.shares, costBasis: i.costBasis, currentPrice: i.currentPrice, assetClass: i.assetClass }));
-
-    // Assets
-    const assets = await prisma.manualAsset.findMany({ where: { householdId }, orderBy: { name: 'asc' } });
-    const assetsSheet = workbook.addWorksheet('Assets');
-    assetsSheet.columns = [
-      { header: 'Name', key: 'name', width: 24 },
-      { header: 'Type', key: 'assetType', width: 16 },
-      { header: 'Current Value', key: 'currentValue', width: 16 },
-      { header: 'Purchase Value', key: 'purchaseValue', width: 16 },
-      { header: 'Currency', key: 'currency', width: 10 },
-    ];
-    assets.forEach(a => assetsSheet.addRow({ name: a.name, assetType: a.type, currentValue: a.currentValue, purchaseValue: a.purchaseValue ?? '', currency: a.currency }));
-
-    // Liabilities
-    const liabilities = await prisma.manualLiability.findMany({ where: { householdId }, orderBy: { name: 'asc' } });
-    const liabSheet = workbook.addWorksheet('Liabilities');
-    liabSheet.columns = [
-      { header: 'Name', key: 'name', width: 24 },
-      { header: 'Type', key: 'type', width: 16 },
-      { header: 'Current Balance', key: 'currentBalance', width: 16 },
-      { header: 'Interest Rate', key: 'interestRate', width: 14 },
-      { header: 'Monthly Payment', key: 'monthlyPayment', width: 16 },
-      { header: 'Currency', key: 'currency', width: 10 },
-    ];
-    liabilities.forEach(l => liabSheet.addRow({ name: l.name, type: l.type, currentBalance: l.currentBalance, interestRate: l.interestRate ?? '', monthlyPayment: l.monthlyPayment ?? '', currency: l.currency }));
+    const workbook = await settingsService.exportHouseholdData(householdId);
 
     // Stream the workbook
     const fileName = `kuber-export-${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -1243,20 +591,6 @@ router.get('/export', async (req: AuthRequest, res: Response) => {
   } catch (err) {
     req.log.error({ err }, 'settings/export GET');
     return res.status(500).json({ error: 'Failed to generate export' });
-  }
-});
-
-// POST /api/v1/settings/email/test
-router.post('/email/test', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.userId!;
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    await sendTestEmail(user.email);
-    return res.json({ message: `Test email sent to ${user.email}` });
-  } catch (err) {
-    req.log.error({ err }, 'settings/email/test');
-    return res.status(500).json({ error: 'Failed to send test email. Check your email configuration.' });
   }
 });
 
@@ -1276,20 +610,8 @@ const emailConfigSchema = z.object({
 // GET /api/v1/settings/email-config
 router.get('/email-config', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
   try {
-    const cfg = await prisma.emailConfig.findUnique({ where: { id: 'singleton' } });
-    if (!cfg) {
-      return res.json({ provider: 'none', resendFrom: '', smtpHost: '', smtpPort: 587, smtpUser: '', smtpFrom: '', hasResendKey: false, hasSmtpPass: false });
-    }
-    return res.json({
-      provider: cfg.provider,
-      resendFrom: cfg.resendFrom,
-      smtpHost: cfg.smtpHost,
-      smtpPort: cfg.smtpPort,
-      smtpUser: cfg.smtpUser,
-      smtpFrom: cfg.smtpFrom,
-      hasResendKey: cfg.resendApiKey !== '',
-      hasSmtpPass: cfg.smtpPass !== '',
-    });
+    const config = await settingsService.getEmailConfig();
+    return res.json(config);
   } catch (err) {
     req.log.error({ err }, 'settings/email-config GET');
     return res.status(500).json({ error: 'Internal server error' });
@@ -1303,53 +625,35 @@ router.put('/email-config', requireHouseholdAdmin, async (req: AuthRequest, res:
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' });
     const { provider, resendApiKey, resendFrom, smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = parsed.data;
 
-    const existing = await prisma.emailConfig.findUnique({ where: { id: 'singleton' } });
-
-    const encryptedResendKey = resendApiKey?.trim()
-      ? encrypt(resendApiKey.trim())
-      : (existing?.resendApiKey ?? '');
-    const encryptedSmtpPass = smtpPass?.trim()
-      ? encrypt(smtpPass.trim())
-      : (existing?.smtpPass ?? '');
-
-    const cfg = await prisma.emailConfig.upsert({
-      where: { id: 'singleton' },
-      update: {
-        provider,
-        resendApiKey: encryptedResendKey,
-        resendFrom: resendFrom ?? existing?.resendFrom ?? '',
-        smtpHost: smtpHost ?? existing?.smtpHost ?? '',
-        smtpPort: smtpPort ?? existing?.smtpPort ?? 587,
-        smtpUser: smtpUser ?? existing?.smtpUser ?? '',
-        smtpPass: encryptedSmtpPass,
-        smtpFrom: smtpFrom ?? existing?.smtpFrom ?? '',
-      },
-      create: {
-        id: 'singleton',
-        provider,
-        resendApiKey: encryptedResendKey,
-        resendFrom: resendFrom ?? '',
-        smtpHost: smtpHost ?? '',
-        smtpPort: smtpPort ?? 587,
-        smtpUser: smtpUser ?? '',
-        smtpPass: encryptedSmtpPass,
-        smtpFrom: smtpFrom ?? '',
-      },
+    const config = await settingsService.updateEmailConfig({
+      provider,
+      resendApiKey,
+      resendFrom,
+      smtpHost,
+      smtpPort,
+      smtpUser,
+      smtpPass,
+      smtpFrom,
     });
-
-    return res.json({
-      provider: cfg.provider,
-      resendFrom: cfg.resendFrom,
-      smtpHost: cfg.smtpHost,
-      smtpPort: cfg.smtpPort,
-      smtpUser: cfg.smtpUser,
-      smtpFrom: cfg.smtpFrom,
-      hasResendKey: cfg.resendApiKey !== '',
-      hasSmtpPass: cfg.smtpPass !== '',
-    });
+    return res.json(config);
   } catch (err) {
     req.log.error({ err }, 'settings/email-config PUT');
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/v1/settings/email/test
+router.post('/email/test', requireHouseholdAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const result = await settingsService.testEmailConfig(userId);
+    return res.json(result);
+  } catch (err) {
+    req.log.error({ err }, 'settings/email/test');
+    if (err instanceof Error && err.message.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    return res.status(500).json({ error: 'Failed to send test email. Check your email configuration.' });
   }
 });
 

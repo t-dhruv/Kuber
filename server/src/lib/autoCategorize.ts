@@ -23,10 +23,31 @@ export function normalizeMerchant(description: string): string {
     // Remove pure numeric/alphanumeric suffixes (order IDs, ref codes)
     .replace(/\s+[a-z0-9]{6,}$/gi, '')
     // Remove transaction IDs in parens/brackets
-    .replace(/[[(][^]\s]*]{4,}[\])]/g, '')
+    .replace(/\[[^\]\s]{4,}\]/g, '')
+    .replace(/\([^)\s]{4,}\)/g, '')
     // Collapse whitespace
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * Load all CategoryLearningExamples for a household and build a normalized
+ * merchant key → categoryId lookup map for use during import.
+ */
+export async function buildLearningMap(
+  prismaClient: PrismaClient,
+  householdId: string,
+): Promise<Map<string, string>> {
+  const examples = await prismaClient.categoryLearningExample.findMany({
+    where: { householdId },
+    select: { descriptionPattern: true, correctCategoryId: true },
+  });
+  const map = new Map<string, string>();
+  for (const e of examples) {
+    const key = normalizeMerchant(e.descriptionPattern);
+    if (key) map.set(key, e.correctCategoryId);
+  }
+  return map;
 }
 
 // ── In-memory job progress store ──────────────────────────────────────────────

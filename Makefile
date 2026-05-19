@@ -22,8 +22,10 @@ help:
 	@echo "  format         Prettier check across workspaces"
 	@echo ""
 	@echo "Test"
-	@echo "  test           Run all unit tests"
-	@echo "  test-coverage  Unit tests with coverage"
+	@echo "  test           Run server + client unit tests"
+	@echo "  test-server    Run server unit tests"
+	@echo "  test-client    Run client unit tests"
+	@echo "  test-coverage  Server + client unit tests with coverage"
 	@echo "  test-e2e       Playwright E2E tests"
 	@echo ""
 	@echo "Database"
@@ -94,16 +96,20 @@ format:
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 
-test: test-server
+test:
+	npm run test
 
 test-server:
 	cd server && npm run test
 
+test-client:
+	cd client && npm run test
+
 test-unit:
-	cd server && npm run test
+	npm run test
 
 test-coverage:
-	cd server && npm run test:coverage
+	npm run test:coverage
 
 test-e2e:
 	npx playwright test

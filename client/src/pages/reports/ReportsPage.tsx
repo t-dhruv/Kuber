@@ -1243,8 +1243,19 @@ function CategoryTab({
             `/reports/${mode}/monthly?startDate=${startDate}&endDate=${endDate}&groupBy=${groupBy}${extraParams}`,
           )
           .then((r) => r.data),
-      enabled: viewMode === "change",
+      enabled: true,
     });
+
+  const { data: merchantData, isLoading: merchantLoading } = useQuery<SpendingReport>({
+    queryKey: [`reports-${mode}-merchants`, startDate, endDate, extraParams],
+    queryFn: () =>
+      api
+        .get(
+          `/reports/${mode}?groupBy=merchant&startDate=${startDate}&endDate=${endDate}${extraParams}`,
+        )
+        .then((r) => r.data),
+    enabled: mode === 'spending',
+  });
 
   const categories = reportData?.items ?? [];
   const displayedCategories = showAll ? categories : categories.slice(0, 8);
@@ -1761,6 +1772,121 @@ function CategoryTab({
           )}
         </Card>
       </div>
+
+      {/* Always-visible monthly trend */}
+      {(monthlyData?.months.length ?? 0) > 1 && (monthlyData?.series.length ?? 0) > 0 && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <div
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              color: 'var(--color-text-secondary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              marginBottom: '0.75rem',
+            }}
+          >
+            Monthly Trend
+          </div>
+          <Card padding="lg">
+            <MonthlyView
+              data={monthlyData}
+              isLoading={monthlyLoading}
+              grouping={monthlyGrouping}
+            />
+          </Card>
+        </div>
+      )}
+
+      {/* Top merchants — spending tab only */}
+      {mode === 'spending' && (
+        <div style={{ marginTop: '0.5rem' }}>
+          <div
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              color: 'var(--color-text-secondary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              marginBottom: '0.75rem',
+            }}
+          >
+            Top Merchants
+          </div>
+          <Card padding="lg">
+            {merchantLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="animate-pulse" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: 'var(--color-border)' }} />
+                    <div style={{ flex: 1, height: 14, borderRadius: 4, backgroundColor: 'var(--color-border)' }} />
+                    <div style={{ width: 60, height: 14, borderRadius: 4, backgroundColor: 'var(--color-border)' }} />
+                  </div>
+                ))}
+              </div>
+            ) : !merchantData || merchantData.items.length === 0 ? (
+              <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', textAlign: 'center', padding: '1rem 0' }}>
+                No merchant data for this period.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {merchantData.items.slice(0, 10).map((m, i) => (
+                  <div
+                    key={m.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.5rem 0',
+                      borderBottom: i < Math.min(merchantData.items.length, 10) - 1 ? '1px solid var(--color-border)' : 'none',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', minWidth: 20, textAlign: 'right' }}>
+                      #{i + 1}
+                    </span>
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--color-surface-hover)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.875rem',
+                        fontWeight: 700,
+                        color: 'var(--color-text)',
+                        flexShrink: 0,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {merchantInitial(m.name)}
+                    </div>
+                    <span
+                      style={{
+                        flex: 1,
+                        fontSize: '0.8125rem',
+                        color: 'var(--color-text)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {m.name}
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                      {m.transactionCount} txn{m.transactionCount !== 1 ? 's' : ''}
+                    </span>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)', whiteSpace: 'nowrap' }}>
+                      {fmtCurrency(m.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
 
       {/* Transaction list */}
       <Card padding="lg">

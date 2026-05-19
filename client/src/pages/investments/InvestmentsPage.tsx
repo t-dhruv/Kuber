@@ -43,6 +43,9 @@ interface HoldingLot {
   pricePerShare: number;
   note?: string | null;
   status: 'confirmed' | 'pending';
+  transactionType: 'buy' | 'sell' | 'dividend';
+  acbPerShareAtSale?: number | null;
+  realizedGain?: number | null;
 }
 
 interface Holding {
@@ -78,6 +81,9 @@ interface HoldingsData {
   totalUnrealizedGain: number;
   totalRealizedGain: number;
   totalAnnualDividend: number;
+  totalRecordedDividends: number;
+  totalReturn: number;
+  totalReturnPercent: number;
 }
 
 interface AssetClassSegment {
@@ -683,6 +689,7 @@ function ExpandedHolding({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [lotDeleteTarget, setLotDeleteTarget] = useState<HoldingLot | null>(null);
   const [scheduleDeleteTarget, setScheduleDeleteTarget] = useState<RecurringSchedule | null>(null);
+  const [lotsPage, setLotsPage] = useState(0);
   const queryClient = useQueryClient();
 
   const deleteHoldingMutation = useMutation({
@@ -735,6 +742,10 @@ function ExpandedHolding({
   });
 
   const confirmedLots = holding.lots.filter((l) => l.status === 'confirmed');
+  const LOTS_PAGE_SIZE = 20;
+  const lotsTotalPages = Math.ceil(confirmedLots.length / LOTS_PAGE_SIZE);
+  const pagedLots = confirmedLots.slice(lotsPage * LOTS_PAGE_SIZE, (lotsPage + 1) * LOTS_PAGE_SIZE);
+  const hasSellLots = confirmedLots.some((l) => l.transactionType === 'sell');
 
   return (
     <div style={{
@@ -755,12 +766,12 @@ function ExpandedHolding({
           }}>
             Transaction Lots
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: hasSellLots ? 640 : 480 }}>
             <thead>
               <tr>
-                {['Date', 'Type', 'Shares', 'Price/Share', 'Amount', ''].map((h) => (
+                {['Date', 'Type', 'Shares', 'Price/Share', 'Amount', ...(hasSellLots ? ['ACB/sh', 'Realized Gain'] : []), ''].map((h) => (
                   <th key={h} style={{
-                    textAlign: h === 'Date' || h === 'Type' || h === '' ? (h === '' ? 'right' : 'left') : 'right',
+                    textAlign: h === 'Date' || h === 'Type' ? 'left' : h === '' ? 'right' : 'right',
                     padding: '0.25rem 0.5rem',
                     fontSize: '0.75rem',
                     fontWeight: 600,
@@ -773,9 +784,20 @@ function ExpandedHolding({
               </tr>
             </thead>
             <tbody>
-              {confirmedLots.map((lot) => {
-                const isSell = lot.shares < 0;
+              {pagedLots.map((lot) => {
+                const isSell = lot.transactionType === 'sell';
+                const isDividend = lot.transactionType === 'dividend';
                 const absShares = Math.abs(lot.shares);
+                const badgeBg = isSell
+                  ? 'var(--color-danger-subtle, rgba(239,68,68,0.12))'
+                  : isDividend
+                  ? 'rgba(139,92,246,0.12)'
+                  : 'var(--color-success-subtle, rgba(34,197,94,0.12))';
+                const badgeColor = isSell
+                  ? 'var(--color-danger)'
+                  : isDividend
+                  ? '#8b5cf6'
+                  : 'var(--color-success)';
                 return (
                   <tr key={lot.id}>
                     <td style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
@@ -787,23 +809,37 @@ function ExpandedHolding({
                         fontWeight: 600,
                         padding: '0.125rem 0.375rem',
                         borderRadius: 4,
-                        backgroundColor: isSell ? 'var(--color-danger-subtle, rgba(239,68,68,0.12))' : 'var(--color-success-subtle, rgba(34,197,94,0.12))',
-                        color: isSell ? 'var(--color-danger)' : 'var(--color-success)',
+                        backgroundColor: badgeBg,
+                        color: badgeColor,
                         textTransform: 'uppercase',
                         letterSpacing: '0.04em',
                       }}>
-                        {isSell ? 'Sell' : 'Buy'}
+                        {lot.transactionType}
                       </span>
                     </td>
                     <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
-                      {absShares.toLocaleString('en-US', { maximumFractionDigits: 5 })}
+                      {isDividend ? '—' : absShares.toLocaleString('en-US', { maximumFractionDigits: 5 })}
                     </td>
                     <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text)' }}>
-                      {fmtCurrency(lot.pricePerShare)}
+                      {isDividend ? '—' : fmtCurrency(lot.pricePerShare)}
                     </td>
                     <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                      {fmtCurrency(absShares * lot.pricePerShare)}
+                      {isDividend ? fmtCurrency(lot.pricePerShare) : fmtCurrency(absShares * lot.pricePerShare)}
                     </td>
+                    {hasSellLots && (
+                      <>
+                        <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
+                          {isSell && lot.acbPerShareAtSale != null ? fmtCurrency(lot.acbPerShareAtSale) : '—'}
+                        </td>
+                        <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', fontWeight: 600 }}>
+                          {isSell && lot.realizedGain != null ? (
+                            <span style={{ color: lot.realizedGain >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                              {lot.realizedGain >= 0 ? '+' : ''}{fmtCurrency(lot.realizedGain)}
+                            </span>
+                          ) : '—'}
+                        </td>
+                      </>
+                    )}
                     <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right' }}>
                       <button
                         onClick={() => setLotDeleteTarget(lot)}
@@ -827,6 +863,27 @@ function ExpandedHolding({
               })}
             </tbody>
           </table>
+          {lotsTotalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button
+                onClick={() => setLotsPage((p) => Math.max(0, p - 1))}
+                disabled={lotsPage === 0}
+                style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0.2rem 0.5rem', cursor: lotsPage === 0 ? 'default' : 'pointer', color: 'var(--color-text-secondary)', opacity: lotsPage === 0 ? 0.4 : 1 }}
+              >
+                ‹
+              </button>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                {lotsPage + 1} / {lotsTotalPages}
+              </span>
+              <button
+                onClick={() => setLotsPage((p) => Math.min(lotsTotalPages - 1, p + 1))}
+                disabled={lotsPage >= lotsTotalPages - 1}
+                style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '0.2rem 0.5rem', cursor: lotsPage >= lotsTotalPages - 1 ? 'default' : 'pointer', color: 'var(--color-text-secondary)', opacity: lotsPage >= lotsTotalPages - 1 ? 0.4 : 1 }}
+              >
+                ›
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1047,7 +1104,7 @@ function HoldingsTable({
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [page, setPage] = useState(0);
 
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 25;
   const sorted = [...(data?.holdings ?? [])].sort((a, b) => b.currentValue - a.currentValue);
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -1743,6 +1800,8 @@ function AddLotModal({
     const errs: Partial<AddLotForm> = {};
     if (!form.shares || isNaN(Number(form.shares)) || Number(form.shares) <= 0)
       errs.shares = 'Must be a positive number';
+    else if (isSell && Number(form.shares) > holding.shares)
+      errs.shares = `Cannot sell more than ${holding.shares.toLocaleString('en-US', { maximumFractionDigits: 5 })} shares held`;
     if (!form.pricePerShare || isNaN(Number(form.pricePerShare)) || Number(form.pricePerShare) < 0)
       errs.pricePerShare = 'Must be a non-negative number';
     setErrors(errs);
@@ -1751,11 +1810,11 @@ function AddLotModal({
 
   function handleSubmit() {
     if (!validate()) return;
-    const shares = Number(form.shares);
     mutation.mutate({
       date: form.date,
-      shares: isSell ? -shares : shares,
+      shares: Number(form.shares),
       pricePerShare: Number(form.pricePerShare),
+      transactionType: form.txType,
       note: form.note.trim() || undefined,
     });
   }
@@ -2333,7 +2392,7 @@ export default function InvestmentsPage() {
                   <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
                     Total Return
                   </div>
-                  <GainBadge amount={holdingsData.totalGain} pct={holdingsData.totalGainPercent} showArrow={false} />
+                  <GainBadge amount={holdingsData.totalReturn} pct={holdingsData.totalReturnPercent} showArrow={false} />
                 </div>
                 <div>
                   <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
@@ -2373,6 +2432,16 @@ export default function InvestmentsPage() {
                     {fmtCurrency(holdingsData.totalCostBasis)}
                   </span>
                 </div>
+                {holdingsData.totalRecordedDividends > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                      Dividends Received
+                    </div>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--color-accent)' }}>
+                      {fmtCurrency(holdingsData.totalRecordedDividends)}
+                    </span>
+                  </div>
+                )}
                 {holdingsData.totalAnnualDividend > 0 && (
                   <div>
                     <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -17,6 +17,8 @@ import { SplitTransactionModal } from './components/SplitTransactionModal';
 import { DuplicateReviewModal } from './components/DuplicateReviewModal';
 import { ReceiptOcrModal } from './components/ReceiptOcrModal';
 import { InstitutionLogo } from '@/components/ui';
+import { InlineSuggestionStrip } from './components/InlineSuggestionStrip';
+import { getCategoryPillStyle } from '@/lib/displayStyles';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,6 +60,9 @@ interface Transaction {
   tags: Tag[];
   isRecurring: boolean;
   needsReview: boolean;
+  aiSuggestedCategoryId?: string | null;
+  aiSuggestedCategoryName?: string | null;
+  aiSuggestionConfidence?: number | null;
   isHidden: boolean;
   isPending: boolean;
   isSplit: boolean;
@@ -89,6 +94,30 @@ interface TransactionListResponse {
   total?: number;
   page?: number;
   totalPages?: number;
+}
+
+interface BudgetCategoryEntry {
+  categoryId: string;
+  budgeted: number;
+  actual: number;
+}
+
+interface BudgetVarianceData {
+  categories: BudgetCategoryEntry[];
+}
+
+type BudgetStatus = 'under' | 'warning' | 'over' | null;
+
+export function getBudgetStatus(
+  categoryId: string,
+  budgetMap: Map<string, { budgeted: number; actual: number }>,
+): BudgetStatus {
+  const entry = budgetMap.get(categoryId);
+  if (!entry || entry.budgeted <= 0) return null;
+  const pct = entry.actual / entry.budgeted;
+  if (pct >= 1) return 'over';
+  if (pct >= 0.8) return 'warning';
+  return 'under';
 }
 
 type TxType = 'expense' | 'income' | 'transfer';
@@ -284,11 +313,37 @@ function RefundTransactionPicker({
 
 // ─── Category Pill ────────────────────────────────────────────────────────────
 
-function CategoryPill({ name, color }: { name: string; color?: string }) {
-  const c = color ?? 'var(--color-accent)';
+function CategoryPill({
+  name,
+  color,
+  icon,
+  budgetStatus,
+}: {
+  name?: string | null;
+  color?: string;
+  icon?: string | null;
+  budgetStatus: BudgetStatus;
+}) {
+  const tone = getCategoryPillStyle(color);
+  const displayName = name || 'Uncategorized';
+  const borderColor =
+    budgetStatus === 'over'
+      ? 'var(--color-danger)'
+      : budgetStatus === 'warning'
+        ? 'var(--color-warning)'
+        : budgetStatus === 'under'
+          ? 'var(--color-success)'
+          : 'var(--color-border)';
+  const showEmojiIcon = !!icon && /\p{Emoji}/u.test(icon);
+
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 500, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: `${c}18`, color: c }}>
-      {name}
+    <span
+      className="inline-flex h-6 w-full min-w-0 items-center gap-1.5 rounded-[var(--radius-full)] border px-2 text-xs font-medium leading-none"
+      style={{ ...tone, borderColor }}
+      title={displayName}
+    >
+      {showEmojiIcon && <span className="shrink-0 leading-none">{icon}</span>}
+      <span className="min-w-0 flex-1 truncate">{displayName}</span>
     </span>
   );
 }
@@ -1298,9 +1353,14 @@ interface TransactionRowProps {
   onOpen: (txn: Transaction) => void;
   onMerchantEdit: (id: string, merchant: string) => void;
   onSplit: (txn: Transaction) => void;
+  expandedReviewId: string | null;
+  onToggleReview: (id: string) => void;
+  onReviewDone: (id: string) => void;
+  categories: Category[];
+  budgetStatus: BudgetStatus;
 }
 
-function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSplit }: TransactionRowProps) {
+function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSplit, expandedReviewId, onToggleReview, onReviewDone, categories, budgetStatus }: TransactionRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(txn.merchantName);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1325,13 +1385,14 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
   };
 
   return (
-    <div
-      className="flex items-center h-[52px] px-3 gap-3 cursor-pointer transition-colors duration-150"
-      style={{ backgroundColor: selected ? 'var(--color-accent-light)' : 'transparent' }}
-      onMouseEnter={(e) => { if (!selected && !editing) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'; }}
-      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.backgroundColor = 'transparent'; }}
-      onClick={handleRowClick}
-    >
+    <>
+      <div
+        className="flex items-center h-[52px] px-3 gap-3 cursor-pointer transition-colors duration-150"
+        style={{ backgroundColor: selected ? 'var(--color-accent-light)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!selected && !editing) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'; }}
+        onMouseLeave={(e) => { if (!selected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+        onClick={handleRowClick}
+      >
       {/* Checkbox */}
       <input
         type="checkbox"
@@ -1372,8 +1433,13 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       </div>
 
       {/* Category name — hidden on mobile */}
-      <div className="hidden sm:block flex-[0_0_150px] overflow-hidden">
-        <CategoryPill name={txn.categoryName} color={txn.categoryColor ?? undefined} />
+      <div className="hidden sm:flex flex-[0_0_150px] min-w-0 items-center overflow-hidden">
+        <CategoryPill
+          name={txn.categoryName}
+          color={txn.categoryColor ?? undefined}
+          icon={txn.categoryIcon ?? null}
+          budgetStatus={budgetStatus}
+        />
       </div>
 
       {/* Account — hidden on mobile and tablet */}
@@ -1386,33 +1452,36 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       </div>
 
       {/* Badges */}
-      <div className="flex gap-1 flex-[0_0_auto]">
+      <div className="flex flex-[0_0_auto] items-center gap-1">
         {/* On mobile: only show Review badge */}
         {txn.needsReview && (
-          <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-warning-light)] text-[var(--color-warning)]">
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleReview(txn.id); }}
+            className="inline-flex h-5 items-center rounded-[var(--radius-full)] bg-[var(--color-warning-light)] px-1.5 text-[0.6875rem] font-semibold leading-none text-[var(--color-warning)] hover:opacity-80 cursor-pointer"
+          >
             Review
-          </span>
+          </button>
         )}
 
         {/* On sm+: show all badges */}
-        <div className="hidden sm:flex gap-1">
+        <div className="hidden sm:flex items-center gap-1">
           {txn.isRecurring && (
-            <span title="Recurring" className="text-[var(--color-info)] text-sm">
+            <span title="Recurring" className="inline-flex h-5 w-5 items-center justify-center rounded-[var(--radius-full)] bg-[var(--color-info-light)] text-[var(--color-info)]">
               <RotateCcw size={13} />
             </span>
           )}
           {txn.isPending && (
-            <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]">
+            <span className="inline-flex h-5 items-center rounded-[var(--radius-full)] border border-[var(--color-border)] bg-[var(--color-surface-hover)] px-1.5 text-[0.6875rem] font-semibold leading-none text-[var(--color-text-muted)]">
               Pending
             </span>
           )}
           {txn.isSplit && (
-            <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-accent-light)] text-[var(--color-accent)]">
+            <span className="inline-flex h-5 items-center rounded-[var(--radius-full)] bg-[var(--color-accent-light)] px-1.5 text-[0.6875rem] font-semibold leading-none text-[var(--color-accent)]">
               Split
             </span>
           )}
           {txn.isTransfer && (
-            <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]">
+            <span className="inline-flex h-5 items-center rounded-[var(--radius-full)] border border-[var(--color-border)] bg-[var(--color-surface-hover)] px-1.5 text-[0.6875rem] font-semibold leading-none text-[var(--color-text-muted)]">
               Transfer
             </span>
           )}
@@ -1448,6 +1517,21 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
         <ChevronRight size={16} />
       </div>
     </div>
+
+    {expandedReviewId === txn.id && txn.needsReview && (
+      <div className="px-3 py-2 w-full">
+        <InlineSuggestionStrip
+          transactionId={txn.id}
+          aiSuggestedCategoryId={txn.aiSuggestedCategoryId ?? null}
+          aiSuggestedCategoryName={txn.aiSuggestedCategoryName ?? null}
+          aiSuggestionConfidence={txn.aiSuggestionConfidence ?? null}
+          currentCategoryId={txn.categoryId ?? null}
+          categories={categories}
+          onDone={onReviewDone}
+        />
+      </div>
+    )}
+    </>
   );
 }
 
@@ -1468,6 +1552,7 @@ export default function TransactionsPage() {
   const autoCatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [splitTxn, setSplitTxn] = useState<Transaction | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const search = searchParams.get('search') ?? '';
@@ -1536,6 +1621,33 @@ export default function TransactionsPage() {
     staleTime: 60_000,
     retry: false,
   });
+
+  const budgetMonthStart = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  }, []);
+  const budgetMonthEnd = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  }, []);
+
+  const { data: budgetVariance } = useQuery<BudgetVarianceData>({
+    queryKey: ['reports', 'budget-variance', budgetMonthStart],
+    queryFn: () =>
+      api
+        .get(`/reports/budget-variance?from=${budgetMonthStart}&to=${budgetMonthEnd}`)
+        .then((r) => r.data),
+  });
+
+  const budgetMap = useMemo(() => {
+    const map = new Map<string, { budgeted: number; actual: number }>();
+    for (const entry of budgetVariance?.categories ?? []) {
+      if (entry.budgeted > 0) {
+        map.set(entry.categoryId, { budgeted: entry.budgeted, actual: entry.actual });
+      }
+    }
+    return map;
+  }, [budgetVariance]);
 
   const [autoCatProgress, setAutoCatProgress] = useState<{
     processed: number; total: number; queued: number; done: boolean;
@@ -2071,6 +2183,16 @@ export default function TransactionsPage() {
                     onOpen={setDrawerTxn}
                     onMerchantEdit={handleMerchantEdit}
                     onSplit={setSplitTxn}
+                    expandedReviewId={expandedReviewId}
+                    onToggleReview={(id) =>
+                      setExpandedReviewId((prev) => (prev === id ? null : id))
+                    }
+                    onReviewDone={(id) => {
+                      setExpandedReviewId(null);
+                      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+                    }}
+                    categories={categories}
+                    budgetStatus={getBudgetStatus(txn.categoryId, budgetMap)}
                   />
                   {idx < group.transactions.length - 1 && (
                     <div className="h-px bg-[var(--color-border)] ml-3" />

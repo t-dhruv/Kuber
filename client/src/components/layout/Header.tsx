@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, NavLink, useNavigate } from 'react-router-dom';
-import { Menu, Search, Bell, Settings, LogOut, User } from 'lucide-react';
+import { Menu, Search, Bell, LogOut, User } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
@@ -143,23 +143,12 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             >
               <Bell size={18} />
               {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-[var(--color-danger)] text-[10px] font-bold text-[var(--color-danger)] leading-none">
+                <span className="absolute -right-0.5 -top-0.5 flex min-h-4 min-w-4 items-center justify-center rounded-full border-2 border-[var(--color-surface)] bg-[var(--color-danger)] px-1 text-[10px] font-bold leading-none text-white shadow-sm">
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
             </button>
           </Tooltip>
-          {/* Settings */}
-          <Tooltip content="Settings" placement="bottom">
-            <NavLink
-              to="/settings"
-              className="p-2 rounded-[var(--radius-md)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
-              aria-label="Settings"
-            >
-              <Settings size={18} />
-            </NavLink>
-          </Tooltip>
-
           {/* User avatar + dropdown menu */}
           <div className="ml-1 relative" ref={userMenuRef}>
             <Tooltip content="Account" placement="bottom" disabled={userMenuOpen}>

@@ -283,6 +283,7 @@ model TransactionJournal {
   @@index([categoryId])
   @@index([merchantId])
   @@index([householdId, isDeleted, date])
+  @@index([householdId, merchantId])
   @@map("transaction_journals")
 }
 
@@ -538,23 +539,26 @@ model GoalAllocation {
 }
 
 model InvestmentHolding {
-  id                   String                @id @default(cuid())
-  accountId            String
-  symbol               String
-  name                 String
-  shares               Float
-  sharesDecimal        Decimal?              @db.Decimal(19, 4)
-  costBasis            Float
-  costBasisDecimal     Decimal?              @db.Decimal(19, 4)
-  currentPrice         Float
-  currentPriceDecimal  Decimal?              @db.Decimal(19, 4)
-  assetClass           String                @default("us_stock")
-  priceHistory         Json?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  account              Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  lots                 HoldingLot[]
-  recurringInvestments RecurringInvestment[]
+  id                    String                @id @default(cuid())
+  accountId             String
+  symbol                String
+  name                  String
+  shares                Float
+  sharesDecimal         Decimal?              @db.Decimal(19, 4)
+  costBasis             Float
+  costBasisDecimal      Decimal?              @db.Decimal(19, 4)
+  currentPrice          Float
+  currentPriceDecimal   Decimal?              @db.Decimal(19, 4)
+  assetClass            String                @default("us_stock")
+  priceHistory          Json?
+  totalDividendsDecimal Decimal?              @db.Decimal(19, 4)
+  lastPriceUpdatedAt    DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  account               Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  lots                  HoldingLot[]
+  dividends             DividendRecord[]
+  recurringInvestments  RecurringInvestment[]
 
   @@map("investment_holdings")
 }
@@ -562,17 +566,36 @@ model InvestmentHolding {
 model HoldingLot {
   id                   String            @id @default(cuid())
   holdingId            String
+  transactionType      String            @default("buy") // "buy" | "sell" | "dividend"
   date                 DateTime          @default(now())
   shares               Float
   sharesDecimal        Decimal?          @db.Decimal(19, 4)
   pricePerShare        Float
   pricePerShareDecimal Decimal?          @db.Decimal(19, 4)
+  // sell lots only
+  acbPerShareAtSale    Decimal?          @db.Decimal(19, 4)
+  realizedGainDecimal  Decimal?          @db.Decimal(19, 4)
   note                 String?
   status               String            @default("confirmed") // "confirmed" | "pending"
   createdAt            DateTime          @default(now())
   holding              InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
 
+  @@index([holdingId, date])
   @@map("holding_lots")
+}
+
+model DividendRecord {
+  id            String            @id @default(cuid())
+  holdingId     String
+  date          DateTime
+  amountDecimal Decimal           @db.Decimal(19, 4)
+  currencyCode  String            @default("CAD")
+  journalId     String?
+  createdAt     DateTime          @default(now())
+  holding       InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+
+  @@index([holdingId, date])
+  @@map("dividend_records")
 }
 
 model RecurringInvestment {
@@ -873,6 +896,9 @@ model NetWorthSnapshot {
   liabilitiesDecimal Decimal?  @db.Decimal(19, 4)
   netWorth           Float
   netWorthDecimal    Decimal?  @db.Decimal(19, 4)
+  cashValue          Float     @default(0)
+  investmentValue    Float     @default(0)
+  otherAssetsValue   Float     @default(0)
   createdAt          DateTime  @default(now())
   household          Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
@@ -1045,6 +1071,7 @@ model ImportHistory {
   rowsDuplicate Int       @default(0)
   rowsSkipped   Int       @default(0)
   status        String    @default("completed") // completed | partial | failed
+  journalIds    String[]  @default([])
   createdAt     DateTime  @default(now())
   household     Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 

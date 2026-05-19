@@ -26,6 +26,9 @@ const mockPrismaClient = {
   goal: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
   notification: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
   pushSubscription: { findMany: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+  accountBalanceSnapshot: { upsert: vi.fn() },
+  reportingSnapshot: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), upsert: vi.fn(), findMany: vi.fn() },
+  reportingRollup: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), upsert: vi.fn() },
   settings: { findFirst: vi.fn(), upsert: vi.fn() },
   checkpoint: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
   auditLog: { findMany: vi.fn(), create: vi.fn() },
@@ -38,7 +41,10 @@ const mockPrismaClient = {
   webhookDelivery: { findMany: vi.fn(), create: vi.fn() },
   wealthSnapshot: { findMany: vi.fn() },
   report: { findMany: vi.fn(), create: vi.fn() },
+  refreshToken: { create: vi.fn(), deleteMany: vi.fn() },
 };
+
+export const prismaMock = mockPrismaClient;
 
 vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn().mockImplementation(() => mockPrismaClient),

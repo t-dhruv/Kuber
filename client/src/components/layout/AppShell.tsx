@@ -26,22 +26,15 @@ export function AppShell() {
     setMobileOpen(open);
   };
 
-  // Keep in sync when sidebar toggles itself (via its own button)
+  // Keep in sync when Sidebar's own collapse button fires
   useEffect(() => {
-    const handler = () => {
-      try {
-        setCollapsed(localStorage.getItem(STORAGE_KEY) === 'true');
-      } catch {
-        // ignore
+    const handler = (e: Event) => {
+      if ((e as CustomEvent).detail !== undefined) {
+        setCollapsed((e as CustomEvent<boolean>).detail);
       }
     };
-    window.addEventListener('storage', handler);
-    // Poll localStorage since same-tab writes don't trigger storage event
-    const interval = setInterval(handler, 150);
-    return () => {
-      window.removeEventListener('storage', handler);
-      clearInterval(interval);
-    };
+    window.addEventListener('sidebar-collapse', handler);
+    return () => window.removeEventListener('sidebar-collapse', handler);
   }, []);
 
   // Close mobile drawer on resize to desktop

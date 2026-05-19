@@ -261,7 +261,7 @@ router.get('/analysis', async (req: AuthRequest, res: Response) => {
 
     // 4. Sum per bucket and accumulate category totals
     const { bucketTotals, catMap } = bucketTransactions(transactions.map(t => ({
-      amount: Math.abs(Number(t.amountDecimal)),
+      amount: Number(t.amountDecimal),
       categoryId: t.categoryId,
       category: t.category,
     })));
@@ -519,6 +519,99 @@ Keep response under 400 words. Use plain text, no markdown headers.`;
   } catch (err) {
     req.log.error({ err }, 'ai-analysis error');
     return res.status(500).json({ error: 'Failed to generate AI analysis' });
+  }
+});
+
+// GET /api/v1/wealth/breakdown — full asset/liability breakdown with history
+router.get('/breakdown', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const LIABILITY_ACCOUNT_TYPES = new Set(['credit_card', 'loan']);
+    const isInv = (t: string) => t.toLowerCase().includes('investment');
+    const isCash = (t: string) => { const l = t.toLowerCase(); return l === 'checking' || l === 'savings'; };
+    const isLiab = (t: string) => LIABILITY_ACCOUNT_TYPES.has(t.toLowerCase());
+
+    const [accounts, manualAssets, manualLiabilities] = await Promise.all([
+      prisma.account.findMany({
+        where: { householdId, isHidden: false, excludeFromNetWorth: false, isDeleted: false },
+        select: {
+          id: true, name: true, type: true, balance: true, institution: true,
+          investmentHoldings: { select: { shares: true, currentPrice: true } },
+        },
+      }),
+      prisma.manualAsset.findMany({
+        where: { householdId },
+        select: { id: true, name: true, type: true, currentValue: true },
+      }),
+      prisma.manualLiability.findMany({
+        where: { householdId },
+        select: { id: true, name: true, type: true, currentBalance: true },
+      }),
+    ]);
+
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const liquid: { id: string; name: string; type: string; balance: number; institution: string | null }[] = [];
+    const investments: { id: string; name: string; type: string; value: number; institution: string | null }[] = [];
+    const otherAccounts: { id: string; name: string; type: string; balance: number }[] = [];
+    const liabilityAccounts: { id: string; name: string; type: string; balance: number }[] = [];
+
+    for (const a of accounts) {
+      if (isLiab(a.type)) { liabilityAccounts.push({ id: a.id, name: a.name, type: a.type, balance: r2(Math.abs(a.balance)) }); continue; }
+      if (isInv(a.type)) {
+        const value = a.investmentHoldings.length > 0
+          ? r2(a.investmentHoldings.reduce((s, h) => s + h.shares * h.currentPrice, 0))
+          : a.balance;
+        investments.push({ id: a.id, name: a.name, type: a.type, value, institution: a.institution ?? null });
+        continue;
+      }
+      if (isCash(a.type)) { liquid.push({ id: a.id, name: a.name, type: a.type, balance: a.balance, institution: a.institution ?? null }); continue; }
+      otherAccounts.push({ id: a.id, name: a.name, type: a.type, balance: a.balance });
+    }
+
+    const liquidTotal = r2(liquid.reduce((s, a) => s + a.balance, 0));
+    const investmentTotal = r2(investments.reduce((s, a) => s + a.value, 0));
+    const otherTotal = r2(otherAccounts.reduce((s, a) => s + a.balance, 0) + manualAssets.reduce((s, a) => s + a.currentValue, 0));
+    const liabilitiesTotal = r2(liabilityAccounts.reduce((s, a) => s + a.balance, 0) + manualLiabilities.reduce((s, l) => s + l.currentBalance, 0));
+    const totalAssets = r2(liquidTotal + investmentTotal + otherTotal);
+    const netWorth = r2(totalAssets - liabilitiesTotal);
+
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 11);
+    cutoff.setDate(1); cutoff.setHours(0, 0, 0, 0);
+
+    const snapshots = await prisma.netWorthSnapshot.findMany({
+      where: { householdId, date: { gte: cutoff } },
+      orderBy: { date: 'asc' },
+      select: { date: true, netWorth: true, cashValue: true, investmentValue: true, otherAssetsValue: true, liabilities: true },
+    });
+
+    return res.json({
+      netWorth,
+      totalAssets,
+      liquid: { total: liquidTotal, accounts: liquid },
+      investments: { total: investmentTotal, accounts: investments },
+      otherAssets: {
+        total: otherTotal,
+        accounts: otherAccounts,
+        manualAssets: manualAssets.map((a) => ({ id: a.id, name: a.name, type: a.type, value: a.currentValue })),
+      },
+      liabilities: {
+        total: liabilitiesTotal,
+        accounts: liabilityAccounts,
+        manualLiabilities: manualLiabilities.map((l) => ({ id: l.id, name: l.name, type: l.type, balance: l.currentBalance })),
+      },
+      history: snapshots.map((s) => ({
+        date: s.date.toISOString().slice(0, 10),
+        netWorth: s.netWorth,
+        cashValue: s.cashValue,
+        investmentValue: s.investmentValue,
+        otherAssetsValue: s.otherAssetsValue,
+        liabilities: s.liabilities,
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err }, 'wealth/breakdown');
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

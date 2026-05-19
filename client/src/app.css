@@ -348,6 +348,42 @@ body {
   line-height: 1;
 }
 
+/* ─── Page entry animation ───────────────────────────────────────────────────── */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+#main-content > * {
+  animation: page-enter 0.18s ease-out;
+}
+
+/* ─── Nav section label ──────────────────────────────────────────────────────── */
+.nav-section-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-muted);
+  padding: 0 0.75rem;
+  margin-top: 0.875rem;
+  margin-bottom: 0.125rem;
+  line-height: 1;
+  user-select: none;
+}
+
+/* ─── Nav active indicator ───────────────────────────────────────────────────── */
+.nav-item-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 55%;
+  width: 2px;
+  background: var(--color-accent);
+  border-radius: 0 2px 2px 0;
+}
+
 /* Reduced motion - disable animations when user prefers reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *,

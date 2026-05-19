@@ -10,7 +10,6 @@
 
 import { Router } from 'express';
 import multer from 'multer';
-import { createCheckpoint } from '../lib/checkpoint.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.js';
@@ -20,8 +19,8 @@ import { parsePdfStatement } from '../lib/pdfParser.js';
 import { parseDate } from '../lib/dateUtils.js';
 import { detectColumnMapping } from '../lib/csvColumnDetector.js';
 import { detectLocaleFormat, parseAmount, mergeDebitCredit } from '../lib/amountParser.js';
-import { transactionsImportedTotal } from '../lib/metrics.js';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration.js';
+import { saveImport, getImportSessions, getImportSession, deleteImportSession, undoImportSession } from '../services/importService.js';
 
 const router = Router();
 
@@ -147,17 +146,12 @@ async function parseUploadedFile(
     hash: computeDedupHash(row.date, row.description, row.amount),
   }));
 
-  // Fetch existing hashes for this account and compute dedup set
-  const existingJournals = await prisma.transactionJournal.findMany({
-    where: { entries: { some: { accountId } }, householdId, isHidden: false },
-    select: { date: true, description: true, amountDecimal: true },
+  // Fetch stored import hashes for this account (written by confirm endpoint)
+  const storedMeta = await prisma.transactionJournalMeta.findMany({
+    where: { name: 'importHash', journal: { entries: { some: { accountId } }, householdId } },
+    select: { value: true },
   });
-
-  const existingHashes = new Set(
-    existingJournals.map((j) =>
-      computeDedupHash(j.date.toISOString().slice(0, 10), j.description, Number(j.amountDecimal))
-    )
-  );
+  const existingHashes = new Set(storedMeta.map((m) => m.value));
 
   type RawWithHash = { date: string; description: string; amount: number; reference?: string; hash: string };
   const dedupedRows = markDuplicates(withHashes, existingHashes) as Array<RawWithHash & { isDuplicate: boolean }>;
@@ -370,7 +364,7 @@ router.post('/detect-mapping', upload.single('file'), async (req: AuthRequest, r
     const investmentHints = {
       transactionTypeColumn: headers.find((h) => /^(action|type|transaction.?type|buy.?sell|side|trade.?type|activity.?sub.?type|activity.?type)$/i.test(h)) ?? null,
       sharesColumn: headers.find((h) => /^(shares?|quantity|qty|units?|num.?shares?|volume)$/i.test(h)) ?? null,
-      priceColumn: headers.find((h) => /^(price|share.?price|unit.?price|exec.?price|trade.?price|cost.?per.?share|avg.?price)$/i.test(h)) ?? null,
+      priceColumn: headers.find((h) => /^(price|share.?price|unit.?price|exec.?price|trade.?price|cost.?per.?share|avg.?price|market.?price|per.?share.?price)$/i.test(h)) ?? null,
       tickerColumn: headers.find((h) => /^(symbol|ticker|security|instrument|stock|scrip)$/i.test(h)) ?? null,
     };
 
@@ -601,203 +595,9 @@ router.post('/confirm', async (req: AuthRequest, res) => {
     if (!body.success) return res.status(400).json({ error: body.error.flatten() });
 
     const { accountId, rows, filename, bankSource, batchId } = body.data;
-
-    const account = await prisma.account.findFirst({
-      where: { id: accountId, householdId: req.householdId! },
-    });
-    if (!account) return res.status(404).json({ error: 'Account not found' });
-
-    // Pre-load categories for matching
-    const categories = await prisma.category.findMany({
-      where: { householdId: req.householdId! },
-      select: { id: true, name: true },
-    });
-    const categoryMap = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
-
-    // Pre-load existing merchants to avoid N+1 inside transaction
-    const existingMerchants = await prisma.merchant.findMany({
-      where: { householdId: req.householdId! },
-      select: { id: true, name: true },
-    });
-    const merchantCache = new Map(existingMerchants.map((m) => [m.name.toLowerCase(), m.id]));
-
-    let imported = 0;
-    let skipped = 0;
-    let importedAmountSum = 0;
-    const errors: Array<{ index: number; error: string }> = [];
-
-    const isInvestmentAccount = account.type === 'investment';
-
-    await prisma.$transaction(async (tx) => {
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        try {
-          // Anchor to noon UTC to avoid timezone off-by-one-day issues
-          const rawDate = /^\d{4}-\d{2}-\d{2}$/.test(row.date)
-            ? row.date + 'T12:00:00.000Z'
-            : row.date;
-          const txDate = new Date(rawDate);
-          if (isNaN(txDate.getTime())) {
-            errors.push({ index: i, error: `Invalid date: ${row.date}` });
-            skipped++;
-            continue;
-          }
-
-          if (isInvestmentAccount && (row.investmentType === 'buy' || row.investmentType === 'sell')) {
-            // ── Investment buy/sell: upsert holding + create lot ──────────────
-            const ticker = row.ticker ?? extractTicker(row.description) ?? 'UNKNOWN';
-            const isBuy = row.investmentType === 'buy';
-            const shareDelta = row.shares ?? 1; // fallback: 1 share if not specified
-            const price = row.pricePerShare ?? Math.abs(row.amount) / shareDelta;
-
-            let holding = await tx.investmentHolding.findFirst({
-              where: { accountId, symbol: ticker },
-            });
-
-            if (!holding) {
-              holding = await tx.investmentHolding.create({
-                data: {
-                  accountId,
-                  symbol: ticker,
-                  name: ticker,
-                  shares: 0,
-                  costBasis: 0,
-                  currentPrice: price,
-                },
-              });
-            }
-
-            const newShares = isBuy ? holding.shares + shareDelta : holding.shares - shareDelta;
-            const newCostBasis = isBuy
-              ? holding.costBasis + shareDelta * price
-              : holding.costBasis - (holding.shares > 0 ? (shareDelta / holding.shares) * holding.costBasis : 0);
-
-            await tx.investmentHolding.update({
-              where: { id: holding.id },
-              data: {
-                shares: Math.max(0, newShares),
-                costBasis: Math.max(0, newCostBasis),
-                currentPrice: price,
-              },
-            });
-
-            await tx.holdingLot.create({
-              data: {
-                holdingId: holding.id,
-                date: txDate,
-                shares: isBuy ? shareDelta : -shareDelta,
-                pricePerShare: price,
-                note: [row.description, batchId ? `[batch:${batchId}]` : null].filter(Boolean).join(' '),
-                status: 'confirmed',
-              },
-            });
-          }
-
-          // Always create a transaction record (for cash flow tracking regardless of type)
-          // Resolve category
-          let resolvedCategoryId = row.categoryId ?? null;
-          if (!resolvedCategoryId) {
-            const descLower = row.description.toLowerCase();
-            for (const [name, id] of categoryMap) {
-              if (descLower.includes(name)) {
-                resolvedCategoryId = id;
-                break;
-              }
-            }
-          }
-
-          // Resolve merchant from pre-loaded cache — create only if genuinely new
-          const merchantName = row.description.split(/[#\d]/)[0].trim();
-          const merchantKey = merchantName.toLowerCase();
-          let merchantId: string | null = merchantCache.get(merchantKey) ?? null;
-          if (!merchantId && merchantName.length > 2) {
-            const created = await tx.merchant.create({
-              data: { householdId: req.householdId!, name: merchantName, displayName: merchantName },
-            });
-            merchantId = created.id;
-            merchantCache.set(merchantKey, merchantId);
-          }
-
-          const batchNote = batchId ? `[batch:${batchId}]` : null;
-          const notes = [row.notes, batchNote].filter(Boolean).join(' ') || null;
-
-          // Reuse existing virtual accounts when present; journal creation will create missing ones.
-          const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
-
-          // Create journal instead of legacy transaction
-          const meta: Record<string, string> = {};
-          if (merchantId) meta.legacyMerchantId = merchantId;
-          if (bankSource) meta.bankSource = bankSource;
-          if (batchId) meta.batchId = batchId;
-
-          await createJournalFromLegacyTransaction(
-            tx,
-            {
-              householdId: req.householdId!,
-              accountId,
-              date: txDate,
-              description: row.description,
-              amount: row.amount,
-              categoryId: resolvedCategoryId ?? undefined,
-              notes: notes ?? undefined,
-            },
-            row.amount < 0 ? (virtualAccounts.expenseAccountId ?? undefined) : undefined,
-            row.amount > 0 ? (virtualAccounts.revenueAccountId ?? undefined) : undefined,
-          );
-
-          importedAmountSum += row.amount;
-          imported++;
-        } catch (err) {
-          errors.push({ index: i, error: err instanceof Error ? err.message : 'Unknown error' });
-          skipped++;
-        }
-      }
-    });
-
-    // Update account running balance with sum of imported transaction amounts
-    if (imported > 0) {
-      await prisma.account.update({
-        where: { id: accountId },
-        data: { balance: { increment: importedAmountSum } },
-      });
-    }
-
-    // Create rollback checkpoint
-    if (imported > 0) {
-      // We need the IDs of newly created journals — re-query by createdAt
-      // Simplest: query journals created in the last few seconds
-      const recentIds = await prisma.transactionJournal.findMany({
-        where: { householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
-        select: { id: true },
-      });
-      await createCheckpoint(
-        prisma,
-        req.householdId!,
-        'bulk-import',
-        `Imported ${imported} rows from ${filename ?? 'unknown'}`,
-        recentIds.map((t) => t.id)
-      );
-    }
-
-    // Record import history
-    await prisma.importHistory.create({
-      data: {
-        householdId: req.householdId!,
-        filename: filename ?? 'unknown',
-        bankSource: bankSource ?? 'generic',
-        rowsTotal: rows.length,
-        rowsImported: imported,
-        rowsDuplicate: 0,
-        rowsSkipped: skipped,
-        status: errors.length > 0 ? 'partial' : 'completed',
-      },
-    });
-
-    if (imported > 0) {
-      transactionsImportedTotal.inc({ household_id: req.householdId!, source: bankSource ?? 'generic' });
-    }
-
-    return res.json({ imported, skipped, errors });
+    const result = await saveImport(req.householdId!, req.userId!, accountId, rows, filename, bankSource, batchId);
+    if (!result) return res.status(404).json({ error: 'Account not found' });
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'Import confirm error');
     return res.status(500).json({ error: 'Import failed' });
@@ -811,19 +611,9 @@ router.get('/history', async (req: AuthRequest, res) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
-    const skip = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
-      prisma.importHistory.findMany({
-        where: { householdId: req.householdId! },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      prisma.importHistory.count({ where: { householdId: req.householdId! } }),
-    ]);
-
-    return res.json({ items, total, page, limit });
+    const result = await getImportSessions(req.householdId!, page, limit);
+    return res.json(result);
   } catch (err) {
     req.log.error({ err }, 'Import history error');
     return res.status(500).json({ error: 'Failed to fetch import history' });
@@ -923,6 +713,13 @@ router.post('/webhook', async (req: AuthRequest, res) => {
       });
     }
 
+    const webhookJournalIds = imported > 0
+      ? (await prisma.transactionJournal.findMany({
+          where: { householdId: req.householdId!, createdAt: { gte: new Date(Date.now() - 10_000) } },
+          select: { id: true },
+        })).map((t) => t.id)
+      : [];
+
     await prisma.importHistory.create({
       data: {
         householdId: req.householdId!,
@@ -933,6 +730,7 @@ router.post('/webhook', async (req: AuthRequest, res) => {
         rowsDuplicate: skipped,
         rowsSkipped: 0,
         status: 'completed',
+        journalIds: webhookJournalIds,
       },
     });
 
@@ -940,6 +738,23 @@ router.post('/webhook', async (req: AuthRequest, res) => {
   } catch (err) {
     req.log.error({ err }, 'Import webhook error');
     return res.status(500).json({ error: 'Webhook import failed' });
+  }
+});
+
+// POST /api/v1/import/undo/:checkpointId — roll back a bulk import within its 7-day window
+router.post('/undo/:checkpointId', async (req: AuthRequest, res) => {
+  try {
+    const result = await undoImportSession(req.householdId!, req.params.checkpointId);
+    return res.json(result);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('not found')) {
+      return res.status(404).json({ error: err.message });
+    }
+    if (err instanceof Error && err.message.includes('expired')) {
+      return res.status(410).json({ error: err.message });
+    }
+    req.log.error({ err }, 'Import undo error');
+    return res.status(500).json({ error: 'Failed to undo import' });
   }
 });
 
