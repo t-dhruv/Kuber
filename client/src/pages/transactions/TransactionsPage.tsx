@@ -18,6 +18,7 @@ import { DuplicateReviewModal } from './components/DuplicateReviewModal';
 import { ReceiptOcrModal } from './components/ReceiptOcrModal';
 import { InstitutionLogo } from '@/components/ui';
 import { InlineSuggestionStrip } from './components/InlineSuggestionStrip';
+import { getCategoryPillStyle } from '@/lib/displayStyles';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -312,11 +313,37 @@ function RefundTransactionPicker({
 
 // ─── Category Pill ────────────────────────────────────────────────────────────
 
-function CategoryPill({ name, color }: { name: string; color?: string }) {
-  const c = color ?? 'var(--color-accent)';
+function CategoryPill({
+  name,
+  color,
+  icon,
+  budgetStatus,
+}: {
+  name?: string | null;
+  color?: string;
+  icon?: string | null;
+  budgetStatus: BudgetStatus;
+}) {
+  const tone = getCategoryPillStyle(color);
+  const displayName = name || 'Uncategorized';
+  const borderColor =
+    budgetStatus === 'over'
+      ? 'var(--color-danger)'
+      : budgetStatus === 'warning'
+        ? 'var(--color-warning)'
+        : budgetStatus === 'under'
+          ? 'var(--color-success)'
+          : 'var(--color-border)';
+  const showEmojiIcon = !!icon && /\p{Emoji}/u.test(icon);
+
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 500, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: `${c}18`, color: c }}>
-      {name}
+    <span
+      className="inline-flex h-6 w-full min-w-0 items-center gap-1.5 rounded-[var(--radius-full)] border px-2 text-xs font-medium leading-none"
+      style={{ ...tone, borderColor }}
+      title={displayName}
+    >
+      {showEmojiIcon && <span className="shrink-0 leading-none">{icon}</span>}
+      <span className="min-w-0 flex-1 truncate">{displayName}</span>
     </span>
   );
 }
@@ -1406,24 +1433,13 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       </div>
 
       {/* Category name — hidden on mobile */}
-      <div className="hidden sm:block flex-[0_0_150px] overflow-hidden">
-        <div
-          style={{
-            display: 'inline-flex',
-            borderRadius: 'var(--radius-sm)',
-            outline:
-              budgetStatus === 'over'
-                ? '2px solid var(--color-danger)'
-                : budgetStatus === 'warning'
-                  ? '2px solid var(--color-warning)'
-                  : budgetStatus === 'under'
-                    ? '2px solid var(--color-success)'
-                    : 'none',
-            outlineOffset: '1px',
-          }}
-        >
-          <CategoryPill name={txn.categoryName} color={txn.categoryColor ?? undefined} />
-        </div>
+      <div className="hidden sm:flex flex-[0_0_150px] min-w-0 items-center overflow-hidden">
+        <CategoryPill
+          name={txn.categoryName}
+          color={txn.categoryColor ?? undefined}
+          icon={txn.categoryIcon ?? null}
+          budgetStatus={budgetStatus}
+        />
       </div>
 
       {/* Account — hidden on mobile and tablet */}
@@ -1436,36 +1452,36 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
       </div>
 
       {/* Badges */}
-      <div className="flex gap-1 flex-[0_0_auto]">
+      <div className="flex flex-[0_0_auto] items-center gap-1">
         {/* On mobile: only show Review badge */}
         {txn.needsReview && (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleReview(txn.id); }}
-            className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-warning-light)] text-[var(--color-warning)] hover:opacity-80 cursor-pointer"
+            className="inline-flex h-5 items-center rounded-[var(--radius-full)] bg-[var(--color-warning-light)] px-1.5 text-[0.6875rem] font-semibold leading-none text-[var(--color-warning)] hover:opacity-80 cursor-pointer"
           >
             Review
           </button>
         )}
 
         {/* On sm+: show all badges */}
-        <div className="hidden sm:flex gap-1">
+        <div className="hidden sm:flex items-center gap-1">
           {txn.isRecurring && (
-            <span title="Recurring" className="text-[var(--color-info)] text-sm">
+            <span title="Recurring" className="inline-flex h-5 w-5 items-center justify-center rounded-[var(--radius-full)] bg-[var(--color-info-light)] text-[var(--color-info)]">
               <RotateCcw size={13} />
             </span>
           )}
           {txn.isPending && (
-            <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]">
+            <span className="inline-flex h-5 items-center rounded-[var(--radius-full)] border border-[var(--color-border)] bg-[var(--color-surface-hover)] px-1.5 text-[0.6875rem] font-semibold leading-none text-[var(--color-text-muted)]">
               Pending
             </span>
           )}
           {txn.isSplit && (
-            <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-accent-light)] text-[var(--color-accent)]">
+            <span className="inline-flex h-5 items-center rounded-[var(--radius-full)] bg-[var(--color-accent-light)] px-1.5 text-[0.6875rem] font-semibold leading-none text-[var(--color-accent)]">
               Split
             </span>
           )}
           {txn.isTransfer && (
-            <span className="text-[0.6875rem] font-semibold py-0.5 px-1.5 rounded-[var(--radius-full)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]">
+            <span className="inline-flex h-5 items-center rounded-[var(--radius-full)] border border-[var(--color-border)] bg-[var(--color-surface-hover)] px-1.5 text-[0.6875rem] font-semibold leading-none text-[var(--color-text-muted)]">
               Transfer
             </span>
           )}

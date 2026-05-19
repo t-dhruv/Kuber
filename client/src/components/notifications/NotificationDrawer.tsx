@@ -28,16 +28,16 @@ interface NotificationsResponse {
 
 const SEVERITY_STYLES = {
   alert: {
-    icon: <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />,
-    border: 'border-l-2 border-red-400',
+    icon: <AlertCircle size={16} className="shrink-0 mt-0.5 text-[var(--color-danger)]" />,
+    border: 'border-l-2 border-[var(--color-danger)]',
   },
   warning: {
-    icon: <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />,
-    border: 'border-l-2 border-amber-400',
+    icon: <AlertTriangle size={16} className="shrink-0 mt-0.5 text-[var(--color-warning)]" />,
+    border: 'border-l-2 border-[var(--color-warning)]',
   },
   info: {
-    icon: <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />,
-    border: 'border-l-2 border-blue-400',
+    icon: <Info size={16} className="shrink-0 mt-0.5 text-[var(--color-info)]" />,
+    border: 'border-l-2 border-[var(--color-info)]',
   },
 };
 
@@ -117,7 +117,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
             <Bell size={18} />
             <h2 className="font-semibold">Notifications</h2>
             {(data?.unreadCount ?? 0) > 0 && (
-              <span className="text-xs border border-red-500 text-red-500 rounded-full px-1.5 py-0.5 font-bold">
+              <span className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-danger)] px-1.5 text-xs font-bold leading-none text-white">
                 {data!.unreadCount}
               </span>
             )}
@@ -189,7 +189,7 @@ export function NotificationDrawer({ open, onClose }: Props) {
                   <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{n.body}</p>
                   <p className="text-xs text-[var(--color-text-muted)] mt-1">{timeAgo(n.createdAt)}</p>
                 </div>
-                {!n.read && <div className="w-2 h-2 rounded-full shrink-0 mt-1.5 border border-[var(--color-info)]" />}
+                {!n.read && <div className="w-2 h-2 rounded-full shrink-0 mt-1.5 bg-[var(--color-info)]" />}
               </div>
             );
           })}
