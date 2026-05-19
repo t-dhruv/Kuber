@@ -23,7 +23,8 @@ export function normalizeMerchant(description: string): string {
     // Remove pure numeric/alphanumeric suffixes (order IDs, ref codes)
     .replace(/\s+[a-z0-9]{6,}$/gi, '')
     // Remove transaction IDs in parens/brackets
-    .replace(/[\[(][^\]\)\s]{4,}[\]\)]/g, '')
+    .replace(/\[[^\]\s]{4,}\]/g, '')
+    .replace(/\([^)\s]{4,}\)/g, '')
     // Collapse whitespace
     .replace(/\s+/g, ' ')
     .trim();

@@ -1,3 +1,5 @@
+/* global console */
+
 import { normalizeMerchant } from './src/lib/autoCategorize.js';
 
 const testCases = [
