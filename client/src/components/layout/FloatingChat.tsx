@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { api } from '@/lib/api';
 import { SUGGESTIONS } from '@/pages/advice/components/SuggestionChips';
 
-function ChatMessageItem({ message, onCopy }: { message: ChatMessage; onCopy: (content: string) => void }) {
+function ChatMessageItem({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
   return (
     <div className={`flex gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -80,7 +80,6 @@ export function FloatingChat() {
     isStreaming,
     error,
     send,
-    cancel,
     startNewConversation,
   } = useChatStream();
 
@@ -190,7 +189,7 @@ export function FloatingChat() {
             )}
 
             {hasMessages && messages.filter((m) => !m.streaming).map((msg, i) => (
-              <ChatMessageItem key={msg.id ?? `msg-${i}`} message={msg} onCopy={() => {}} />
+              <ChatMessageItem key={msg.id ?? `msg-${i}`} message={msg} />
             ))}
 
             {isStreaming && (

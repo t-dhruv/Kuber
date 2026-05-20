@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, MoreHorizontal, Pencil, Trash2, MessageSquare, Wallet, CreditCard, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, MoreHorizontal, Pencil, Trash2, Wallet, CreditCard, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   Card, Button, Input, Modal, ModalFooter, Skeleton, Select,

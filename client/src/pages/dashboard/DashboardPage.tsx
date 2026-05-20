@@ -7,7 +7,7 @@ import {
 import { Check, PartyPopper } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getColorToken } from '@/lib/colors';
-import { Card, CardHeader, CardDivider, Skeleton, notify } from '@/components/ui';
+import { Card, CardDivider, Skeleton, notify } from '@/components/ui';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 

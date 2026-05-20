@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import importRouter from '../../src/routes/import';
 import { prisma } from '../../src/lib/prisma';
@@ -143,5 +143,4 @@ describe('POST /confirm — merchant learning lookup', () => {
     expect(capturedCategoryId).toBe('cat-groceries');
   });
 });
-
 

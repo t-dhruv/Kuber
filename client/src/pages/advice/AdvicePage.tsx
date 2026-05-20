@@ -7,7 +7,7 @@ import { ChatMessage } from './components/ChatMessage';
 import { StreamingMessage } from './components/StreamingMessage';
 import { ChatInput } from './components/ChatInput';
 import { ConversationSidebar } from './components/ConversationSidebar';
-import { SuggestionChips, SUGGESTIONS } from './components/SuggestionChips';
+import { SUGGESTIONS } from './components/SuggestionChips';
 
 // ─── Advice Library Types ─────────────────────────────────────────────────────
 

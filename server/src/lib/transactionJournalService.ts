@@ -352,15 +352,6 @@ async function findLegacyJournalLink(tx: TransactionClient, legacyTransactionId:
   });
 }
 
-async function findJournalMetaLink(tx: TransactionClient, name: string, value: string) {
-  return tx.transactionJournalMeta.findFirst({
-    where: { name, value },
-    include: {
-      journal: { select: { id: true, groupId: true } },
-    },
-  });
-}
-
 export async function createTransactionJournal(
   input: CreateTransactionJournalInput,
   prisma: PrismaLike = defaultPrisma,
@@ -452,7 +443,7 @@ export interface JournalFormatOptions {
   includeTags?: boolean;
 }
 
-export function formatJournalAsTransaction(journal: any, options: JournalFormatOptions = {}) {
+export function formatJournalAsTransaction(journal: any) {
   // For withdrawals the real account is the source (negative amountDecimal entry).
   // For deposits the real account is the destination (positive amountDecimal entry).
   const isWithdrawal = journal.transactionType === 'withdrawal';
@@ -664,6 +655,7 @@ export async function queryJournalsWithRelations(
   const where: any = {
     householdId: query.householdId,
     isDeleted: false,
+    isHidden: false,
   };
 
   if (query.dateFrom || query.dateTo) {
@@ -721,6 +713,7 @@ export async function queryJournalAmounts(
   const where: any = {
     householdId: filter.householdId,
     isDeleted: false,
+    isHidden: false,
   };
 
   if (filter.dateFrom || filter.dateTo) {

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { getBudgetStatus } from '../../../src/pages/transactions/TransactionsPage';
+import {
+  getBudgetStatus,
+  keepDateRangeOrdered,
+} from '../../../src/pages/transactions/TransactionsPage';
 
 describe('getBudgetStatus', () => {
   const map = new Map([
@@ -27,5 +30,32 @@ describe('getBudgetStatus', () => {
 
   it('returns null for unknown categoryId', () => {
     expect(getBudgetStatus('cat-unknown', map)).toBe(null);
+  });
+});
+
+describe('keepDateRangeOrdered', () => {
+  it('pushes the to date after a changed from date', () => {
+    expect(keepDateRangeOrdered('2026-05-20', '2026-05-19', 'from')).toEqual({
+      from: '2026-05-20',
+      to: '2026-05-21',
+    });
+  });
+
+  it('pulls the from date before a changed to date', () => {
+    expect(keepDateRangeOrdered('2026-05-20', '2026-05-20', 'to')).toEqual({
+      from: '2026-05-19',
+      to: '2026-05-20',
+    });
+  });
+
+  it('leaves empty or already ordered ranges unchanged', () => {
+    expect(keepDateRangeOrdered('2026-05-19', '2026-05-20', 'from')).toEqual({
+      from: '2026-05-19',
+      to: '2026-05-20',
+    });
+    expect(keepDateRangeOrdered('2026-05-19', '', 'from')).toEqual({
+      from: '2026-05-19',
+      to: '',
+    });
   });
 });

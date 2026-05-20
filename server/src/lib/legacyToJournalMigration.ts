@@ -1,4 +1,3 @@
-import type { Prisma } from '@prisma/client';
 import type { CreateTransactionJournalInput } from './transactionJournalService';
 import { createTransactionJournalInTransaction } from './transactionJournalService';
 import { prisma as defaultPrisma } from './prisma';

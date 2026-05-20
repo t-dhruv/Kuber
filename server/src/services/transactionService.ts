@@ -2,21 +2,16 @@ import { prisma } from '../lib/prisma';
 import { NOT_DELETED } from '../lib/softDeleteWhere';
 import { logAudit } from '../lib/audit';
 import { fireWebhooks } from '../lib/webhookFire';
-import { applyActiveRulesToJournal, applyActiveRulesToTransaction } from '../lib/ruleEngine';
+import { applyActiveRulesToJournal } from '../lib/ruleEngine';
 import { getTransactionSplitDetails } from '../lib/transactionSplits';
-import { matchBillsForTransaction } from '../lib/billMatcher';
 import { buildSearchWhere } from '../lib/searchParser';
 import {
-  buildJournalInputFromLegacyTransaction,
   buildRuleMatchInputFromJournal,
-  createTransactionJournal,
   createTransactionJournalInTransaction,
-  deleteLegacyTransactionJournal,
   formatJournalAsTransaction,
   getTransactionJournalGroup,
   listTransactionJournalGroups,
   queryJournalsWithRelations,
-  syncLegacyTransactionJournal,
 } from '../lib/transactionJournalService';
 import { planTransferConversion } from '../lib/transferConversion';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration';
@@ -161,6 +156,7 @@ export async function listTransactions(params: ListTransactionsParams) {
 
   // Build where clause
   const where: any = { householdId, ...NOT_DELETED };
+  where.isHidden = false;
 
   if (accountId) where.accountId = accountId;
   if (categoryId) where.categoryId = categoryId;
@@ -281,7 +277,7 @@ export async function listTransactions(params: ListTransactionsParams) {
   const skip = (page - 1) * limit;
 
   // Build journal where directly from parsed filter vars (mirrors cursor path)
-  const journalOffsetWhere: any = { householdId, isDeleted: false };
+  const journalOffsetWhere: any = { householdId, isDeleted: false, isHidden: false };
   if (accountId) journalOffsetWhere.entries = { some: { accountId } };
   if (categoryId) journalOffsetWhere.categoryId = categoryId;
   if (where.date) journalOffsetWhere.date = where.date;
@@ -471,8 +467,8 @@ interface UpdateTransactionParams {
   date?: string;
   description?: string;
   merchantName?: string;
-  categoryId?: string;
-  notes?: string;
+  categoryId?: string | null;
+  notes?: string | null;
   isRecurring?: boolean;
   needsReview?: boolean;
   isHidden?: boolean;
@@ -511,10 +507,14 @@ export async function updateTransaction(params: UpdateTransactionParams) {
   if (date) data.date = new Date(date);
   if (description) data.description = description;
   if (merchantName) data.description = merchantName; // merchantName maps to description in journals
-  if (categoryId) {
-    const cat = await prisma.category.findFirst({ where: { id: categoryId, householdId, ...NOT_DELETED } });
-    if (!cat) throw new Error('Category not found');
-    data.categoryId = categoryId;
+  if (categoryId !== undefined) {
+    if (categoryId === null) {
+      data.categoryId = null;
+    } else {
+      const cat = await prisma.category.findFirst({ where: { id: categoryId, householdId, ...NOT_DELETED } });
+      if (!cat) throw new Error('Category not found');
+      data.categoryId = categoryId;
+    }
   }
   if (notes !== undefined) data.notes = notes ?? null;
   if (isRecurring !== undefined) data.isRecurring = isRecurring;
@@ -607,7 +607,7 @@ interface BulkUpdateParams {
 }
 
 export async function bulkUpdateTransactions(params: BulkUpdateParams) {
-  const { householdId, userId, action, ids, categoryId } = params;
+  const { householdId, action, ids, categoryId } = params;
 
   // Verify all journals belong to the household
   const count = await prisma.transactionJournal.count({

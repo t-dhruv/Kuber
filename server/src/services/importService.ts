@@ -6,7 +6,6 @@
 
 import { prisma } from '../lib/prisma';
 import { createCheckpoint, rollbackCheckpoint } from '../lib/checkpoint';
-import { computeDedupHash } from '../lib/importDedup';
 import { normalizeMerchant, buildLearningMap } from '../lib/autoCategorize';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration';
 import { transactionsImportedTotal } from '../lib/metrics';

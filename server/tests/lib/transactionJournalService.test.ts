@@ -11,6 +11,8 @@ import {
   buildRuleMatchInputFromJournal,
   getTransactionJournalGroup,
   listTransactionJournalGroups,
+  queryJournalAmounts,
+  queryJournalsWithRelations,
   syncLegacyTransactionJournal,
   type CreateTransactionJournalInput,
 } from '../../src/lib/transactionJournalService';
@@ -37,6 +39,7 @@ function makePrismaMock() {
         groupId: 'group-1',
         entries: [],
       }),
+      findMany: vi.fn(),
       update: vi.fn().mockResolvedValue({
         id: 'journal-1',
         groupId: 'group-1',
@@ -56,6 +59,7 @@ function makePrismaMock() {
 
   const prisma = {
     transactionGroup: tx.transactionGroup,
+    transactionJournal: tx.transactionJournal,
     $transaction: vi.fn(async (fn: (txClient: typeof tx) => Promise<unknown>) => fn(tx)),
   };
 
@@ -482,6 +486,38 @@ describe('journal group reads', () => {
       where: { id: 'group-1', householdId: 'hh-1' },
     }));
     expect(result?.id).toBe('group-1');
+  });
+});
+
+describe('journal list reads', () => {
+  it('excludes hidden and deleted journals from relation reads', async () => {
+    const { prisma, tx } = makePrismaMock();
+    tx.transactionJournal.findMany.mockResolvedValue([]);
+
+    await queryJournalsWithRelations({ householdId: 'hh-1' }, prisma as any);
+
+    expect(tx.transactionJournal.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        householdId: 'hh-1',
+        isDeleted: false,
+        isHidden: false,
+      }),
+    }));
+  });
+
+  it('excludes hidden and deleted journals from amount reads', async () => {
+    const { prisma, tx } = makePrismaMock();
+    tx.transactionJournal.findMany.mockResolvedValue([]);
+
+    await queryJournalAmounts({ householdId: 'hh-1' }, {}, prisma as any);
+
+    expect(tx.transactionJournal.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        householdId: 'hh-1',
+        isDeleted: false,
+        isHidden: false,
+      }),
+    }));
   });
 });
 

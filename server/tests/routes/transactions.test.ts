@@ -101,6 +101,7 @@ describe('transactions route integration', () => {
       where: expect.objectContaining({
         householdId: 'household-1',
         isDeleted: false,
+        isHidden: false,
         amountDecimal: { lt: 0 },
       }),
       skip: 0,
@@ -110,6 +111,7 @@ describe('transactions route integration', () => {
       where: expect.objectContaining({
         householdId: 'household-1',
         isDeleted: false,
+        isHidden: false,
         amountDecimal: { lt: 0 },
       }),
     });
@@ -184,6 +186,40 @@ describe('transactions route integration', () => {
     expect(prisma.transactionJournal.update).not.toHaveBeenCalled();
   });
 
+  it('allows clearing nullable update fields from the transaction drawer', async () => {
+    vi.mocked(prisma.transactionJournal.findFirst).mockResolvedValue({
+      ...journal,
+      entries: [{ accountId: 'account-1', amountDecimal: -4.25 }],
+    } as any);
+    vi.mocked(prisma.transactionJournal.update).mockResolvedValue({
+      ...journal,
+      categoryId: null,
+      notes: null,
+    } as any);
+
+    const res = await request(makeApp())
+      .put('/journal-1')
+      .send({
+        merchantName: 'Coffee',
+        date: '2026-05-01T12:00:00.000Z',
+        categoryId: null,
+        notes: null,
+        needsReview: false,
+        isRecurring: false,
+        isHidden: false,
+      });
+
+    expect(res.status).toBe(200);
+    expect(prisma.category.findFirst).not.toHaveBeenCalled();
+    expect(prisma.transactionJournal.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'journal-1' },
+      data: expect.objectContaining({
+        categoryId: null,
+        notes: null,
+      }),
+    }));
+  });
+
   it('soft-deletes household transactions', async () => {
     vi.mocked(prisma.transactionJournal.findFirst).mockResolvedValue(journal as any);
     vi.mocked(prisma.transactionJournal.update).mockResolvedValue({
@@ -204,5 +240,3 @@ describe('transactions route integration', () => {
     });
   });
 });
-
-
