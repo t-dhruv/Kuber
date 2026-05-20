@@ -1,5 +1,28 @@
 # Kuber Audit Tracker
 
+## 2026-05-16 Project Structure Cleanup
+
+Completed work:
+
+- Moved the remaining auth middleware test out of `server/src` into `server/tests/middleware`.
+- Reduced `ReportsPage`, `SettingsPage`, and `InvestmentsPage` entry files to thin shells, with extracted page-local modules for settings and investments.
+- Moved large server route implementations into `server/src/routeModules` and left `server/src/routes` as stable small re-export entry points.
+- Fixed the partial `ReportsPage` extraction so it matches current shared UI component contracts.
+
+Verification:
+
+- Server build passes.
+- Client build passes.
+- Server Vitest suite passes: 90 files, 557 tests.
+- Client Vitest suite passes: 8 files, 38 tests.
+- No `*.test.*` files remain under `server/src` or `client/src`.
+- No file under `server/src/routes/*.ts` is over 400 lines.
+
+Known follow-up structure work:
+
+- Several client page entry files remain over 400 lines and still need the deeper feature-slice extraction described in `docs/superpowers/plans/2026-05-16-project-structure-cleanup.md`.
+- `server/src/routeModules` now contains the large route implementations; further service extraction can continue from those modules without changing public route import paths.
+
 ## 2026-05-14 Test Coverage Push
 
 Completed work:
