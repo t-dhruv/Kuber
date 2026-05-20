@@ -50,8 +50,6 @@ function parseCSV(text: string): string[][] {
   return rows;
 }
 
-const BULK_ACCOUNT_COLUMNS = ['name', 'type', 'balance', 'institution', 'last_four', 'currency', 'credit_limit', 'exclude_from_net_worth', 'id'] as const;
-
 const bulkRowSchema = z.object({
   name:                  z.string().min(1),
   type:                  z.string().min(1),
@@ -214,8 +212,8 @@ router.get('/:id/history', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const account = await prisma.account.findUnique({ where: { id }, select: { id: true, householdId: true } });
-    if (!account || account.householdId !== householdId) {
+    const account = await prisma.account.findFirst({ where: { id, householdId, ...NOT_DELETED }, select: { id: true } });
+    if (!account) {
       return res.status(404).json({ error: 'Account not found' });
     }
 
@@ -338,7 +336,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { name, type, institution, institutionLogo, lastFour, balance, currency, creditLimit, notes } = req.body;
+    const { name, type, institution, institutionLogo, lastFour, balance, currency, creditLimit } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'name is required' });
@@ -380,8 +378,8 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const existing = await prisma.account.findUnique({ where: { id } });
-    if (!existing || existing.householdId !== householdId) {
+    const existing = await prisma.account.findFirst({ where: { id, householdId, ...NOT_DELETED } });
+    if (!existing) {
       return res.status(404).json({ error: 'Account not found' });
     }
 
@@ -437,8 +435,8 @@ router.post('/:id/reconcile', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'actualBalance is required and must be a number' });
     }
 
-    const account = await prisma.account.findUnique({ where: { id } });
-    if (!account || account.householdId !== householdId) {
+    const account = await prisma.account.findFirst({ where: { id, householdId, ...NOT_DELETED } });
+    if (!account) {
       return res.status(404).json({ error: 'Account not found' });
     }
 
@@ -493,8 +491,8 @@ router.post('/:id/close', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const existing = await prisma.account.findUnique({ where: { id } });
-    if (!existing || existing.householdId !== householdId) {
+    const existing = await prisma.account.findFirst({ where: { id, householdId, ...NOT_DELETED } });
+    if (!existing) {
       return res.status(404).json({ error: 'Account not found' });
     }
 
@@ -514,19 +512,47 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const existing = await prisma.account.findUnique({ where: { id } });
-    if (!existing || existing.householdId !== householdId) {
+    const existing = await prisma.account.findFirst({ where: { id, householdId, ...NOT_DELETED } });
+    if (!existing) {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    // Soft-delete all journals with entries for this account, then soft-delete the account.
-    await prisma.transactionJournal.updateMany({
-      where: { entries: { some: { accountId: id } }, householdId },
-      data: { isHidden: true },
-    });
-    await prisma.account.update({
-      where: { id },
-      data: { isDeleted: true, isHidden: true },
+    await prisma.$transaction(async (tx) => {
+      await tx.transactionJournal.updateMany({
+        where: { entries: { some: { accountId: id } }, householdId },
+        data: { isDeleted: true, isHidden: true },
+      });
+      await tx.recurringItem.updateMany({
+        where: { householdId, accountId: id, isDeleted: false },
+        data: { isDeleted: true, isActive: false },
+      });
+      await tx.goal.updateMany({
+        where: { householdId, accountId: id, isDeleted: false },
+        data: { isDeleted: true },
+      });
+      await tx.taxAccount.updateMany({
+        where: { householdId, linkedAccountId: id },
+        data: { linkedAccountId: null },
+      });
+      await tx.accountBalanceSnapshot.deleteMany({
+        where: { householdId, accountId: id },
+      });
+      await tx.reconciliation.deleteMany({
+        where: { householdId, accountId: id },
+      });
+      await tx.reportingSnapshot.deleteMany({
+        where: { householdId, kind: 'account_balance', subjectId: id },
+      });
+      await tx.reportingRollup.deleteMany({
+        where: { householdId, kind: 'account_balance', subjectId: id },
+      });
+      await tx.investmentHolding.deleteMany({
+        where: { accountId: id },
+      });
+      await tx.account.update({
+        where: { id },
+        data: { isDeleted: true, isHidden: true },
+      });
     });
 
     return res.json({ success: true });
@@ -542,8 +568,8 @@ router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { id } = req.params;
 
-    const account = await prisma.account.findUnique({ where: { id } });
-    if (!account || account.householdId !== householdId) {
+    const account = await prisma.account.findFirst({ where: { id, householdId, ...NOT_DELETED } });
+    if (!account) {
       return res.status(404).json({ error: 'Account not found' });
     }
 

@@ -37,7 +37,7 @@ router.put('/:id/read', async (req: AuthRequest, res: Response) => {
     if (!n) return res.status(404).json({ error: 'Not found' });
     await prisma.notification.update({ where: { id: req.params.id }, data: { read: true } });
     return res.json({ message: 'Marked as read' });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -50,7 +50,7 @@ router.put('/read-all', async (req: AuthRequest, res: Response) => {
       data: { read: true },
     });
     return res.json({ message: 'All marked as read' });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -62,7 +62,7 @@ router.delete('/clear', async (req: AuthRequest, res: Response) => {
       where: { householdId: req.householdId!, read: true },
     });
     return res.json({ deleted: result.count });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

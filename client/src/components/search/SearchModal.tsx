@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -17,11 +17,6 @@ interface AccountResult {
   id: string;
   name: string;
   type: string;
-}
-
-interface SearchResults {
-  transactions: TransactionResult[];
-  accounts: AccountResult[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────

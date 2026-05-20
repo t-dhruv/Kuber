@@ -542,7 +542,7 @@ router.get('/2fa/status', async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({ where: { id: payload.userId }, select: { totpEnabled: true, backupCodes: true } });
     if (!user) return res.status(404).json({ error: 'User not found' });
     return res.json({ totpEnabled: user.totpEnabled, backupCodesRemaining: user.backupCodes.length });
-  } catch (err) {
+  } catch {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 });

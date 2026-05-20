@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
-import { getAiClient, getAiClientForHousehold } from '../lib/ai';
+import { getAiClient } from '../lib/ai';
 import { getChatContext } from '../lib/ai/context';
 import { chatSystemPrompt } from '../lib/ai/prompts';
 import type { AiMessage } from '../lib/ai/types';
@@ -395,7 +395,7 @@ router.post('/budget-coach/stream', async (req: AuthRequest, res: Response) => {
     const startDate = new Date(year, mon - 1, 1);
     const endDate = new Date(year, mon, 0, 23, 59, 59);
 
-    const [budgets, journals, categories] = await Promise.all([
+    const [budgets, journals] = await Promise.all([
       prisma.budget.findMany({
         where: { householdId },
         include: { category: { select: { name: true, icon: true } } },

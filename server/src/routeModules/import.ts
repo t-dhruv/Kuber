@@ -20,7 +20,7 @@ import { parseDate } from '../lib/dateUtils.js';
 import { detectColumnMapping } from '../lib/csvColumnDetector.js';
 import { detectLocaleFormat, parseAmount, mergeDebitCredit } from '../lib/amountParser.js';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration.js';
-import { saveImport, getImportSessions, getImportSession, deleteImportSession, undoImportSession } from '../services/importService.js';
+import { saveImport, getImportSessions, undoImportSession } from '../services/importService.js';
 
 const router = Router();
 

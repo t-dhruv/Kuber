@@ -1,8 +1,7 @@
-import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Card, Skeleton } from "@/components/ui";
-import { Building2, Home, ShieldAlert, Wallet, TrendingUp } from "lucide-react";
+import { Building2, Home, ShieldAlert, Wallet } from "lucide-react";
 import type { ReactNode } from "react";
 
 const money = (value: number) =>

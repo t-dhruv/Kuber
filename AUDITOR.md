@@ -1,5 +1,18 @@
 # Kuber Audit Tracker
 
+## 2026-05-19 Account Deletion Cascade
+
+Completed work:
+
+- Expanded account deletion to clean up account-related data: transaction journals, recurring items, goals, tax account links, account balance snapshots, reconciliations, reporting snapshots/rollups, and investment holdings.
+- Blocked deleted accounts from account detail, history, reconcile, close, update, and account transaction endpoints.
+- Added regression coverage for account deletion cascade and hidden/deleted journal filtering.
+
+Verification:
+
+- `rtk npx vitest run server/tests/routes/accounts.test.ts server/tests/routes/transactions.test.ts server/tests/lib/transactionJournalService.test.ts --reporter=dot`
+- `rtk npm run typecheck --if-present`
+
 ## 2026-05-16 Project Structure Cleanup
 
 Completed work:

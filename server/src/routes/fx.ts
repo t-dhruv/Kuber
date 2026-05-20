@@ -9,7 +9,7 @@ router.get('/rates', async (_req: AuthRequest, res: Response) => {
   try {
     const rates = await getFxRates();
     return res.json({ base: 'USD', rates, cachedAt: new Date().toISOString() });
-  } catch (err) {
+  } catch {
     return res.status(502).json({ error: 'FX rates unavailable' });
   }
 });
@@ -20,7 +20,7 @@ router.get('/snapshot', async (req: AuthRequest, res: Response) => {
     const base = (req.query.base as string)?.toUpperCase() || 'USD';
     const snapshot = await getCurrencySnapshot(base);
     return res.json({ base, rates: snapshot });
-  } catch (err) {
+  } catch {
     return res.status(502).json({ error: 'FX rates unavailable' });
   }
 });

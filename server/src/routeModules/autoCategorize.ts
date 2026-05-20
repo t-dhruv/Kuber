@@ -455,7 +455,7 @@ router.get('/status', async (req: AuthRequest, res: Response) => {
       reviewCount,
       setupMessage: configured ? null : NOT_CONFIGURED_MSG,
     });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

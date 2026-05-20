@@ -12,7 +12,6 @@ import {
   ChevronUp,
   RefreshCw,
   Settings,
-  Newspaper,
   Loader2,
 } from 'lucide-react';
 import {
@@ -23,8 +22,6 @@ import { Card, CardHeader, Button, Input, Skeleton, notify } from '@/components/
 import type { AxiosError } from 'axios';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type BucketType = 'needs' | 'wants' | 'savings' | 'uncategorized';
 
 interface CategoryDetail {
   id: string;
@@ -145,17 +142,14 @@ const BUCKET_META: Record<
 function BucketCard({
   type,
   bucket,
-  income,
 }: {
   type: 'needs' | 'wants' | 'savings';
   bucket: BucketDetail;
-  income: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const meta = BUCKET_META[type];
   const color = bucketColor(type, bucket.pct);
   const textColor = bucketTextColor(color);
-  const isOver = type !== 'savings' ? bucket.total > bucket.target : bucket.total < bucket.target;
   const deltaLabel =
     type === 'savings'
       ? bucket.delta >= 0
@@ -646,13 +640,6 @@ interface ProjectionsData {
   horizons: ProjectionHorizon[];
 }
 
-interface NewsItem {
-  title: string;
-  link: string;
-  pubDate: string;
-  description: string;
-}
-
 // ─── Types: Net Worth Breakdown ───────────────────────────────────────────────
 
 interface BreakdownAccount {
@@ -779,59 +766,6 @@ function PortfolioProjections() {
         </>
       )}
     </Card>
-  );
-}
-
-// ─── Holding News Widget ───────────────────────────────────────────────────────
-
-function HoldingNewsPanel({ ticker }: { ticker: string }) {
-  const { data, isLoading, isError } = useQuery<{ ticker: string; items: NewsItem[] }>({
-    queryKey: ['holding-news', ticker],
-    queryFn: () => api.get(`/investment-intel/news?ticker=${encodeURIComponent(ticker)}`).then((r) => r.data),
-    staleTime: 10 * 60 * 1000,
-  });
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 py-3 px-4 text-sm text-[var(--color-text-muted)]">
-        <Loader2 size={13} className="animate-spin flex-shrink-0" />
-        Loading news for {ticker}…
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <p className="py-2 px-4 text-sm text-[var(--color-danger,#ef4444)]">Could not load news.</p>
-    );
-  }
-
-  const items = data?.items?.slice(0, 5) ?? [];
-
-  if (!items.length) {
-    return <p className="py-2 px-4 text-sm text-[var(--color-text-muted)]">No news found for {ticker}.</p>;
-  }
-
-  return (
-    <div className="flex flex-col divide-y divide-[var(--color-border)] px-4 pb-2">
-      {items.map((item, i) => (
-        <div key={i} className="py-2.5">
-          <a
-            href={item.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-[var(--color-accent)] hover:underline leading-snug"
-          >
-            {item.title}
-          </a>
-          {item.pubDate && (
-            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-              {new Date(item.pubDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </p>
-          )}
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -1270,9 +1204,9 @@ export default function WealthPage() {
 
               {/* ── Three bucket cards ── */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <BucketCard type="needs" bucket={analysis.buckets.needs} income={analysis.income} />
-                <BucketCard type="wants" bucket={analysis.buckets.wants} income={analysis.income} />
-                <BucketCard type="savings" bucket={analysis.buckets.savings} income={analysis.income} />
+                <BucketCard type="needs" bucket={analysis.buckets.needs} />
+                <BucketCard type="wants" bucket={analysis.buckets.wants} />
+                <BucketCard type="savings" bucket={analysis.buckets.savings} />
               </div>
 
               {/* ── Alerts ── */}

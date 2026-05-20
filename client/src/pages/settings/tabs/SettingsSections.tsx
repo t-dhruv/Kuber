@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import {
   User, Monitor, Bell, Shield, Home, Tag, Database, CreditCard,
   Pencil, Trash2, Plus, ChevronDown, ChevronRight, Upload, ShieldCheck, ShieldOff, Mail, Bot,
@@ -11,10 +10,7 @@ import {
   Button, Input, Select, Checkbox, Avatar, Card, CardDivider, Modal, ModalFooter, notify, Skeleton, ConfirmDialog,
 } from '@/components/ui';
 import { EmojiPicker } from '@/components/ui/EmojiPicker';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { TaxAccountsSection } from '../components/TaxAccountsSection';
 import { EmailConnectorSection } from '../components/EmailConnectorSection';
-import { AutomationSection } from '../components/AutomationSection';
 import { useAuthStore } from '@/stores/authStore';
 import { useTotpStatus, useTotpSetup, useTotpEnable, useTotpDisable } from '@/hooks/useAuth';
 
@@ -1411,7 +1407,7 @@ export function CategoriesSection() {
   });
 
   // Fetch category groups
-  const { data: groups, isLoading: groupsLoading } = useQuery<{ id: string; name: string; type: string; categoryCount: number }[]>({
+  const { data: groups } = useQuery<{ id: string; name: string; type: string; categoryCount: number }[]>({
     queryKey: ['settings', 'category-groups'],
     queryFn: () => api.get('/settings/category-groups').then((r) => r.data),
   });

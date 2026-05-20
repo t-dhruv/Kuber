@@ -8,6 +8,7 @@ vi.mock('../../src/lib/prisma', () => ({
   prisma: {
     account: {
       findMany: vi.fn(),
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -15,12 +16,34 @@ vi.mock('../../src/lib/prisma', () => ({
     },
     accountBalanceSnapshot: {
       findMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    recurringItem: {
+      updateMany: vi.fn(),
+    },
+    goal: {
+      updateMany: vi.fn(),
+    },
+    taxAccount: {
+      updateMany: vi.fn(),
+    },
+    reconciliation: {
+      deleteMany: vi.fn(),
+    },
+    reportingSnapshot: {
+      deleteMany: vi.fn(),
+    },
+    reportingRollup: {
+      deleteMany: vi.fn(),
+    },
+    investmentHolding: {
+      deleteMany: vi.fn(),
     },
     transactionJournal: {
       findMany: vi.fn(),
       updateMany: vi.fn(),
     },
-    $transaction: vi.fn(),
+    $transaction: vi.fn(async (fn) => fn(prisma)),
   },
 }));
 
@@ -136,10 +159,7 @@ describe('accounts route integration', () => {
   });
 
   it('returns 404 when updating an account from another household', async () => {
-    vi.mocked(prisma.account.findUnique).mockResolvedValue({
-      ...baseAccount,
-      householdId: 'other-household',
-    } as any);
+    vi.mocked(prisma.account.findFirst).mockResolvedValue(null);
 
     const res = await request(makeApp())
       .put('/account-1')
@@ -150,9 +170,17 @@ describe('accounts route integration', () => {
     expect(prisma.account.update).not.toHaveBeenCalled();
   });
 
-  it('soft-deletes the account and hides related journals', async () => {
-    vi.mocked(prisma.account.findUnique).mockResolvedValue(baseAccount as any);
+  it('deletes account-related data and soft-deletes user-visible financial records', async () => {
+    vi.mocked(prisma.account.findFirst).mockResolvedValue(baseAccount as any);
     vi.mocked(prisma.transactionJournal.updateMany).mockResolvedValue({ count: 2 } as any);
+    vi.mocked(prisma.recurringItem.updateMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.goal.updateMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.taxAccount.updateMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.accountBalanceSnapshot.deleteMany).mockResolvedValue({ count: 3 } as any);
+    vi.mocked(prisma.reconciliation.deleteMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.reportingSnapshot.deleteMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.reportingRollup.deleteMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.investmentHolding.deleteMany).mockResolvedValue({ count: 1 } as any);
     vi.mocked(prisma.account.update).mockResolvedValue({
       ...baseAccount,
       isDeleted: true,
@@ -161,9 +189,40 @@ describe('accounts route integration', () => {
     const res = await request(makeApp()).delete('/account-1');
 
     expect(res.status).toBe(200);
+    expect(prisma.account.findFirst).toHaveBeenCalledWith({
+      where: { id: 'account-1', householdId: 'household-1', isDeleted: false },
+    });
+    expect(prisma.$transaction).toHaveBeenCalled();
     expect(prisma.transactionJournal.updateMany).toHaveBeenCalledWith({
       where: { entries: { some: { accountId: 'account-1' } }, householdId: 'household-1' },
-      data: { isHidden: true },
+      data: { isDeleted: true, isHidden: true },
+    });
+    expect(prisma.recurringItem.updateMany).toHaveBeenCalledWith({
+      where: { householdId: 'household-1', accountId: 'account-1', isDeleted: false },
+      data: { isDeleted: true, isActive: false },
+    });
+    expect(prisma.goal.updateMany).toHaveBeenCalledWith({
+      where: { householdId: 'household-1', accountId: 'account-1', isDeleted: false },
+      data: { isDeleted: true },
+    });
+    expect(prisma.taxAccount.updateMany).toHaveBeenCalledWith({
+      where: { householdId: 'household-1', linkedAccountId: 'account-1' },
+      data: { linkedAccountId: null },
+    });
+    expect(prisma.accountBalanceSnapshot.deleteMany).toHaveBeenCalledWith({
+      where: { householdId: 'household-1', accountId: 'account-1' },
+    });
+    expect(prisma.reconciliation.deleteMany).toHaveBeenCalledWith({
+      where: { householdId: 'household-1', accountId: 'account-1' },
+    });
+    expect(prisma.reportingSnapshot.deleteMany).toHaveBeenCalledWith({
+      where: { householdId: 'household-1', kind: 'account_balance', subjectId: 'account-1' },
+    });
+    expect(prisma.reportingRollup.deleteMany).toHaveBeenCalledWith({
+      where: { householdId: 'household-1', kind: 'account_balance', subjectId: 'account-1' },
+    });
+    expect(prisma.investmentHolding.deleteMany).toHaveBeenCalledWith({
+      where: { accountId: 'account-1' },
     });
     expect(prisma.account.update).toHaveBeenCalledWith({
       where: { id: 'account-1' },
@@ -172,5 +231,3 @@ describe('accounts route integration', () => {
     expect(prisma.account.delete).not.toHaveBeenCalled();
   });
 });
-
-

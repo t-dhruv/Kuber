@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Settings, MoreHorizontal, Pencil, Trash2, PauseCircle, PlayCircle, Check } from 'lucide-react';
+import { Plus, Settings, Pencil, Trash2, PauseCircle, PlayCircle, Check } from 'lucide-react';
 import { api } from '@/lib/api';
 import {
   FREQUENCY_OPTIONS,
@@ -152,66 +152,6 @@ function accountLabel(item: RecurringItem): string {
   return item.accountLastFour
     ? `${item.accountName} ••${item.accountLastFour}`
     : item.accountName;
-}
-
-// ─── Overflow Menu ────────────────────────────────────────────────────────────
-
-function OverflowMenu({
-  onEdit,
-  onToggle,
-  onDelete,
-  isActive,
-}: {
-  onEdit: () => void;
-  onToggle: () => void;
-  onDelete: () => void;
-  isActive: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="bg-transparent border-none cursor-pointer py-1 px-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] flex items-center hover:bg-[var(--color-surface-hover)]"
-        aria-label="More options"
-      >
-        <MoreHorizontal size={16} />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-[var(--shadow-md)] min-w-[140px] z-50">
-          {[
-            { label: 'Edit', icon: <Pencil size={13} />, action: onEdit },
-            {
-              label: isActive ? 'Pause' : 'Resume',
-              icon: isActive ? <PauseCircle size={13} /> : <PlayCircle size={13} />,
-              action: onToggle,
-            },
-            { label: 'Delete', icon: <Trash2 size={13} />, action: onDelete, danger: true },
-          ].map((item) => (
-            <button
-              key={item.label}
-              onClick={() => { item.action(); setOpen(false); }}
-              className={`flex items-center gap-2 w-full py-2 px-3 bg-transparent border-none cursor-pointer text-[0.8125rem] text-left hover:bg-[var(--color-surface-hover)] ${(item as any).danger ? 'text-[var(--color-danger)]' : 'text-[var(--color-text)]'}`}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ─── Add/Edit Modal ───────────────────────────────────────────────────────────
@@ -380,17 +320,11 @@ function MonthlyView({
   data,
   isLoading,
   isError,
-  onEdit,
-  onDelete,
-  onToggle,
   onAddIncome,
 }: {
   data?: MonthlySummary;
   isLoading: boolean;
   isError: boolean;
-  onEdit: (item: RecurringItem) => void;
-  onDelete: (item: RecurringItem) => void;
-  onToggle: (item: RecurringItem) => void;
   onAddIncome: () => void;
 }) {
   if (isLoading) {
@@ -1166,9 +1100,6 @@ export default function RecurringPage() {
           data={summary}
           isLoading={summaryLoading}
           isError={summaryError}
-          onEdit={openEdit}
-          onDelete={openDelete}
-          onToggle={(item) => toggleMut.mutate(item)}
           onAddIncome={openAdd}
         />
       ) : view === 'calendar' ? (

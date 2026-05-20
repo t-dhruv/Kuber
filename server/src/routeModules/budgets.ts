@@ -7,8 +7,7 @@ import { getPeriodKey, getOrCreateBudgetLimit, recalcSpentAmount, rolloverPrevio
 
 const router = Router();
 
-const VALID_BUDGET_TYPES = ['FIXED', 'FLEXIBLE', 'NON_MONTHLY'] as const;
-type BudgetType = (typeof VALID_BUDGET_TYPES)[number];
+type BudgetType = 'FIXED' | 'FLEXIBLE' | 'NON_MONTHLY';
 
 const budgetCreateSchema = z.object({
   categoryId: z.string().optional(),

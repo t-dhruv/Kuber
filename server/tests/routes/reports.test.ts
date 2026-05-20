@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import reportsRouter from '../../src/routes/reports';
-import { prisma } from '../../src/lib/prisma';
 import { fetchJournalReportRows, type JournalReportRow } from '../../src/lib/journalReportingCore';
 
 vi.mock('../../src/lib/prisma', () => ({

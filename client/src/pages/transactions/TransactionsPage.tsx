@@ -157,8 +157,30 @@ function fmtInputDate(dateStr: string): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function merchantInitial(name: string) {
-  return (name ?? '?')[0].toUpperCase();
+function shiftDateInput(dateStr: string, days: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) return dateStr;
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  date.setDate(date.getDate() + days);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function keepDateRangeOrdered(
+  from: string,
+  to: string,
+  changedField: 'from' | 'to',
+): { from: string; to: string } {
+  if (!from || !to || from < to) return { from, to };
+
+  if (changedField === 'from') {
+    return { from, to: shiftDateInput(from, 1) };
+  }
+
+  return { from: shiftDateInput(to, -1), to };
 }
 
 // ─── Group transactions by date ───────────────────────────────────────────────
@@ -1058,7 +1080,20 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
   const [localFrom, setLocalFrom] = useState(searchParams.get('from') ?? '');
   const [localTo, setLocalTo] = useState(searchParams.get('to') ?? '');
 
+  function updateLocalFrom(from: string) {
+    const next = keepDateRangeOrdered(from, localTo, 'from');
+    setLocalFrom(next.from);
+    setLocalTo(next.to);
+  }
+
+  function updateLocalTo(to: string) {
+    const next = keepDateRangeOrdered(localFrom, to, 'to');
+    setLocalFrom(next.from);
+    setLocalTo(next.to);
+  }
+
   function applyFilters() {
+    const orderedRange = keepDateRangeOrdered(localFrom, localTo, 'to');
     const next = new URLSearchParams(searchParams);
     next.delete('accountId');
     next.delete('categoryId');
@@ -1082,8 +1117,8 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
     if (localHidden) next.set('hidden', 'true');
     if (localType !== 'all') next.set('type', localType);
     if (localPending) next.set('pending', 'true');
-    if (localFrom) next.set('from', localFrom);
-    if (localTo) next.set('to', localTo);
+    if (orderedRange.from) next.set('from', orderedRange.from);
+    if (orderedRange.to) next.set('to', orderedRange.to);
 
     setSearchParams(next);
     onClose();
@@ -1142,7 +1177,8 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
                 <input
                   type="date"
                   value={localFrom}
-                  onChange={(e) => setLocalFrom(e.target.value)}
+                  max={localTo ? shiftDateInput(localTo, -1) : undefined}
+                  onChange={(e) => updateLocalFrom(e.target.value)}
                   className="w-full px-2 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit] box-border"
                 />
               </div>
@@ -1151,7 +1187,8 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
                 <input
                   type="date"
                   value={localTo}
-                  onChange={(e) => setLocalTo(e.target.value)}
+                  min={localFrom ? shiftDateInput(localFrom, 1) : undefined}
+                  onChange={(e) => updateLocalTo(e.target.value)}
                   className="w-full px-2 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit] box-border"
                 />
               </div>
@@ -1728,7 +1765,22 @@ export default function TransactionsPage() {
 
   function setParam(key: string, value: string) {
     const next = new URLSearchParams(searchParams);
-    if (value) {
+
+    if (key === 'startDate' || key === 'endDate') {
+      const currentFrom = key === 'startDate' ? value : searchParams.get('startDate') ?? '';
+      const currentTo = key === 'endDate' ? value : searchParams.get('endDate') ?? '';
+      const orderedRange = keepDateRangeOrdered(
+        currentFrom,
+        currentTo,
+        key === 'startDate' ? 'from' : 'to',
+      );
+
+      if (orderedRange.from) next.set('startDate', orderedRange.from);
+      else next.delete('startDate');
+
+      if (orderedRange.to) next.set('endDate', orderedRange.to);
+      else next.delete('endDate');
+    } else if (value) {
       next.set(key, value);
     } else {
       next.delete(key);
@@ -1843,6 +1895,8 @@ export default function TransactionsPage() {
   const groups = groupByDate(transactions);
   const allSelected = transactions.length > 0 && selectedIds.size === transactions.length;
   const someSelected = selectedIds.size > 0;
+  const selectedStartDate = searchParams.get('startDate') ?? '';
+  const selectedEndDate = searchParams.get('endDate') ?? '';
 
   return (
     <div className="py-4 flex flex-col gap-3">
@@ -1877,7 +1931,8 @@ export default function TransactionsPage() {
             From
             <input
               type="date"
-              value={searchParams.get('startDate') ?? ''}
+              value={selectedStartDate}
+              max={selectedEndDate ? shiftDateInput(selectedEndDate, -1) : undefined}
               onChange={(e) => setParam('startDate', e.target.value)}
               className="px-2 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
             />
@@ -1886,7 +1941,8 @@ export default function TransactionsPage() {
             To
             <input
               type="date"
-              value={searchParams.get('endDate') ?? ''}
+              value={selectedEndDate}
+              min={selectedStartDate ? shiftDateInput(selectedStartDate, 1) : undefined}
               onChange={(e) => setParam('endDate', e.target.value)}
               className="px-2 py-[0.4rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] text-[0.8125rem] font-[inherit]"
             />
@@ -2187,7 +2243,7 @@ export default function TransactionsPage() {
                     onToggleReview={(id) =>
                       setExpandedReviewId((prev) => (prev === id ? null : id))
                     }
-                    onReviewDone={(id) => {
+                    onReviewDone={() => {
                       setExpandedReviewId(null);
                       queryClient.invalidateQueries({ queryKey: ['transactions'] });
                     }}

@@ -19,7 +19,7 @@ export default function ReviewQueuePage() {
   const qc = useQueryClient();
   const [page] = useState(1);
   const [pendingRulePattern, setPendingRulePattern] = useState<string | null>(() => {
-    try { return sessionStorage.getItem('pendingRulePattern') ?? null; } catch (_e) { return null; }
+    try { return sessionStorage.getItem('pendingRulePattern') ?? null; } catch { return null; }
   });
 
   const { data, isLoading } = useQuery<ReviewQueueResponse>({
@@ -120,7 +120,7 @@ export default function ReviewQueuePage() {
     try {
       if (val) sessionStorage.setItem('pendingRulePattern', val);
       else sessionStorage.removeItem('pendingRulePattern');
-    } catch (_e) {
+    } catch {
       // sessionStorage unavailable
     }
     setPendingRulePattern(val);

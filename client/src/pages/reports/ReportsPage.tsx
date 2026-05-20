@@ -1,17 +1,16 @@
-import { useEffect, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookmarkPlus } from "lucide-react";
 import {
   ReportTab,
   TabBar,
   DatePresetDropdown,
-  SavedReport,
 } from "./shared";
 import { CashFlowTab } from "./tabs/CashFlowTab";
 import { SavingsTab } from "./tabs/SavingsTab";
 import { SpendingTab } from "./tabs/SpendingTab";
 import { BenchmarksTab } from "./tabs/BenchmarksTab";
-import { DATE_PRESETS, computeDateRange, type DatePreset } from "./dateRange";
+import { computeDateRange, type DatePreset } from "./dateRange";
 import { api } from "@/lib/api";
 import {
   Card,
@@ -47,8 +46,8 @@ export default function ReportsPage() {
     const range = computeDateRange(datePreset);
     return range.endDate;
   });
-  const [excludeCategoryIds, setExcludeCategoryIds] = useState<string[]>([]);
-  const [excludeAccountIds, setExcludAccountIds] = useState<string[]>([]);
+  const [excludeCategoryIds] = useState<string[]>([]);
+  const [excludeAccountIds] = useState<string[]>([]);
   const [drillPanel, setDrillPanel] = useState<{
     id: string;
     name: string;
@@ -57,21 +56,11 @@ export default function ReportsPage() {
     groupBy: string;
   } | null>(null);
 
-  const [savedViews, setSavedViews] = useState<SavedReport[]>([]);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveModalName, setSaveModalName] = useState("");
   const [selectedSavedViewId, setSelectedSavedViewId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const queryClient = useQueryClient();
-
-  const { data: allSavedReports } = useQuery({
-    queryKey: ["reports-saved-views"],
-    queryFn: () => api.get("/reports/saved-views").then((r) => r.data),
-  });
-
-  useEffect(() => {
-    setSavedViews(allSavedReports || []);
-  }, [allSavedReports]);
 
   const saveMutation = useMutation({
     mutationFn: (name: string) =>

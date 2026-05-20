@@ -10,7 +10,6 @@ import {
   buildBucket,
   buildAlerts,
   computeSavingsCapacity,
-  type BucketKey,
 } from '../lib/wealthAnalysis';
 
 const router = Router();

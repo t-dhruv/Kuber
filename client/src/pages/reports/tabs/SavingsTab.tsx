@@ -8,7 +8,6 @@ import {
   fmtPct,
   KpiCards,
   SummaryRow,
-  MONTH_NAMES,
 } from "../shared";
 
 export function SavingsTab({

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Check, X, Plus } from 'lucide-react';
 import { Button, CategoryCombobox, notify } from '@/components/ui';
 import { CreateCategoryInline } from './CreateCategoryInline';
@@ -37,7 +36,6 @@ function confidenceColor(confidence: number | null): string {
 }
 
 export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, onCreateRule }: Props) {
-  const navigate = useNavigate();
   const [mode, setMode] = useState<'idle' | 'rejecting' | 'creating'>('idle');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [loading, setLoading] = useState(false);

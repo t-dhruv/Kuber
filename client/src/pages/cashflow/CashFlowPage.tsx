@@ -600,7 +600,7 @@ function SankeyChart({ data, year, month }: { data?: MonthData; year: number; mo
             nodePadding={14}
             nodeWidth={18}
             margin={{ top: 8, right: 140, bottom: 8, left: 140 }}
-            link={({ sourceX, sourceY, sourceControlX, targetControlX, targetX, targetY, linkWidth, index }: any) => (
+            link={({ sourceX, sourceY, sourceControlX, targetControlX, targetX, targetY, linkWidth }: any) => (
               <path
                 d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
                 fill="none"

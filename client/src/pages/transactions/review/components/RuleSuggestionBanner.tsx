@@ -21,7 +21,7 @@ function loadDismissed(): Set<string> {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     return raw ? new Set(JSON.parse(raw)) : new Set();
-  } catch (_e) {
+  } catch {
     return new Set();
   }
 }
@@ -29,7 +29,7 @@ function loadDismissed(): Set<string> {
 function saveDismissed(set: Set<string>) {
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify([...set]));
-  } catch (_e) {
+  } catch {
     // sessionStorage unavailable (e.g. private browsing restrictions)
   }
 }

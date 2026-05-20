@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Card, CardDivider } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { ReportsSankeyChart, type SankeyData } from "../components/ReportsSankeyChart";
 import {
   CashFlowReport,
