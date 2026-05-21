@@ -42,6 +42,13 @@ const mockPrismaClient = {
   wealthSnapshot: { findMany: vi.fn() },
   report: { findMany: vi.fn(), create: vi.fn() },
   refreshToken: { create: vi.fn(), deleteMany: vi.fn() },
+  securityToken: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    deleteMany: vi.fn(),
+  },
 };
 
 export const prismaMock = mockPrismaClient;

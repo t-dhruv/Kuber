@@ -160,9 +160,7 @@ function TotpStep({
   }
 
   const error = validate.error || backup.error;
-  const errorMessage = error
-    ? getApiErrorMessage(error, "Invalid code")
-    : null;
+  const errorMessage = error ? getApiErrorMessage(error, "Invalid code") : null;
   const isPending = validate.isPending || backup.isPending;
 
   return (
@@ -311,51 +309,99 @@ export default function LoginPage() {
         padding: "1rem",
       }}
     >
-      <div style={{ width: "100%", maxWidth: "400px", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "400px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "1.5rem",
+        }}
+      >
         {/* Logo + wordmark */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.875rem" }}>
-          <div style={{
-            width: 56, height: 56,
-            borderRadius: "var(--radius-lg)",
-            backgroundColor: "var(--color-accent)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", fontSize: "1.5rem", fontWeight: 700,
-            boxShadow: "var(--shadow-md)",
-          }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "0.875rem",
+          }}
+        >
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: "var(--radius-lg)",
+              backgroundColor: "var(--color-accent)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#fff",
+              fontSize: "1.5rem",
+              fontWeight: 700,
+              boxShadow: "var(--shadow-md)",
+            }}
+          >
             K
           </div>
           <div style={{ textAlign: "center" }}>
-            <h1 style={{
-              fontFamily: "var(--font-display)",
-              fontSize: "2rem",
-              fontWeight: 800,
-              color: "var(--color-accent)",
-              margin: 0,
-              letterSpacing: "-0.02em",
-              lineHeight: 1,
-            }}>
+            <h1
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "2rem",
+                fontWeight: 800,
+                color: "var(--color-accent)",
+                margin: 0,
+                letterSpacing: "-0.02em",
+                lineHeight: 1,
+              }}
+            >
               Kuber
             </h1>
-            <p style={{ color: "var(--color-text-muted)", marginTop: "0.375rem", fontSize: "0.8125rem" }}>
+            <p
+              style={{
+                color: "var(--color-text-muted)",
+                marginTop: "0.375rem",
+                fontSize: "0.8125rem",
+              }}
+            >
               Your finances, your server, your rules.
             </p>
           </div>
         </div>
 
         {/* Card */}
-        <div style={{
-          backgroundColor: "var(--color-surface)",
-          borderRadius: "var(--radius-xl)",
-          boxShadow: "var(--shadow-lg)",
-          border: "1px solid var(--color-border)",
-          padding: "2rem",
-        }}>
+        <div
+          style={{
+            backgroundColor: "var(--color-surface)",
+            borderRadius: "var(--radius-xl)",
+            boxShadow: "var(--shadow-lg)",
+            border: "1px solid var(--color-border)",
+            padding: "2rem",
+          }}
+        >
           <div style={{ marginBottom: "1.5rem" }}>
-            <h2 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--color-text)", margin: 0 }}>
-              {tempToken ? "Two-factor authentication" : "Sign in to your account"}
+            <h2
+              style={{
+                fontSize: "1.125rem",
+                fontWeight: 600,
+                color: "var(--color-text)",
+                margin: 0,
+              }}
+            >
+              {tempToken
+                ? "Two-factor authentication"
+                : "Sign in to your account"}
             </h2>
             {!tempToken && (
-              <p style={{ color: "var(--color-text-secondary)", marginTop: "0.25rem", fontSize: "0.8125rem", margin: "0.25rem 0 0" }}>
+              <p
+                style={{
+                  color: "var(--color-text-secondary)",
+                  marginTop: "0.25rem",
+                  fontSize: "0.8125rem",
+                  margin: "0.25rem 0 0",
+                }}
+              >
                 Access your self-hosted finance server.
               </p>
             )}
@@ -366,20 +412,28 @@ export default function LoginPage() {
           ) : (
             <>
               <PasswordStep onRequireTotp={setTempToken} />
-              <p style={{ textAlign: "center", marginTop: "1.25rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+              <p
+                style={{
+                  textAlign: "center",
+                  marginTop: "1.25rem",
+                  fontSize: "0.875rem",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
                 Don't have an account?{" "}
-                <Link to="/signup" style={{ color: "var(--color-accent)", textDecoration: "none", fontWeight: "500" }}>
+                <Link
+                  to="/signup"
+                  style={{
+                    color: "var(--color-accent)",
+                    textDecoration: "none",
+                    fontWeight: "500",
+                  }}
+                >
                   Sign up
                 </Link>
               </p>
             </>
           )}
-        </div>
-
-        {/* Server indicator */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: "var(--color-success)", display: "inline-block" }} />
-          Self-hosted · kuber.local
         </div>
       </div>
     </div>
