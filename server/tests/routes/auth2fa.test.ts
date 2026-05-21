@@ -57,6 +57,7 @@ const passwordHash = bcrypt.hashSync('CorrectPassword123!', 12);
 const user = {
   id: 'user-1',
   email: 'user@example.com',
+  emailVerifiedAt: new Date('2026-05-21T12:00:00.000Z'),
   passwordHash,
   firstName: 'Ada',
   lastName: 'Lovelace',
@@ -225,5 +226,4 @@ describe('auth 2FA routes', () => {
     expect(res.body).toEqual({ message: 'Two-factor authentication disabled' });
   });
 });
-
 

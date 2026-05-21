@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { prismaMock } from '../test-setup';
+import { prismaMock } from '../../src/test-setup';
 import {
   consumeSecurityToken,
   createSecurityToken,
   deleteSecurityTokensForUser,
   SECURITY_TOKEN_TTLS,
-} from './securityTokens';
-import { hashToken } from './token';
+} from '../../src/lib/securityTokens';
+import { hashToken } from '../../src/lib/token';
 
 describe('securityTokens', () => {
   beforeEach(() => {
