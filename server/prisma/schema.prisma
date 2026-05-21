@@ -11,6 +11,7 @@ model User {
   id                  String            @id @default(cuid())
   email               String            @unique
   passwordHash        String
+  emailVerifiedAt     DateTime?
   firstName           String
   lastName            String
   avatar              String?
@@ -28,6 +29,7 @@ model User {
   householdMembers    HouseholdMember[]
   preferences         UserPreference[]
   refreshTokens       RefreshToken[]
+  securityTokens      SecurityToken[]
   auditLogs           AuditLog[]
   apiTokens           ApiToken[]
 
@@ -183,6 +185,23 @@ model RefreshToken {
 
   @@index([familyId])
   @@map("refresh_tokens")
+}
+
+model SecurityToken {
+  id           String    @id @default(cuid())
+  userId       String
+  type         String
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  attemptCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("security_tokens")
 }
 
 model Account {
