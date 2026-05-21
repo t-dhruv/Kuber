@@ -5,6 +5,15 @@ import { useLogin, useTotpValidate, useTotpBackup } from "@/hooks/useAuth";
 import { Input } from "@/components/ui";
 import { getApiErrorMessage } from "@/lib/apiError";
 
+type EmailVerificationError = {
+  response?: {
+    data?: {
+      requireEmailVerification?: boolean;
+      email?: string;
+    };
+  };
+};
+
 function ErrorBox({ message }: { message: string }) {
   return (
     <div
@@ -33,6 +42,7 @@ function PasswordStep({
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const login = useLogin();
 
   function handleSubmit(e: FormEvent) {
@@ -43,11 +53,17 @@ function PasswordStep({
         onSuccess: (data) => {
           if (data.requireTotp) onRequireTotp(data.tempToken);
         },
+        onError: (err) => {
+          const data = (err as EmailVerificationError).response?.data;
+          if (data?.requireEmailVerification && data.email) {
+            setUnverifiedEmail(data.email);
+          }
+        },
       },
     );
   }
 
-  const errorMessage = login.error
+  const errorMessage = login.error && !unverifiedEmail
     ? getApiErrorMessage(login.error, "Sign in failed. Please try again.")
     : null;
 
@@ -106,6 +122,12 @@ function PasswordStep({
           Remember me for 90 days
         </span>
       </label>
+
+      {unverifiedEmail && (
+        <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-accent-light)] text-[var(--color-text)] text-sm mb-4">
+          Verify {unverifiedEmail} before signing in. Use the link we sent to your inbox.
+        </div>
+      )}
 
       {errorMessage && <ErrorBox message={errorMessage} />}
 

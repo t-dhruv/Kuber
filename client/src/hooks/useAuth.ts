@@ -8,6 +8,16 @@ type LoginResponse =
   | { user: UserDto; accessToken: string; requireTotp?: never }
   | { requireTotp: true; tempToken: string };
 
+type SignupResponse = {
+  requireEmailVerification: true;
+  email: string;
+  message: string;
+};
+
+type EmailVerificationResponse = {
+  message: string;
+};
+
 export function useLogin() {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
@@ -23,15 +33,23 @@ export function useLogin() {
 }
 
 export function useSignup() {
-  const { setAuth } = useAuthStore();
-  const navigate = useNavigate();
   return useMutation({
     mutationFn: (data: { email: string; password: string; firstName: string; lastName: string; householdName?: string; inviteToken?: string }) =>
-      api.post<{ user: UserDto; accessToken: string }>('/auth/signup', data).then(r => r.data),
-    onSuccess: (data) => {
-      setAuth(data.user, data.accessToken);
-      navigate('/');
-    },
+      api.post<SignupResponse>('/auth/signup', data).then(r => r.data),
+  });
+}
+
+export function useVerifyEmail() {
+  return useMutation({
+    mutationFn: (token: string) =>
+      api.post<EmailVerificationResponse>('/auth/verify-email', { token }).then(r => r.data),
+  });
+}
+
+export function useResendVerification() {
+  return useMutation({
+    mutationFn: (email: string) =>
+      api.post<EmailVerificationResponse>('/auth/resend-verification', { email }).then(r => r.data),
   });
 }
 
