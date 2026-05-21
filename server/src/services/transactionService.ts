@@ -835,7 +835,7 @@ export async function createTransfer(params: CreateTransferParams) {
 
   // Fetch full journal with entries for response
   const fullJournal = await prisma.transactionJournal.findUniqueOrThrow({
-    where: { id: journal.journalId },
+    where: { id: journal.id },
     include: {
       entries: { include: { account: true } },
       category: true,
@@ -976,7 +976,7 @@ export async function convertToTransfer(params: ConvertTransferParams) {
 
   // Fetch full journal for response
   const fullJournal = await prisma.transactionJournal.findUniqueOrThrow({
-    where: { id: transferJournal.journalId },
+    where: { id: transferJournal.id },
     include: {
       entries: { include: { account: { select: { id: true, name: true } } } },
       category: { select: { id: true, name: true, icon: true } },

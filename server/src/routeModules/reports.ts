@@ -534,14 +534,30 @@ router.get('/no-category', async (req: AuthRequest, res: Response) => {
 router.get('/export/csv', async (req: AuthRequest, res: Response) => {
   try {
     const { type } = req.query as Record<string, string | undefined>;
-    if (!type || !['spending', 'income', 'cashflow'].includes(type)) {
-      return res.status(400).json({ error: 'type must be one of: spending, income, cashflow' });
+    if (!type || !['spending', 'income', 'cashflow', 'tax'].includes(type)) {
+      return res.status(400).json({ error: 'type must be one of: spending, income, cashflow, tax' });
     }
-    const range = parseDateRange(req.query.startDate, req.query.endDate);
-    if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
-    const rows = await loadJournalRowsForRequest(req, range);
     const filename = `report-${type}-${new Date().toISOString().slice(0, 10)}.csv`;
     setCsvHeaders(res, filename);
+    if (type === 'tax') {
+      const year = parseInt(String(req.query.year ?? new Date().getFullYear()), 10);
+      if (isNaN(year)) return res.status(400).json({ error: 'Invalid year' });
+      const range = { start: new Date(year, 0, 1), end: new Date(year, 11, 31, 23, 59, 59, 999) };
+      const rows = await loadJournalRowsForRequest(req, range);
+      const tax = buildJournalTaxSummary(rows, year, buildJournalReportFilters(req.query as Record<string, unknown>));
+      return res.send(toCSV(tax.categories.map((item) => ({
+        category: item.name,
+        transactions: item.transactionCount,
+        amount: item.amount,
+      })), [
+        { key: 'category', header: 'Category' },
+        { key: 'transactions', header: 'Transactions' },
+        { key: 'amount', header: 'Amount' },
+      ]));
+    }
+    const range = getJournalDateRange(req);
+    if (!range) return res.status(400).json({ error: 'startDate/endDate or from/to are required (ISO format)' });
+    const rows = await loadJournalRowsForRequest(req, range);
     if (type === 'cashflow') {
       const cashflow = buildJournalCashflowReport(rows, {
         ...range,

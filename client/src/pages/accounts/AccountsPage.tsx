@@ -1560,7 +1560,7 @@ function AssetsLiabilitiesTab() {
             {/* Inline amortization panel */}
             {selectedLiab?.id === l.id && (
               <div className="ml-2 mr-1 mb-2 border border-[var(--color-border)] rounded-[var(--radius-md)] p-4 bg-[var(--color-surface)]">
-                <LiabilityDetailPanel liability={l as any} currency={l.currency} />
+                <LiabilityDetailPanel liability={l} currency={l.currency} />
               </div>
             )}
           </div>

@@ -1,7 +1,7 @@
 /**
  * emailConnector.ts
  * API for managing the optional IMAP email connector.
- * Credentials stored as UserPreference key 'imap_config' (JSON, should be encrypted in prod).
+ * Credentials are encrypted before being stored in UserPreference key 'imap_config'.
  */
 import { Router, Response } from 'express';
 import { z } from 'zod';

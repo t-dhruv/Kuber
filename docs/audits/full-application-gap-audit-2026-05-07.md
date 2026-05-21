@@ -95,7 +95,7 @@ Severity: Medium
 Category: OWASP A05 Security Misconfiguration  
 Evidence: [docker-compose.prod.yml](C:/_Code/_selfHosted/Kuber/docker-compose.prod.yml:17), [docker-compose.prod.yml](C:/_Code/_selfHosted/Kuber/docker-compose.prod.yml:35), [docker-compose.prod.yml](C:/_Code/_selfHosted/Kuber/docker-compose.prod.yml:145), [docker-compose.prod.yml](C:/_Code/_selfHosted/Kuber/docker-compose.prod.yml:167), nginx HTTP listener in [docker-compose.prod.yml](C:/_Code/_selfHosted/Kuber/docker-compose.prod.yml:78), tutorial starts on HTTP in [README.md](C:/_Code/_selfHosted/Kuber/README.md:85)
 
-Production can come up with `CHANGE_ME`, `admin`, and `changeme` defaults for Postgres/Grafana/n8n. Plain HTTP is supported without an enforced HTTPS/HSTS path.
+Production can come up with `CHANGE_ME`, `admin`, and `changeme` defaults for Postgres/Grafana/bundled automation services. Plain HTTP is supported without an enforced HTTPS/HSTS path.
 
 Remediation: use `${VAR:?must be set}` in production compose, document a required secret checklist, ship a hardened TLS reverse-proxy example, and add startup checks for obviously unsafe values.
 

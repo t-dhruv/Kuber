@@ -69,6 +69,13 @@ import { metricsHandler, httpRequestsTotal, httpRequestDurationSeconds,
 
 const jobLog = logger.child({ module: 'jobs' });
 
+function getRequestId(req: express.Request): string {
+  const maybeRequestId = 'id' in req ? req.id : undefined;
+  return typeof maybeRequestId === 'string' || typeof maybeRequestId === 'number'
+    ? String(maybeRequestId)
+    : '';
+}
+
 // ── Cron job registry ─────────────────────────────────────────────────────────
 // Register all recurring jobs so they are visible via GET /api/v1/cron/jobs
 // and triggerable via POST /api/v1/cron/jobs/:name/trigger.
@@ -172,7 +179,7 @@ app.use(compression({
     if (req.path.includes('/stream')) return false;
     return compression.filter(req, res);
   },
-}) as any);
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
@@ -197,7 +204,7 @@ app.use(pinoHttp({
 
 // Expose request ID to clients for support/debugging (pino-http sets req.id)
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-  res.setHeader('X-Request-Id', (req as any).id ?? '');
+  res.setHeader('X-Request-Id', getRequestId(req));
   next();
 });
 

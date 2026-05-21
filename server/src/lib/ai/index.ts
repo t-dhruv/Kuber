@@ -15,6 +15,30 @@ export * from './types';
 interface CacheEntry { client: AiProviderClient; expiresAt: number }
 const clientCache = new Map<string, CacheEntry>();
 
+interface AiConfigRepository {
+  aiConfig: {
+    findUnique(args: { where: { householdId: string } }): Promise<AiConfig | null>;
+  };
+}
+
+function parseHeaderConfig(headers: string | null): Record<string, string> | null {
+  if (!headers) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(headers);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+
+    const entries = Object.entries(parsed);
+    if (!entries.every((entry): entry is [string, string] => typeof entry[1] === 'string')) {
+      return null;
+    }
+
+    return Object.fromEntries(entries);
+  } catch {
+    return null;
+  }
+}
+
 export function invalidateAiCache(householdId: string): void {
   clientCache.delete(householdId);
 }
@@ -29,16 +53,12 @@ export function getAiClient(config: AiConfig): AiProviderClient {
   if (cached && Date.now() < cached.expiresAt) return cached.client;
 
   const apiKey  = decrypt(config.encryptedApiKey);
-  let parsedHeaders: Record<string, string> | null = null;
-  if ((config as any).headers) {
-    try { parsedHeaders = JSON.parse((config as any).headers); } catch { /* ignore bad JSON */ }
-  }
   const data: AiConfigData = {
     provider,
     model:   config.model,
     apiKey,
     baseUrl: config.baseUrl,
-    headers: parsedHeaders,
+    headers: parseHeaderConfig(config.headers),
   };
 
   let client: AiProviderClient;
@@ -59,7 +79,7 @@ export function getAiClient(config: AiConfig): AiProviderClient {
 
 export async function getAiClientForHousehold(
   householdId: string,
-  prisma: { aiConfig: { findUnique: (args: any) => Promise<AiConfig | null> } },
+  prisma: AiConfigRepository,
 ): Promise<AiProviderClient> {
   const config = await prisma.aiConfig.findUnique({ where: { householdId } });
   if (!config || config.provider === 'none') {

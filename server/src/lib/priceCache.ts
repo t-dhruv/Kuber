@@ -11,6 +11,8 @@ const YahooFinance = yahooFinanceModule as unknown as new (opts?: object) => {
     regularMarketChangePercent?: number;
     currency?: string;
     shortName?: string;
+    dividendYield?: number;
+    trailingAnnualDividendYield?: number;
   }>;
   historical(
     symbol: string,
@@ -47,7 +49,7 @@ async function fetchFromYahoo(symbol: string): Promise<CachedQuote> {
     dayChangePercent: Math.round((q.regularMarketChangePercent ?? 0) * 100) / 100,
     currency: q.currency ?? 'USD',
     shortName: q.shortName ?? symbol,
-    dividendYield: (q as any).dividendYield ?? (q as any).trailingAnnualDividendYield ?? 0,
+    dividendYield: q.dividendYield ?? q.trailingAnnualDividendYield ?? 0,
     fetchedAt: Date.now(),
   };
 }

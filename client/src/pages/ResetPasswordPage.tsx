@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/apiError';
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -33,7 +34,7 @@ export default function ResetPasswordPage() {
   }
 
   const errorMessage = validationError
-    ?? (mutation.error ? (mutation.error as any)?.response?.data?.error ?? 'Something went wrong. Please try again.' : null);
+    ?? (mutation.error ? getApiErrorMessage(mutation.error, 'Something went wrong. Please try again.') : null);
 
   const inputClass = "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] text-[0.9375rem] outline-none box-border";
 

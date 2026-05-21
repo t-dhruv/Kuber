@@ -81,6 +81,19 @@ const rows: JournalReportRow[] = [
     tags: [],
     entryBalance: 0,
   },
+  {
+    id: 'journal-donation',
+    householdId: 'hh-1',
+    transactionType: 'withdrawal',
+    date: new Date('2026-02-10T00:00:00.000Z'),
+    description: 'Donation',
+    amount: 50,
+    signedAmount: -50,
+    category: { id: 'cat-charity', name: 'Charity', icon: 'heart', type: 'expense', isTaxDeductible: true },
+    reportAccount: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false },
+    tags: [],
+    entryBalance: 0,
+  },
 ];
 
 describe('journal-backed report routes', () => {
@@ -133,6 +146,31 @@ describe('journal-backed report routes', () => {
     expect(res.headers['content-type']).toContain('text/csv');
     expect(res.text).toContain('Category,Amount,Percentage');
     expect(res.text).toContain('Food,75,100');
+  });
+
+  it('accepts from/to aliases for report CSV exports', async () => {
+    const res = await request(makeApp()).get('/reports/export/csv?type=cashflow&from=2026-01-01&to=2026-01-31');
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('Month,Income,Expenses,Net');
+    expect(fetchJournalReportRows).toHaveBeenCalledWith({
+      householdId: 'hh-1',
+      start: new Date('2026-01-01'),
+      end: new Date('2026-01-31'),
+    });
+  });
+
+  it('exports tax report CSV by year', async () => {
+    const res = await request(makeApp()).get('/reports/export/csv?type=tax&year=2026');
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('Category,Transactions,Amount');
+    expect(res.text).toContain('Charity,1,50');
+    expect(fetchJournalReportRows).toHaveBeenCalledWith({
+      householdId: 'hh-1',
+      start: new Date(2026, 0, 1),
+      end: new Date(2026, 11, 31, 23, 59, 59, 999),
+    });
   });
 });
 

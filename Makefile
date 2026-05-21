@@ -41,7 +41,7 @@ help:
 	@echo "  logs           Follow all container logs"
 	@echo ""
 	@echo "Docker (prod)"
-	@echo "  prod-up        Start full prod stack (observability + automation)"
+	@echo "  prod-up        Start full prod stack (with observability)"
 	@echo "  prod-down      Stop prod stack"
 	@echo "  prod-logs      Follow prod logs"
 	@echo ""
@@ -152,18 +152,18 @@ logs:
 # ── Docker (prod) ─────────────────────────────────────────────────────────────
 
 prod-up:
-	docker compose -f docker-compose.prod.yml --profile observability --profile automation up -d
+	docker compose -f docker-compose.prod.yml --profile observability up -d
 
 prod-down:
-	docker compose -f docker-compose.prod.yml --profile observability --profile automation down
+	docker compose -f docker-compose.prod.yml --profile observability down
 
 prod-update:
-	docker compose -f docker-compose.prod.yml --profile observability --profile automation down
-	docker compose -f docker-compose.prod.yml --profile observability --profile automation pull
-	docker compose -f docker-compose.prod.yml --profile observability --profile automation up -d
+	docker compose -f docker-compose.prod.yml --profile observability down
+	docker compose -f docker-compose.prod.yml --profile observability pull
+	docker compose -f docker-compose.prod.yml --profile observability up -d
 
 prod-logs:
-	docker compose -f docker-compose.prod.yml --profile observability --profile automation logs -f
+	docker compose -f docker-compose.prod.yml --profile observability logs -f
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 

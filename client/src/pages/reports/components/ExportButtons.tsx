@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { FileText, FileSpreadsheet } from 'lucide-react';
+import { FileText, FileSpreadsheet, FileDown } from 'lucide-react';
+import { api } from '@/lib/api';
 
 interface ExportButtonsProps {
   type: 'spending' | 'cashflow' | 'tax';
@@ -21,8 +22,9 @@ function buildUrl(base: string, params: Record<string, string | number | undefin
 export function ExportButtons({ type, from, to, year }: ExportButtonsProps) {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
+  const [csvLoading, setCsvLoading] = useState(false);
 
-  async function handleDownload(format: 'pdf' | 'excel', setLoading: (v: boolean) => void) {
+  async function handleDownload(format: 'pdf' | 'excel' | 'csv', setLoading: (v: boolean) => void) {
     setLoading(true);
     try {
       const params: Record<string, string | number | undefined> = { type };
@@ -30,19 +32,13 @@ export function ExportButtons({ type, from, to, year }: ExportButtonsProps) {
       if (to) params.to = to;
       if (year !== undefined) params.year = year;
 
-      const url = buildUrl(`/api/v1/reports/export/${format}`, params);
-      const res = await fetch(url, { credentials: 'include' });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: 'Export failed' }));
-        throw new Error(data.error ?? 'Export failed');
-      }
-
-      const blob = await res.blob();
+      const url = buildUrl(`/reports/export/${format}`, params);
+      const res = await api.get<Blob>(url, { responseType: 'blob' });
+      const blob = res.data;
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
-      a.download = `kuber-${type}-report.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      a.download = `kuber-${type}-report.${format === 'excel' ? 'xlsx' : format}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -80,6 +76,17 @@ export function ExportButtons({ type, from, to, year }: ExportButtonsProps) {
       >
         <FileSpreadsheet size={14} />
         {excelLoading ? 'Exporting…' : 'Excel'}
+      </button>
+      <button
+        className={btnClass}
+        aria-label="Export report as CSV"
+        style={{ opacity: csvLoading ? 0.6 : 1 }}
+        onClick={() => handleDownload('csv', setCsvLoading)}
+        disabled={csvLoading}
+        title="Export as CSV"
+      >
+        <FileDown size={14} />
+        {csvLoading ? 'Exporting…' : 'CSV'}
       </button>
     </div>
   );

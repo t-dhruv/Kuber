@@ -43,15 +43,15 @@ interface Liability {
   type:             string;
   currentBalance:   number;
   originalAmount:   number;
-  interestRate:     number | null;
-  monthlyPayment:   number | null;
+  interestRate?:    number | null;
+  monthlyPayment?:  number | null;
   currency:         string;
-  region:           string | null;
-  rateType:         string | null;
-  primeRate:        number | null;
-  primeDiscount:    number | null;
-  termEndDate:      string | null;
-  amortizationYears: number | null;
+  region?:          string | null;
+  rateType?:        string | null;
+  primeRate?:       number | null;
+  primeDiscount?:   number | null;
+  termEndDate?:     string | null;
+  amortizationYears?: number | null;
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────────

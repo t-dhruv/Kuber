@@ -1,9 +1,9 @@
-import { Router } from 'express';
+import { Response, Router } from 'express';
 import { getOrFetchBankLogo, getOrFetchMerchantLogo } from '../services/logoService';
 
 const router = Router();
 
-function sendLogo(res: any, logo: { data: Buffer; mimeType: string } | null) {
+function sendLogo(res: Response, logo: { data: Buffer; mimeType: string } | null) {
   if (!logo) return res.status(404).end();
   res.setHeader('Content-Type', logo.mimeType);
   res.setHeader('Cache-Control', 'public, max-age=604800'); // 7 days

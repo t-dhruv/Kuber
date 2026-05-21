@@ -5,11 +5,13 @@
 
 export const NOT_DELETED = { isDeleted: false };
 
-export function addNotDeletedFilter(where: Record<string, any>): Record<string, any> {
+export type WhereClause = Record<string, unknown>;
+
+export function addNotDeletedFilter<TWhere extends WhereClause>(where: TWhere): TWhere & typeof NOT_DELETED {
   return { ...where, isDeleted: false };
 }
 
-export function addNotDeletedToAnd(where: Record<string, any>): Record<string, any> {
+export function addNotDeletedToAnd<TWhere extends WhereClause>(where: TWhere): TWhere & { isDeleted?: false; AND?: unknown[] } {
   if (where.AND) {
     return {
       ...where,

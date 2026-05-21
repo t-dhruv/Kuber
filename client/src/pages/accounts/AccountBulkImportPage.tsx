@@ -13,6 +13,7 @@ import {
   RefreshCw, ChevronDown, ChevronUp, X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/apiError';
 import { getColorToken } from '@/lib/colors';
 import { Button, notify } from '@/components/ui';
 
@@ -253,7 +254,7 @@ export default function AccountBulkImportPage() {
       setRows(data.rows);
       setStep('preview');
     },
-    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to parse CSV'),
+    onError: (err: unknown) => notify.error(getApiErrorMessage(err, 'Failed to parse CSV')),
   });
 
   const confirmMutation = useMutation({
@@ -267,7 +268,7 @@ export default function AccountBulkImportPage() {
       qc.invalidateQueries({ queryKey: ['accounts'] });
       qc.invalidateQueries({ queryKey: ['networth'] });
     },
-    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Import failed'),
+    onError: (err: unknown) => notify.error(getApiErrorMessage(err, 'Import failed')),
   });
 
   // ── Row toggle ────────────────────────────────────────────────────────────

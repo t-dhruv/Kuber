@@ -1,6 +1,6 @@
 # Self-Hosting Kuber
 
-This guide covers the production Docker Compose deployment. Run commands from the repository root because `docker-compose.prod.yml` mounts local `nginx/`, `observability/`, and `n8n-workflows/` directories.
+This guide covers the production Docker Compose deployment. Run commands from the repository root because `docker-compose.prod.yml` mounts local `nginx/` and `observability/` directories.
 
 ## Requirements
 
@@ -35,7 +35,6 @@ Optional profile values:
 | Profile | Variables |
 | --- | --- |
 | `observability` | `GRAFANA_USER`, `GRAFANA_PASSWORD` |
-| `automation` | `N8N_USER`, `N8N_PASSWORD`, optionally `KUBER_API_TOKEN` |
 
 ## Start
 
@@ -54,13 +53,7 @@ Enable observability:
 docker compose -f docker-compose.prod.yml --profile observability up -d
 ```
 
-Enable n8n automation:
-
-```bash
-docker compose -f docker-compose.prod.yml --profile automation up -d
-```
-
-Set the profile credentials in `.env` before enabling either profile. The compose file intentionally does not provide `admin` or `changeme` fallbacks.
+Set the profile credentials in `.env` before enabling observability. The compose file intentionally does not provide `admin` or `changeme` fallbacks.
 
 ## HTTPS
 

@@ -86,6 +86,12 @@ interface CategoryOption {
   icon?: string;
 }
 
+interface CategoryResponse {
+  id: string;
+  name: string;
+  icon?: string | null;
+}
+
 interface RecurringFormValues {
   name: string;
   amount: string;
@@ -188,7 +194,7 @@ function RecurringModal({
     } else {
       setForm({ ...EMPTY_FORM, ...prefill });
     }
-  }, [editing, open]);
+  }, [editing, open, prefill]);
 
   function set(field: keyof RecurringFormValues, value: string | boolean) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -1013,10 +1019,10 @@ export default function RecurringPage() {
   const { data: categories = [] } = useQuery<CategoryOption[]>({
     queryKey: ['categories-options'],
     queryFn: () => api.get('/categories').then((r) =>
-      (Array.isArray(r.data) ? r.data : []).map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        icon: c.icon ?? null,
+      (Array.isArray(r.data) ? r.data : []).map((category: CategoryResponse) => ({
+        id: category.id,
+        name: category.name,
+        icon: category.icon ?? undefined,
       }))
     ),
   });
