@@ -8,6 +8,8 @@
  * list of categories with emoji, 50/30/20 bucket, and optional tax-deductible flag.
  */
 
+import type { Prisma } from '@prisma/client';
+
 export type BucketType = 'needs' | 'wants' | 'savings' | 'uncategorized';
 
 export interface CategoryDef {
@@ -22,6 +24,15 @@ export interface CategoryGroupDef {
   type: 'income' | 'expense' | 'transfer';
   categories: CategoryDef[];
 }
+
+type SeedDefaultCategoriesTransaction = {
+  categoryGroup: {
+    create: (args: Prisma.CategoryGroupCreateArgs) => Promise<{ id: string }>;
+  };
+  category: {
+    create: (args: Prisma.CategoryCreateArgs) => Promise<{ id: string }>;
+  };
+};
 
 export const DEFAULT_CATEGORY_GROUPS: CategoryGroupDef[] = [
   // ── Income ────────────────────────────────────────────────────────────────
@@ -295,10 +306,7 @@ export const DEFAULT_CATEGORY_GROUPS: CategoryGroupDef[] = [
  * Returns a Map<categoryName, categoryId> for downstream use.
  */
 export async function seedDefaultCategories(
-  tx: {
-    categoryGroup: { create: (args: any) => Promise<{ id: string }> };
-    category: { create: (args: any) => Promise<{ id: string }> };
-  },
+  tx: SeedDefaultCategoriesTransaction,
   householdId: string,
 ): Promise<Map<string, string>> {
   const categoryMap = new Map<string, string>();

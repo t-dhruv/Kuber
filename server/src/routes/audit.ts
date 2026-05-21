@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 
@@ -10,7 +11,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const householdId = req.householdId!;
     const { entity, action, startDate, endDate, limit = '50' } = req.query as Record<string, string | undefined>;
 
-    const where: any = { householdId };
+    const where: Prisma.AuditLogWhereInput = { householdId };
     if (entity) where.entity = entity.toUpperCase();
     if (action) where.action = action.toUpperCase();
     if (startDate || endDate) {

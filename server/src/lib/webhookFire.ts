@@ -1,4 +1,5 @@
 import { createHmac } from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { createModuleLogger } from './logger.js';
 import { assertSafeOutboundUrl } from './safeOutboundUrl';
@@ -18,7 +19,7 @@ export type WebhookEvent =
 export async function fireWebhooks(
   householdId: string,
   event: string,
-  payload: Record<string, unknown>,
+  payload: Prisma.InputJsonObject,
 ): Promise<void> {
   const webhooks = await prisma.webhook.findMany({
     where: { householdId, isActive: true, events: { has: event } },
@@ -30,7 +31,7 @@ export async function fireWebhooks(
 async function fireOne(
   webhook: { id: string; url: string; secret: string | null },
   event: string,
-  payload: Record<string, unknown>,
+  payload: Prisma.InputJsonObject,
 ): Promise<void> {
   const body = JSON.stringify({ event, data: payload });
   const secret = decryptWebhookSecret(webhook.secret);
@@ -42,7 +43,7 @@ async function fireOne(
     data: {
       webhookId:     webhook.id,
       event,
-      payload:       payload as any,
+      payload,
       lastAttemptAt: new Date(),
     },
   });

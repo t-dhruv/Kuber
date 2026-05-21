@@ -329,7 +329,7 @@ router.post('/lots/:id/skip', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ── PATCH /holdings/prices — bulk price update from n8n ──────────────────────
+// ── PATCH /holdings/prices — bulk price update from automation tools ─────────
 const priceUpdateSchema = z.array(z.object({
   symbol: z.string().min(1).max(20),
   price: z.number().positive(),

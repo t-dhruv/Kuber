@@ -1,6 +1,6 @@
 /**
  * investmentIntel.ts
- * Investment intelligence endpoints — news per holding, Monte Carlo projections, n8n intel feed.
+ * Investment intelligence endpoints — news per holding, Monte Carlo projections, automation intel feed.
  */
 import { Router, Response } from 'express';
 import { z } from 'zod';
@@ -149,7 +149,7 @@ router.get('/projections', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ── POST /api/v1/investment-intel/feed — receive intel from n8n ──────────────
+// ── POST /api/v1/investment-intel/feed — receive intel from automation tools ─
 const feedSchema = z.object({
   source: z.enum(['news', 'youtube', 'manual']),
   title: z.string().min(1).max(500),

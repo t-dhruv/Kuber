@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, ChangeEvent, DragEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload, ArrowRight, ArrowLeft, FileText, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/apiError';
 import { Modal, ModalFooter, Button, toast } from '@/components/ui';
 
 // Native select wrapper so we can use children-style options
@@ -470,8 +471,8 @@ function Step3Preview({ file, accountId, dateFormat, mapping, invertAmounts, onB
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       onDone();
     },
-    onError: (err: any) => {
-      toast.error(err.response?.data?.error ?? 'Import failed');
+    onError: (err: unknown) => {
+      toast.error(getApiErrorMessage(err, 'Import failed'));
     },
   });
 
@@ -490,7 +491,7 @@ function Step3Preview({ file, accountId, dateFormat, mapping, invertAmounts, onB
       {previewQuery.isError && (
         <div className="flex items-center gap-2 p-3 rounded-[var(--radius-md)] bg-[var(--color-error-light,#fef2f2)] text-[var(--color-error,#dc2626)]">
           <AlertTriangle size={16} />
-          <span className="text-sm">{(previewQuery.error as any)?.response?.data?.error ?? 'Failed to parse CSV'}</span>
+          <span className="text-sm">{getApiErrorMessage(previewQuery.error, 'Failed to parse CSV')}</span>
         </div>
       )}
 

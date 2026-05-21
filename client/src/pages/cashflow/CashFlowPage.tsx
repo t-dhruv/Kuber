@@ -97,6 +97,16 @@ interface MonthData {
   dailyFlow: Array<{ day: number; income: number; expenses: number }>;
 }
 
+interface SankeyLinkProps {
+  sourceX: number;
+  sourceY: number;
+  sourceControlX: number;
+  targetControlX: number;
+  targetX: number;
+  targetY: number;
+  linkWidth: number;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function savingsColor(pct: number): string {
@@ -600,7 +610,7 @@ function SankeyChart({ data, year, month }: { data?: MonthData; year: number; mo
             nodePadding={14}
             nodeWidth={18}
             margin={{ top: 8, right: 140, bottom: 8, left: 140 }}
-            link={({ sourceX, sourceY, sourceControlX, targetControlX, targetX, targetY, linkWidth }: any) => (
+            link={({ sourceX, sourceY, sourceControlX, targetControlX, targetX, targetY, linkWidth }: SankeyLinkProps) => (
               <path
                 d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
                 fill="none"
@@ -1039,7 +1049,7 @@ export default function CashFlowPage() {
               minWidth: 200,
             }}
           >
-            <div style={{ padding: '0.25rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' as any, letterSpacing: '0.04em' }}>
+            <div style={{ padding: '0.25rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Quick select
             </div>
             {quickFilters.map((f) => (
@@ -1067,7 +1077,7 @@ export default function CashFlowPage() {
 
             <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '0.25rem 0' }} />
 
-            <div style={{ padding: '0.25rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' as any, letterSpacing: '0.04em' }}>
+            <div style={{ padding: '0.25rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Year
             </div>
             <select
@@ -1090,7 +1100,7 @@ export default function CashFlowPage() {
               ))}
             </select>
 
-            <div style={{ padding: '0.25rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' as any, letterSpacing: '0.04em', marginTop: '0.25rem' }}>
+            <div style={{ padding: '0.25rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '0.25rem' }}>
               Month (detail view)
             </div>
             <select

@@ -6,6 +6,7 @@ import {
   ChevronRight as ChevronRightIcon, Upload, Scissors, Sparkles, Camera, CheckCheck, Receipt,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/apiError';
 import { usePrefetchLogos } from '@/hooks/usePrefetchLogos';
 import {
   Button, Input, Select, Modal, ModalFooter, Skeleton, Badge, Toggle, Card, notify, ConfirmDialog, CategoryCombobox,
@@ -482,7 +483,7 @@ function TransactionDrawer({ transaction, categories, accounts, onClose, onSaved
       queryClient.invalidateQueries({ queryKey: ['cashflow'] });
       onSaved();
     },
-    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to save transaction'),
+    onError: (err: unknown) => notify.error(getApiErrorMessage(err, 'Failed to save transaction')),
   });
 
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -935,7 +936,7 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
       onClose();
       reset();
     },
-    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to add transaction'),
+    onError: (err: unknown) => notify.error(getApiErrorMessage(err, 'Failed to add transaction')),
   });
 
   const accountOptions = accounts.map((a) => ({
@@ -1818,7 +1819,7 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ['budget'] });
       setSelectedIds(new Set());
     },
-    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
+    onError: (err: unknown) => notify.error(getApiErrorMessage(err, 'Bulk operation failed. Please try again.')),
   });
 
   const bulkMarkReviewedMutation = useMutation({
@@ -1830,7 +1831,7 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ['budget'] });
       setSelectedIds(new Set());
     },
-    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
+    onError: (err: unknown) => notify.error(getApiErrorMessage(err, 'Bulk operation failed. Please try again.')),
   });
 
   const bulkHideMutation = useMutation({
@@ -1842,7 +1843,7 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ['budget'] });
       setSelectedIds(new Set());
     },
-    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
+    onError: (err: unknown) => notify.error(getApiErrorMessage(err, 'Bulk operation failed. Please try again.')),
   });
 
   const bulkDeleteMutation = useMutation({
@@ -1857,7 +1858,7 @@ export default function TransactionsPage() {
       setSelectedIds(new Set());
       setConfirmBulkDelete(false);
     },
-    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Bulk operation failed. Please try again.'),
+    onError: (err: unknown) => notify.error(getApiErrorMessage(err, 'Bulk operation failed. Please try again.')),
   });
 
   // ── Inline merchant edit ──
@@ -1869,7 +1870,7 @@ export default function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (err: any) => notify.error(err?.response?.data?.error ?? 'Failed to update merchant. Please try again.'),
+    onError: (err: unknown) => notify.error(getApiErrorMessage(err, 'Failed to update merchant. Please try again.')),
   });
 
   const handleMerchantEdit = useCallback((id: string, merchantName: string) => {

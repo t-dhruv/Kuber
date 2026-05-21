@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from './prisma';
 
 export type JournalReportPeriod = 'month' | 'year' | 'multi-year';
@@ -71,6 +71,31 @@ export interface JournalReportCatalogEntry {
   periods: JournalReportPeriod[];
 }
 
+type JournalAmountValue = Prisma.Decimal | number | string | null | undefined;
+
+interface JournalSourceEntry {
+  accountId: string;
+  amountDecimal: JournalAmountValue;
+  account: JournalReportAccount | null;
+}
+
+interface JournalSourceTagLink {
+  tag: JournalReportTag;
+}
+
+interface JournalSource {
+  id: string;
+  householdId: string;
+  transactionType: string;
+  date: Date | string;
+  description: string;
+  amount?: JournalAmountValue;
+  amountDecimal?: JournalAmountValue;
+  category: JournalReportCategory | null;
+  entries: JournalSourceEntry[];
+  tags: JournalSourceTagLink[];
+}
+
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function roundMoney(value: number) {
@@ -89,17 +114,17 @@ function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function signedAmountForJournal(journal: any) {
+function signedAmountForJournal(journal: Pick<JournalSource, 'amount' | 'amountDecimal' | 'transactionType'>) {
   const amount = Math.abs(toNumber(journal.amountDecimal ?? journal.amount));
   if (journal.transactionType === 'deposit') return amount;
   return -amount;
 }
 
-function findReportAccount(journal: any): JournalReportAccount | null {
+function findReportAccount(journal: Pick<JournalSource, 'entries' | 'transactionType'>): JournalReportAccount | null {
   const entries = journal.entries ?? [];
   const entry = journal.transactionType === 'deposit'
-    ? entries.find((item: any) => toNumber(item.amountDecimal) > 0)
-    : entries.find((item: any) => toNumber(item.amountDecimal) < 0);
+    ? entries.find((item) => toNumber(item.amountDecimal) > 0)
+    : entries.find((item) => toNumber(item.amountDecimal) < 0);
   const account = entry?.account;
   if (!entry || !account) return null;
   return {
@@ -110,8 +135,8 @@ function findReportAccount(journal: any): JournalReportAccount | null {
   };
 }
 
-function entryBalance(journal: any) {
-  return roundMoney((journal.entries ?? []).reduce((sum: number, entry: any) => sum + toNumber(entry.amountDecimal), 0));
+function entryBalance(journal: Pick<JournalSource, 'entries'>) {
+  return roundMoney(journal.entries.reduce((sum, entry) => sum + toNumber(entry.amountDecimal), 0));
 }
 
 export function classifyReportPeriod(start: Date, end: Date): JournalReportPeriod {
@@ -134,7 +159,7 @@ export function buildJournalReportCatalog(): JournalReportCatalogEntry[] {
   ];
 }
 
-export function mapJournalToReportRow(journal: any): JournalReportRow {
+export function mapJournalToReportRow(journal: JournalSource): JournalReportRow {
   const category = journal.category
     ? {
         id: journal.category.id,
@@ -156,7 +181,7 @@ export function mapJournalToReportRow(journal: any): JournalReportRow {
     signedAmount: signedAmountForJournal(journal),
     category,
     reportAccount: findReportAccount(journal),
-    tags: (journal.tags ?? []).map((link: any) => ({
+    tags: journal.tags.map((link) => ({
       id: link.tag.id,
       name: link.tag.name,
       color: link.tag.color ?? null,
@@ -461,7 +486,7 @@ export function buildJournalTagSummary(rows: JournalReportRow[], input: JournalR
 
 export async function fetchJournalReportRows(
   input: { householdId: string; start?: Date; end?: Date },
-  prisma = defaultPrisma,
+  prisma: Pick<PrismaClient, 'transactionJournal'> = defaultPrisma,
 ): Promise<JournalReportRow[]> {
   const where: Prisma.TransactionJournalWhereInput = {
     householdId: input.householdId,

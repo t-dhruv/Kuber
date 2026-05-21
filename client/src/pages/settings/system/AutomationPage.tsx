@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/apiError';
 import { notify } from '@/components/ui';
 import { SectionCard } from './components/SectionCard';
 import { TriggerButton } from './components/TriggerButton';
@@ -33,10 +34,7 @@ export default function AutomationPage() {
       notify.success('Automation settings saved');
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error && 'response' in err
-        ? (err as any).response?.data?.error
-        : undefined;
-      notify.error(msg ?? 'Save failed');
+      notify.error(getApiErrorMessage(err, 'Save failed'));
     },
   });
 

@@ -86,6 +86,86 @@ Kuber/
 
 ---
 
+## Modularity and Code Architecture Rules
+
+The full project should stay modular, maintainable, and production-grade. Prefer clear feature boundaries over large catch-all files.
+
+General principles:
+
+- Follow SOLID, DRY, KISS, YAGNI, separation of concerns, dependency inversion, and explicit domain boundaries.
+- Prefer composition over inheritance.
+- Keep modules cohesive: one module should have one primary reason to change.
+- Keep coupling low: do not make unrelated features depend on each other's internals.
+- Do not add abstractions just to look "enterprise"; add them only when they reduce real duplication, isolate volatility, or clarify domain behavior.
+- Prefer typed domain models, DTOs, schemas, and service interfaces over loose objects and `any`.
+- Make invalid states hard to represent with TypeScript types and Zod validation.
+- Keep public APIs stable and narrow. Export only what other modules actually need.
+
+File and module size:
+
+- Treat files over 400 lines as candidates for extraction.
+- Treat files over 700 lines as technical debt unless there is a clear reason.
+- Page files should be thin route/view shells. Move page-specific components to `pages/<feature>/components`, hooks to `pages/<feature>/hooks`, and domain helpers to feature-local `lib` or shared modules.
+- Server route files should be thin HTTP adapters. Move business logic into `server/src/services` or focused `server/src/lib` modules.
+- Avoid "god" components, "god" services, and large utility grab bags.
+
+Dependency direction:
+
+- UI components may depend on hooks/services, but services must not depend on UI.
+- Route handlers may depend on services/lib, but services should not depend on Express request/response objects.
+- Shared package code must stay framework-neutral and must not import client or server internals.
+- Feature modules should communicate through stable DTOs/services, not deep relative imports into another feature's internals.
+
+Backend patterns:
+
+- Validate request input at the route boundary with Zod.
+- Keep authorization, validation, orchestration, and persistence separate where practical.
+- Put Prisma queries behind service functions for non-trivial workflows.
+- Centralize repeated query scopes such as `householdId`, soft-delete filters, hidden/excluded filters, and role checks.
+- Use transactions for multi-write financial workflows.
+- Return domain-specific errors that routes translate into `{ error: "..." }` responses.
+
+Frontend patterns:
+
+- Keep React components focused on rendering and interaction.
+- Move data fetching/mutations into hooks that use TanStack Query.
+- Move pure formatting, filtering, grouping, and calculations into tested helper modules.
+- Use shared UI primitives for repeated controls; do not duplicate one-off button/input/table patterns.
+- Prefer accessible native controls before custom ARIA widgets.
+- Avoid global state unless state is truly cross-page or session-level.
+
+Testing and maintainability:
+
+- Add tests when extracting business logic, fixing regressions, or touching financial calculations.
+- Prefer small unit tests for pure helpers and route/service tests for API behavior.
+- Add smoke/E2E coverage for new user-visible workflows.
+- When fixing debt, leave the code more modular than you found it, but keep edits scoped to the task.
+- Track meaningful remaining debt in `AUDITOR.md`; do not leave untracked TODO comments.
+
+---
+
+## Code Quality and Technical Debt Tracking
+
+Always treat code quality, technical debt, and product gaps as first-class project state.
+
+- Keep `AUDITOR.md` as the source of truth for completed hardening work, known debt, gaps, risks, and verification history.
+- After any meaningful feature, fix, refactor, security change, or architecture change, update `AUDITOR.md` in the same work slice.
+- When finding a gap but not fixing it immediately, record it under a dated audit section with clear scope, impact, and a concrete follow-up.
+- When fixing an item from an older audit, update the current audit section and, when practical, reconcile stale audit docs so they do not continue reporting fixed issues as open.
+- Track quality debt by category: security, data integrity, exports/imports, auth/access control, modularity, type safety, tests, accessibility, performance, deployment, and documentation.
+- Include the verification commands that were actually run. If verification was skipped or blocked, record why.
+- Prefer small, dated entries over large rewrites of the audit tracker.
+- Do not use hidden or informal TODOs as the tracking system. Code TODOs are allowed only when mirrored in `AUDITOR.md`.
+
+Quality review checklist for every slice:
+
+- Did this change preserve household scoping, soft delete rules, and auth boundaries?
+- Did this change reduce or at least avoid increasing oversized files, `any`, duplicate logic, and cross-feature coupling?
+- Did this change add or preserve tests for financial calculations, exports/imports, auth, and API contracts?
+- Did this change leave any user-visible gap, reliability risk, or operational risk that should be tracked?
+
+---
+
 ## Common Commands
 
 ```bash
@@ -400,7 +480,7 @@ rtk git push -u origin feat/short-description
 
 ## AUDITOR.md Rules
 
-Update `AUDITOR.md` after meaningful feature work.
+Update `AUDITOR.md` after meaningful feature work, bug fixes, refactors, security hardening, and any investigation that finds technical debt or product gaps.
 
 Track:
 
@@ -410,6 +490,9 @@ Track:
 - Test gaps
 - Deferred TODOs
 - Follow-up items
+- Verification commands and results
+- Current high-priority gap list when relevant
+- Stale audit findings that were fixed or superseded
 
 Do not leave TODO comments in code unless the item is also tracked in `AUDITOR.md`.
 

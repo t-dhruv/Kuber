@@ -120,34 +120,8 @@ services:
     networks:
       - kuber_network
 
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: kuber_n8n
-    profiles: ["automation"]
-    restart: unless-stopped
-    ports:
-      - "9006:5678"
-    environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
-      - N8N_HOST=0.0.0.0
-      - N8N_PORT=5678
-      - WEBHOOK_URL=http://localhost:9006/
-      - GENERIC_TIMEZONE=America/Toronto
-      - KUBER_WEBHOOK_URL=http://kuber_server:9002
-      - KUBER_API_TOKEN=${KUBER_API_TOKEN:-}
-      - KUBER_WATCH_TICKERS=${KUBER_WATCH_TICKERS:-}
-      - N8N_RUNNERS_ENABLED=true
-    volumes:
-      - n8n_data:/home/node/.n8n
-      - ./n8n-workflows:/home/node/workflows:ro
-    networks:
-      - kuber_network
-
 volumes:
   kuber_pgdata:
-  n8n_data:
   kuber_prometheus_data:
   kuber_loki_data:
   kuber_grafana_data:

@@ -18,6 +18,7 @@ type HoldingDto = {
   totalCost: number;
   gain: number;
   gainPercent: number;
+  trailingIncome?: number;
 };
 
 type HoldingsResponse = {
@@ -66,7 +67,7 @@ export function InvestmentPerformanceSection({ data }: InvestmentPerformanceSect
     twr: queryPerf.data?.portfolioReturn ?? 0,
     mwr: queryPerf.data?.portfolioReturn ?? 0, // MWR ≈ TWR when no cash flows; real MWR needs full calculation
     trailingIncome: holdings.reduce(
-      (sum, h) => sum + ((h as any).trailingIncome ?? 0),
+      (sum, h) => sum + (h.trailingIncome ?? 0),
       0,
     ),
   };

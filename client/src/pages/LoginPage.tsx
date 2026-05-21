@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { useLogin, useTotpValidate, useTotpBackup } from "@/hooks/useAuth";
 import { Input } from "@/components/ui";
+import { getApiErrorMessage } from "@/lib/apiError";
 
 function ErrorBox({ message }: { message: string }) {
   return (
@@ -47,8 +48,7 @@ function PasswordStep({
   }
 
   const errorMessage = login.error
-    ? ((login.error as any)?.response?.data?.error ??
-      "Sign in failed. Please try again.")
+    ? getApiErrorMessage(login.error, "Sign in failed. Please try again.")
     : null;
 
   return (
@@ -161,7 +161,7 @@ function TotpStep({
 
   const error = validate.error || backup.error;
   const errorMessage = error
-    ? ((error as any)?.response?.data?.error ?? "Invalid code")
+    ? getApiErrorMessage(error, "Invalid code")
     : null;
   const isPending = validate.isPending || backup.isPending;
 

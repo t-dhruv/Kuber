@@ -160,7 +160,7 @@ router.get('/pdf', async (req: AuthRequest, res: Response) => {
 
       for (const item of items) {
         const pct = total > 0 ? Math.round((item.amount / total) * 100) : 0;
-        const label = item.icon ? `${item.icon}  ${item.name}` : item.name;
+        const label = item.name;
         const y = doc.y;
         doc.font('Helvetica').fontSize(10).fillColor('#333333')
           .text(label, 50, y, { width: 295 })
@@ -206,7 +206,7 @@ router.get('/pdf', async (req: AuthRequest, res: Response) => {
       doc.moveDown(0.3);
 
       for (const cat of data.categories) {
-        const label = cat.icon ? `${cat.icon}  ${cat.name}` : cat.name;
+        const label = cat.name;
         const y = doc.y;
         doc.font('Helvetica').fontSize(10).fillColor('#333333')
           .text(label, 50, y, { width: 295 })

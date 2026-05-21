@@ -1,3 +1,4 @@
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '../prisma';
 
 type SnapshotSource = 'live' | 'snapshot';
@@ -10,6 +11,45 @@ function toUtcDateOnly(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
+function toNestedJsonValue(value: unknown): Prisma.InputJsonValue | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => toNestedJsonValue(item));
+  }
+
+  if (typeof value === 'object') {
+    if ('toJSON' in value && typeof value.toJSON === 'function') {
+      return toNestedJsonValue(value.toJSON());
+    }
+
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, toNestedJsonValue(item)]),
+    );
+  }
+
+  return String(value);
+}
+
+function toInputJsonValue(value: unknown): Prisma.InputJsonValue | Prisma.JsonNullValueInput {
+  if (value === null || value === undefined) {
+    return Prisma.JsonNull;
+  }
+
+  const converted = toNestedJsonValue(value);
+  return converted === null ? Prisma.JsonNull : converted;
+}
+
 export async function upsertDailySnapshot(input: {
   householdId: string;
   kind: string;
@@ -19,8 +59,9 @@ export async function upsertDailySnapshot(input: {
   subjectId?: string | null;
 }): Promise<void> {
   const snapshotDate = toUtcDateOnly(input.date);
-  const reportingSnapshot = (prisma as any).reportingSnapshot;
+  const reportingSnapshot: PrismaClient['reportingSnapshot'] = prisma.reportingSnapshot;
   const periodKey = `${snapshotDate.getUTCFullYear()}-${String(snapshotDate.getUTCMonth() + 1).padStart(2, '0')}`;
+  const payload = toInputJsonValue(input.payload);
 
   // Prisma upsert doesn't accept null in where clause for compound unique constraints.
   // Handle null subjectId with findFirst + create/update instead.
@@ -39,7 +80,7 @@ export async function upsertDailySnapshot(input: {
       await reportingSnapshot.update({
         where: { id: existing.id },
         data: {
-          payload: input.payload as never,
+          payload,
           source: input.source,
           periodKey,
         },
@@ -52,7 +93,7 @@ export async function upsertDailySnapshot(input: {
           snapshotDate,
           periodKey,
           subjectId: null,
-          payload: input.payload as never,
+          payload,
           source: input.source,
         },
       });
@@ -68,7 +109,7 @@ export async function upsertDailySnapshot(input: {
         },
       },
       update: {
-        payload: input.payload as never,
+        payload,
         source: input.source,
         periodKey,
       },
@@ -78,7 +119,7 @@ export async function upsertDailySnapshot(input: {
         snapshotDate,
         periodKey,
         subjectId: input.subjectId,
-        payload: input.payload as never,
+        payload,
         source: input.source,
       },
     });
@@ -86,7 +127,7 @@ export async function upsertDailySnapshot(input: {
 }
 
 export async function listSnapshotDates(householdId: string, kind: string): Promise<Date[]> {
-  const reportingSnapshot = (prisma as any).reportingSnapshot;
+  const reportingSnapshot: PrismaClient['reportingSnapshot'] = prisma.reportingSnapshot;
   const snapshots = await reportingSnapshot.findMany({
     where: { householdId, kind },
     select: { snapshotDate: true },

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Copy, Check, Trash2, Plus, ExternalLink, Key, Zap, Globe } from 'lucide-react';
+import { Copy, Check, Trash2, Plus, Key, Zap, Globe } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button, Input, Card, Modal, ModalFooter, notify, ConfirmDialog } from '@/components/ui';
 
@@ -100,14 +100,14 @@ function ApiTokensSection() {
         </h3>
       </div>
       <p className="text-[0.8125rem] text-[var(--color-text-secondary)] mb-4">
-        Create long-lived API tokens for n8n and other automation tools.
+        Create long-lived API tokens for external automation tools.
       </p>
 
       <div className="flex gap-2 mb-5">
         <Input
           value={tokenName}
           onChange={(e) => setTokenName(e.target.value)}
-          placeholder="Token name (e.g. n8n-automation)"
+          placeholder="Token name (e.g. statement-importer)"
           onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
           className="flex-1"
         />
@@ -193,37 +193,6 @@ function ApiTokensSection() {
   );
 }
 
-function N8nConnectionSection() {
-  return (
-    <Card className="p-5 mb-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Zap size={16} className="text-[var(--color-accent)]" />
-        <h3 className="m-0 text-[0.9375rem] font-semibold text-[var(--color-text)]">
-          n8n Automation
-        </h3>
-      </div>
-      <p className="text-[0.8125rem] text-[var(--color-text-secondary)] mb-4">
-        n8n is the workflow automation engine that powers market news syncing, price updates, and CSV imports.
-        Start it with the automation profile.
-      </p>
-      <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[0.8125rem] font-mono mb-4 text-[var(--color-text-secondary)]">
-        docker compose --profile automation up -d
-      </div>
-      <a
-        href="http://localhost:5678"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="no-underline"
-      >
-        <Button variant="outline" size="sm">
-          <ExternalLink size={14} className="mr-1.5" />
-          Open n8n
-        </Button>
-      </a>
-    </Card>
-  );
-}
-
 function WebhookUrlsSection() {
   const origin = window.location.origin;
 
@@ -243,7 +212,7 @@ function WebhookUrlsSection() {
         </h3>
       </div>
       <p className="text-[0.8125rem] text-[var(--color-text-secondary)] mb-4">
-        Use these URLs in your n8n workflows. All endpoints require a Bearer API token.
+        Use these URLs with external automation tools. All endpoints require a Bearer API token.
       </p>
       <div className="flex flex-col gap-2">
         {endpoints.map(({ label, url }) => (
@@ -333,11 +302,10 @@ export function AutomationSection() {
           Automation
         </h2>
         <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-          Connect n8n workflows to automate market news, price updates, and statement imports.
+          Connect external tools to automate market news, price updates, and statement imports.
         </p>
       </div>
       <ApiTokensSection />
-      <N8nConnectionSection />
       <WebhookUrlsSection />
       <WatchTickersSection />
     </div>

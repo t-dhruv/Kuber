@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { getApiErrorMessage } from '@/lib/apiError';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function ForgotPasswordPage() {
@@ -64,7 +65,7 @@ export default function ForgotPasswordPage() {
 
             {mutation.error && (
               <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-danger-light)] text-[var(--color-danger)] text-sm mb-4">
-                {(mutation.error as any)?.response?.data?.error ?? 'Something went wrong. Please try again.'}
+                {getApiErrorMessage(mutation.error, 'Something went wrong. Please try again.')}
               </div>
             )}
 

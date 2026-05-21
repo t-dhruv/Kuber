@@ -45,6 +45,17 @@ interface Props {
   to: string;
 }
 
+interface ChartPayloadItem {
+  dataKey?: string;
+  value?: number | string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: ChartPayloadItem[];
+  label?: string;
+}
+
 function SummaryCard({
   label,
   value,
@@ -89,10 +100,10 @@ function SummaryCard({
 }
 
 // Custom tooltip for the bar chart
-function CustomTooltip({ active, payload, label }: any) {
+function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
-  const budgeted = payload.find((p: any) => p.dataKey === "budgeted")?.value ?? 0;
-  const actual = payload.find((p: any) => p.dataKey === "actual")?.value ?? 0;
+  const budgeted = Number(payload.find((item) => item.dataKey === "budgeted")?.value ?? 0);
+  const actual = Number(payload.find((item) => item.dataKey === "actual")?.value ?? 0);
   const variance = budgeted - actual;
   const isOver = variance < 0;
   return (

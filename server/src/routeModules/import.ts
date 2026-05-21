@@ -5,7 +5,7 @@
  *   POST /api/v1/import/parse      — upload file, detect bank, parse, dedup-flag
  *   POST /api/v1/import/confirm    — bulk-create accepted rows
  *   GET  /api/v1/import/history    — paginated import log
- *   POST /api/v1/import/webhook    — n8n/automation webhook (same contract as parse+confirm)
+ *   POST /api/v1/import/webhook    — automation webhook (same contract as parse+confirm)
  */
 
 import { Router } from 'express';
@@ -622,7 +622,7 @@ router.get('/history', async (req: AuthRequest, res) => {
 
 // ---------------------------------------------------------------------------
 // POST /api/v1/import/webhook
-// n8n / automation webhook — accepts pre-parsed JSON payload
+// Automation webhook — accepts pre-parsed JSON payload
 // ---------------------------------------------------------------------------
 const WebhookRowSchema = z.object({
   date: z.string(),

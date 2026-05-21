@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useSignup } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
+import { getApiErrorMessage } from '@/lib/apiError';
 
 export default function SignupPage() {
   const { isAuthenticated } = useAuthStore();
@@ -42,7 +43,7 @@ export default function SignupPage() {
   }
 
   const errorMessage = validationError
-    ?? (signup.error ? (signup.error as any)?.response?.data?.error ?? 'Sign up failed. Please try again.' : null);
+    ?? (signup.error ? getApiErrorMessage(signup.error, 'Sign up failed. Please try again.') : null);
 
   const inputClass = "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] text-[0.9375rem] outline-none box-border";
   const labelClass = "block text-sm font-medium text-[var(--color-text)] mb-1.5";

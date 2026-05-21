@@ -71,7 +71,68 @@ export interface GetTransactionJournalGroupInput {
 }
 
 type PrismaLike = typeof defaultPrisma;
-type TransactionClient = Parameters<Parameters<PrismaLike['$transaction']>[0]>[0] | any;
+type TransactionClient = Prisma.TransactionClient;
+
+type ScalarNumber = number | string | Prisma.Decimal | null | undefined;
+
+interface JournalAccountRelation {
+  id?: string;
+  name?: string | null;
+  type?: string | null;
+}
+
+interface JournalEntryRelation {
+  id?: string;
+  accountId?: string | null;
+  amountDecimal: ScalarNumber;
+  currencyCode?: string | null;
+  account?: JournalAccountRelation | null;
+}
+
+interface JournalTagRelation {
+  tag: {
+    id: string;
+    name: string;
+    color: string | null;
+  };
+}
+
+interface JournalMetaRelation {
+  name: string;
+  value: string;
+}
+
+interface JournalLike {
+  id: string;
+  transactionType: string;
+  date?: Date | string | null;
+  description?: string | null;
+  amountDecimal: ScalarNumber;
+  currencyCode?: string | null;
+  categoryId?: string | null;
+  category?: { name?: string | null; icon?: string | null } | null;
+  notes?: string | null;
+  isPending?: boolean | null;
+  isReconciled?: boolean | null;
+  reconciledAt?: Date | string | null;
+  order?: number | null;
+  needsReview?: boolean | null;
+  aiSuggestedCategoryId?: string | null;
+  aiSuggestedCategoryName?: string | null;
+  aiSuggestionConfidence?: number | null;
+  entries?: JournalEntryRelation[];
+  tags?: JournalTagRelation[];
+  meta?: JournalMetaRelation[];
+}
+
+interface JournalGroupLike {
+  id: string;
+  householdId: string;
+  title?: string | null;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+  journals?: JournalLike[];
+}
 
 const JOURNAL_GROUP_INCLUDE = {
   journals: {
@@ -425,7 +486,7 @@ export async function backfillLegacyTransactionJournals(
   return { scanned: 0, created: 0, skipped: 0 };
 }
 
-function toNumber(value: unknown) {
+function toNumber(value: ScalarNumber) {
   return Number(value ?? 0);
 }
 
@@ -443,12 +504,12 @@ export interface JournalFormatOptions {
   includeTags?: boolean;
 }
 
-export function formatJournalAsTransaction(journal: any) {
+export function formatJournalAsTransaction(journal: JournalLike) {
   // For withdrawals the real account is the source (negative amountDecimal entry).
   // For deposits the real account is the destination (positive amountDecimal entry).
   const isWithdrawal = journal.transactionType === 'withdrawal';
-  const mainEntry = journal.entries?.find((e: any) =>
-    isWithdrawal ? e.amountDecimal < 0 : e.amountDecimal > 0
+  const mainEntry = journal.entries?.find((entry) =>
+    isWithdrawal ? toNumber(entry.amountDecimal) < 0 : toNumber(entry.amountDecimal) > 0
   ) ?? journal.entries?.[0];
   const mainAccountId = mainEntry?.accountId ?? null;
   const mainAccountName = mainEntry?.account?.name ?? null;
@@ -488,7 +549,7 @@ export function formatJournalAsTransaction(journal: any) {
     refunds: [],
     splits: [],
     notes: journal.notes ?? null,
-    tags: (journal.tags ?? []).map((jt: any) => ({
+    tags: (journal.tags ?? []).map((jt) => ({
       id: jt.tag.id,
       name: jt.tag.name,
       color: jt.tag.color,
@@ -496,15 +557,15 @@ export function formatJournalAsTransaction(journal: any) {
   };
 }
 
-export function formatTransactionJournalGroup(group: any) {
+export function formatTransactionJournalGroup(group: JournalGroupLike) {
   return {
     id: group.id,
     householdId: group.householdId,
     title: group.title ?? null,
     createdAt: toIso(group.createdAt),
     updatedAt: toIso(group.updatedAt),
-    journals: (group.journals ?? []).map((journal: any) => {
-      const entries = (journal.entries ?? []).map((entry: any) => ({
+    journals: (group.journals ?? []).map((journal) => {
+      const entries = (journal.entries ?? []).map((entry) => ({
         id: entry.id,
         accountId: entry.accountId,
         accountName: entry.account?.name ?? null,
@@ -528,19 +589,19 @@ export function formatTransactionJournalGroup(group: any) {
         reconciledAt: toIso(journal.reconciledAt),
         order: journal.order,
         entries,
-        tags: (journal.tags ?? []).map((tagLink: any) => ({
+        tags: (journal.tags ?? []).map((tagLink) => ({
           id: tagLink.tag.id,
           name: tagLink.tag.name,
           color: tagLink.tag.color,
         })),
-        meta: Object.fromEntries((journal.meta ?? []).map((item: any) => [item.name, item.value])),
-        entryBalance: Math.round(entries.reduce((sum: number, entry: any) => sum + entry.amount, 0) * 10000) / 10000,
+        meta: Object.fromEntries((journal.meta ?? []).map((item) => [item.name, item.value])),
+        entryBalance: Math.round(entries.reduce((sum, entry) => sum + entry.amount, 0) * 10000) / 10000,
       };
     }),
   };
 }
 
-function signedJournalAmount(journal: any) {
+function signedJournalAmount(journal: Pick<JournalLike, 'amountDecimal' | 'transactionType'>) {
   const amount = Math.abs(toNumber(journal.amountDecimal));
 
   if (journal.transactionType === 'withdrawal' || journal.transactionType === 'transfer') {
@@ -550,8 +611,8 @@ function signedJournalAmount(journal: any) {
   return amount;
 }
 
-export function buildRuleMatchInputFromJournal(journal: any) {
-  const sourceEntry = (journal.entries ?? []).find((entry: any) => toNumber(entry.amountDecimal) < 0)
+export function buildRuleMatchInputFromJournal(journal: JournalLike) {
+  const sourceEntry = (journal.entries ?? []).find((entry) => toNumber(entry.amountDecimal) < 0)
     ?? (journal.entries ?? [])[0];
 
   return {
@@ -564,7 +625,7 @@ export function buildRuleMatchInputFromJournal(journal: any) {
   };
 }
 
-export function buildCashFlowEventFromJournal(journal: any) {
+export function buildCashFlowEventFromJournal(journal: Pick<JournalLike, 'amountDecimal' | 'transactionType'>) {
   const amount = signedJournalAmount(journal);
 
   if (journal.transactionType === 'transfer') {
@@ -652,7 +713,7 @@ export async function queryJournalsWithRelations(
   query: JournalListQuery,
   prisma: PrismaLike = defaultPrisma,
 ) {
-  const where: any = {
+  const where: Prisma.TransactionJournalWhereInput = {
     householdId: query.householdId,
     isDeleted: false,
     isHidden: false,
@@ -710,7 +771,7 @@ export async function queryJournalAmounts(
   options: JournalQueryOptions = {},
   prisma: PrismaLike = defaultPrisma,
 ) {
-  const where: any = {
+  const where: Prisma.TransactionJournalWhereInput = {
     householdId: filter.householdId,
     isDeleted: false,
     isHidden: false,
@@ -747,7 +808,7 @@ export async function queryJournalAmounts(
 
   // Use include if relations needed, select otherwise
   if (options.withCategory || options.withEntries) {
-    const include: any = {};
+    const include: Prisma.TransactionJournalInclude = {};
     if (options.withCategory) {
       include.category = { select: { id: true, name: true, icon: true } };
     }

@@ -1,67 +1,43 @@
 # Kuber Audit Tracker
 
-## 2026-05-19 Account Deletion Cascade
+Keep this file small and focused on open quality debt, product gaps, and verification gaps. Do not add completed-work history here unless it explains an active risk.
 
-Completed work:
+## Tracking Rules
 
-- Expanded account deletion to clean up account-related data: transaction journals, recurring items, goals, tax account links, account balance snapshots, reconciliations, reporting snapshots/rollups, and investment holdings.
-- Blocked deleted accounts from account detail, history, reconcile, close, update, and account transaction endpoints.
-- Added regression coverage for account deletion cascade and hidden/deleted journal filtering.
+- Update this file after meaningful feature work, bug fixes, refactors, security hardening, or investigations that uncover gaps.
+- Track only open debt, active risks, blocked verification, and next actions.
+- Remove items once they are fixed and verified.
+- Mirror any code TODO here, or remove the code TODO.
+- Include verification gaps when tests, builds, lint, E2E, or smoke checks were skipped or blocked.
 
-Verification:
+## Current Priority Debt
 
-- `rtk npx vitest run server/tests/routes/accounts.test.ts server/tests/routes/transactions.test.ts server/tests/lib/transactionJournalService.test.ts --reporter=dot`
-- `rtk npm run typecheck --if-present`
+- **Modularity:** Continue breaking down oversized files, especially `client/src/pages/settings/tabs/SettingsSections.tsx` at about 1,345 lines, `client/src/pages/settings/components/CategoriesSection.tsx` at about 650 lines, `client/src/pages/transactions/TransactionsPage.tsx`, `client/src/pages/investments/InvestmentsSections.tsx`, `client/src/pages/accounts/AccountsPage.tsx`, and large server route/service modules.
+- **Type safety:** Client lint is clean; backend lint still reports 438 broad `any`/CommonJS warnings across services, route modules, lib helpers, and tests. Prioritize production server modules before test mocks.
+- **Exports/imports:** Add browser E2E coverage for authenticated report exports, Settings data exports, Settings Excel export, CSV import, and archive flows.
+- **Audit accuracy:** Reconcile older audit docs when the current code has already fixed a listed gap.
+- **Backend structure:** Keep public route entry points thin and continue moving non-trivial business logic into focused services/lib modules.
+- **Security/data integrity:** Keep checking household scoping, role checks, soft-delete behavior, secret redaction, SSRF protections, and encrypted credential storage during every related change.
 
-## 2026-05-16 Project Structure Cleanup
+## Verification Gaps
 
-Completed work:
+- Settings Data export/archive actions need E2E coverage.
+- Report PDF/CSV/Excel authenticated downloads need E2E coverage.
+- Large frontend pages still need smoke or workflow coverage when they are split.
 
-- Moved the remaining auth middleware test out of `server/src` into `server/tests/middleware`.
-- Reduced `ReportsPage`, `SettingsPage`, and `InvestmentsPage` entry files to thin shells, with extracted page-local modules for settings and investments.
-- Moved large server route implementations into `server/src/routeModules` and left `server/src/routes` as stable small re-export entry points.
-- Fixed the partial `ReportsPage` extraction so it matches current shared UI component contracts.
+## Latest Verification
 
-Verification:
+- 2026-05-21: Production backend helpers `transactionJournalService.ts`, `journalReportingCore.ts`, `priceCache.ts`, `reporting/rollups.ts`, `reporting/snapshots.ts`, `pdfParser.ts`, `ai/index.ts`, `softDeleteWhere.ts`, `audit.ts`, `default-categories.ts`, `webhookFire.ts`, `routes/audit.ts`, and `routes/logos.ts` are lint-clean. `rtk npm run build`, `rtk npm run test`, and `rtk npm run lint` pass; root lint still reports 438 server warnings.
 
-- Server build passes.
-- Client build passes.
-- Server Vitest suite passes: 90 files, 557 tests.
-- Client Vitest suite passes: 8 files, 38 tests.
-- No `*.test.*` files remain under `server/src` or `client/src`.
-- No file under `server/src/routes/*.ts` is over 400 lines.
+## Quality Categories To Track
 
-Known follow-up structure work:
-
-- Several client page entry files remain over 400 lines and still need the deeper feature-slice extraction described in `docs/superpowers/plans/2026-05-16-project-structure-cleanup.md`.
-- `server/src/routeModules` now contains the large route implementations; further service extraction can continue from those modules without changing public route import paths.
-
-## 2026-05-14 Test Coverage Push
-
-Completed work:
-
-- Added backend route coverage for bills, wealth income/category bucket/analysis/AI-cache flows, attachments, object groups, report schedules, transaction links, and current-user profile routes.
-- Added backend unit coverage for AI auto-categorization merchant normalization, single suggestions, batch job state, rule-first categorization, backwards-compatible batch wrapper behavior, and rule suggestion detection.
-- Fixed `/api/v1/wealth/analysis` spending bucket totals by passing signed withdrawal amounts into `bucketTransactions`.
-- Fixed attachment upload validation so disallowed MIME types return the intended `400 { error }` response.
-- Fixed flaky encryption tamper test by deterministically changing the auth tag byte.
-
-Coverage status:
-
-- Server release coverage gate after this pass: statements 98.73%, branches 96.91%, functions 99.08%, lines 99.06%.
-- Client release coverage gate after this pass: statements 100%, branches 95.45%, functions 100%, lines 100%.
-- Feature coverage matrix after this pass: 39/39 shipped feature rows marked `COVERED` for the release gate.
-- Broad all-file server/client coverage remains lower if every route, page, and adapter module is included; the release gate now focuses on deterministic in-process business modules while feature coverage is tracked through unit/API/E2E mapping.
-
-Known follow-up coverage hardening:
-
-- Large low-coverage routes remain: `transactions.ts`, `import.ts`, `settings.ts`, `investments.ts`, `accounts.ts`, `reports.ts`, `advisor.ts`, `cashflow.ts`, `autoCategorize.ts`, and `wealth.ts`.
-- AI provider implementations and AI context/prompt builders are largely untested.
-- Client page-level component coverage remains mostly covered through Playwright E2E rather than broad Vitest line coverage.
-- Email digest/parser/watcher, category bucket job, PDF parsing, webhook firing, and web push libs remain at or near zero coverage.
-
-Follow-up items:
-
-- Add focused mocked route integration tests for `transactions`, `import`, `settings`, `advisor`, `reports`, and `accounts` before raising coverage thresholds.
-- Add provider-off and provider-configured tests for AI advisor settings/chat flows, including secret redaction and provider-none behavior.
-- Add feature-matrix-driven E2E assertions for browser workflows that currently only have smoke coverage.
+- Security and auth/access control
+- Household scoping and data integrity
+- Soft delete and retention behavior
+- Exports, imports, and reports
+- Modularity and oversized files
+- Type safety and API contracts
+- Tests, E2E, smoke checks, and coverage gaps
+- Accessibility and UX reliability
+- Performance and bundle size
+- Deployment and documentation

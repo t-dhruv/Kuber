@@ -15,6 +15,20 @@ export interface PdfParseResult {
   error?: string;
 }
 
+interface TesseractModule {
+  default: {
+    recognize(
+      image: unknown,
+      language: string,
+      options: { logger: () => void },
+    ): Promise<{ data: { text: string } }>;
+  };
+}
+
+interface PdfToImgModule {
+  pdf(buffer: Buffer, options: { scale: number }): Promise<AsyncIterable<unknown>>;
+}
+
 /**
  * Parse a PDF buffer into transaction rows.
  * Uses pdf-parse for text extraction, then applies regex patterns to find transactions.
@@ -143,16 +157,16 @@ export async function ocrPdfBuffer(buffer: Buffer): Promise<string | null> {
     // Dynamic import — tesseract.js is optional
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore optional peer dependency
-    const Tesseract = await import('tesseract.js').catch(() => null) as any;
+    const Tesseract = await import('tesseract.js').catch(() => null) as TesseractModule | null;
     if (!Tesseract) return null;
 
     // Convert first page of PDF to image using pdf-to-img (also optional)
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore optional peer dependency
-    const pdfToImg = await import('pdf-to-img').catch(() => null) as any;
+    const pdfToImg = await import('pdf-to-img').catch(() => null) as PdfToImgModule | null;
     if (!pdfToImg) return null;
 
-    const pages = await (pdfToImg as any).pdf(buffer, { scale: 2 });
+    const pages = await pdfToImg.pdf(buffer, { scale: 2 });
     let fullText = '';
     for await (const page of pages) {
       const { data } = await Tesseract.default.recognize(page, 'eng', {

@@ -31,7 +31,7 @@ Focus: Accessibility and UI/UX remediation, custom outbound endpoint governance,
 - [x] S5/P1: Look up reset submissions by hashed reset-token key and delete the stored key on use/expiry as before.
 - [x] S5/P1: Encrypt newly saved webhook signing secrets, mask them from webhook API responses, and decrypt them before signing test/background deliveries.
 - [x] S5/P1: Update Settings webhook edit flow so blank secret on edit preserves the existing masked secret instead of resubmitting it.
-- [x] S6/F4: Remove hardcoded production compose credential fallbacks for Postgres, Grafana, and n8n.
+- [x] S6/F4: Remove hardcoded production compose credential fallbacks for Postgres, Grafana, and bundled automation services.
 - [x] S6/F4: Correct production compose self-contained claim to document required mounted config directories.
 - [x] S6/F4: Add missing self-hosting and development setup guides linked from README.
 - [x] S6/F4: Require `AI_ENCRYPTION_KEY` at server startup so encrypted AI, IMAP, and webhook secrets do not fail later at runtime.
@@ -93,7 +93,7 @@ Focus: Accessibility and UI/UX remediation, custom outbound endpoint governance,
 - 2026-05-07: GitNexus impact for `REQUIRED_ENV` in `server/src/index.ts` returned LOW risk, 0 direct callers/processes/modules.
 - 2026-05-07: `npm --workspace server run build` passed after production env validation hardening.
 - 2026-05-07: `docker compose -f docker-compose.prod.yml config` rendered successfully with explicit test values for required compose variables.
-- 2026-05-07: `docker compose --env-file .env.example -f docker-compose.prod.yml --profile observability --profile automation config` rendered successfully with explicit test values for profile credentials.
+- 2026-05-07: `docker compose --env-file .env.example -f docker-compose.prod.yml --profile observability config` rendered successfully with explicit test values for profile credentials.
 - 2026-05-07: `npm --workspace server test` passed after production env validation hardening, 42 files / 268 tests.
 - 2026-05-07: `git diff --check -- docker-compose.prod.yml .env.example server/src/index.ts Makefile README.md docs/SELF_HOSTING.md DEV.md docs/audits/full-application-gap-implementation-progress-2026-05-07.md` passed with line-ending warnings only.
 - 2026-05-07: GitNexus impact checks before UI edits returned LOW risk for `AppShell`, `Sidebar`, `DropZone`, `MappingConfirmStep`, `ChatInput`, `ConversationSidebar`, `FilterBar`, `DataTable`, `CustomProvider`, `AiAdvisorCard`, `SettingsPage`, and `RowTable`.
