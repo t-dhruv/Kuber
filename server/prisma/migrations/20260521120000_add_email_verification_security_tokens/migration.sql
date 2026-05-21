@@ -1,4 +1,5 @@
 ALTER TABLE "users" ADD COLUMN "emailVerifiedAt" TIMESTAMP(3);
+UPDATE "users" SET "emailVerifiedAt" = CURRENT_TIMESTAMP WHERE "emailVerifiedAt" IS NULL;
 
 CREATE TABLE "security_tokens" (
     "id" TEXT NOT NULL,
