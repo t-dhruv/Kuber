@@ -18,6 +18,7 @@ Keep this file small and focused on open quality debt, product gaps, and verific
 - **Audit accuracy:** Reconcile older audit docs when the current code has already fixed a listed gap.
 - **Backend structure:** Keep public route entry points thin and continue moving non-trivial business logic into focused services/lib modules.
 - **Security/data integrity:** Keep checking household scoping, role checks, soft-delete behavior, secret redaction, SSRF protections, and encrypted credential storage during every related change.
+- **Security/auth roadmap:** Email verification, email OTP MFA, generalized MFA responses, and field-level client-side encryption are not implemented yet. Design is tracked in `docs/superpowers/specs/2026-05-21-security-foundation-e2ee-design.md`.
 
 ## Verification Gaps
 
@@ -28,6 +29,7 @@ Keep this file small and focused on open quality debt, product gaps, and verific
 ## Latest Verification
 
 - 2026-05-21: Production backend helpers `transactionJournalService.ts`, `journalReportingCore.ts`, `priceCache.ts`, `reporting/rollups.ts`, `reporting/snapshots.ts`, `pdfParser.ts`, `ai/index.ts`, `softDeleteWhere.ts`, `audit.ts`, `default-categories.ts`, `webhookFire.ts`, `routes/audit.ts`, and `routes/logos.ts` are lint-clean. `rtk npm run build`, `rtk npm run test`, and `rtk npm run lint` pass; root lint still reports 438 server warnings.
+- 2026-05-21: Security foundation and field-level E2EE design documented. No runtime tests run because this slice only added planning documentation.
 
 ## Quality Categories To Track
 
