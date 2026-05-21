@@ -20,6 +20,7 @@ model User {
   // 2FA
   totpSecret          String?
   totpEnabled         Boolean           @default(false)
+  emailMfaEnabled     Boolean           @default(false)
   backupCodes         String[]          @default([])
   // Account lockout
   failedLoginAttempts Int               @default(0)
@@ -191,7 +192,7 @@ model SecurityToken {
   id           String    @id @default(cuid())
   userId       String
   type         String
-  tokenHash    String    @unique
+  tokenHash    String
   expiresAt    DateTime
   consumedAt   DateTime?
   attemptCount Int       @default(0)
@@ -200,6 +201,7 @@ model SecurityToken {
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type])
+  @@index([type, tokenHash])
   @@index([expiresAt])
   @@map("security_tokens")
 }
