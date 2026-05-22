@@ -60,8 +60,10 @@ const baseAccount = {
   id: 'account-1',
   householdId: 'household-1',
   name: 'Main Checking',
+  nameEncrypted: null,
   type: 'CHECKING',
   institution: 'Kuber Bank',
+  institutionEncrypted: null,
   institutionLogo: null,
   lastFour: '1234',
   balance: 5000,
@@ -146,6 +148,43 @@ describe('accounts route integration', () => {
       type: 'SAVINGS',
       balance: 1200,
     });
+  });
+
+  it('accepts encrypted account labels while preserving plaintext fallback', async () => {
+    const encrypted = { v: 1, alg: 'AES-GCM', kid: 'key-1', iv: 'iv', ct: 'ct' };
+    vi.mocked(prisma.account.create).mockResolvedValue({
+      ...baseAccount,
+      id: 'encrypted-account',
+      name: 'Checking',
+      nameEncrypted: encrypted,
+      institution: 'Bank',
+      institutionEncrypted: encrypted,
+      type: 'CHECKING',
+      balance: 0,
+    } as any);
+
+    const res = await request(makeApp())
+      .post('/')
+      .send({
+        name: 'Checking',
+        nameEncrypted: encrypted,
+        institution: 'Bank',
+        institutionEncrypted: encrypted,
+        type: 'checking',
+        balance: 0,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.account.nameEncrypted).toEqual(encrypted);
+    expect(res.body.account.institutionEncrypted).toEqual(encrypted);
+    expect(prisma.account.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        householdId: 'household-1',
+        name: 'Checking',
+        nameEncrypted: encrypted,
+        institutionEncrypted: encrypted,
+      }),
+    }));
   });
 
   it('rejects account creation with invalid type before writing', async () => {
