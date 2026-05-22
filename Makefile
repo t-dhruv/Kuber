@@ -1,8 +1,10 @@
 .PHONY: help dev dev-client dev-server build build-client build-server \
         test test-server test-client test-unit test-coverage test-e2e \
-        clean db-reset db-drop db-migrate db-generate db-seed db-studio \
+        clean db-reset db-env-check db-drop db-migrate db-generate db-seed db-studio \
         lint typecheck format start install up down logs \
         prod-up prod-down prod-logs
+
+WITH_ROOT_ENV = node scripts/run-with-root-env.mjs
 
 # ── Default ──────────────────────────────────────────────────────────────────
 
@@ -52,15 +54,15 @@ help:
 # ── Dev ──────────────────────────────────────────────────────────────────────
 
 dev:
-	npx concurrently --kill-others-on-fail \
+	$(WITH_ROOT_ENV) npx concurrently --kill-others-on-fail \
 		"cd server && npm run dev" \
 		"cd client && npm run dev"
 
 dev-client:
-	cd client && npm run dev
+	$(WITH_ROOT_ENV) sh -c 'cd client && npm run dev'
 
 dev-server:
-	cd server && npm run dev
+	$(WITH_ROOT_ENV) sh -c 'cd server && npm run dev'
 
 # ── Install ───────────────────────────────────────────────────────────────────
 
@@ -74,64 +76,70 @@ install:
 build: build-server build-client
 
 build-client:
-	cd client && npm run build
+	$(WITH_ROOT_ENV) sh -c 'cd client && npm run build'
 
 build-server:
-	cd server && npm run build
+	$(WITH_ROOT_ENV) sh -c 'cd server && npm run build'
 
 # ── Quality ───────────────────────────────────────────────────────────────────
 
 lint:
-	cd server && npm run lint
-	cd client && npm run lint
+	$(WITH_ROOT_ENV) sh -c 'cd server && npm run lint'
+	$(WITH_ROOT_ENV) sh -c 'cd client && npm run lint'
 
 typecheck:
-	cd server && npx tsc --noEmit
-	cd client && npx tsc --noEmit
-	cd shared && npx tsc --noEmit 2>/dev/null || true
+	$(WITH_ROOT_ENV) sh -c 'cd server && npx tsc --noEmit'
+	$(WITH_ROOT_ENV) sh -c 'cd client && npx tsc --noEmit'
+	$(WITH_ROOT_ENV) sh -c 'cd shared && npx tsc --noEmit 2>/dev/null || true'
 
 format:
-	cd server && npx prettier --check "src/**/*.{ts,json}"
-	cd client && npx prettier --check "src/**/*.{ts,tsx,css}"
+	$(WITH_ROOT_ENV) sh -c 'cd server && npx prettier --check "src/**/*.{ts,json}"'
+	$(WITH_ROOT_ENV) sh -c 'cd client && npx prettier --check "src/**/*.{ts,tsx,css}"'
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 
 test:
-	npm run test
+	$(WITH_ROOT_ENV) npm run test
 
 test-server:
-	cd server && npm run test
+	$(WITH_ROOT_ENV) sh -c 'cd server && npm run test'
 
 test-client:
-	cd client && npm run test
+	$(WITH_ROOT_ENV) sh -c 'cd client && npm run test'
 
 test-unit:
-	npm run test
+	$(WITH_ROOT_ENV) npm run test
 
 test-coverage:
-	npm run test:coverage
+	$(WITH_ROOT_ENV) npm run test:coverage
 
 test-e2e:
-	npx playwright test
+	$(WITH_ROOT_ENV) npx playwright test
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
-db-reset: db-drop db-migrate db-seed
+db-reset: db-env-check db-drop db-migrate db-seed
 
-db-drop:
-	cd server && npx prisma migrate reset --force --skip-seed
+db-env-check:
+	@$(WITH_ROOT_ENV) sh -c 'if [ -z "$$DATABASE_URL" ]; then \
+		echo "DATABASE_URL is not set. Create .env from .env.example or export DATABASE_URL."; \
+		exit 1; \
+	fi'
 
-db-migrate:
-	cd server && npm run db:migrate
+db-drop: db-env-check
+	$(WITH_ROOT_ENV) sh -c 'cd server && npx prisma migrate reset --force --skip-seed'
+
+db-migrate: db-env-check
+	$(WITH_ROOT_ENV) sh -c 'cd server && npm run db:migrate'
 
 db-generate:
-	cd server && npm run db:generate
+	$(WITH_ROOT_ENV) sh -c 'cd server && npm run db:generate'
 
-db-seed:
-	cd server && npm run db:seed
+db-seed: db-env-check
+	$(WITH_ROOT_ENV) sh -c 'cd server && npm run db:seed'
 
-db-studio:
-	cd server && npx prisma studio
+db-studio: db-env-check
+	$(WITH_ROOT_ENV) sh -c 'cd server && npx prisma studio'
 
 # ── Docker (dev) ──────────────────────────────────────────────────────────────
 
@@ -168,7 +176,7 @@ prod-logs:
 # ── Misc ──────────────────────────────────────────────────────────────────────
 
 start:
-	cd server && npm run start
+	$(WITH_ROOT_ENV) sh -c 'cd server && npm run start'
 
 clean:
 	rm -rf client/dist server/dist node_modules client/node_modules server/node_modules shared/node_modules .turbo

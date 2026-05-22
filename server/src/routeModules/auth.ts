@@ -2,22 +2,80 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { generateSecret as totpGenerateSecret, verify as totpVerify, generateURI as totpGenerateURI } from 'otplib';
 import { toDataURL } from 'qrcode';
 import { prisma } from '../lib/prisma';
 import { createRefreshToken, invalidateFamily, hashToken, DEFAULT_REFRESH_TTL_MS, REMEMBER_ME_REFRESH_TTL_MS } from '../lib/token';
-import { sendPasswordResetEmail, sendAccountLockoutEmail, sendWelcomeEmail } from '../lib/email';
+import { consumeSecurityToken, createSecurityToken } from '../lib/securityTokens';
+import { sendPasswordResetEmail, sendAccountLockoutEmail, sendWelcomeEmail, sendEmailVerificationEmail } from '../lib/email';
 import { requireAuth } from '../middleware/auth';
 import { seedDefaultCategories } from '../lib/default-categories';
 import type { AuthRequest } from '../middleware/auth';
 import type { UserDto } from '@kuber/shared';
 import { createModuleLogger } from '../lib/logger';
+import {
+  getAvailableMfaMethods,
+  sendEmailOtpChallenge,
+  signMfaTempToken,
+  verifyLegacyOrMfaTempToken,
+  verifyMfaCode,
+  verifyMfaTempToken,
+} from '../services/mfaService';
 
 const log = createModuleLogger('auth');
 const router = Router();
 
 const ACCESS_TOKEN_TTL = '15m';
 const BCRYPT_ROUNDS = 12;
+
+const signupSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  householdName: z.string().min(1).optional(),
+  inviteToken: z.string().min(1).optional(),
+}).refine((data) => data.householdName || data.inviteToken, {
+  message: 'All fields are required',
+});
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+  rememberMe: z.boolean().optional(),
+});
+
+const tokenSchema = z.object({
+  token: z.string().min(1),
+});
+
+const resendVerificationSchema = z.object({
+  email: z.string().email(),
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8),
+});
+
+const mfaTempTokenSchema = z.object({
+  tempToken: z.string().min(1),
+});
+
+const mfaVerifySchema = z.object({
+  tempToken: z.string().min(1),
+  method: z.enum(['totp', 'email', 'backup']),
+  code: z.string().min(1),
+});
+
+const passwordConfirmSchema = z.object({
+  password: z.string().min(1),
+});
 
 // Lockout thresholds: { attemptCount → lockDurationMs }
 const LOCKOUT_THRESHOLDS: [number, number][] = [
@@ -68,17 +126,12 @@ function setRefreshCookie(res: Response, rawToken: string, rememberMe = false) {
 
 router.post('/signup', async (req: Request, res: Response) => {
   try {
-    const { email, password, firstName, lastName, householdName, inviteToken } = req.body as {
-      email: string; password: string; firstName: string; lastName: string; householdName?: string; inviteToken?: string;
-    };
-
-    if (!email || !password || !firstName || !lastName || (!householdName && !inviteToken)) {
-      return res.status(400).json({ error: 'All fields are required' });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    const parsed = signupSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid signup request' });
     }
 
+    const { email, password, firstName, lastName, householdName, inviteToken } = parsed.data;
     const normalizedEmail = email.toLowerCase();
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) return res.status(409).json({ error: 'Email already in use' });
@@ -119,16 +172,62 @@ router.post('/signup', async (req: Request, res: Response) => {
       return { user: newUser, householdId: household.id };
     });
 
-    const accessToken = signAccessToken(result.user.id, result.householdId, result.user.email);
-    const { rawToken } = await createRefreshToken(result.user.id);
-    setRefreshCookie(res, rawToken);
+    const { rawToken } = await createSecurityToken(result.user.id, 'email_verification');
 
-    // Fire-and-forget welcome email
+    sendEmailVerificationEmail(result.user.email, rawToken).catch(() => {});
     sendWelcomeEmail(result.user.email, result.user.firstName).catch(() => {});
 
-    return res.status(201).json({ user: toUserDto(result.user, result.householdId), accessToken });
+    return res.status(201).json({
+      requireEmailVerification: true,
+      email: result.user.email,
+      message: 'Check your email to verify your account.',
+    });
   } catch (err) {
     log.error({ err }, 'auth/signup');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /verify-email ───────────────────────────────────────────────────────
+
+router.post('/verify-email', async (req: Request, res: Response) => {
+  try {
+    const parsed = tokenSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Verification token is required' });
+
+    const result = await consumeSecurityToken(parsed.data.token, 'email_verification');
+    if (!result.ok) return res.status(400).json({ error: 'Invalid or expired verification token' });
+
+    await prisma.user.update({
+      where: { id: result.userId },
+      data: { emailVerifiedAt: new Date() },
+    });
+
+    return res.json({ message: 'Email verified successfully' });
+  } catch (err) {
+    log.error({ err }, 'auth/verify-email');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /resend-verification ───────────────────────────────────────────────
+
+router.post('/resend-verification', async (req: Request, res: Response) => {
+  try {
+    const parsed = resendVerificationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.json({ message: 'If that email needs verification, a new link has been sent.' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
+    if (user && !user.emailVerifiedAt) {
+      const { rawToken } = await createSecurityToken(user.id, 'email_verification');
+      await sendEmailVerificationEmail(user.email, rawToken);
+    }
+
+    return res.json({ message: 'If that email needs verification, a new link has been sent.' });
+  } catch (err) {
+    log.error({ err }, 'auth/resend-verification');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -137,10 +236,10 @@ router.post('/signup', async (req: Request, res: Response) => {
 
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password, rememberMe = false } = req.body as { email: string; password: string; rememberMe?: boolean };
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Email and password are required' });
+
+    const { email, password, rememberMe = false } = parsed.data;
 
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
@@ -178,6 +277,14 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    if (!user.emailVerifiedAt) {
+      return res.status(403).json({
+        requireEmailVerification: true,
+        email: user.email,
+        error: 'Verify your email before signing in.',
+      });
+    }
+
     const householdId = user.householdMembers[0]?.householdId;
     if (!householdId) return res.status(400).json({ error: 'User has no household' });
 
@@ -189,14 +296,10 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    // 2FA check
-    if (user.totpEnabled) {
-      const tempToken = jwt.sign(
-        { userId: user.id, purpose: '2fa', rememberMe: !!rememberMe },
-        process.env.JWT_SECRET!,
-        { expiresIn: '5m' },
-      );
-      return res.json({ requireTotp: true, tempToken });
+    const mfaMethods = getAvailableMfaMethods(user);
+    if (mfaMethods.length > 0) {
+      const tempToken = signMfaTempToken(user.id, !!rememberMe);
+      return res.json({ requireMfa: true, tempToken, methods: mfaMethods });
     }
 
     const accessToken = signAccessToken(user.id, householdId, user.email);
@@ -278,24 +381,15 @@ router.post('/logout', async (req: Request, res: Response) => {
 
 router.post('/forgot-password', async (req: Request, res: Response) => {
   try {
-    const { email } = req.body as { email: string };
-    if (!email) return res.status(400).json({ error: 'Email is required' });
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Email is required' });
 
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
 
     // Always return success to prevent user enumeration
-    if (user) {
-      const resetToken = crypto.randomBytes(32).toString('hex');
-      const resetTokenKey = `reset_token_${hashToken(resetToken)}`;
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-      await prisma.userPreference.upsert({
-        where: { userId_key: { userId: user.id, key: resetTokenKey } },
-        update: { value: expiresAt.toISOString() },
-        create: { userId: user.id, key: resetTokenKey, value: expiresAt.toISOString() },
-      });
-
-      await sendPasswordResetEmail(user.email, resetToken);
+    if (user?.emailVerifiedAt) {
+      const { rawToken } = await createSecurityToken(user.id, 'password_reset');
+      await sendPasswordResetEmail(user.email, rawToken);
     }
 
     return res.json({ message: 'If that email exists, a reset link has been sent.' });
@@ -309,29 +403,22 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
 
 router.post('/reset-password', async (req: Request, res: Response) => {
   try {
-    const { token, password } = req.body as { token: string; password: string };
-    if (!token || !password) return res.status(400).json({ error: 'Token and password are required' });
-    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-
-    const pref = await prisma.userPreference.findFirst({
-      where: { key: `reset_token_${hashToken(token)}` },
-    });
-    if (!pref) return res.status(400).json({ error: 'Invalid or expired reset token' });
-
-    const expiresAt = new Date(pref.value);
-    if (expiresAt < new Date()) {
-      await prisma.userPreference.delete({ where: { userId_key: { userId: pref.userId, key: pref.key } } });
-      return res.status(400).json({ error: 'Reset token has expired' });
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Token and password are required' });
     }
+
+    const { token, password } = parsed.data;
+    const consumed = await consumeSecurityToken(token, 'password_reset');
+    if (!consumed.ok) return res.status(400).json({ error: 'Invalid or expired reset token' });
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     await prisma.$transaction([
       prisma.user.update({
-        where: { id: pref.userId },
+        where: { id: consumed.userId },
         data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null },
       }),
-      prisma.userPreference.delete({ where: { userId_key: { userId: pref.userId, key: pref.key } } }),
-      prisma.refreshToken.deleteMany({ where: { userId: pref.userId } }),
+      prisma.refreshToken.deleteMany({ where: { userId: consumed.userId } }),
     ]);
 
     return res.json({ message: 'Password updated successfully' });
@@ -439,6 +526,105 @@ router.post('/2fa/disable', async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /mfa/email/send ────────────────────────────────────────────────────
+
+router.post('/mfa/email/send', async (req: Request, res: Response) => {
+  try {
+    const parsed = mfaTempTokenSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'tempToken is required' });
+
+    const payload = verifyMfaTempToken(parsed.data.tempToken);
+    if (!payload) return res.status(401).json({ error: 'Invalid or expired token' });
+
+    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+    if (user) await sendEmailOtpChallenge(user);
+
+    return res.json({ message: 'If email MFA is available, a code has been sent.' });
+  } catch (err) {
+    log.error({ err }, 'auth/mfa/email/send');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /mfa/verify ────────────────────────────────────────────────────────
+
+router.post('/mfa/verify', async (req: Request, res: Response) => {
+  try {
+    const parsed = mfaVerifySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'tempToken, method, and code are required' });
+
+    const payload = verifyMfaTempToken(parsed.data.tempToken);
+    if (!payload) return res.status(401).json({ error: 'Invalid or expired token' });
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      include: { householdMembers: { take: 1 } },
+    });
+    if (!user) return res.status(400).json({ error: 'MFA verification failed' });
+
+    const valid = await verifyMfaCode(user, parsed.data.method, parsed.data.code);
+    if (!valid) return res.status(401).json({ error: 'MFA verification failed' });
+
+    const householdId = user.householdMembers[0]?.householdId;
+    if (!householdId) return res.status(400).json({ error: 'User has no household' });
+
+    const accessToken = signAccessToken(user.id, householdId, user.email);
+    const { rawToken } = await createRefreshToken(user.id, undefined, payload.rememberMe);
+    setRefreshCookie(res, rawToken, payload.rememberMe);
+
+    return res.json({ user: toUserDto(user, householdId), accessToken });
+  } catch (err) {
+    log.error({ err }, 'auth/mfa/verify');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /mfa/email/enable ──────────────────────────────────────────────────
+
+router.post('/mfa/email/enable', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = passwordConfirmSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Password is required' });
+
+    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user.emailVerifiedAt) return res.status(400).json({ error: 'Verify your email before enabling email MFA' });
+
+    const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
+    if (!valid) return res.status(401).json({ error: 'Invalid password' });
+
+    await prisma.user.update({ where: { id: user.id }, data: { emailMfaEnabled: true } });
+    return res.json({ message: 'Email MFA enabled' });
+  } catch (err) {
+    log.error({ err }, 'auth/mfa/email/enable');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /mfa/email/disable ─────────────────────────────────────────────────
+
+router.post('/mfa/email/disable', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = passwordConfirmSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Password is required' });
+
+    const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
+    if (!valid) return res.status(401).json({ error: 'Invalid password' });
+
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: user.id }, data: { emailMfaEnabled: false } }),
+      prisma.securityToken.deleteMany({ where: { userId: user.id, type: 'email_otp', consumedAt: null } }),
+    ]);
+    return res.json({ message: 'Email MFA disabled' });
+  } catch (err) {
+    log.error({ err }, 'auth/mfa/email/disable');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ─── POST /2fa/validate ───────────────────────────────────────────────────────
 // Second step: exchange tempToken + TOTP code for full access
 
@@ -447,14 +633,8 @@ router.post('/2fa/validate', async (req: Request, res: Response) => {
     const { tempToken, code } = req.body as { tempToken: string; code: string };
     if (!tempToken || !code) return res.status(400).json({ error: 'tempToken and code are required' });
 
-    let payload: { userId: string; purpose: string; rememberMe?: boolean };
-    try {
-      payload = jwt.verify(tempToken, process.env.JWT_SECRET!) as typeof payload;
-    } catch {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-
-    if (payload.purpose !== '2fa') return res.status(400).json({ error: 'Invalid token purpose' });
+    const payload = verifyLegacyOrMfaTempToken(tempToken);
+    if (!payload) return res.status(401).json({ error: 'Invalid or expired token' });
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
@@ -470,7 +650,7 @@ router.post('/2fa/validate', async (req: Request, res: Response) => {
     const householdId = user.householdMembers[0]?.householdId;
     if (!householdId) return res.status(400).json({ error: 'User has no household' });
 
-    const rememberMe2fa = !!payload.rememberMe;
+    const rememberMe2fa = payload.rememberMe;
     const accessToken = signAccessToken(user.id, householdId, user.email);
     const { rawToken } = await createRefreshToken(user.id, undefined, rememberMe2fa);
     setRefreshCookie(res, rawToken, rememberMe2fa);
@@ -489,13 +669,8 @@ router.post('/2fa/use-backup', async (req: Request, res: Response) => {
     const { tempToken, backupCode } = req.body as { tempToken: string; backupCode: string };
     if (!tempToken || !backupCode) return res.status(400).json({ error: 'tempToken and backupCode are required' });
 
-    let payload: { userId: string; purpose: string; rememberMe?: boolean };
-    try {
-      payload = jwt.verify(tempToken, process.env.JWT_SECRET!) as typeof payload;
-    } catch {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-    if (payload.purpose !== '2fa') return res.status(400).json({ error: 'Invalid token purpose' });
+    const payload = verifyLegacyOrMfaTempToken(tempToken);
+    if (!payload) return res.status(401).json({ error: 'Invalid or expired token' });
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
@@ -520,7 +695,7 @@ router.post('/2fa/use-backup', async (req: Request, res: Response) => {
     const householdId = user.householdMembers[0]?.householdId;
     if (!householdId) return res.status(400).json({ error: 'User has no household' });
 
-    const rememberMe2fa = !!payload.rememberMe;
+    const rememberMe2fa = payload.rememberMe;
     const accessToken = signAccessToken(user.id, householdId, user.email);
     const { rawToken } = await createRefreshToken(user.id, undefined, rememberMe2fa);
     setRefreshCookie(res, rawToken, rememberMe2fa);
@@ -539,9 +714,22 @@ router.get('/2fa/status', async (req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
     const payload = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET!) as { userId: string };
-    const user = await prisma.user.findUnique({ where: { id: payload.userId }, select: { totpEnabled: true, backupCodes: true } });
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        emailVerifiedAt: true,
+        totpEnabled: true,
+        emailMfaEnabled: true,
+        backupCodes: true,
+      },
+    });
     if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json({ totpEnabled: user.totpEnabled, backupCodesRemaining: user.backupCodes.length });
+    return res.json({
+      emailVerified: !!user.emailVerifiedAt,
+      totpEnabled: user.totpEnabled,
+      emailMfaEnabled: user.emailMfaEnabled,
+      backupCodesRemaining: user.backupCodes.length,
+    });
   } catch {
     return res.status(401).json({ error: 'Unauthorized' });
   }

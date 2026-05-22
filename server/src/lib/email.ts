@@ -149,6 +149,37 @@ export async function sendPasswordResetEmail(to: string, token: string) {
   });
 }
 
+export async function sendEmailVerificationEmail(to: string, token: string) {
+  const url = `${CLIENT_URL}/verify-email?token=${token}`;
+  await sendMail({
+    to,
+    subject: 'Verify your Kuber email',
+    text: `Verify your email: ${url}\n\nThis link expires in 24 hours. If you didn't create a Kuber account, ignore this email.`,
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto">
+        <h2>Verify your email</h2>
+        <p>Confirm this email address to finish setting up your Kuber account. This link expires in 24 hours.</p>
+        <a href="${url}" style="display:inline-block;padding:10px 20px;background:#E5622A;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Verify Email</a>
+        <p style="color:#888;font-size:12px;margin-top:24px">If you didn't create a Kuber account, you can safely ignore this email.</p>
+      </div>`,
+  });
+}
+
+export async function sendEmailOtpEmail(to: string, code: string) {
+  await sendMail({
+    to,
+    subject: 'Your Kuber sign-in code',
+    text: `Your Kuber sign-in code is ${code}.\n\nThis code expires in 10 minutes. If you didn't try to sign in, ignore this email.`,
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto">
+        <h2>Your sign-in code</h2>
+        <p>Use this code to finish signing in to Kuber. It expires in 10 minutes.</p>
+        <div style="font-size:28px;letter-spacing:6px;font-weight:700;margin:20px 0">${code}</div>
+        <p style="color:#888;font-size:12px;margin-top:24px">If you didn't try to sign in, you can safely ignore this email.</p>
+      </div>`,
+  });
+}
+
 export async function sendAccountLockoutEmail(to: string, lockedUntil: Date) {
   const time = lockedUntil.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
   await sendMail({

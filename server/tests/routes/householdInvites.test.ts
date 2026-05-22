@@ -4,8 +4,8 @@ import request from 'supertest';
 import authRouter from '../../src/routes/auth';
 import settingsRouter from '../../src/routes/settings';
 import { prisma } from '../../src/lib/prisma';
-import { sendHouseholdInviteEmail } from '../../src/lib/email';
-import { createRefreshToken } from '../../src/lib/token';
+import { sendEmailVerificationEmail, sendHouseholdInviteEmail } from '../../src/lib/email';
+import { createSecurityToken } from '../../src/lib/securityTokens';
 
 vi.mock('../../src/lib/prisma', () => ({
   prisma: {
@@ -21,7 +21,10 @@ vi.mock('../../src/lib/prisma', () => ({
       create: vi.fn(),
       findUnique: vi.fn(),
     },
-    $transaction: vi.fn(),
+    securityToken: { deleteMany: vi.fn() },
+    refreshToken: { deleteMany: vi.fn() },
+    auditLog: { create: vi.fn() },
+    $transaction: vi.fn(async (callback: any) => callback(prisma)),
   },
 }));
 
@@ -29,6 +32,7 @@ vi.mock('../../src/lib/email', () => ({
   sendHouseholdInviteEmail: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
   sendAccountLockoutEmail: vi.fn(),
+  sendEmailVerificationEmail: vi.fn(() => Promise.resolve()),
   sendWelcomeEmail: vi.fn(() => Promise.resolve()),
   sendTestEmail: vi.fn(),
 }));
@@ -39,6 +43,11 @@ vi.mock('../../src/lib/token', () => ({
   hashToken: vi.fn((token: string) => `hashed:${token}`),
   DEFAULT_REFRESH_TTL_MS: 60_000,
   REMEMBER_ME_REFRESH_TTL_MS: 120_000,
+}));
+
+vi.mock('../../src/lib/securityTokens', () => ({
+  createSecurityToken: vi.fn(),
+  consumeSecurityToken: vi.fn(),
 }));
 
 vi.mock('../../src/lib/default-categories', () => ({
@@ -69,6 +78,7 @@ function makeAuthApp() {
 describe('household invites', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => callback(prisma));
     process.env.JWT_SECRET = 'test-secret';
     process.env.CLIENT_URL = 'http://localhost:3000';
   });
@@ -108,7 +118,10 @@ describe('household invites', () => {
       expiresAt: new Date(Date.now() + 60_000),
       usedAt: null,
     } as any);
-    vi.mocked(createRefreshToken).mockResolvedValue({ rawToken: 'refresh-token' } as any);
+    vi.mocked(createSecurityToken).mockResolvedValue({
+      rawToken: 'verification-token',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
 
     const tx = {
       user: {
@@ -145,7 +158,12 @@ describe('household invites', () => {
       where: { id: 'invite-1' },
       data: { usedAt: expect.any(Date) },
     });
-    expect(res.body.user.householdId).toBe('hh-1');
+    expect(createSecurityToken).toHaveBeenCalledWith('user-1', 'email_verification');
+    expect(sendEmailVerificationEmail).toHaveBeenCalledWith('ada@example.com', 'verification-token');
+    expect(res.body).toMatchObject({
+      requireEmailVerification: true,
+      email: 'ada@example.com',
+    });
   });
 
   it('rejects expired or already used signup invites', async () => {
@@ -178,6 +196,9 @@ describe('household invites', () => {
       .mockResolvedValueOnce({ role: 'owner' } as any)
       .mockResolvedValueOnce({ role: 'member' } as any);
     vi.mocked(prisma.user.update).mockResolvedValue({} as any);
+    vi.mocked(prisma.securityToken.deleteMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({} as any);
 
     const res = await request(makeSettingsApp())
       .post('/settings/household/members/member-1/disable-2fa')
@@ -186,7 +207,13 @@ describe('household invites', () => {
     expect(res.status).toBe(200);
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'member-1' },
-      data: { totpSecret: null, totpEnabled: false, backupCodes: [] },
+      data: { totpSecret: null, totpEnabled: false, emailMfaEnabled: false, backupCodes: [] },
+    });
+    expect(prisma.securityToken.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'member-1', type: 'email_otp', consumedAt: null },
+    });
+    expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'member-1' },
     });
   });
 });

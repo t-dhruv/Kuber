@@ -1,9 +1,25 @@
 import { useState, FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
-import { useLogin, useTotpValidate, useTotpBackup } from "@/hooks/useAuth";
+import {
+  isMfaLoginResponse,
+  mfaMethodLabel,
+  useLogin,
+  useMfaVerify,
+  useSendEmailMfaCode,
+  type MfaMethod,
+} from "@/hooks/useAuth";
 import { Input } from "@/components/ui";
 import { getApiErrorMessage } from "@/lib/apiError";
+
+type EmailVerificationError = {
+  response?: {
+    data?: {
+      requireEmailVerification?: boolean;
+      email?: string;
+    };
+  };
+};
 
 function ErrorBox({ message }: { message: string }) {
   return (
@@ -25,14 +41,15 @@ function ErrorBox({ message }: { message: string }) {
 // ─── Step 1: Email + Password ──────────────────────────────────────────────────
 
 function PasswordStep({
-  onRequireTotp,
+  onRequireMfa,
 }: {
-  onRequireTotp: (tempToken: string) => void;
+  onRequireMfa: (challenge: { tempToken: string; methods: MfaMethod[] }) => void;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const login = useLogin();
 
   function handleSubmit(e: FormEvent) {
@@ -41,13 +58,21 @@ function PasswordStep({
       { email, password, rememberMe },
       {
         onSuccess: (data) => {
-          if (data.requireTotp) onRequireTotp(data.tempToken);
+          if (isMfaLoginResponse(data)) {
+            onRequireMfa({ tempToken: data.tempToken, methods: data.methods });
+          }
+        },
+        onError: (err) => {
+          const data = (err as EmailVerificationError).response?.data;
+          if (data?.requireEmailVerification && data.email) {
+            setUnverifiedEmail(data.email);
+          }
         },
       },
     );
   }
 
-  const errorMessage = login.error
+  const errorMessage = login.error && !unverifiedEmail
     ? getApiErrorMessage(login.error, "Sign in failed. Please try again.")
     : null;
 
@@ -107,6 +132,12 @@ function PasswordStep({
         </span>
       </label>
 
+      {unverifiedEmail && (
+        <div className="p-3 rounded-[var(--radius-md)] bg-[var(--color-accent-light)] text-[var(--color-text)] text-sm mb-4">
+          Verify {unverifiedEmail} before signing in. Use the link we sent to your inbox.
+        </div>
+      )}
+
       {errorMessage && <ErrorBox message={errorMessage} />}
 
       <button
@@ -134,36 +165,36 @@ function PasswordStep({
   );
 }
 
-// ─── Step 2: TOTP code ────────────────────────────────────────────────────────
+// ─── Step 2: MFA code ─────────────────────────────────────────────────────────
 
-function TotpStep({
+function MfaStep({
   tempToken,
+  methods,
   onBack,
 }: {
   tempToken: string;
+  methods: MfaMethod[];
   onBack: () => void;
 }) {
+  const [method, setMethod] = useState<MfaMethod>(methods[0] ?? "totp");
   const [code, setCode] = useState("");
-  const [showBackup, setShowBackup] = useState(false);
-  const [backupCode, setBackupCode] = useState("");
-  const validate = useTotpValidate();
-  const backup = useTotpBackup();
+  const verify = useMfaVerify();
+  const sendEmail = useSendEmailMfaCode();
 
-  function handleTotp(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    validate.mutate({ tempToken, code });
+    verify.mutate({ tempToken, method, code });
   }
 
-  function handleBackup(e: FormEvent) {
-    e.preventDefault();
-    backup.mutate({ tempToken, backupCode });
+  function handleMethod(nextMethod: MfaMethod) {
+    setMethod(nextMethod);
+    setCode("");
   }
 
-  const error = validate.error || backup.error;
-  const errorMessage = error
-    ? getApiErrorMessage(error, "Invalid code")
-    : null;
-  const isPending = validate.isPending || backup.isPending;
+  const error = verify.error || sendEmail.error;
+  const errorMessage = error ? getApiErrorMessage(error, "Invalid code") : null;
+  const isPending = verify.isPending;
+  const isNumericCode = method !== "backup";
 
   return (
     <div>
@@ -174,95 +205,86 @@ function TotpStep({
           marginBottom: "1.5rem",
         }}
       >
-        Open your authenticator app and enter the 6-digit code for Kuber.
+        Complete verification to sign in.
       </p>
 
-      {!showBackup ? (
-        <form onSubmit={handleTotp} noValidate>
-          <div style={{ marginBottom: "1.5rem" }}>
-            <Input
-              id="totp"
-              label="Authenticator code"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(e) =>
-                setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
-              }
-              placeholder="000000"
-              maxLength={6}
-              className="text-center tracking-widest text-2xl"
-              autoFocus
-            />
-          </div>
-
-          {errorMessage && <ErrorBox message={errorMessage} />}
-
+      <div className="flex gap-2 mb-4">
+        {methods.map((item) => (
           <button
-            type="submit"
-            disabled={isPending || code.length !== 6}
+            key={item}
+            type="button"
+            onClick={() => handleMethod(item)}
+            className="px-3 py-2 rounded-[var(--radius-md)] border text-sm font-medium"
             style={{
-              width: "100%",
-              padding: "0.75rem",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--color-accent)",
-              color: "#fff",
-              fontWeight: "600",
-              fontSize: "0.9375rem",
-              border: "none",
-              cursor:
-                isPending || code.length !== 6 ? "not-allowed" : "pointer",
-              opacity: isPending || code.length !== 6 ? 0.6 : 1,
-              transition: "opacity 0.15s",
+              borderColor: item === method ? "var(--color-accent)" : "var(--color-border)",
+              color: item === method ? "var(--color-accent)" : "var(--color-text-secondary)",
+              backgroundColor: item === method ? "var(--color-accent-light)" : "transparent",
             }}
           >
-            {isPending ? "Verifying…" : "Verify"}
+            {mfaMethodLabel(item)}
           </button>
-        </form>
-      ) : (
-        <form onSubmit={handleBackup} noValidate>
-          <div style={{ marginBottom: "1.5rem" }}>
-            <Input
-              id="backup"
-              label="Backup code"
-              type="text"
-              value={backupCode}
-              onChange={(e) => setBackupCode(e.target.value.trim())}
-              placeholder="xxxxxxxxxx"
-              autoFocus
-            />
-          </div>
+        ))}
+      </div>
 
-          {errorMessage && <ErrorBox message={errorMessage} />}
-
-          <button
-            type="submit"
-            disabled={isPending || !backupCode}
-            style={{
-              width: "100%",
-              padding: "0.75rem",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--color-accent)",
-              color: "#fff",
-              fontWeight: "600",
-              fontSize: "0.9375rem",
-              border: "none",
-              cursor: isPending || !backupCode ? "not-allowed" : "pointer",
-              opacity: isPending || !backupCode ? 0.6 : 1,
-              transition: "opacity 0.15s",
-            }}
-          >
-            {isPending ? "Verifying…" : "Use backup code"}
-          </button>
-        </form>
+      {method === "email" && (
+        <button
+          type="button"
+          onClick={() => sendEmail.mutate(tempToken)}
+          disabled={sendEmail.isPending}
+          className="mb-4 text-sm text-[var(--color-accent)] font-medium"
+          style={{ background: "none", border: "none", padding: 0, cursor: sendEmail.isPending ? "not-allowed" : "pointer" }}
+        >
+          {sendEmail.isPending ? "Sending…" : "Send email code"}
+        </button>
       )}
+
+      <form onSubmit={handleSubmit} noValidate>
+        <div style={{ marginBottom: "1.5rem" }}>
+          <Input
+            id="mfa-code"
+            label={method === "backup" ? "Backup code" : `${mfaMethodLabel(method)} code`}
+            type="text"
+            inputMode={isNumericCode ? "numeric" : "text"}
+            autoComplete="one-time-code"
+            value={code}
+            onChange={(e) =>
+              setCode(isNumericCode
+                ? e.target.value.replace(/\D/g, "").slice(0, 6)
+                : e.target.value.trim())
+            }
+            placeholder={isNumericCode ? "000000" : "xxxxxxxxxx"}
+            maxLength={isNumericCode ? 6 : undefined}
+            className={isNumericCode ? "text-center tracking-widest text-2xl" : undefined}
+            autoFocus
+          />
+        </div>
+
+        {errorMessage && <ErrorBox message={errorMessage} />}
+
+        <button
+          type="submit"
+          disabled={isPending || !code || (isNumericCode && code.length !== 6)}
+          style={{
+            width: "100%",
+            padding: "0.75rem",
+            borderRadius: "var(--radius-md)",
+            backgroundColor: "var(--color-accent)",
+            color: "#fff",
+            fontWeight: "600",
+            fontSize: "0.9375rem",
+            border: "none",
+            cursor: isPending || !code || (isNumericCode && code.length !== 6) ? "not-allowed" : "pointer",
+            opacity: isPending || !code || (isNumericCode && code.length !== 6) ? 0.6 : 1,
+            transition: "opacity 0.15s",
+          }}
+        >
+          {isPending ? "Verifying…" : "Verify"}
+        </button>
+      </form>
 
       <div
         style={{
           marginTop: "1rem",
-          display: "flex",
-          justifyContent: "space-between",
           fontSize: "0.8125rem",
         }}
       >
@@ -278,18 +300,6 @@ function TotpStep({
         >
           ← Back
         </button>
-        <button
-          onClick={() => setShowBackup((b) => !b)}
-          style={{
-            background: "none",
-            border: "none",
-            color: "var(--color-accent)",
-            cursor: "pointer",
-            padding: 0,
-          }}
-        >
-          {showBackup ? "Use authenticator app" : "Use a backup code"}
-        </button>
       </div>
     </div>
   );
@@ -298,7 +308,7 @@ function TotpStep({
 // ─── Main LoginPage ───────────────────────────────────────────────────────────
 
 export default function LoginPage() {
-  const [tempToken, setTempToken] = useState<string | null>(null);
+  const [mfaChallenge, setMfaChallenge] = useState<{ tempToken: string; methods: MfaMethod[] } | null>(null);
 
   return (
     <div
@@ -311,75 +321,135 @@ export default function LoginPage() {
         padding: "1rem",
       }}
     >
-      <div style={{ width: "100%", maxWidth: "400px", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "400px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "1.5rem",
+        }}
+      >
         {/* Logo + wordmark */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.875rem" }}>
-          <div style={{
-            width: 56, height: 56,
-            borderRadius: "var(--radius-lg)",
-            backgroundColor: "var(--color-accent)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", fontSize: "1.5rem", fontWeight: 700,
-            boxShadow: "var(--shadow-md)",
-          }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "0.875rem",
+          }}
+        >
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: "var(--radius-lg)",
+              backgroundColor: "var(--color-accent)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#fff",
+              fontSize: "1.5rem",
+              fontWeight: 700,
+              boxShadow: "var(--shadow-md)",
+            }}
+          >
             K
           </div>
           <div style={{ textAlign: "center" }}>
-            <h1 style={{
-              fontFamily: "var(--font-display)",
-              fontSize: "2rem",
-              fontWeight: 800,
-              color: "var(--color-accent)",
-              margin: 0,
-              letterSpacing: "-0.02em",
-              lineHeight: 1,
-            }}>
+            <h1
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "2rem",
+                fontWeight: 800,
+                color: "var(--color-accent)",
+                margin: 0,
+                letterSpacing: "-0.02em",
+                lineHeight: 1,
+              }}
+            >
               Kuber
             </h1>
-            <p style={{ color: "var(--color-text-muted)", marginTop: "0.375rem", fontSize: "0.8125rem" }}>
+            <p
+              style={{
+                color: "var(--color-text-muted)",
+                marginTop: "0.375rem",
+                fontSize: "0.8125rem",
+              }}
+            >
               Your finances, your server, your rules.
             </p>
           </div>
         </div>
 
         {/* Card */}
-        <div style={{
-          backgroundColor: "var(--color-surface)",
-          borderRadius: "var(--radius-xl)",
-          boxShadow: "var(--shadow-lg)",
-          border: "1px solid var(--color-border)",
-          padding: "2rem",
-        }}>
+        <div
+          style={{
+            backgroundColor: "var(--color-surface)",
+            borderRadius: "var(--radius-xl)",
+            boxShadow: "var(--shadow-lg)",
+            border: "1px solid var(--color-border)",
+            padding: "2rem",
+          }}
+        >
           <div style={{ marginBottom: "1.5rem" }}>
-            <h2 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--color-text)", margin: 0 }}>
-              {tempToken ? "Two-factor authentication" : "Sign in to your account"}
+            <h2
+              style={{
+                fontSize: "1.125rem",
+                fontWeight: 600,
+                color: "var(--color-text)",
+                margin: 0,
+              }}
+            >
+              {mfaChallenge
+                ? "Multi-factor authentication"
+                : "Sign in to your account"}
             </h2>
-            {!tempToken && (
-              <p style={{ color: "var(--color-text-secondary)", marginTop: "0.25rem", fontSize: "0.8125rem", margin: "0.25rem 0 0" }}>
+            {!mfaChallenge && (
+              <p
+                style={{
+                  color: "var(--color-text-secondary)",
+                  marginTop: "0.25rem",
+                  fontSize: "0.8125rem",
+                  margin: "0.25rem 0 0",
+                }}
+              >
                 Access your self-hosted finance server.
               </p>
             )}
           </div>
 
-          {tempToken ? (
-            <TotpStep tempToken={tempToken} onBack={() => setTempToken(null)} />
+          {mfaChallenge ? (
+            <MfaStep
+              tempToken={mfaChallenge.tempToken}
+              methods={mfaChallenge.methods}
+              onBack={() => setMfaChallenge(null)}
+            />
           ) : (
             <>
-              <PasswordStep onRequireTotp={setTempToken} />
-              <p style={{ textAlign: "center", marginTop: "1.25rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
+              <PasswordStep onRequireMfa={setMfaChallenge} />
+              <p
+                style={{
+                  textAlign: "center",
+                  marginTop: "1.25rem",
+                  fontSize: "0.875rem",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
                 Don't have an account?{" "}
-                <Link to="/signup" style={{ color: "var(--color-accent)", textDecoration: "none", fontWeight: "500" }}>
+                <Link
+                  to="/signup"
+                  style={{
+                    color: "var(--color-accent)",
+                    textDecoration: "none",
+                    fontWeight: "500",
+                  }}
+                >
                   Sign up
                 </Link>
               </p>
             </>
           )}
-        </div>
-
-        {/* Server indicator */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", fontSize: "0.75rem", color: "var(--color-text-muted)", fontFamily: "var(--font-mono)" }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: "var(--color-success)", display: "inline-block" }} />
-          Self-hosted · kuber.local
         </div>
       </div>
     </div>

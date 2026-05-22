@@ -14,6 +14,7 @@ import { api } from '@/lib/api';
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const SignupPage = lazy(() => import('@/pages/SignupPage'));
+const VerifyEmailPage = lazy(() => import('@/pages/VerifyEmailPage'));
 const ForgotPasswordPage = lazy(() => import('@/pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'));
 const OfflinePage = lazy(() => import('@/pages/OfflinePage'));
@@ -113,6 +114,14 @@ export default function App() {
         element={
           <Suspense fallback={<PageLoader />}>
             <SignupPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/verify-email"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <VerifyEmailPage />
           </Suspense>
         }
       />

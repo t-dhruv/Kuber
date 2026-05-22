@@ -11,9 +11,13 @@ vi.mock('../../src/lib/prisma', () => ({
     household: { findUnique: vi.fn(), update: vi.fn() },
     householdMember: { findFirst: vi.fn(), findUnique: vi.fn(), delete: vi.fn() },
     householdInvite: { create: vi.fn() },
+    securityToken: { deleteMany: vi.fn() },
+    refreshToken: { deleteMany: vi.fn() },
+    auditLog: { create: vi.fn() },
     category: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
     categoryGroup: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), delete: vi.fn() },
     transactionJournal: { count: vi.fn() },
+    $transaction: vi.fn(async (callback: any) => callback(prisma)),
   },
 }));
 
@@ -187,7 +191,41 @@ describe('settings routes', () => {
     expect(res.status).toBe(200);
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'user-2' },
-      data: { totpSecret: null, totpEnabled: false, backupCodes: [] },
+      data: { totpSecret: null, totpEnabled: false, emailMfaEnabled: false, backupCodes: [] },
+    });
+  });
+
+  it('resets all member MFA methods and invalidates sessions with an audit record', async () => {
+    vi.mocked(prisma.householdMember.findUnique)
+      .mockResolvedValueOnce({ role: 'owner' } as any)
+      .mockResolvedValueOnce({ role: 'member' } as any);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as any);
+    vi.mocked(prisma.securityToken.deleteMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 2 } as any);
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({} as any);
+
+    const res = await request(makeApp()).post('/settings/household/members/user-2/disable-2fa');
+
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-2' },
+      data: { totpSecret: null, totpEnabled: false, emailMfaEnabled: false, backupCodes: [] },
+    });
+    expect(prisma.securityToken.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-2', type: 'email_otp', consumedAt: null },
+    });
+    expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'user-2' },
+    });
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        householdId: 'hh-1',
+        userId: 'user-1',
+        action: 'MEMBER_MFA_RESET',
+        entity: 'USER',
+        entityId: 'user-2',
+        changes: { after: { mfaReset: true, targetUserId: 'user-2', sessionsInvalidated: true } },
+      },
     });
   });
 
@@ -244,5 +282,3 @@ describe('settings routes', () => {
     expect(res.body).toEqual({ id: 'group-1', name: 'Bills', type: 'expense', categoryCount: 0 });
   });
 });
-
-

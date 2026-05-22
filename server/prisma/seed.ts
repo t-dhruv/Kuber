@@ -1,8 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { Decimal } from "@prisma/client/runtime/library";
+import { pathToFileURL } from "node:url";
 
-const prisma = new PrismaClient();
+let prisma: PrismaClient;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -60,6 +61,18 @@ function monthlyRunDates(today: Date, dayOfMonth: number) {
   const lastRunAt = currentRun <= today ? currentRun : addMonths(currentRun, -1);
   const nextRunAt = currentRun > today ? currentRun : addMonths(currentRun, 1);
   return { lastRunAt, nextRunAt };
+}
+
+export function createSeedUserData(passwordHash: string) {
+  return {
+    email: "demo@kuber.app",
+    passwordHash,
+    emailVerifiedAt: new Date(),
+    firstName: "Dhruv",
+    lastName: "Trivedi",
+    timezone: "America/Toronto",
+    theme: "system",
+  };
 }
 
 // Enumerate every calendar day between two dates (inclusive)
@@ -123,14 +136,7 @@ async function main() {
   const passwordHash = await bcrypt.hash("password123", 12);
 
   const user = await prisma.user.create({
-    data: {
-      email: "demo@kuber.app",
-      passwordHash,
-      firstName: "Dhruv",
-      lastName: "Trivedi",
-      timezone: "America/Toronto",
-      theme: "system",
-    },
+    data: createSeedUserData(passwordHash),
   });
 
   const household = await prisma.household.create({
@@ -2864,11 +2870,19 @@ async function seedCategoryBuckets() {
   console.log(`  Seeded bucketType for ${allCategories.length} categories`);
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+function isDirectRun(): boolean {
+  return process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
+}
+
+if (isDirectRun()) {
+  prisma = new PrismaClient();
+
+  main()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

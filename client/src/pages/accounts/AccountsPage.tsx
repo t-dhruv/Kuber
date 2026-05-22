@@ -14,6 +14,8 @@ import {
 import { notify } from '@/components/ui';
 import { LiabilityDetailPanel } from './components/LiabilityDetailPanel';
 import { usePrefetchLogos } from '@/hooks/usePrefetchLogos';
+import type { EncryptedField } from '@/lib/security/encryptedField';
+import { displayAccountLabel } from './lib/accountEncryption';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,8 +24,10 @@ type AccountType = 'checking' | 'savings' | 'credit_card' | 'investment' | 'loan
 interface Account {
   id: string;
   name: string;
+  nameEncrypted?: EncryptedField | null;
   type: AccountType;
   institution?: string | null;
+  institutionEncrypted?: EncryptedField | null;
   institutionLogo?: string | null;
   lastFour?: string | null;
   balance: number;
@@ -339,6 +343,7 @@ function AccountRow({
       ? `${account.institution} ••${account.lastFour}`
       : account.institution
     : (TYPE_LABELS[account.type] ?? account.type);
+  const accountLabel = displayAccountLabel(account, null);
 
   return (
     <div
@@ -348,12 +353,12 @@ function AccountRow({
       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
     >
       {/* Bank logo */}
-      <InstitutionLogo name={account.institution ?? account.name} logoUrl={account.institutionLogo ?? undefined} size={40} />
+      <InstitutionLogo name={account.institution ?? accountLabel} logoUrl={account.institutionLogo ?? undefined} size={40} />
 
       {/* Name + last four */}
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-[var(--color-text)] truncate">
-          {account.name}
+          {accountLabel}
         </div>
         <div className="text-xs text-[var(--color-text-muted)]">
           {displayName}
@@ -377,8 +382,8 @@ function AccountRow({
       {/* Overflow menu */}
       <OverflowMenu
         onEdit={onEdit}
-        onHide={() => notify.info(`${account.name} hidden`)}
-        onExclude={() => notify.info(`${account.name} excluded from net worth`)}
+        onHide={() => notify.info(`${accountLabel} hidden`)}
+        onExclude={() => notify.info(`${accountLabel} excluded from net worth`)}
         onDelete={onDelete}
       />
     </div>
@@ -1042,6 +1047,7 @@ function AccountDetailDrawer({
   const detail = data?.account ?? account;
   const history = historyData ?? [];
   const txns = data?.recentTransactions ?? [];
+  const detailLabel = detail ? displayAccountLabel(detail, null) : '';
 
   return (
     <>
@@ -1059,12 +1065,12 @@ function AccountDetailDrawer({
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)] shrink-0">
           <div className="flex items-center gap-3">
-            {account && <InstitutionLogo name={account.institution ?? account.name} logoUrl={account.institutionLogo ?? undefined} size={40} />}
+            {account && <InstitutionLogo name={detail?.institution ?? detailLabel} logoUrl={detail?.institutionLogo ?? undefined} size={40} />}
             <div>
-              <div className="text-base font-semibold text-[var(--color-text)]">{account?.name}</div>
-              {account?.institution && (
+              <div className="text-base font-semibold text-[var(--color-text)]">{detailLabel}</div>
+              {detail?.institution && (
                 <div className="text-xs text-[var(--color-text-muted)]">
-                  {account.institution}{account.lastFour ? ` ••${account.lastFour}` : ''}
+                  {detail.institution}{detail.lastFour ? ` ••${detail.lastFour}` : ''}
                 </div>
               )}
             </div>

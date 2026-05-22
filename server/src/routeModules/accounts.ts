@@ -1,12 +1,14 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
 import { logAudit } from '../lib/audit';
 import { toCSV, setCsvHeaders } from '../lib/csvExport';
 import { NOT_DELETED } from '../lib/softDeleteWhere';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration';
+import { encryptedFieldSchema } from '../lib/encryptedField';
 
 const csvUpload = multer({
   storage: multer.memoryStorage(),
@@ -77,8 +79,10 @@ const VALID_ACCOUNT_TYPES = [
 function formatAccount(account: {
   id: string;
   name: string;
+  nameEncrypted?: unknown;
   type: string;
   institution: string | null;
+  institutionEncrypted?: unknown;
   institutionLogo: string | null;
   lastFour: string | null;
   balance: number;
@@ -96,8 +100,10 @@ function formatAccount(account: {
   return {
     id: account.id,
     name: account.name,
+    nameEncrypted: account.nameEncrypted ?? null,
     type: account.type,
     institution: account.institution,
+    institutionEncrypted: account.institutionEncrypted ?? null,
     institutionLogo: account.institutionLogo,
     lastFour: account.lastFour,
     balance: account.balance,
@@ -109,6 +115,16 @@ function formatAccount(account: {
     lastSyncedAt: account.lastSynced ? account.lastSynced.toISOString() : null,
     createdAt: account.createdAt.toISOString(),
   };
+}
+
+function parseEncryptedFieldInput(value: unknown, fieldName: string) {
+  if (value === undefined) return undefined;
+  if (value === null) return Prisma.JsonNull;
+  const parsed = encryptedFieldSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`${fieldName} must be a valid encrypted field envelope`);
+  }
+  return parsed.data;
 }
 
 // GET /api/v1/accounts
@@ -336,7 +352,18 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { name, type, institution, institutionLogo, lastFour, balance, currency, creditLimit } = req.body;
+    const {
+      name,
+      type,
+      institution,
+      institutionLogo,
+      lastFour,
+      balance,
+      currency,
+      creditLimit,
+      nameEncrypted,
+      institutionEncrypted,
+    } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'name is required' });
@@ -349,12 +376,17 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'balance must be a number' });
     }
 
+    const parsedNameEncrypted = parseEncryptedFieldInput(nameEncrypted, 'nameEncrypted');
+    const parsedInstitutionEncrypted = parseEncryptedFieldInput(institutionEncrypted, 'institutionEncrypted');
+
     const account = await prisma.account.create({
       data: {
         householdId,
         name: name.trim(),
+        nameEncrypted: parsedNameEncrypted,
         type: normalizedType,
         institution: institution ?? null,
+        institutionEncrypted: parsedInstitutionEncrypted,
         institutionLogo: institutionLogo ?? null,
         lastFour: lastFour ?? null,
         balance,
@@ -383,7 +415,17 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    const { name, type, institution, institutionLogo, lastFour, isHidden, excludeFromNetWorth } = req.body;
+    const {
+      name,
+      type,
+      institution,
+      institutionLogo,
+      lastFour,
+      isHidden,
+      excludeFromNetWorth,
+      nameEncrypted,
+      institutionEncrypted,
+    } = req.body;
 
     const data: Record<string, unknown> = {};
     if (name !== undefined) {
@@ -391,6 +433,9 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ error: 'name must be a non-empty string' });
       }
       data.name = name.trim();
+    }
+    if (nameEncrypted !== undefined) {
+      data.nameEncrypted = parseEncryptedFieldInput(nameEncrypted, 'nameEncrypted');
     }
     if (type !== undefined) {
       const normalizedType = String(type).toUpperCase().replace(/\s+/g, '_');
@@ -400,6 +445,9 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
       data.type = normalizedType;
     }
     if (institution !== undefined) data.institution = institution;
+    if (institutionEncrypted !== undefined) {
+      data.institutionEncrypted = parseEncryptedFieldInput(institutionEncrypted, 'institutionEncrypted');
+    }
     if (institutionLogo !== undefined) data.institutionLogo = institutionLogo ?? null;
     if (lastFour !== undefined) data.lastFour = lastFour;
     if (isHidden !== undefined) data.isHidden = isHidden;

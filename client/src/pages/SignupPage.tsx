@@ -15,6 +15,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [householdName, setHouseholdName] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
   const signup = useSignup();
 
   if (isAuthenticated) return <Navigate to="/" replace />;
@@ -32,14 +33,19 @@ export default function SignupPage() {
       return;
     }
 
-    signup.mutate({
-      email,
-      password,
-      firstName,
-      lastName,
-      householdName: inviteToken ? undefined : householdName,
-      inviteToken,
-    });
+    signup.mutate(
+      {
+        email,
+        password,
+        firstName,
+        lastName,
+        householdName: inviteToken ? undefined : householdName,
+        inviteToken,
+      },
+      {
+        onSuccess: (data) => setPendingVerificationEmail(data.email),
+      },
+    );
   }
 
   const errorMessage = validationError
@@ -47,6 +53,22 @@ export default function SignupPage() {
 
   const inputClass = "w-full px-3.5 py-2.5 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-bg)] text-[var(--color-text)] text-[0.9375rem] outline-none box-border";
   const labelClass = "block text-sm font-medium text-[var(--color-text)] mb-1.5";
+
+  if (pendingVerificationEmail) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] p-4">
+        <div className="w-full max-w-[440px] bg-[var(--color-surface)] rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] p-10">
+          <h1 className="text-[2rem] font-extrabold text-[var(--color-accent)] m-0">Check your email</h1>
+          <p className="text-[var(--color-text-secondary)] mt-4 text-sm">
+            We sent a verification link to {pendingVerificationEmail}. Verify your email before signing in.
+          </p>
+          <Link to="/login" className="inline-flex mt-6 text-[var(--color-accent)] no-underline font-medium">
+            Back to sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] p-4">

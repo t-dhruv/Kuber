@@ -8,28 +8,32 @@ datasource db {
 }
 
 model User {
-  id                  String            @id @default(cuid())
-  email               String            @unique
-  passwordHash        String
-  firstName           String
-  lastName            String
-  avatar              String?
-  timezone            String            @default("America/New_York")
-  theme               String            @default("system")
+  id                   String                @id @default(cuid())
+  email                String                @unique
+  passwordHash         String
+  emailVerifiedAt      DateTime?
+  firstName            String
+  lastName             String
+  avatar               String?
+  timezone             String                @default("America/New_York")
+  theme                String                @default("system")
   // 2FA
-  totpSecret          String?
-  totpEnabled         Boolean           @default(false)
-  backupCodes         String[]          @default([])
+  totpSecret           String?
+  totpEnabled          Boolean               @default(false)
+  emailMfaEnabled      Boolean               @default(false)
+  backupCodes          String[]              @default([])
   // Account lockout
-  failedLoginAttempts Int               @default(0)
-  lockedUntil         DateTime?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  householdMembers    HouseholdMember[]
-  preferences         UserPreference[]
-  refreshTokens       RefreshToken[]
-  auditLogs           AuditLog[]
-  apiTokens           ApiToken[]
+  failedLoginAttempts  Int                   @default(0)
+  lockedUntil          DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  householdMembers     HouseholdMember[]
+  preferences          UserPreference[]
+  refreshTokens        RefreshToken[]
+  securityTokens       SecurityToken[]
+  auditLogs            AuditLog[]
+  apiTokens            ApiToken[]
+  householdWrappedKeys HouseholdWrappedKey[]
 
   @@map("users")
 }
@@ -84,8 +88,39 @@ model Household {
   attachments              Attachment[]
   transactionLinks         TransactionLink[]
   objectGroups             ObjectGroup[]
+  encryptionKeys           HouseholdEncryptionKey[]
 
   @@map("households")
+}
+
+model HouseholdEncryptionKey {
+  id          String                @id @default(cuid())
+  householdId String
+  version     Int
+  status      String                @default("active")
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  household   Household             @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  wrappedKeys HouseholdWrappedKey[]
+
+  @@unique([householdId, version])
+  @@index([householdId, status])
+  @@map("household_encryption_keys")
+}
+
+model HouseholdWrappedKey {
+  id         String                 @id @default(cuid())
+  keyId      String
+  userId     String
+  wrappedKey Json
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+  key        HouseholdEncryptionKey @relation(fields: [keyId], references: [id], onDelete: Cascade)
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([keyId, userId])
+  @@index([userId])
+  @@map("household_wrapped_keys")
 }
 
 model AiConfig {
@@ -185,12 +220,32 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+model SecurityToken {
+  id           String    @id @default(cuid())
+  userId       String
+  type         String
+  tokenHash    String
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  attemptCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([type, tokenHash])
+  @@index([expiresAt])
+  @@map("security_tokens")
+}
+
 model Account {
   id                   String                   @id @default(cuid())
   householdId          String
   name                 String
+  nameEncrypted        Json?
   type                 String
   institution          String?
+  institutionEncrypted Json?
   institutionLogo      String?
   lastFour             String?
   balance              Float                    @default(0)

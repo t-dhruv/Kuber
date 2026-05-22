@@ -57,6 +57,7 @@ const passwordHash = bcrypt.hashSync('CorrectPassword123!', 12);
 const user = {
   id: 'user-1',
   email: 'user@example.com',
+  emailVerifiedAt: new Date('2026-05-21T12:00:00.000Z'),
   passwordHash,
   firstName: 'Ada',
   lastName: 'Lovelace',
@@ -94,7 +95,7 @@ describe('auth 2FA routes', () => {
     vi.mocked(totpVerify).mockReturnValue(true as any);
   });
 
-  it('returns a temporary challenge token when login credentials are valid and TOTP is enabled', async () => {
+  it('returns a temporary MFA challenge token when login credentials are valid and TOTP is enabled', async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(user as any);
 
     const res = await request(makeApp())
@@ -102,10 +103,12 @@ describe('auth 2FA routes', () => {
       .send({ email: 'USER@example.com', password: 'CorrectPassword123!', rememberMe: true });
 
     expect(res.status).toBe(200);
-    expect(res.body.requireTotp).toBe(true);
+    expect(res.body.requireMfa).toBe(true);
+    expect(res.body.methods).toEqual(['totp']);
+    expect(res.body.requireTotp).toBeUndefined();
     expect(jwt.verify(res.body.tempToken, 'test-secret')).toMatchObject({
       userId: 'user-1',
-      purpose: '2fa',
+      purpose: 'mfa',
       rememberMe: true,
     });
     expect(createRefreshToken).not.toHaveBeenCalled();
@@ -225,5 +228,3 @@ describe('auth 2FA routes', () => {
     expect(res.body).toEqual({ message: 'Two-factor authentication disabled' });
   });
 });
-
-

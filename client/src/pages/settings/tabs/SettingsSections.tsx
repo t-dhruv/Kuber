@@ -12,7 +12,15 @@ import {
 } from '@/components/ui';
 import { SectionHeader } from '../components/SectionHeader';
 import { useAuthStore } from '@/stores/authStore';
-import { useTotpStatus, useTotpSetup, useTotpEnable, useTotpDisable } from '@/hooks/useAuth';
+import {
+  useEmailMfaDisable,
+  useEmailMfaEnable,
+  useTotpDisable,
+  useTotpEnable,
+  useTotpSetup,
+  useTotpStatus,
+} from '@/hooks/useAuth';
+import { getEncryptionStatus } from '@/lib/security/householdEncryption';
 
 export { DataSection } from '../components/DataSection';
 export { AuditLogSection } from '../components/AuditLogSection';
@@ -892,6 +900,123 @@ function TwoFactorCard() {
   );
 }
 
+function EmailMfaCard() {
+  const { data: status, isLoading } = useTotpStatus();
+  const enableMutation = useEmailMfaEnable();
+  const disableMutation = useEmailMfaDisable();
+  const [modalMode, setModalMode] = useState<'enable' | 'disable' | null>(null);
+  const [password, setPassword] = useState('');
+
+  if (isLoading) return null;
+
+  const isEnabled = status?.emailMfaEnabled ?? false;
+  const emailVerified = status?.emailVerified ?? false;
+  const activeMutation = modalMode === 'enable' ? enableMutation : disableMutation;
+  const errorMessage = activeMutation.error
+    ? getApiErrorMessage(activeMutation.error, 'Failed to update email MFA')
+    : null;
+
+  function handleSubmit() {
+    if (!modalMode || !password) return;
+    const mutation = modalMode === 'enable' ? enableMutation : disableMutation;
+    mutation.mutate({ password }, {
+      onSuccess: () => {
+        notify.success(modalMode === 'enable' ? 'Email MFA enabled' : 'Email MFA disabled');
+        setPassword('');
+        setModalMode(null);
+      },
+    });
+  }
+
+  return (
+    <>
+      <Card padding="lg">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex gap-3 items-start">
+            <Mail size={20} className="text-[var(--color-text-muted)] shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold text-[var(--color-text)] mb-1">
+                Email Code
+              </div>
+              <p className="text-sm text-[var(--color-text-secondary)] m-0">
+                {isEnabled ? 'Enabled' : emailVerified ? 'Available' : 'Verify your email to enable'}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant={isEnabled ? 'outline' : 'secondary'}
+            size="sm"
+            disabled={!emailVerified}
+            onClick={() => setModalMode(isEnabled ? 'disable' : 'enable')}
+            className="shrink-0"
+          >
+            {isEnabled ? 'Disable' : 'Enable'}
+          </Button>
+        </div>
+      </Card>
+
+      <Modal
+        open={modalMode !== null}
+        onClose={() => { setModalMode(null); setPassword(''); }}
+        title={modalMode === 'enable' ? 'Enable Email Code' : 'Disable Email Code'}
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <Input
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            error={errorMessage || undefined}
+          />
+          <ModalFooter>
+            <Button variant="ghost" onClick={() => { setModalMode(null); setPassword(''); }}>Cancel</Button>
+            <Button
+              variant={modalMode === 'disable' ? 'danger' : 'primary'}
+              loading={enableMutation.isPending || disableMutation.isPending}
+              disabled={!password}
+              onClick={handleSubmit}
+            >
+              Confirm
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+function EncryptionCard() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['security', 'encryption-status'],
+    queryFn: getEncryptionStatus,
+  });
+
+  if (isLoading) return null;
+
+  return (
+    <Card padding="lg">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="font-semibold text-[var(--color-text)] mb-1">Field encryption</div>
+          <p className="text-sm text-[var(--color-text-secondary)] m-0">
+            {data?.enabled ? 'Enabled for this household' : 'Not set up'}
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={data?.enabled}
+          onClick={() => notify.info('Encryption setup flow will be available after recovery key setup is added.')}
+        >
+          {data?.enabled ? 'Enabled' : 'Set up'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 // ─── Section: Security ────────────────────────────────────────────────────────
 
 export function SecuritySection() {
@@ -990,6 +1115,8 @@ export function SecuritySection() {
 
         {/* Two-Factor Authentication */}
         <TwoFactorCard />
+        <EmailMfaCard />
+        <EncryptionCard />
 
         {/* Danger Zone */}
         <Card padding="lg" className="border-[var(--color-danger)]">
@@ -1331,7 +1458,7 @@ export function HouseholdSection() {
           Disable two-factor authentication for <strong>{twoFactorResetTarget ? `${twoFactorResetTarget.firstName} ${twoFactorResetTarget.lastName}`.trim() : ''}</strong>?
         </p>
         <p className="text-sm text-[var(--color-text-secondary)] mb-4">
-          They can sign in with their password and set up two-factor authentication again from Security settings.
+          Their active sessions will be signed out. They can sign in with their password and set up two-factor authentication again from Security settings.
         </p>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setTwoFactorResetTarget(null)}>Cancel</Button>
