@@ -3,16 +3,16 @@
   "private": true,
   "version": "1.0.0-beta",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "lint": "eslint .",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio",
-    "db:generate": "prisma generate",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage --maxWorkers=1"
+    "dev": "node ../scripts/run-with-root-env.mjs --cwd server tsx watch src/index.ts",
+    "build": "node ../scripts/run-with-root-env.mjs --cwd server tsc",
+    "start": "node ../scripts/run-with-root-env.mjs --cwd server node dist/index.js",
+    "lint": "node ../scripts/run-with-root-env.mjs --cwd server eslint .",
+    "db:migrate": "node ../scripts/run-with-root-env.mjs --cwd server prisma migrate dev",
+    "db:seed": "node ../scripts/run-with-root-env.mjs --cwd server tsx prisma/seed.ts",
+    "db:studio": "node ../scripts/run-with-root-env.mjs --cwd server prisma studio",
+    "db:generate": "node ../scripts/run-with-root-env.mjs --cwd server prisma generate",
+    "test": "node ../scripts/run-with-root-env.mjs --cwd server vitest run",
+    "test:coverage": "node ../scripts/run-with-root-env.mjs --cwd server vitest run --coverage --maxWorkers=1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",

@@ -21,7 +21,10 @@ vi.mock('../../src/lib/prisma', () => ({
       create: vi.fn(),
       findUnique: vi.fn(),
     },
-    $transaction: vi.fn(),
+    securityToken: { deleteMany: vi.fn() },
+    refreshToken: { deleteMany: vi.fn() },
+    auditLog: { create: vi.fn() },
+    $transaction: vi.fn(async (callback: any) => callback(prisma)),
   },
 }));
 
@@ -75,6 +78,7 @@ function makeAuthApp() {
 describe('household invites', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => callback(prisma));
     process.env.JWT_SECRET = 'test-secret';
     process.env.CLIENT_URL = 'http://localhost:3000';
   });
@@ -192,6 +196,9 @@ describe('household invites', () => {
       .mockResolvedValueOnce({ role: 'owner' } as any)
       .mockResolvedValueOnce({ role: 'member' } as any);
     vi.mocked(prisma.user.update).mockResolvedValue({} as any);
+    vi.mocked(prisma.securityToken.deleteMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.refreshToken.deleteMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({} as any);
 
     const res = await request(makeSettingsApp())
       .post('/settings/household/members/member-1/disable-2fa')
@@ -200,7 +207,13 @@ describe('household invites', () => {
     expect(res.status).toBe(200);
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'member-1' },
-      data: { totpSecret: null, totpEnabled: false, backupCodes: [] },
+      data: { totpSecret: null, totpEnabled: false, emailMfaEnabled: false, backupCodes: [] },
+    });
+    expect(prisma.securityToken.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'member-1', type: 'email_otp', consumedAt: null },
+    });
+    expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'member-1' },
     });
   });
 });

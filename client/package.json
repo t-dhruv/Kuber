@@ -4,12 +4,12 @@
   "version": "1.0.0-beta",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "lint": "eslint .",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "dev": "node ../scripts/run-with-root-env.mjs --cwd client vite",
+    "build": "node ../scripts/run-with-root-env.mjs --cwd client sh -c \"tsc -b && vite build\"",
+    "preview": "node ../scripts/run-with-root-env.mjs --cwd client vite preview",
+    "lint": "node ../scripts/run-with-root-env.mjs --cwd client eslint .",
+    "test": "node ../scripts/run-with-root-env.mjs --cwd client vitest run",
+    "test:coverage": "node ../scripts/run-with-root-env.mjs --cwd client vitest run --coverage"
   },
   "dependencies": {
     "@kuber/shared": "*",
