@@ -20,6 +20,7 @@ import {
   useTotpSetup,
   useTotpStatus,
 } from '@/hooks/useAuth';
+import { getEncryptionStatus } from '@/lib/security/householdEncryption';
 
 export { DataSection } from '../components/DataSection';
 export { AuditLogSection } from '../components/AuditLogSection';
@@ -986,6 +987,36 @@ function EmailMfaCard() {
   );
 }
 
+function EncryptionCard() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['security', 'encryption-status'],
+    queryFn: getEncryptionStatus,
+  });
+
+  if (isLoading) return null;
+
+  return (
+    <Card padding="lg">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="font-semibold text-[var(--color-text)] mb-1">Field encryption</div>
+          <p className="text-sm text-[var(--color-text-secondary)] m-0">
+            {data?.enabled ? 'Enabled for this household' : 'Not set up'}
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={data?.enabled}
+          onClick={() => notify.info('Encryption setup flow will be available after recovery key setup is added.')}
+        >
+          {data?.enabled ? 'Enabled' : 'Set up'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 // ─── Section: Security ────────────────────────────────────────────────────────
 
 export function SecuritySection() {
@@ -1085,6 +1116,7 @@ export function SecuritySection() {
         {/* Two-Factor Authentication */}
         <TwoFactorCard />
         <EmailMfaCard />
+        <EncryptionCard />
 
         {/* Danger Zone */}
         <Card padding="lg" className="border-[var(--color-danger)]">
