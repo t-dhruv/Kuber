@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
@@ -8,7 +8,7 @@ import InstallPrompt from '@/components/pwa/InstallPrompt';
 import OfflineStatus from '@/components/pwa/OfflineStatus';
 import { OnboardingWizard, shouldShowOnboarding } from '@/components/onboarding/OnboardingWizard';
 import { NoAccountsGuard } from '@/components/NoAccountsGuard';
-import { api } from '@/lib/api';
+import { api, restoreSession } from '@/lib/api';
 
 // ─── Lazy page imports ────────────────────────────────────────────────────────
 
@@ -51,6 +51,29 @@ function PageLoader() {
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
+  const [isRestoringSession, setIsRestoringSession] = useState(() => !useAuthStore.getState().accessToken);
+
+  useEffect(() => {
+    if (useAuthStore.getState().accessToken) {
+      setIsRestoringSession(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsRestoringSession(true);
+
+    restoreSession()
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsRestoringSession(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (isRestoringSession) return <PageLoader />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }

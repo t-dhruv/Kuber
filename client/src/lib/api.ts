@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '@/stores/authStore';
+import type { UserDto } from '@kuber/shared';
 
 export const api = axios.create({
   baseURL: '/api/v1',
@@ -47,6 +48,13 @@ export async function refreshAccessToken(): Promise<string> {
 
 export async function getAccessToken(): Promise<string> {
   return useAuthStore.getState().accessToken ?? refreshAccessToken();
+}
+
+export async function restoreSession(): Promise<UserDto> {
+  const accessToken = await refreshAccessToken();
+  const { data: user } = await api.get<UserDto>('/users/me');
+  useAuthStore.getState().setAuth(user, accessToken);
+  return user;
 }
 
 api.interceptors.response.use(
