@@ -277,9 +277,30 @@ export async function disableMember2fa(
     throw new Error('Member not found in this household');
   }
 
-  await prisma.user.update({
-    where: { id: targetUserId },
-    data: { totpSecret: null, totpEnabled: false, backupCodes: [] },
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: targetUserId },
+      data: { totpSecret: null, totpEnabled: false, emailMfaEnabled: false, backupCodes: [] },
+    });
+
+    await tx.securityToken.deleteMany({
+      where: { userId: targetUserId, type: 'email_otp', consumedAt: null },
+    });
+
+    await tx.refreshToken.deleteMany({
+      where: { userId: targetUserId },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        householdId,
+        userId,
+        action: 'MEMBER_MFA_RESET',
+        entity: 'USER',
+        entityId: targetUserId,
+        changes: { after: { mfaReset: true, targetUserId, sessionsInvalidated: true } },
+      },
+    });
   });
 
   return { message: 'Member two-factor authentication disabled' };

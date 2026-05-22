@@ -1426,7 +1426,7 @@ export function HouseholdSection() {
           Disable two-factor authentication for <strong>{twoFactorResetTarget ? `${twoFactorResetTarget.firstName} ${twoFactorResetTarget.lastName}`.trim() : ''}</strong>?
         </p>
         <p className="text-sm text-[var(--color-text-secondary)] mb-4">
-          They can sign in with their password and set up two-factor authentication again from Security settings.
+          Their active sessions will be signed out. They can sign in with their password and set up two-factor authentication again from Security settings.
         </p>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setTwoFactorResetTarget(null)}>Cancel</Button>
