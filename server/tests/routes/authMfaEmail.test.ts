@@ -177,4 +177,37 @@ describe('generalized MFA email OTP routes', () => {
     expect(res.body.error).toBe('Verify your email before enabling email MFA');
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
+
+  it('returns email verification and email MFA status', async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(verifiedUser() as never);
+
+    const res = await request(makeApp())
+      .get('/auth/2fa/status')
+      .set('Authorization', bearerToken());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      emailVerified: true,
+      totpEnabled: false,
+      emailMfaEnabled: true,
+      backupCodesRemaining: 0,
+    });
+  });
+
+  it('enables email MFA with password confirmation', async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(verifiedUser({ emailMfaEnabled: false }) as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    const res = await request(makeApp())
+      .post('/auth/mfa/email/enable')
+      .set('Authorization', bearerToken())
+      .send({ password: 'Password123!' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ message: 'Email MFA enabled' });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: { emailMfaEnabled: true },
+    });
+  });
 });

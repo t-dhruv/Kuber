@@ -107,8 +107,15 @@ export function useMfaVerify() {
   });
 }
 
+export type MfaStatus = {
+  emailVerified: boolean;
+  totpEnabled: boolean;
+  emailMfaEnabled: boolean;
+  backupCodesRemaining: number;
+};
+
 export function useTotpStatus() {
-  return useQuery<{ totpEnabled: boolean; backupCodesRemaining: number }>({
+  return useQuery<MfaStatus>({
     queryKey: ['auth', '2fa-status'],
     queryFn: () => api.get('/auth/2fa/status').then(r => r.data),
   });
@@ -135,6 +142,24 @@ export function useTotpDisable() {
   return useMutation({
     mutationFn: (data: { password: string }) =>
       api.post('/auth/2fa/disable', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auth', '2fa-status'] }),
+  });
+}
+
+export function useEmailMfaEnable() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { password: string }) =>
+      api.post('/auth/mfa/email/enable', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auth', '2fa-status'] }),
+  });
+}
+
+export function useEmailMfaDisable() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { password: string }) =>
+      api.post('/auth/mfa/email/disable', data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auth', '2fa-status'] }),
   });
 }

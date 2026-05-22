@@ -714,9 +714,22 @@ router.get('/2fa/status', async (req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
     const payload = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET!) as { userId: string };
-    const user = await prisma.user.findUnique({ where: { id: payload.userId }, select: { totpEnabled: true, backupCodes: true } });
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        emailVerifiedAt: true,
+        totpEnabled: true,
+        emailMfaEnabled: true,
+        backupCodes: true,
+      },
+    });
     if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json({ totpEnabled: user.totpEnabled, backupCodesRemaining: user.backupCodes.length });
+    return res.json({
+      emailVerified: !!user.emailVerifiedAt,
+      totpEnabled: user.totpEnabled,
+      emailMfaEnabled: user.emailMfaEnabled,
+      backupCodesRemaining: user.backupCodes.length,
+    });
   } catch {
     return res.status(401).json({ error: 'Unauthorized' });
   }
