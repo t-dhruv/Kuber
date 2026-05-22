@@ -4,9 +4,21 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import type { UserDto } from '@kuber/shared';
 
-type LoginResponse =
-  | { user: UserDto; accessToken: string; requireTotp?: never }
-  | { requireTotp: true; tempToken: string };
+export type MfaMethod = 'totp' | 'email' | 'backup';
+
+export type LoginResponse =
+  | { user: UserDto; accessToken: string; requireMfa?: never }
+  | { requireMfa: true; tempToken: string; methods: MfaMethod[] };
+
+export function isMfaLoginResponse(data: LoginResponse): data is Extract<LoginResponse, { requireMfa: true }> {
+  return 'requireMfa' in data && data.requireMfa === true;
+}
+
+export function mfaMethodLabel(method: MfaMethod): string {
+  if (method === 'totp') return 'Authenticator';
+  if (method === 'email') return 'Email';
+  return 'Backup';
+}
 
 type SignupResponse = {
   requireEmailVerification: true;
@@ -25,7 +37,7 @@ export function useLogin() {
     mutationFn: (data: { email: string; password: string; rememberMe?: boolean }) =>
       api.post<LoginResponse>('/auth/login', data).then(r => r.data),
     onSuccess: (data) => {
-      if (data.requireTotp) return; // caller handles 2FA step
+      if (isMfaLoginResponse(data)) return; // caller handles MFA step
       setAuth(data.user, data.accessToken);
       navigate('/');
     },
@@ -68,6 +80,26 @@ export function useTotpValidate() {
   return useMutation({
     mutationFn: (data: { tempToken: string; code: string }) =>
       api.post<{ user: UserDto; accessToken: string }>('/auth/2fa/validate', data).then(r => r.data),
+    onSuccess: (data) => {
+      setAuth(data.user, data.accessToken);
+      navigate('/');
+    },
+  });
+}
+
+export function useSendEmailMfaCode() {
+  return useMutation({
+    mutationFn: (tempToken: string) =>
+      api.post<{ message: string }>('/auth/mfa/email/send', { tempToken }).then(r => r.data),
+  });
+}
+
+export function useMfaVerify() {
+  const { setAuth } = useAuthStore();
+  const navigate = useNavigate();
+  return useMutation({
+    mutationFn: (data: { tempToken: string; method: MfaMethod; code: string }) =>
+      api.post<{ user: UserDto; accessToken: string }>('/auth/mfa/verify', data).then(r => r.data),
     onSuccess: (data) => {
       setAuth(data.user, data.accessToken);
       navigate('/');

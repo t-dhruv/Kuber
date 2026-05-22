@@ -1,7 +1,14 @@
 import { useState, FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
-import { useLogin, useTotpValidate, useTotpBackup } from "@/hooks/useAuth";
+import {
+  isMfaLoginResponse,
+  mfaMethodLabel,
+  useLogin,
+  useMfaVerify,
+  useSendEmailMfaCode,
+  type MfaMethod,
+} from "@/hooks/useAuth";
 import { Input } from "@/components/ui";
 import { getApiErrorMessage } from "@/lib/apiError";
 
@@ -34,9 +41,9 @@ function ErrorBox({ message }: { message: string }) {
 // ─── Step 1: Email + Password ──────────────────────────────────────────────────
 
 function PasswordStep({
-  onRequireTotp,
+  onRequireMfa,
 }: {
-  onRequireTotp: (tempToken: string) => void;
+  onRequireMfa: (challenge: { tempToken: string; methods: MfaMethod[] }) => void;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,7 +58,9 @@ function PasswordStep({
       { email, password, rememberMe },
       {
         onSuccess: (data) => {
-          if (data.requireTotp) onRequireTotp(data.tempToken);
+          if (isMfaLoginResponse(data)) {
+            onRequireMfa({ tempToken: data.tempToken, methods: data.methods });
+          }
         },
         onError: (err) => {
           const data = (err as EmailVerificationError).response?.data;
@@ -156,34 +165,36 @@ function PasswordStep({
   );
 }
 
-// ─── Step 2: TOTP code ────────────────────────────────────────────────────────
+// ─── Step 2: MFA code ─────────────────────────────────────────────────────────
 
-function TotpStep({
+function MfaStep({
   tempToken,
+  methods,
   onBack,
 }: {
   tempToken: string;
+  methods: MfaMethod[];
   onBack: () => void;
 }) {
+  const [method, setMethod] = useState<MfaMethod>(methods[0] ?? "totp");
   const [code, setCode] = useState("");
-  const [showBackup, setShowBackup] = useState(false);
-  const [backupCode, setBackupCode] = useState("");
-  const validate = useTotpValidate();
-  const backup = useTotpBackup();
+  const verify = useMfaVerify();
+  const sendEmail = useSendEmailMfaCode();
 
-  function handleTotp(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    validate.mutate({ tempToken, code });
+    verify.mutate({ tempToken, method, code });
   }
 
-  function handleBackup(e: FormEvent) {
-    e.preventDefault();
-    backup.mutate({ tempToken, backupCode });
+  function handleMethod(nextMethod: MfaMethod) {
+    setMethod(nextMethod);
+    setCode("");
   }
 
-  const error = validate.error || backup.error;
+  const error = verify.error || sendEmail.error;
   const errorMessage = error ? getApiErrorMessage(error, "Invalid code") : null;
-  const isPending = validate.isPending || backup.isPending;
+  const isPending = verify.isPending;
+  const isNumericCode = method !== "backup";
 
   return (
     <div>
@@ -194,95 +205,86 @@ function TotpStep({
           marginBottom: "1.5rem",
         }}
       >
-        Open your authenticator app and enter the 6-digit code for Kuber.
+        Complete verification to sign in.
       </p>
 
-      {!showBackup ? (
-        <form onSubmit={handleTotp} noValidate>
-          <div style={{ marginBottom: "1.5rem" }}>
-            <Input
-              id="totp"
-              label="Authenticator code"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(e) =>
-                setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
-              }
-              placeholder="000000"
-              maxLength={6}
-              className="text-center tracking-widest text-2xl"
-              autoFocus
-            />
-          </div>
-
-          {errorMessage && <ErrorBox message={errorMessage} />}
-
+      <div className="flex gap-2 mb-4">
+        {methods.map((item) => (
           <button
-            type="submit"
-            disabled={isPending || code.length !== 6}
+            key={item}
+            type="button"
+            onClick={() => handleMethod(item)}
+            className="px-3 py-2 rounded-[var(--radius-md)] border text-sm font-medium"
             style={{
-              width: "100%",
-              padding: "0.75rem",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--color-accent)",
-              color: "#fff",
-              fontWeight: "600",
-              fontSize: "0.9375rem",
-              border: "none",
-              cursor:
-                isPending || code.length !== 6 ? "not-allowed" : "pointer",
-              opacity: isPending || code.length !== 6 ? 0.6 : 1,
-              transition: "opacity 0.15s",
+              borderColor: item === method ? "var(--color-accent)" : "var(--color-border)",
+              color: item === method ? "var(--color-accent)" : "var(--color-text-secondary)",
+              backgroundColor: item === method ? "var(--color-accent-light)" : "transparent",
             }}
           >
-            {isPending ? "Verifying…" : "Verify"}
+            {mfaMethodLabel(item)}
           </button>
-        </form>
-      ) : (
-        <form onSubmit={handleBackup} noValidate>
-          <div style={{ marginBottom: "1.5rem" }}>
-            <Input
-              id="backup"
-              label="Backup code"
-              type="text"
-              value={backupCode}
-              onChange={(e) => setBackupCode(e.target.value.trim())}
-              placeholder="xxxxxxxxxx"
-              autoFocus
-            />
-          </div>
+        ))}
+      </div>
 
-          {errorMessage && <ErrorBox message={errorMessage} />}
-
-          <button
-            type="submit"
-            disabled={isPending || !backupCode}
-            style={{
-              width: "100%",
-              padding: "0.75rem",
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--color-accent)",
-              color: "#fff",
-              fontWeight: "600",
-              fontSize: "0.9375rem",
-              border: "none",
-              cursor: isPending || !backupCode ? "not-allowed" : "pointer",
-              opacity: isPending || !backupCode ? 0.6 : 1,
-              transition: "opacity 0.15s",
-            }}
-          >
-            {isPending ? "Verifying…" : "Use backup code"}
-          </button>
-        </form>
+      {method === "email" && (
+        <button
+          type="button"
+          onClick={() => sendEmail.mutate(tempToken)}
+          disabled={sendEmail.isPending}
+          className="mb-4 text-sm text-[var(--color-accent)] font-medium"
+          style={{ background: "none", border: "none", padding: 0, cursor: sendEmail.isPending ? "not-allowed" : "pointer" }}
+        >
+          {sendEmail.isPending ? "Sending…" : "Send email code"}
+        </button>
       )}
+
+      <form onSubmit={handleSubmit} noValidate>
+        <div style={{ marginBottom: "1.5rem" }}>
+          <Input
+            id="mfa-code"
+            label={method === "backup" ? "Backup code" : `${mfaMethodLabel(method)} code`}
+            type="text"
+            inputMode={isNumericCode ? "numeric" : "text"}
+            autoComplete="one-time-code"
+            value={code}
+            onChange={(e) =>
+              setCode(isNumericCode
+                ? e.target.value.replace(/\D/g, "").slice(0, 6)
+                : e.target.value.trim())
+            }
+            placeholder={isNumericCode ? "000000" : "xxxxxxxxxx"}
+            maxLength={isNumericCode ? 6 : undefined}
+            className={isNumericCode ? "text-center tracking-widest text-2xl" : undefined}
+            autoFocus
+          />
+        </div>
+
+        {errorMessage && <ErrorBox message={errorMessage} />}
+
+        <button
+          type="submit"
+          disabled={isPending || !code || (isNumericCode && code.length !== 6)}
+          style={{
+            width: "100%",
+            padding: "0.75rem",
+            borderRadius: "var(--radius-md)",
+            backgroundColor: "var(--color-accent)",
+            color: "#fff",
+            fontWeight: "600",
+            fontSize: "0.9375rem",
+            border: "none",
+            cursor: isPending || !code || (isNumericCode && code.length !== 6) ? "not-allowed" : "pointer",
+            opacity: isPending || !code || (isNumericCode && code.length !== 6) ? 0.6 : 1,
+            transition: "opacity 0.15s",
+          }}
+        >
+          {isPending ? "Verifying…" : "Verify"}
+        </button>
+      </form>
 
       <div
         style={{
           marginTop: "1rem",
-          display: "flex",
-          justifyContent: "space-between",
           fontSize: "0.8125rem",
         }}
       >
@@ -298,18 +300,6 @@ function TotpStep({
         >
           ← Back
         </button>
-        <button
-          onClick={() => setShowBackup((b) => !b)}
-          style={{
-            background: "none",
-            border: "none",
-            color: "var(--color-accent)",
-            cursor: "pointer",
-            padding: 0,
-          }}
-        >
-          {showBackup ? "Use authenticator app" : "Use a backup code"}
-        </button>
       </div>
     </div>
   );
@@ -318,7 +308,7 @@ function TotpStep({
 // ─── Main LoginPage ───────────────────────────────────────────────────────────
 
 export default function LoginPage() {
-  const [tempToken, setTempToken] = useState<string | null>(null);
+  const [mfaChallenge, setMfaChallenge] = useState<{ tempToken: string; methods: MfaMethod[] } | null>(null);
 
   return (
     <div
@@ -411,11 +401,11 @@ export default function LoginPage() {
                 margin: 0,
               }}
             >
-              {tempToken
-                ? "Two-factor authentication"
+              {mfaChallenge
+                ? "Multi-factor authentication"
                 : "Sign in to your account"}
             </h2>
-            {!tempToken && (
+            {!mfaChallenge && (
               <p
                 style={{
                   color: "var(--color-text-secondary)",
@@ -429,11 +419,15 @@ export default function LoginPage() {
             )}
           </div>
 
-          {tempToken ? (
-            <TotpStep tempToken={tempToken} onBack={() => setTempToken(null)} />
+          {mfaChallenge ? (
+            <MfaStep
+              tempToken={mfaChallenge.tempToken}
+              methods={mfaChallenge.methods}
+              onBack={() => setMfaChallenge(null)}
+            />
           ) : (
             <>
-              <PasswordStep onRequireTotp={setTempToken} />
+              <PasswordStep onRequireMfa={setMfaChallenge} />
               <p
                 style={{
                   textAlign: "center",
