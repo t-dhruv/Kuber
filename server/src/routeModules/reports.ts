@@ -81,14 +81,14 @@ router.get('/overview', async (req: AuthRequest, res: Response) => {
     const cashFlowEvents = journalRows.map((row) => ({
       amount: row.signedAmount,
       type:
-        row.transactionType === 'transfer'
+        row.transactionType === 'transfer' || row.category?.type === 'transfer'
           ? 'transfer'
           : row.signedAmount < 0 && (row.reportAccount?.type === 'investment' || row.category?.type === 'investment')
             ? 'investment_buy'
             : row.signedAmount >= 0
               ? 'income'
               : 'expense',
-      isTransfer: row.transactionType === 'transfer',
+      isTransfer: row.transactionType === 'transfer' || row.category?.type === 'transfer',
     }));
 
     const diagnosticsInput = {
@@ -455,7 +455,7 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
     if (!range) return res.status(400).json({ error: 'from and to query params are required (ISO format)' });
     const [budgets, rows] = await Promise.all([
       prisma.budget.findMany({
-        where: { householdId: req.householdId! },
+        where: { householdId: req.householdId!, isDeleted: false },
         include: { category: { select: { id: true, name: true, icon: true } } },
       }),
       loadJournalRowsForRequest(req, range),

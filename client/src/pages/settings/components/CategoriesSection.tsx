@@ -8,13 +8,14 @@ import { api } from '@/lib/api';
 import { getApiErrorMessage, getApiErrorStatus } from '@/lib/apiError';
 import { SectionHeader } from './SectionHeader';
 
-type BucketType = 'needs' | 'wants' | 'savings' | 'uncategorized';
+type BucketType = 'needs' | 'wants' | 'savings';
 type CategoryKind = 'expense' | 'income' | 'transfer';
 
 interface Category {
   id: string;
   name: string;
   icon: string | null;
+  type: CategoryKind;
   groupId: string | null;
   groupName: string | null;
   group?: { id: string; name: string } | null;
@@ -31,7 +32,6 @@ interface CategoryGroup {
 interface CategoryGroupResponse {
   id: string;
   name: string;
-  type: CategoryKind;
   categoryCount: number;
 }
 
@@ -51,7 +51,6 @@ const BUCKET_COLORS: Record<BucketType, { bg: string; text: string; label: strin
   needs: { bg: '#dbeafe', text: '#1d4ed8', label: 'Needs' },
   wants: { bg: '#ffedd5', text: '#c2410c', label: 'Wants' },
   savings: { bg: '#dcfce7', text: '#15803d', label: 'Savings' },
-  uncategorized: { bg: '#f1f5f9', text: '#64748b', label: 'Unset' },
 };
 
 const CATEGORY_TYPE_OPTIONS = [
@@ -61,7 +60,8 @@ const CATEGORY_TYPE_OPTIONS = [
 ];
 
 function toCategoryKind(value: string): CategoryKind {
-  if (value === 'income' || value === 'transfer') return value;
+  const normalized = value.toLowerCase();
+  if (normalized === 'income' || normalized === 'transfer') return normalized;
   return 'expense';
 }
 
@@ -72,6 +72,7 @@ export function CategoriesSection() {
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<{ id: string; name: string } | null>(null);
   const [editingBucket, setEditingBucket] = useState<string | null>(null);
+  const [editingType, setEditingType] = useState<string | null>(null);
   const [showGroupManager, setShowGroupManager] = useState(false);
   const [catName, setCatName] = useState('');
   const [catIcon, setCatIcon] = useState('');
@@ -79,7 +80,6 @@ export function CategoriesSection() {
   const [catError, setCatError] = useState('');
   const [catType, setCatType] = useState<CategoryKind>('expense');
   const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupType, setNewGroupType] = useState<CategoryKind>('expense');
 
   const { data: rawCategories, isLoading } = useQuery<Category[]>({
     queryKey: ['settings', 'categories'],
@@ -97,7 +97,7 @@ export function CategoriesSection() {
   });
 
   const bucketMap = new Map<string, BucketType>(
-    (buckets ?? []).map((bucket) => [bucket.id, (bucket.bucketType as BucketType) ?? 'uncategorized'])
+    (buckets ?? []).map((bucket) => [bucket.id, (bucket.bucketType as BucketType) ?? 'wants'])
   );
 
   const updateBucketMutation = useMutation({
@@ -119,6 +119,27 @@ export function CategoriesSection() {
       queryClient.invalidateQueries({ queryKey: ['wealth', 'category-buckets'] });
       queryClient.invalidateQueries({ queryKey: ['wealth', 'analysis'] });
       setEditingBucket(null);
+    },
+  });
+
+  const updateTypeMutation = useMutation({
+    mutationFn: ({ categoryId, type }: { categoryId: string; type: CategoryKind }) =>
+      api.put(`/settings/categories/${categoryId}`, { type }),
+    onMutate: async ({ categoryId, type }) => {
+      await queryClient.cancelQueries({ queryKey: ['settings', 'categories'] });
+      const prev = queryClient.getQueryData<Category[]>(['settings', 'categories']);
+      queryClient.setQueryData<Category[]>(['settings', 'categories'], (old) =>
+        (old ?? []).map((category) => (category.id === categoryId ? { ...category, type } : category))
+      );
+      return { prev };
+    },
+    onError: (_error, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['settings', 'categories'], ctx.prev);
+      notify.error('Failed to update category type');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'categories'] });
+      setEditingType(null);
     },
   });
 
@@ -155,7 +176,7 @@ export function CategoriesSection() {
   });
 
   const createGroupMutation = useMutation({
-    mutationFn: () => api.post('/settings/category-groups', { name: newGroupName, type: newGroupType }),
+    mutationFn: () => api.post('/settings/category-groups', { name: newGroupName }),
     onSuccess: () => {
       notify.success('Group created');
       setNewGroupName('');
@@ -200,7 +221,6 @@ export function CategoriesSection() {
     if (needsKeywords.some((keyword) => text.includes(keyword))) return 'needs';
     if (wantsKeywords.some((keyword) => text.includes(keyword))) return 'wants';
 
-    if (catType === 'income') return 'uncategorized';
     return 'wants';
   }
 
@@ -224,6 +244,8 @@ export function CategoriesSection() {
     setCatName('');
     setCatIcon('');
     setCatGroup(group ?? '');
+    const existingGroup = data?.groups.find((candidate) => candidate.name === group);
+    setCatType(toCategoryKind(existingGroup?.categories[0]?.type ?? 'expense'));
     setCatError('');
     setModal({ mode: 'add' });
   }
@@ -232,6 +254,7 @@ export function CategoriesSection() {
     setCatName(category.name);
     setCatIcon(category.icon ?? '');
     setCatGroup(category.group?.name ?? '');
+    setCatType(toCategoryKind(category.type));
     setCatError('');
     setModal({ mode: 'edit', category });
   }
@@ -366,12 +389,6 @@ export function CategoriesSection() {
               placeholder="New group name..."
               className="flex-1"
             />
-            <Select
-              value={newGroupType}
-              onChange={(event) => setNewGroupType(toCategoryKind(event.target.value))}
-              options={CATEGORY_TYPE_OPTIONS}
-              className="w-32"
-            />
             <Button
               variant="primary"
               size="sm"
@@ -387,7 +404,6 @@ export function CategoriesSection() {
               <div key={group.id} className="flex items-center justify-between py-2 px-3 rounded hover:bg-[var(--color-surface)]">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-[var(--color-text)]">{group.name}</span>
-                  <span className="text-xs text-[var(--color-text-muted)]">({group.type})</span>
                   <span className="text-xs text-[var(--color-text-muted)]">· {group.categoryCount} categories</span>
                 </div>
                 <Button
@@ -430,9 +446,12 @@ export function CategoriesSection() {
               {!isCollapsed && (
                 <div>
                   {group.categories.map((category, idx) => {
-                    const bucketKey = (bucketMap.get(category.id) ?? 'uncategorized') as BucketType;
+                    const bucketKey = (bucketMap.get(category.id) ?? 'wants') as BucketType;
                     const bucketMeta = BUCKET_COLORS[bucketKey];
                     const isEditingThisBucket = editingBucket === category.id;
+                    const isEditingThisType = editingType === category.id;
+                    const typeLabel =
+                      CATEGORY_TYPE_OPTIONS.find((option) => option.value === category.type)?.label ?? 'Expense';
                     return (
                       <div
                         key={category.id}
@@ -445,6 +464,35 @@ export function CategoriesSection() {
                         <span className="flex-1 text-sm text-[var(--color-text)]">
                           {category.name}
                         </span>
+                        {isEditingThisType ? (
+                          <select
+                            autoFocus
+                            value={category.type}
+                            onChange={(event) => {
+                              updateTypeMutation.mutate({
+                                categoryId: category.id,
+                                type: toCategoryKind(event.target.value),
+                              });
+                            }}
+                            onBlur={() => setEditingType(null)}
+                            className="text-xs px-1.5 py-0.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] cursor-pointer"
+                          >
+                            {CATEGORY_TYPE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <button
+                            onClick={() => setEditingType(category.id)}
+                            title="Click to change type"
+                            className="text-[0.6875rem] font-semibold py-[0.1875rem] px-2 rounded-full border border-[var(--color-border)] bg-transparent text-[var(--color-text-secondary)] cursor-pointer shrink-0"
+                            style={{ opacity: updateTypeMutation.isPending ? 0.5 : 1 }}
+                          >
+                            {typeLabel}
+                          </button>
+                        )}
                         {isEditingThisBucket ? (
                           <select
                             autoFocus
@@ -461,7 +509,6 @@ export function CategoriesSection() {
                             <option value="needs">Needs</option>
                             <option value="wants">Wants</option>
                             <option value="savings">Savings</option>
-                            <option value="uncategorized">Unset</option>
                           </select>
                         ) : (
                           <button

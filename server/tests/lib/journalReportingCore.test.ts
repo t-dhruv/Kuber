@@ -129,6 +129,39 @@ describe('journal reporting core', () => {
     ]);
   });
 
+  it('excludes category-level transfers from grouped and cashflow reports', () => {
+    const transferCategoryRow: JournalReportRow = {
+      ...rows[0],
+      id: 'j-emergency-fund',
+      description: 'Emergency fund transfer',
+      amount: 250,
+      signedAmount: -250,
+      category: {
+        id: 'cat-emergency-fund',
+        name: 'Emergency Fund',
+        icon: 'banknote',
+        type: 'transfer',
+        isTaxDeductible: false,
+      },
+    };
+    const inputRows = [...rows, transferCategoryRow];
+
+    const grouped = buildJournalGroupedReport(inputRows, {
+      mode: 'spending',
+      groupBy: 'category',
+      start: new Date('2026-01-01'),
+      end: new Date('2026-01-31T23:59:59.999Z'),
+    });
+    const cashflow = buildJournalCashflowReport(inputRows, {
+      start: new Date('2026-01-01'),
+      end: new Date('2026-01-31T23:59:59.999Z'),
+    });
+
+    expect(grouped.total).toBe(125);
+    expect(grouped.items.map((item) => item.id)).not.toContain('cat-emergency-fund');
+    expect(cashflow).toMatchObject({ income: 300, expenses: 125, net: 175 });
+  });
+
   it('returns journal drilldown rows for chart segments', () => {
     const drill = buildJournalReportDrilldown(rows, {
       mode: 'spending',

@@ -20,6 +20,12 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Record<string, Record<string, boo
   weeklyDigest: { inApp: false, email: false, push: false },
 };
 
+const CATEGORY_BUCKETS = ['needs', 'wants', 'savings'] as const;
+
+function isCategoryBucket(value: string | undefined): value is (typeof CATEGORY_BUCKETS)[number] {
+  return value !== undefined && CATEGORY_BUCKETS.includes(value as (typeof CATEGORY_BUCKETS)[number]);
+}
+
 // ─── Profile ──────────────────────────────────────────────────────────────
 
 export async function getProfile(userId: string) {
@@ -318,9 +324,12 @@ export async function getCategories(householdId: string) {
 
 export async function createCategory(
   householdId: string,
-  data: { name: string; groupId?: string; icon?: string; type?: string; bucketType?: string }
+  data: { name: string; groupId?: string | null; icon?: string | null; type: string; bucketType?: string }
 ) {
   if (!data.name) throw new Error('name is required');
+  if (!['income', 'expense', 'transfer'].includes(data.type)) {
+    throw new Error('type must be income, expense, or transfer');
+  }
 
   // Validate groupId belongs to household if provided
   if (data.groupId) {
@@ -338,11 +347,8 @@ export async function createCategory(
       name: data.name,
       groupId: data.groupId ?? null,
       icon: data.icon ?? null,
-      type: data.type ?? 'expense',
-      bucketType:
-        data.bucketType && ['needs', 'wants', 'savings', 'uncategorized'].includes(data.bucketType)
-          ? data.bucketType
-          : 'uncategorized',
+      type: data.type,
+      bucketType: isCategoryBucket(data.bucketType) ? data.bucketType : 'wants',
     },
     include: { group: { select: { id: true, name: true } } },
   });
@@ -372,7 +378,10 @@ export async function updateCategory(
   if (data.groupId !== undefined) updateData.groupId = data.groupId;
   if (data.isTaxDeductible !== undefined) updateData.isTaxDeductible = data.isTaxDeductible;
   if (data.excludeFromReports !== undefined) updateData.excludeFromReports = data.excludeFromReports;
-  if (data.bucketType !== undefined) updateData.bucketType = data.bucketType;
+  if (data.bucketType !== undefined) {
+    if (!isCategoryBucket(data.bucketType)) throw new Error('bucketType must be needs, wants, or savings');
+    updateData.bucketType = data.bucketType;
+  }
   if (data.type !== undefined) updateData.type = data.type;
 
   return prisma.category.update({
@@ -413,22 +422,16 @@ export async function getCategoryGroups(householdId: string) {
   return groups.map(g => ({
     id: g.id,
     name: g.name,
-    type: g.type,
     categoryCount: g._count.categories,
   }));
 }
 
 export async function createCategoryGroup(
   householdId: string,
-  data: { name: string; type?: string }
+  data: { name: string }
 ) {
   if (!data.name || typeof data.name !== 'string' || !data.name.trim()) {
     throw new Error('name is required');
-  }
-
-  const type = data.type ?? 'expense';
-  if (!['income', 'expense', 'transfer'].includes(type)) {
-    throw new Error('type must be income, expense, or transfer');
   }
 
   const existing = await prisma.categoryGroup.findFirst({
@@ -442,11 +445,10 @@ export async function createCategoryGroup(
     data: {
       householdId,
       name: data.name.trim(),
-      type,
     },
   });
 
-  return { id: group.id, name: group.name, type: group.type, categoryCount: 0 };
+  return { id: group.id, name: group.name, categoryCount: 0 };
 }
 
 export async function deleteCategoryGroup(householdId: string, groupId: string) {

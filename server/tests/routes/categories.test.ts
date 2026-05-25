@@ -21,7 +21,7 @@ const baseCategory = {
   householdId: 'household-1',
   name: 'Dining',
   icon: 'utensils',
-  type: 'EXPENSE',
+  type: 'expense',
   groupId: 'group-1',
   group: { id: 'group-1', name: 'Wants' },
   bucketType: 'wants',
@@ -53,7 +53,7 @@ describe('categories route integration', () => {
         id: 'cat-1',
         name: 'Dining',
         icon: 'utensils',
-        type: 'EXPENSE',
+        type: 'expense',
         groupId: 'group-1',
         groupName: 'Wants',
       },
@@ -75,7 +75,7 @@ describe('categories route integration', () => {
       .post('/')
       .send({
         name: ' Dining Out ',
-        type: 'EXPENSE',
+        type: 'expense',
         bucketType: 'wants',
         isTaxDeductible: true,
       });
@@ -86,7 +86,7 @@ describe('categories route integration', () => {
         householdId: 'household-1',
         name: 'Dining Out',
         icon: null,
-        type: 'EXPENSE',
+        type: 'expense',
         groupId: null,
         bucketType: 'wants',
         isTaxDeductible: true,
@@ -101,10 +101,38 @@ describe('categories route integration', () => {
     });
   });
 
+  it('defaults new custom categories to wants when no bucket is provided', async () => {
+    vi.mocked(prisma.category.create).mockResolvedValue({
+      ...baseCategory,
+      name: 'Custom',
+      bucketType: 'wants',
+    } as any);
+
+    const res = await request(makeApp())
+      .post('/')
+      .send({ name: 'Custom', type: 'expense' });
+
+    expect(res.status).toBe(201);
+    expect(prisma.category.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ bucketType: 'wants' }),
+      }),
+    );
+  });
+
+  it('rejects uncategorized as a custom category bucket', async () => {
+    const res = await request(makeApp())
+      .post('/')
+      .send({ name: 'Custom', type: 'expense', bucketType: 'uncategorized' });
+
+    expect(res.status).toBe(400);
+    expect(prisma.category.create).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid category payloads before writing', async () => {
     const res = await request(makeApp())
       .post('/')
-      .send({ name: '', type: 'EXPENSE' });
+      .send({ name: '', type: 'expense' });
 
     expect(res.status).toBe(400);
     expect(prisma.category.create).not.toHaveBeenCalled();
@@ -154,5 +182,3 @@ describe('categories route integration', () => {
     expect(prisma.category.delete).not.toHaveBeenCalled();
   });
 });
-
-

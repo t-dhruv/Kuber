@@ -159,7 +159,7 @@ router.get('/category-buckets', async (req: AuthRequest, res: Response) => {
 
 const updateBucketSchema = z.object({
   categoryId: z.string().min(1),
-  bucketType: z.enum(['needs', 'wants', 'savings', 'uncategorized']),
+  bucketType: z.enum(['needs', 'wants', 'savings']),
 });
 
 router.put('/category-buckets', async (req: AuthRequest, res: Response) => {
@@ -212,7 +212,7 @@ router.post('/category-buckets/reset', async (req: AuthRequest, res: Response) =
     });
 
     const updates = categories.map((c) => {
-      const bucketType = BUCKET_DEFAULTS[c.name] ?? 'uncategorized';
+      const bucketType = BUCKET_DEFAULTS[c.name] ?? 'wants';
       return prisma.category.update({ where: { id: c.id }, data: { bucketType } });
     });
     await Promise.all(updates);
@@ -261,6 +261,7 @@ router.get('/analysis', async (req: AuthRequest, res: Response) => {
     // 4. Sum per bucket and accumulate category totals
     const { bucketTotals, catMap } = bucketTransactions(transactions.map(t => ({
       amount: Number(t.amountDecimal),
+      transactionType: t.transactionType,
       categoryId: t.categoryId,
       category: t.category,
     })));

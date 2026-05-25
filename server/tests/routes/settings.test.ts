@@ -229,27 +229,47 @@ describe('settings routes', () => {
     });
   });
 
-  it('creates categories only for valid household category groups', async () => {
+  it('creates categories only for valid household category groups with an explicit type', async () => {
     vi.mocked(prisma.categoryGroup.findFirst).mockResolvedValue({ id: 'group-1' } as any);
     vi.mocked(prisma.category.create).mockResolvedValue({
       id: 'cat-1',
       householdId: 'hh-1',
       name: 'Groceries',
       groupId: 'group-1',
+      type: 'expense',
       bucketType: 'needs',
     } as any);
 
     const res = await request(makeApp())
       .post('/settings/categories')
-      .send({ name: 'Groceries', groupId: 'group-1', bucketType: 'needs' });
+      .send({ name: 'Groceries', groupId: 'group-1', type: 'expense', bucketType: 'needs' });
 
     expect(res.status).toBe(201);
     expect(prisma.categoryGroup.findFirst).toHaveBeenCalledWith({
       where: { id: 'group-1', householdId: 'hh-1' },
     });
     expect(prisma.category.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ householdId: 'hh-1', name: 'Groceries', bucketType: 'needs' }),
+      data: expect.objectContaining({ householdId: 'hh-1', name: 'Groceries', type: 'expense', bucketType: 'needs' }),
     }));
+  });
+
+  it('rejects categories without a type', async () => {
+    const res = await request(makeApp())
+      .post('/settings/categories')
+      .send({ name: 'Groceries', groupId: 'group-1', bucketType: 'needs' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'type is required' });
+    expect(prisma.category.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects uncategorized as a settings category bucket', async () => {
+    const res = await request(makeApp())
+      .post('/settings/categories')
+      .send({ name: 'Groceries', groupId: 'group-1', type: 'expense', bucketType: 'uncategorized' });
+
+    expect(res.status).toBe(400);
+    expect(prisma.category.create).not.toHaveBeenCalled();
   });
 
   it('blocks deletion of categories used by live journals', async () => {
@@ -263,22 +283,27 @@ describe('settings routes', () => {
     expect(prisma.category.delete).not.toHaveBeenCalled();
   });
 
-  it('creates unique category groups for the household', async () => {
+  it('creates unique untyped category groups for the household', async () => {
     vi.mocked(prisma.categoryGroup.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.categoryGroup.create).mockResolvedValue({
       id: 'group-1',
       name: 'Bills',
-      type: 'expense',
     } as any);
 
     const res = await request(makeApp())
       .post('/settings/category-groups')
-      .send({ name: ' Bills ', type: 'expense' });
+      .send({ name: ' Bills ' });
 
     expect(res.status).toBe(201);
     expect(prisma.categoryGroup.findFirst).toHaveBeenCalledWith({
       where: { householdId: 'hh-1', name: 'Bills' },
     });
-    expect(res.body).toEqual({ id: 'group-1', name: 'Bills', type: 'expense', categoryCount: 0 });
+    expect(prisma.categoryGroup.create).toHaveBeenCalledWith({
+      data: {
+        householdId: 'hh-1',
+        name: 'Bills',
+      },
+    });
+    expect(res.body).toEqual({ id: 'group-1', name: 'Bills', categoryCount: 0 });
   });
 });

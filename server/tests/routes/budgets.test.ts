@@ -44,12 +44,11 @@ const groceriesCategory = {
   householdId: 'household-1',
   name: 'Groceries',
   icon: 'cart',
-  type: 'EXPENSE',
+  type: 'expense',
   groupId: 'group-needs',
   group: {
     id: 'group-needs',
     name: 'Needs',
-    type: 'EXPENSE',
     sortOrder: 1,
   },
 };
@@ -69,7 +68,7 @@ const baseBudget = {
     id: 'cat-groceries',
     name: 'Groceries',
     icon: 'cart',
-    type: 'EXPENSE',
+    type: 'expense',
     group: groceriesCategory.group,
   },
 };
@@ -112,6 +111,24 @@ describe('budgets route integration', () => {
       actual: 125.5,
       remaining: 274.5,
       percent: 31.37,
+    });
+  });
+
+  it('derives budget category group type from categories, not category groups', async () => {
+    vi.mocked(prisma.category.findMany).mockResolvedValue([
+      {
+        ...groceriesCategory,
+        group: { id: 'group-needs', name: 'Needs', sortOrder: 1 },
+      },
+    ] as any);
+
+    const res = await request(makeApp()).get('/categories');
+
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({
+      groupId: 'group-needs',
+      groupName: 'Needs',
+      type: 'expense',
     });
   });
 
@@ -184,5 +201,3 @@ describe('budgets route integration', () => {
     expect(prisma.budget.delete).not.toHaveBeenCalled();
   });
 });
-
-

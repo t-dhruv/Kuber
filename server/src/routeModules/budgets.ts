@@ -79,13 +79,13 @@ router.get('/categories', async (req: AuthRequest, res: Response) => {
       }
 
       if (!groupMap.has(cat.groupId)) {
-        groupMap.set(cat.groupId, {
-          groupId: cat.group.id,
-          groupName: cat.group.name,
-          type: cat.group.type,
-          sortOrder: cat.group.sortOrder,
-          categories: [],
-        });
+          groupMap.set(cat.groupId, {
+            groupId: cat.group.id,
+            groupName: cat.group.name,
+            type: cat.type,
+            sortOrder: cat.group.sortOrder,
+            categories: [],
+          });
       }
       groupMap.get(cat.groupId)!.categories.push(catEntry);
     }

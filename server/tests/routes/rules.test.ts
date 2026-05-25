@@ -204,6 +204,91 @@ describe('rules journal simulation and application', () => {
     }));
   });
 
+  it('applies ungrouped active rules when applying all rules', async () => {
+    vi.mocked(prisma.rule.findMany).mockResolvedValue([normalizedRule] as any);
+    vi.mocked(prisma.ruleGroup.findMany).mockResolvedValue([] as any);
+    vi.mocked(prisma.transactionJournal.findMany).mockResolvedValue([
+      {
+        id: 'journal-1',
+        householdId: 'hh-1',
+        transactionType: 'withdrawal',
+        description: 'Morning coffee',
+        amountDecimal: 5,
+        categoryId: null,
+        notes: null,
+        entries: [{ accountId: 'checking-1', amountDecimal: -5 }],
+      },
+    ] as any);
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn: any) => fn({
+      transactionJournal: { updateMany: vi.fn() },
+      transactionEntry: { updateMany: vi.fn() },
+      journalTag: { upsert: vi.fn(), deleteMany: vi.fn() },
+      ruleExecutionLog: { create: vi.fn() },
+    }));
+
+    const res = await request(makeApp()).post('/rules/apply-all');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ matched: 1, rulesRun: 1, checkpointId: '' });
+    expect(prisma.rule.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { householdId: 'hh-1', isActive: true, ruleGroupId: null },
+      include: { triggers: true, ruleActions: true },
+      orderBy: { sortOrder: 'asc' },
+    }));
+  });
+
+  it('exports household rules without database identifiers', async () => {
+    vi.mocked(prisma.rule.findMany).mockResolvedValue([normalizedRule] as any);
+
+    const res = await request(makeApp()).get('/rules/export');
+
+    expect(res.status).toBe(200);
+    expect(res.body.version).toBe(1);
+    expect(res.body.rules).toEqual([
+      expect.objectContaining({
+        name: 'Coffee',
+        strict: false,
+        stopProcessing: true,
+        isActive: true,
+        conditions: [{ field: 'description', operator: 'contains', value: 'coffee' }],
+        actions: [{ type: 'setCategory', value: 'cat-coffee' }],
+      }),
+    ]);
+    expect(res.body.rules[0]).not.toHaveProperty('id');
+    expect(res.body.rules[0]).not.toHaveProperty('householdId');
+    expect(res.body.rules[0]).not.toHaveProperty('ruleGroupId');
+  });
+
+  it('imports rules for the authenticated household', async () => {
+    vi.mocked(prisma.rule.aggregate).mockResolvedValue({ _max: { sortOrder: 2 } } as any);
+    vi.mocked(prisma.rule.create).mockResolvedValue({ ...normalizedRule, id: 'rule-imported' } as any);
+
+    const res = await request(makeApp())
+      .post('/rules/import')
+      .send({
+        rules: [{
+          name: 'Imported coffee',
+          strict: true,
+          isActive: true,
+          conditions: [{ field: 'description', operator: 'contains', value: 'coffee' }],
+          actions: [{ type: 'setCategory', value: 'cat-coffee' }],
+        }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({ imported: 1, rules: [expect.objectContaining({ id: 'rule-imported' })] });
+    expect(prisma.rule.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        householdId: 'hh-1',
+        name: 'Imported coffee',
+        sortOrder: 3,
+        conditions: [{ field: 'description', operator: 'contains', value: 'coffee' }],
+        actions: [{ type: 'setCategory', value: 'cat-coffee' }],
+      }),
+      include: { triggers: true, ruleActions: true },
+    });
+  });
+
   it('lists rule execution logs for the household', async () => {
     vi.mocked(prisma.ruleExecutionLog.findMany).mockResolvedValue([
       {

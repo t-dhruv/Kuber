@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { Decimal } from "@prisma/client/runtime/library";
 import { pathToFileURL } from "node:url";
+import { DEFAULT_CATEGORY_GROUPS } from "../src/lib/default-categories";
 
 let prisma: PrismaClient;
 
@@ -237,218 +238,7 @@ async function main() {
   // Category Groups + Categories
   // -------------------------------------------------------------------------
 
-  type CategoryDef = {
-    name: string;
-    icon: string;
-    bucketType: "needs" | "wants" | "savings" | "uncategorized";
-    isTaxDeductible?: boolean;
-  };
-  type GroupDef = { name: string; type: string; categories: CategoryDef[] };
-
-  const groupDefs: GroupDef[] = [
-    {
-      name: "Income",
-      type: "income",
-      categories: [
-        { name: "Salary & Wages", icon: "💼", bucketType: "uncategorized" },
-        {
-          name: "Freelance & Consulting",
-          icon: "💻",
-          bucketType: "uncategorized",
-        },
-        {
-          name: "Investment Dividends",
-          icon: "📈",
-          bucketType: "uncategorized",
-        },
-        { name: "Gifts & Bonuses", icon: "🎁", bucketType: "uncategorized" },
-        { name: "Tax Refund", icon: "🏦", bucketType: "uncategorized" },
-        { name: "Reimbursements", icon: "💸", bucketType: "uncategorized" },
-        { name: "Other Income", icon: "➕", bucketType: "uncategorized" },
-      ],
-    },
-    {
-      name: "Housing & Utilities",
-      type: "expense",
-      categories: [
-        { name: "Rent & Mortgage", icon: "🏠", bucketType: "needs" },
-        {
-          name: "Property Taxes",
-          icon: "🏛️",
-          bucketType: "needs",
-          isTaxDeductible: true,
-        },
-        { name: "Home Maintenance", icon: "🛠️", bucketType: "needs" },
-        { name: "Electricity / Hydro", icon: "⚡", bucketType: "needs" },
-        { name: "Water & Sewage", icon: "💧", bucketType: "needs" },
-        { name: "Heating & Gas", icon: "🔥", bucketType: "needs" },
-        { name: "Internet", icon: "📶", bucketType: "needs" },
-        { name: "Phone Plan", icon: "📱", bucketType: "needs" },
-        { name: "Home Insurance", icon: "🛡️", bucketType: "needs" },
-      ],
-    },
-    {
-      name: "Food & Dining",
-      type: "expense",
-      categories: [
-        { name: "Groceries", icon: "🛒", bucketType: "needs" },
-        { name: "Restaurants", icon: "🍽️", bucketType: "wants" },
-        { name: "Coffee Shops", icon: "☕", bucketType: "wants" },
-        { name: "Takeout & Delivery", icon: "🥡", bucketType: "wants" },
-        { name: "Alcohol & Bars", icon: "🍷", bucketType: "wants" },
-      ],
-    },
-    {
-      name: "Transportation",
-      type: "expense",
-      categories: [
-        { name: "Fuel & Gas", icon: "⛽", bucketType: "needs" },
-        { name: "Public Transit", icon: "🚆", bucketType: "needs" },
-        { name: "Rideshare", icon: "🚗", bucketType: "wants" },
-        { name: "Auto Insurance", icon: "🚘", bucketType: "needs" },
-        { name: "Car Maintenance & Repairs", icon: "🔧", bucketType: "needs" },
-        { name: "Parking & Tolls", icon: "🅿️", bucketType: "wants" },
-        { name: "Registration & Licensing", icon: "🆔", bucketType: "needs" },
-      ],
-    },
-    {
-      name: "Health & Personal Care",
-      type: "expense",
-      categories: [
-        {
-          name: "Doctor & Specialists",
-          icon: "🩺",
-          bucketType: "needs",
-          isTaxDeductible: true,
-        },
-        {
-          name: "Pharmacy & Medications",
-          icon: "💊",
-          bucketType: "needs",
-          isTaxDeductible: true,
-        },
-        {
-          name: "Dental",
-          icon: "🦷",
-          bucketType: "needs",
-          isTaxDeductible: true,
-        },
-        {
-          name: "Mental Health & Therapy",
-          icon: "🧘",
-          bucketType: "needs",
-          isTaxDeductible: true,
-        },
-        { name: "Gym & Fitness", icon: "🏋️", bucketType: "wants" },
-        { name: "Hair & Beauty", icon: "✂️", bucketType: "wants" },
-        { name: "Toiletries", icon: "🧴", bucketType: "needs" },
-      ],
-    },
-    {
-      name: "Family & Pets",
-      type: "expense",
-      categories: [
-        { name: "Childcare/Daycare", icon: "👶", bucketType: "needs" },
-        { name: "School Fees/Supplies", icon: "🎒", bucketType: "needs" },
-        { name: "Toys & Activities", icon: "🧩", bucketType: "wants" },
-        { name: "Pet Food", icon: "🦴", bucketType: "needs" },
-        { name: "Vet & Pet Meds", icon: "🐕", bucketType: "needs" },
-        { name: "Pet Grooming", icon: "🎾", bucketType: "wants" },
-      ],
-    },
-    {
-      name: "Shopping & Lifestyle",
-      type: "expense",
-      categories: [
-        { name: "Clothing & Apparel", icon: "👕", bucketType: "wants" },
-        { name: "Electronics & Gadgets", icon: "🖥️", bucketType: "wants" },
-        { name: "Online Shopping", icon: "🛍️", bucketType: "wants" },
-        { name: "Home & Garden", icon: "🏡", bucketType: "wants" },
-        { name: "Subscriptions", icon: "🔄", bucketType: "wants" },
-        { name: "Hobbies", icon: "🎨", bucketType: "wants" },
-      ],
-    },
-    {
-      name: "Entertainment",
-      type: "expense",
-      categories: [
-        { name: "Movies & Streaming", icon: "🎬", bucketType: "wants" },
-        { name: "Music", icon: "🎵", bucketType: "wants" },
-        { name: "Games", icon: "🎮", bucketType: "wants" },
-        { name: "Events & Concerts", icon: "🎟️", bucketType: "wants" },
-        { name: "Sports", icon: "⚽", bucketType: "wants" },
-        { name: "Gambling & Lottery", icon: "🎲", bucketType: "wants" },
-      ],
-    },
-    {
-      name: "Travel",
-      type: "expense",
-      categories: [
-        { name: "Flights", icon: "✈️", bucketType: "wants" },
-        { name: "Hotels & Lodging", icon: "🛏️", bucketType: "wants" },
-        { name: "Vacation Activities", icon: "🌴", bucketType: "wants" },
-        { name: "Travel Insurance", icon: "🌍", bucketType: "wants" },
-      ],
-    },
-    {
-      name: "Education & Career",
-      type: "expense",
-      categories: [
-        {
-          name: "Tuition",
-          icon: "🎓",
-          bucketType: "needs",
-          isTaxDeductible: true,
-        },
-        { name: "Books & Learning Materials", icon: "📚", bucketType: "needs" },
-        { name: "Professional Development", icon: "📈", bucketType: "wants" },
-        {
-          name: "Work Expenses",
-          icon: "💼",
-          bucketType: "needs",
-          isTaxDeductible: true,
-        },
-      ],
-    },
-    {
-      name: "Financial & Savings",
-      type: "expense",
-      categories: [
-        { name: "Emergency Fund", icon: "🚨", bucketType: "savings" },
-        {
-          name: "RRSP Contribution",
-          icon: "💰",
-          bucketType: "savings",
-          isTaxDeductible: true,
-        },
-        { name: "TFSA Contribution", icon: "🏦", bucketType: "savings" },
-        { name: "Investment Purchase", icon: "📉", bucketType: "savings" },
-        { name: "Loan/Debt Repayment", icon: "💸", bucketType: "needs" },
-        { name: "Bank Fees & Interest", icon: "💳", bucketType: "needs" },
-      ],
-    },
-    {
-      name: "Gifts & Donations",
-      type: "expense",
-      categories: [
-        {
-          name: "Charity & Donations",
-          icon: "🎗️",
-          bucketType: "wants",
-          isTaxDeductible: true,
-        },
-        { name: "Gifts", icon: "🎁", bucketType: "wants" },
-      ],
-    },
-    {
-      name: "Transfer",
-      type: "transfer",
-      categories: [
-        { name: "Internal Transfer", icon: "↔️", bucketType: "uncategorized" },
-        { name: "Balance Adjustment", icon: "⚖️", bucketType: "uncategorized" },
-      ],
-    },
-  ];
+  const groupDefs = DEFAULT_CATEGORY_GROUPS;
 
   const categoryMap = new Map<string, string>();
   for (let gi = 0; gi < groupDefs.length; gi++) {
@@ -457,7 +247,6 @@ async function main() {
       data: {
         householdId: household.id,
         name: gd.name,
-        type: gd.type,
         sortOrder: gi,
       },
     });
@@ -467,8 +256,8 @@ async function main() {
         data: {
           householdId: household.id,
           name: cd.name,
-          icon: cd.icon,
-          type: gd.type,
+          icon: cd.emoji,
+          type: cd.type,
           groupId: group.id,
           sortOrder: ci,
           bucketType: cd.bucketType,
@@ -2858,7 +2647,7 @@ async function seedCategoryBuckets() {
     } else if (savingsNames.has(lower)) {
       bucketType = "savings";
     } else {
-      bucketType = "uncategorized";
+      bucketType = "wants";
     }
 
     await prisma.category.update({

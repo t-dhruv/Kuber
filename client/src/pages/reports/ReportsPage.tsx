@@ -101,8 +101,8 @@ export default function ReportsPage() {
   };
 
   const extraParams = [
-    excludeCategoryIds.length > 0 ? `&excludeCategories=${excludeCategoryIds.join(",")}` : "",
-    excludeAccountIds.length > 0 ? `&excludeAccounts=${excludeAccountIds.join(",")}` : "",
+    excludeCategoryIds.length > 0 ? `&excludeCategoryIds=${excludeCategoryIds.join(",")}` : "",
+    excludeAccountIds.length > 0 ? `&excludeAccountIds=${excludeAccountIds.join(",")}` : "",
   ].join("");
 
   return (

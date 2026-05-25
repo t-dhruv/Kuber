@@ -74,6 +74,11 @@ const partialRuleBodySchema = ruleBodyBaseSchema.partial().refine((body) => {
   return true;
 }, { message: 'Trigger/action arrays cannot be empty' });
 
+const rulesImportSchema = z.object({
+  version: z.number().int().optional(),
+  rules: z.array(ruleBodySchema).min(1).max(500),
+});
+
 const testBodySchema = z.object({
   journalId: z.string().optional(),
   matchInput: z.object({
@@ -216,6 +221,28 @@ function formatRule(rule: RuleWithNormalizedRows) {
   };
 }
 
+function formatRuleExport(rule: RuleWithNormalizedRows) {
+  const triggers = normalizeRuleTriggers(rule);
+  const ruleActions = normalizeRuleActions(rule);
+  return {
+    name: typeof rule.name === 'string' && rule.name.trim()
+      ? rule.name
+      : generateRuleName(triggers, ruleActions),
+    strict: typeof rule.strict === 'boolean' ? rule.strict : true,
+    stopProcessing: typeof rule.stopProcessing === 'boolean' ? rule.stopProcessing : false,
+    isActive: typeof rule.isActive === 'boolean' ? rule.isActive : true,
+    sortOrder: typeof rule.sortOrder === 'number' ? rule.sortOrder : undefined,
+    conditions: Array.isArray(rule.conditions) && (rule.conditions as unknown[]).length > 0
+      ? rule.conditions
+      : triggers.map(asLegacyTrigger),
+    actions: Array.isArray(rule.actions) && (rule.actions as unknown[]).length > 0
+      ? rule.actions
+      : ruleActions.map(asLegacyAction),
+    triggers: triggers.map(asPublicTrigger),
+    ruleActions: ruleActions.map(asPublicAction),
+  };
+}
+
 function buildRuleWriteData(parsed: z.infer<typeof ruleBodySchema> | z.infer<typeof partialRuleBodySchema>, householdId: string, sortOrder?: number) {
   const triggers = (parsed.triggers ?? parsed.conditions ?? []).map((trigger, index) => ({
     field: trigger.field,
@@ -331,6 +358,25 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
+router.get('/export', async (req: AuthRequest, res: Response) => {
+  try {
+    const rules = await prisma.rule.findMany({
+      where: { householdId: req.householdId! },
+      include: { triggers: true, ruleActions: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    return res.json({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      rules: rules.map(formatRuleExport),
+    });
+  } catch (err) {
+    req.log.error({ err }, 'rules/export');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const body = { ...req.body };
@@ -358,6 +404,44 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     return res.status(201).json(formatRule(rule));
   } catch (err) {
     req.log.error({ err }, 'rules/create');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/import', async (req: AuthRequest, res: Response) => {
+  try {
+    const body = {
+      ...req.body,
+      rules: Array.isArray(req.body?.rules)
+        ? req.body.rules.map((rule: any) => ({
+          ...rule,
+          conditions: Array.isArray(rule.conditions) ? rule.conditions.map(sanitizeTrigger) : rule.conditions,
+          triggers: Array.isArray(rule.triggers) ? rule.triggers.map(sanitizeTrigger) : rule.triggers,
+        }))
+        : req.body?.rules,
+    };
+    const parsed = rulesImportSchema.safeParse(body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+
+    const maxOrder = await prisma.rule.aggregate({
+      where: { householdId: req.householdId! },
+      _max: { sortOrder: true },
+    });
+    let nextSortOrder = (maxOrder._max.sortOrder ?? 0) + 1;
+
+    const imported = [];
+    for (const rule of parsed.data.rules) {
+      const created = await prisma.rule.create({
+        data: buildRuleWriteData(rule, req.householdId!, nextSortOrder++) as any,
+        include: { triggers: true, ruleActions: true },
+      });
+      imported.push(formatRule(created));
+      logAudit({ householdId: req.householdId!, userId: req.userId!, action: 'CREATE', entity: 'RULE', entityId: created.id, after: created as any });
+    }
+
+    return res.status(201).json({ imported: imported.length, rules: imported });
+  } catch (err) {
+    req.log.error({ err }, 'rules/import');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -500,6 +584,11 @@ router.post('/:id/apply', async (req: AuthRequest, res: Response) => {
 router.post('/apply-all', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
+    const standaloneRules = await prisma.rule.findMany({
+      where: { householdId, isActive: true, ruleGroupId: null },
+      include: { triggers: true, ruleActions: true },
+      orderBy: { sortOrder: 'asc' },
+    });
     const groups = await prisma.ruleGroup.findMany({
       where: { householdId, isActive: true },
       include: {
@@ -517,6 +606,21 @@ router.post('/apply-all', async (req: AuthRequest, res: Response) => {
 
     for (const journal of journals) {
       const matchInput = buildRuleMatchInputFromJournal(journal);
+      for (const rule of standaloneRules) {
+        const triggers = normalizeRuleTriggers(rule);
+        if (!ruleMatchesMode(triggers, matchInput, rule.strict ?? true)) continue;
+
+        await applyActionsToJournal(prisma, {
+          journalId: journal.id,
+          householdId,
+          ruleId: rule.id,
+          actions: normalizeRuleActions(rule),
+        });
+        totalMatched++;
+        firedRules.add(rule.id);
+        if (rule.stopProcessing) break;
+      }
+
       for (const group of groups) {
         let groupFired = false;
         for (const rule of group.rules) {

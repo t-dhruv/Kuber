@@ -380,7 +380,7 @@ model Category {
   objectGroupId       String?
   sortOrder           Int                       @default(0)
   isSystem            Boolean                   @default(false)
-  bucketType          String                    @default("uncategorized") // needs | wants | savings | uncategorized
+  bucketType          String                    @default("wants") // needs | wants | savings
   isTaxDeductible     Boolean                   @default(false)
   excludeFromReports  Boolean                   @default(false)
   isDeleted           Boolean                   @default(false)
@@ -402,7 +402,6 @@ model CategoryGroup {
   id          String     @id @default(cuid())
   householdId String
   name        String
-  type        String
   sortOrder   Int        @default(0)
   categories  Category[]
 

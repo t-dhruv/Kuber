@@ -4,24 +4,25 @@
  * Canonical category definitions for every new Kuber household.
  * Used at signup (to seed the new household) and in the demo seed.
  *
- * Each group has a `type` ("income" | "expense" | "transfer") and an ordered
- * list of categories with emoji, 50/30/20 bucket, and optional tax-deductible flag.
+ * Each category has a `type` ("income" | "expense" | "transfer"), emoji,
+ * 50/30/20 bucket, and optional tax-deductible flag.
  */
 
 import type { Prisma } from '@prisma/client';
 
-export type BucketType = 'needs' | 'wants' | 'savings' | 'uncategorized';
+export type BucketType = 'needs' | 'wants' | 'savings';
+export type CategoryType = 'income' | 'expense' | 'transfer';
 
 export interface CategoryDef {
   name: string;
   emoji: string;
+  type: CategoryType;
   bucketType: BucketType;
   isTaxDeductible?: boolean;
 }
 
 export interface CategoryGroupDef {
   name: string;
-  type: 'income' | 'expense' | 'transfer';
   categories: CategoryDef[];
 }
 
@@ -34,34 +35,40 @@ type SeedDefaultCategoriesTransaction = {
   };
 };
 
+function categoryDefs(
+  type: CategoryType,
+  categories: Array<Omit<CategoryDef, 'type'> & { type?: CategoryType }>,
+): CategoryDef[] {
+  return categories.map((category) => ({ ...category, type: category.type ?? type }));
+}
+
 export const DEFAULT_CATEGORY_GROUPS: CategoryGroupDef[] = [
   // ── Income ────────────────────────────────────────────────────────────────
   {
     name: 'Income',
-    type: 'income',
-    categories: [
-      { name: 'Salary & Wages',           emoji: '💼', bucketType: 'uncategorized' },
-      { name: 'Freelance & Consulting',    emoji: '💻', bucketType: 'uncategorized' },
-      { name: 'Rental Income',             emoji: '🏠', bucketType: 'uncategorized' },
-      { name: 'Business Income',           emoji: '🏢', bucketType: 'uncategorized' },
-      { name: 'Investment Dividends',      emoji: '📈', bucketType: 'uncategorized' },
-      { name: 'Capital Gains',             emoji: '📊', bucketType: 'uncategorized' },
-      { name: 'Government Benefits',       emoji: '🏛️', bucketType: 'uncategorized' },
-      { name: 'Pension & Retirement',      emoji: '👴', bucketType: 'uncategorized' },
-      { name: 'Side Hustle',               emoji: '🔨', bucketType: 'uncategorized' },
-      { name: 'Gifts & Bonuses',           emoji: '🎁', bucketType: 'uncategorized' },
-      { name: 'Tax Refund',                emoji: '🏦', bucketType: 'uncategorized' },
-      { name: 'Reimbursements',            emoji: '💸', bucketType: 'uncategorized' },
-      { name: 'Interest Income',           emoji: '💰', bucketType: 'uncategorized' },
-      { name: 'Other Income',              emoji: '➕', bucketType: 'uncategorized' },
-    ],
+    categories: categoryDefs('income', [
+      { name: 'Salary & Wages',           emoji: '💼', bucketType: 'needs' },
+      { name: 'Freelance & Consulting',    emoji: '💻', bucketType: 'needs' },
+      { name: 'Rental Income',             emoji: '🏠', bucketType: 'needs' },
+      { name: 'Business Income',           emoji: '🏢', bucketType: 'needs' },
+      { name: 'Investment Dividends',      emoji: '📈', bucketType: 'savings' },
+      { name: 'Capital Gains',             emoji: '📊', bucketType: 'savings' },
+      { name: 'Government Benefits',       emoji: '🏛️', bucketType: 'needs' },
+      { name: 'Pension & Retirement',      emoji: '👴', bucketType: 'needs' },
+      { name: 'Side Hustle',               emoji: '🔨', bucketType: 'needs' },
+      { name: 'Gifts & Bonuses',           emoji: '🎁', bucketType: 'savings' },
+      { name: 'Tax Refund',                emoji: '🏦', bucketType: 'savings' },
+      { name: 'Reimbursements',            emoji: '💸', bucketType: 'needs' },
+      { name: 'Interest Income',           emoji: '💰', bucketType: 'savings' },
+      { name: 'Interac e-Transfer Received', emoji: '📥', bucketType: 'savings' },
+      { name: 'Other Income',              emoji: '➕', bucketType: 'needs' },
+    ]),
   },
 
   // ── Housing & Utilities ───────────────────────────────────────────────────
   {
     name: 'Housing & Utilities',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Rent & Mortgage',           emoji: '🏠', bucketType: 'needs' },
       { name: 'Strata / HOA Fees',         emoji: '🏢', bucketType: 'needs' },
       { name: 'Property Taxes',            emoji: '🏛️', bucketType: 'needs', isTaxDeductible: true },
@@ -78,14 +85,13 @@ export const DEFAULT_CATEGORY_GROUPS: CategoryGroupDef[] = [
       { name: 'Lawn & Garden',             emoji: '🌿', bucketType: 'wants' },
       { name: 'Cleaning & Housekeeping',   emoji: '🧹', bucketType: 'wants' },
       { name: 'Furniture & Appliances',    emoji: '🛋️', bucketType: 'wants' },
-    ],
+    ]),
   },
 
   // ── Food & Dining ─────────────────────────────────────────────────────────
   {
     name: 'Food & Dining',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Groceries',                 emoji: '🛒', bucketType: 'needs' },
       { name: 'Restaurants',               emoji: '🍽️', bucketType: 'wants' },
       { name: 'Fast Food',                 emoji: '🍔', bucketType: 'wants' },
@@ -93,31 +99,30 @@ export const DEFAULT_CATEGORY_GROUPS: CategoryGroupDef[] = [
       { name: 'Takeout & Delivery',        emoji: '🥡', bucketType: 'wants' },
       { name: 'Alcohol & Bars',            emoji: '🍷', bucketType: 'wants' },
       { name: 'Work Lunches',              emoji: '🥗', bucketType: 'needs' },
-    ],
+    ]),
   },
 
   // ── Transportation ────────────────────────────────────────────────────────
   {
     name: 'Transportation',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Fuel & Gas',                emoji: '⛽', bucketType: 'needs' },
       { name: 'Public Transit',            emoji: '🚆', bucketType: 'needs' },
-      { name: 'Rideshare & Taxi',          emoji: '🚗', bucketType: 'wants' },
+      { name: 'Rideshare',                 emoji: '🚗', bucketType: 'wants' },
       { name: 'Auto Insurance',            emoji: '🚘', bucketType: 'needs' },
       { name: 'Car Maintenance & Repairs', emoji: '🔧', bucketType: 'needs' },
-      { name: 'Car Payment / Lease',       emoji: '🏎️', bucketType: 'needs' },
+      { name: 'Car Lease Payment',         emoji: '🏎️', bucketType: 'needs' },
+      { name: 'Auto Loan Principal',       emoji: '🚙', type: 'transfer', bucketType: 'savings' },
       { name: 'Parking & Tolls',           emoji: '🅿️', bucketType: 'wants' },
       { name: 'Registration & Licensing',  emoji: '🆔', bucketType: 'needs' },
       { name: 'Bicycle & Scooter',         emoji: '🚲', bucketType: 'wants' },
-    ],
+    ]),
   },
 
   // ── Health & Personal Care ────────────────────────────────────────────────
   {
     name: 'Health & Personal Care',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Doctor & Specialists',      emoji: '🩺', bucketType: 'needs', isTaxDeductible: true },
       { name: 'Pharmacy & Medications',    emoji: '💊', bucketType: 'needs', isTaxDeductible: true },
       { name: 'Dental',                    emoji: '🦷', bucketType: 'needs', isTaxDeductible: true },
@@ -129,14 +134,13 @@ export const DEFAULT_CATEGORY_GROUPS: CategoryGroupDef[] = [
       { name: 'Toiletries & Hygiene',      emoji: '🧴', bucketType: 'needs' },
       { name: 'Vitamins & Supplements',    emoji: '💉', bucketType: 'wants' },
       { name: 'Health Insurance',          emoji: '🏥', bucketType: 'needs' },
-    ],
+    ]),
   },
 
   // ── Family & Pets ─────────────────────────────────────────────────────────
   {
     name: 'Family & Pets',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Childcare & Daycare',       emoji: '👶', bucketType: 'needs' },
       { name: 'School Fees & Supplies',    emoji: '🎒', bucketType: 'needs' },
       { name: 'Extracurricular Activities',emoji: '🎭', bucketType: 'wants' },
@@ -147,48 +151,48 @@ export const DEFAULT_CATEGORY_GROUPS: CategoryGroupDef[] = [
       { name: 'Pet Insurance',             emoji: '🐾', bucketType: 'needs' },
       { name: 'Pet Grooming',              emoji: '🎾', bucketType: 'wants' },
       { name: 'Elder Care',                emoji: '👵', bucketType: 'needs' },
-    ],
+    ]),
   },
 
   // ── Shopping & Lifestyle ─────────────────────────────────────────────────
   {
     name: 'Shopping & Lifestyle',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Clothing & Apparel',        emoji: '👕', bucketType: 'wants' },
       { name: 'Shoes & Accessories',       emoji: '👟', bucketType: 'wants' },
       { name: 'Electronics & Gadgets',     emoji: '🖥️', bucketType: 'wants' },
       { name: 'Books & Magazines',         emoji: '📚', bucketType: 'wants' },
       { name: 'Online Shopping',           emoji: '🛍️', bucketType: 'wants' },
+      { name: 'Home & Garden',             emoji: '🏡', bucketType: 'wants' },
       { name: 'Home Goods & Décor',        emoji: '🏡', bucketType: 'wants' },
       { name: 'Sports & Outdoor Gear',     emoji: '⛷️', bucketType: 'wants' },
       { name: 'Subscriptions',             emoji: '🔄', bucketType: 'wants' },
       { name: 'Hobbies & Crafts',          emoji: '🎨', bucketType: 'wants' },
       { name: 'Gifts Given',               emoji: '🎁', bucketType: 'wants' },
-    ],
+    ]),
   },
 
   // ── Entertainment ─────────────────────────────────────────────────────────
   {
     name: 'Entertainment',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Movies & Streaming',        emoji: '🎬', bucketType: 'wants' },
       { name: 'Music & Concerts',          emoji: '🎵', bucketType: 'wants' },
       { name: 'Video Games',               emoji: '🎮', bucketType: 'wants' },
       { name: 'Events & Tickets',          emoji: '🎟️', bucketType: 'wants' },
+      { name: 'Events & Concerts',         emoji: '🎟️', bucketType: 'wants' },
       { name: 'Sports Events',             emoji: '⚽', bucketType: 'wants' },
+      { name: 'Sports',                    emoji: '⚽', bucketType: 'wants' },
       { name: 'Museums & Attractions',     emoji: '🏛️', bucketType: 'wants' },
       { name: 'Gambling & Lottery',        emoji: '🎲', bucketType: 'wants' },
       { name: 'Nightlife & Clubs',         emoji: '🎉', bucketType: 'wants' },
-    ],
+    ]),
   },
 
   // ── Travel ────────────────────────────────────────────────────────────────
   {
     name: 'Travel',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Flights',                   emoji: '✈️', bucketType: 'wants' },
       { name: 'Hotels & Lodging',          emoji: '🛏️', bucketType: 'wants' },
       { name: 'Car Rental',                emoji: '🚙', bucketType: 'wants' },
@@ -197,107 +201,103 @@ export const DEFAULT_CATEGORY_GROUPS: CategoryGroupDef[] = [
       { name: 'Travel Insurance',          emoji: '🌍', bucketType: 'wants' },
       { name: 'Passport & Visas',          emoji: '🛂', bucketType: 'wants' },
       { name: 'Luggage & Accessories',     emoji: '🧳', bucketType: 'wants' },
-    ],
+    ]),
   },
 
   // ── Education & Career ────────────────────────────────────────────────────
   {
     name: 'Education & Career',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Tuition & University',      emoji: '🎓', bucketType: 'needs', isTaxDeductible: true },
-      { name: 'Student Loan Payments',     emoji: '🏫', bucketType: 'needs' },
+      { name: 'Student Loan Principal',    emoji: '🏫', type: 'transfer', bucketType: 'savings' },
+      { name: 'Student Loan Interest',     emoji: '🏫', bucketType: 'needs' },
       { name: 'Online Courses & Training', emoji: '💻', bucketType: 'needs' },
       { name: 'Books & Learning Materials',emoji: '📖', bucketType: 'needs' },
       { name: 'Professional Development',  emoji: '📈', bucketType: 'wants' },
       { name: 'Work Expenses',             emoji: '💼', bucketType: 'needs', isTaxDeductible: true },
       { name: 'Professional Memberships',  emoji: '🏆', bucketType: 'needs', isTaxDeductible: true },
       { name: 'Home Office Supplies',      emoji: '🖊️', bucketType: 'needs', isTaxDeductible: true },
-    ],
+    ]),
   },
 
   // ── Financial & Savings ───────────────────────────────────────────────────
   {
     name: 'Financial & Savings',
-    type: 'expense',
-    categories: [
-      { name: 'Emergency Fund',            emoji: '🚨', bucketType: 'savings' },
-      { name: 'RRSP / 401(k) Contribution',emoji: '💰', bucketType: 'savings', isTaxDeductible: true },
-      { name: 'TFSA / Roth IRA',           emoji: '🏦', bucketType: 'savings' },
-      { name: 'RESP / Education Savings',  emoji: '🎓', bucketType: 'savings' },
-      { name: 'General Investments',       emoji: '📉', bucketType: 'savings' },
-      { name: 'Mortgage Payment',          emoji: '🏠', bucketType: 'needs' },
-      { name: 'Loan / Debt Repayment',     emoji: '💸', bucketType: 'needs' },
-      { name: 'Credit Card Payment',       emoji: '💳', bucketType: 'needs' },
+    categories: categoryDefs('expense', [
+      { name: 'ABM Cash',                  emoji: '💵', bucketType: 'needs' },
+      { name: 'Emergency Fund',            emoji: '🚨', type: 'transfer', bucketType: 'savings' },
+      { name: 'RRSP Contribution',         emoji: '💰', type: 'transfer', bucketType: 'savings', isTaxDeductible: true },
+      { name: 'TFSA Contribution',         emoji: '🏦', type: 'transfer', bucketType: 'savings' },
+      { name: 'RESP Contribution',         emoji: '🎓', type: 'transfer', bucketType: 'savings' },
+      { name: 'General Investments',       emoji: '📉', type: 'transfer', bucketType: 'savings' },
+      { name: 'Mortgage Principal Payment', emoji: '🏠', type: 'transfer', bucketType: 'savings' },
+      { name: 'Mortgage Interest',         emoji: '🏠', bucketType: 'needs' },
+      { name: 'Loan/Debt Repayment',       emoji: '💸', type: 'transfer', bucketType: 'savings' },
+      { name: 'Credit Card Payment',       emoji: '💳', type: 'transfer', bucketType: 'savings' },
       { name: 'Bank Fees & Interest',      emoji: '🏛️', bucketType: 'needs' },
       { name: 'Life Insurance',            emoji: '📋', bucketType: 'needs' },
       { name: 'Disability Insurance',      emoji: '🩹', bucketType: 'needs' },
       { name: 'Accountant & Tax Prep',     emoji: '🧾', bucketType: 'needs', isTaxDeductible: true },
       { name: 'Financial Advisor',         emoji: '📊', bucketType: 'needs' },
-    ],
+    ]),
   },
 
   // ── Taxes ─────────────────────────────────────────────────────────────────
   {
     name: 'Taxes',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Income Tax Owing',          emoji: '🧾', bucketType: 'needs' },
       { name: 'HST / GST / VAT',           emoji: '🏦', bucketType: 'needs' },
       { name: 'Property Transfer Tax',     emoji: '🏛️', bucketType: 'needs' },
       { name: 'Capital Gains Tax',         emoji: '📊', bucketType: 'needs' },
-    ],
+    ]),
   },
 
   // ── Gifts & Donations ─────────────────────────────────────────────────────
   {
     name: 'Gifts & Donations',
-    type: 'expense',
-    categories: [
+    categories: categoryDefs('expense', [
       { name: 'Charitable Donations',      emoji: '🎗️', bucketType: 'wants', isTaxDeductible: true },
       { name: 'Religious Giving / Tithing',emoji: '⛪', bucketType: 'wants', isTaxDeductible: true },
       { name: 'Birthday & Holiday Gifts',  emoji: '🎂', bucketType: 'wants' },
       { name: 'Wedding & Baby Gifts',      emoji: '💒', bucketType: 'wants' },
-    ],
+      { name: 'Interac e-Transfer Sent',   emoji: '📤', bucketType: 'wants' },
+    ]),
   },
 
   // ── Business (self-employed / side hustle) ────────────────────────────────
   {
     name: 'Business Expenses',
-    type: 'expense',
-    categories: [
-      { name: 'Advertising & Marketing',   emoji: '📣', bucketType: 'uncategorized', isTaxDeductible: true },
-      { name: 'Software & SaaS',           emoji: '💻', bucketType: 'uncategorized', isTaxDeductible: true },
-      { name: 'Business Travel',           emoji: '✈️', bucketType: 'uncategorized', isTaxDeductible: true },
-      { name: 'Client Entertainment',      emoji: '🍽️', bucketType: 'uncategorized', isTaxDeductible: true },
-      { name: 'Office Rent',               emoji: '🏢', bucketType: 'uncategorized', isTaxDeductible: true },
-      { name: 'Contractors & Subcontractors',emoji:'👥', bucketType: 'uncategorized', isTaxDeductible: true },
-      { name: 'Business Insurance',        emoji: '🛡️', bucketType: 'uncategorized', isTaxDeductible: true },
-      { name: 'Equipment & Tools',         emoji: '🔧', bucketType: 'uncategorized', isTaxDeductible: true },
-      { name: 'Professional Services',     emoji: '⚖️', bucketType: 'uncategorized', isTaxDeductible: true },
-      { name: 'Business Bank Fees',        emoji: '🏦', bucketType: 'uncategorized', isTaxDeductible: true },
-    ],
+    categories: categoryDefs('expense', [
+      { name: 'Advertising & Marketing',   emoji: '📣', bucketType: 'needs', isTaxDeductible: true },
+      { name: 'Software & SaaS',           emoji: '💻', bucketType: 'needs', isTaxDeductible: true },
+      { name: 'Business Travel',           emoji: '✈️', bucketType: 'needs', isTaxDeductible: true },
+      { name: 'Client Entertainment',      emoji: '🍽️', bucketType: 'wants', isTaxDeductible: true },
+      { name: 'Office Rent',               emoji: '🏢', bucketType: 'needs', isTaxDeductible: true },
+      { name: 'Contractors & Subcontractors',emoji:'👥', bucketType: 'needs', isTaxDeductible: true },
+      { name: 'Business Insurance',        emoji: '🛡️', bucketType: 'needs', isTaxDeductible: true },
+      { name: 'Equipment & Tools',         emoji: '🔧', bucketType: 'needs', isTaxDeductible: true },
+      { name: 'Professional Services',     emoji: '⚖️', bucketType: 'needs', isTaxDeductible: true },
+      { name: 'Business Bank Fees',        emoji: '🏦', bucketType: 'needs', isTaxDeductible: true },
+    ]),
   },
 
   // ── Transfers ─────────────────────────────────────────────────────────────
   {
     name: 'Transfers',
-    type: 'transfer',
-    categories: [
-      { name: 'Internal Transfer',         emoji: '↔️', bucketType: 'uncategorized' },
-      { name: 'Balance Adjustment',        emoji: '⚖️', bucketType: 'uncategorized' },
-      { name: 'e-Transfer Sent',           emoji: '📤', bucketType: 'uncategorized' },
-      { name: 'e-Transfer Received',       emoji: '📥', bucketType: 'uncategorized' },
-    ],
+    categories: categoryDefs('transfer', [
+      { name: 'Internal Transfer',         emoji: '↔️', bucketType: 'savings' },
+      { name: 'Cash Deposit',              emoji: '🏧', bucketType: 'savings' },
+      { name: 'Balance Adjustment',        emoji: '⚖️', bucketType: 'savings' },
+    ]),
   },
 
   // ── Uncategorized ─────────────────────────────────────────────────────────
   {
     name: 'Uncategorized',
-    type: 'expense',
-    categories: [
-      { name: 'Uncategorized',             emoji: '❓', bucketType: 'uncategorized' },
-    ],
+    categories: categoryDefs('expense', [
+      { name: 'Uncategorized',             emoji: '❓', bucketType: 'wants' },
+    ]),
   },
 ];
 
@@ -317,7 +317,6 @@ export async function seedDefaultCategories(
       data: {
         householdId,
         name: gd.name,
-        type: gd.type,
         sortOrder: gi,
       },
     });
@@ -329,9 +328,10 @@ export async function seedDefaultCategories(
           householdId,
           name: cd.name,
           icon: cd.emoji,
-          type: gd.type,
+          type: cd.type,
           groupId: group.id,
           sortOrder: ci,
+          bucketType: cd.bucketType,
           isTaxDeductible: cd.isTaxDeductible ?? false,
         },
       });
