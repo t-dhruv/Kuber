@@ -66,6 +66,14 @@ describe('bucketTransactions', () => {
     expect(bucketTotals.needs).toBe(0);
   });
 
+  it('counts positive withdrawal journal amounts as spending', () => {
+    const { bucketTotals } = bucketTransactions([{
+      ...tx(500, 'needs'),
+      transactionType: 'withdrawal',
+    }]);
+    expect(bucketTotals.needs).toBe(500);
+  });
+
   it('accumulates absolute values of negative transactions into the correct bucket', () => {
     const txns: TransactionInput[] = [
       tx(-100, 'needs', 'cat-1', 'Groceries'),

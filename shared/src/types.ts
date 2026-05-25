@@ -4,7 +4,7 @@ export type LoanRateType = 'fixed' | 'variable';
 export type PaymentFrequency = 'monthly' | 'biweekly' | 'weekly';
 
 export type AccountType = 'checking' | 'savings' | 'credit' | 'investment' | 'loan' | 'property' | 'other';
-export type CategoryType = 'income' | 'expense';
+export type CategoryType = 'income' | 'expense' | 'transfer';
 export type GoalType = 'save_up' | 'pay_down';
 export type RecurringFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual';
 export type AssetClass = 'us_stock' | 'intl_stock' | 'bond' | 'real_estate' | 'cash' | 'crypto' | 'commodity' | 'other';

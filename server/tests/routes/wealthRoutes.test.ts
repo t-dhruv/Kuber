@@ -151,7 +151,7 @@ describe('wealth route integration', () => {
     });
     expect(prisma.category.update).toHaveBeenCalledWith({
       where: { id: 'cat-2' },
-      data: { bucketType: 'uncategorized' },
+      data: { bucketType: 'wants' },
     });
   });
 
@@ -159,12 +159,14 @@ describe('wealth route integration', () => {
     vi.mocked(prisma.userPreference.findUnique).mockResolvedValue({ value: '5000' } as any);
     vi.mocked(prisma.transactionJournal.findMany).mockResolvedValue([
       {
-        amountDecimal: -1200,
+        amountDecimal: 1200,
+        transactionType: 'withdrawal',
         categoryId: 'rent',
         category: { id: 'rent', name: 'Rent', icon: 'home', bucketType: 'needs' },
       },
       {
-        amountDecimal: -350,
+        amountDecimal: 350,
+        transactionType: 'withdrawal',
         categoryId: 'dining',
         category: { id: 'dining', name: 'Dining', icon: 'fork', bucketType: 'wants' },
       },
@@ -214,5 +216,3 @@ describe('wealth route integration', () => {
     });
   });
 });
-
-

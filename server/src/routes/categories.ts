@@ -6,10 +6,13 @@ import { NOT_DELETED } from '../lib/softDeleteWhere';
 
 const categoryCreateSchema = z.object({
   name: z.string().min(1),
-  type: z.string().min(1),
+  type: z.string().min(1).transform((value) => value.toLowerCase()).refine(
+    (value) => ['income', 'expense', 'transfer'].includes(value),
+    'type must be income, expense, or transfer',
+  ),
   icon: z.string().optional().nullable(),
   groupId: z.string().optional().nullable(),
-  bucketType: z.string().optional(),
+  bucketType: z.enum(['needs', 'wants', 'savings']).optional(),
   isTaxDeductible: z.boolean().optional(),
 });
 
@@ -58,7 +61,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         icon: icon ?? null,
         type,
         groupId: groupId ?? null,
-        bucketType: bucketType ?? 'uncategorized',
+        bucketType: bucketType ?? 'wants',
         isTaxDeductible: isTaxDeductible ?? false,
         isSystem: false,
       },

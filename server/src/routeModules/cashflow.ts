@@ -4,6 +4,39 @@ import { AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
+type CashflowJournal = {
+  amountDecimal: unknown;
+  transactionType?: string | null;
+  category?: { type?: string | null } | null;
+};
+
+type CashflowDirection = 'income' | 'expense' | 'transfer' | 'ignored';
+type YearCashflowJournal = CashflowJournal & { date: Date };
+type MonthCashflowJournal = CashflowJournal & {
+  date: Date;
+  description: string;
+  categoryId: string | null;
+  category?: {
+    name: string;
+    icon: string | null;
+    type: string | null;
+    groupId: string | null;
+    group?: { name: string } | null;
+  } | null;
+  merchantId: string | null;
+  merchant?: { name: string } | null;
+};
+type SankeyCashflowJournal = CashflowJournal & {
+  categoryId: string | null;
+  category?: {
+    id: string;
+    name: string;
+    icon: string | null;
+    type: string | null;
+    bucketType: string | null;
+  } | null;
+};
+
 function getYearBounds(year: number): { start: Date; end: Date } {
   return {
     start: new Date(year, 0, 1),
@@ -20,11 +53,42 @@ function getMonthBounds(year: number, month: number): { start: Date; end: Date }
 
 function reportableCategoryFilter() {
   return {
-    OR: [
-      { categoryId: null },
-      { category: { is: { excludeFromReports: false } } },
+    AND: [
+      {
+        transactionType: { not: 'transfer' },
+      },
+      {
+        OR: [
+          { categoryId: null },
+          { category: { is: { excludeFromReports: false } } },
+        ],
+      },
+      {
+        OR: [
+          { categoryId: null },
+          { category: { is: { type: { not: 'transfer' } } } },
+        ],
+      },
     ],
   };
+}
+
+function classifyCashflowJournal(journal: CashflowJournal): CashflowDirection {
+  const transactionType = journal.transactionType?.toLowerCase();
+  const categoryType = journal.category?.type?.toLowerCase();
+
+  if (transactionType === 'transfer' || categoryType === 'transfer') return 'transfer';
+  if (categoryType === 'investment') return 'ignored';
+  if (transactionType === 'deposit') return 'income';
+  if (transactionType === 'withdrawal') return 'expense';
+  if (categoryType === 'income') return 'income';
+  if (categoryType === 'expense') return 'expense';
+
+  return Number(journal.amountDecimal) >= 0 ? 'income' : 'expense';
+}
+
+function cashflowAmount(journal: CashflowJournal): number {
+  return Math.abs(Number(journal.amountDecimal));
 }
 
 // GET /api/v1/cashflow
@@ -44,8 +108,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         isDeleted: false,
         ...reportableCategoryFilter(),
       },
-      select: { date: true, amountDecimal: true },
-    });
+      select: { date: true, amountDecimal: true, transactionType: true, category: { select: { type: true } } },
+    }) as YearCashflowJournal[];
 
     // Aggregate by month
     const monthMap = new Map<number, { income: number; expenses: number }>();
@@ -56,12 +120,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         monthMap.set(m, { income: 0, expenses: 0 });
       }
       const entry = monthMap.get(m)!;
-      const amount = Number(j.amountDecimal);
-      if (amount > 0) {
-        entry.income += amount;
-      } else {
-        entry.expenses += Math.abs(amount);
-      }
+      const direction = classifyCashflowJournal(j);
+      const amount = cashflowAmount(j);
+      if (direction === 'income') entry.income += amount;
+      if (direction === 'expense') entry.expenses += amount;
     }
 
     const months = Array.from({ length: 12 }, (_, i) => {
@@ -143,8 +205,9 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
         merchant: {
           select: { id: true, name: true },
         },
+        transactionType: true,
       },
-    });
+    }) as MonthCashflowJournal[];
 
     // Separate income vs expense
     const incomeByCategory = new Map<
@@ -171,46 +234,47 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
 
     for (const j of journals) {
       const day = new Date(j.date).getDate();
-      const amount = Number(j.amountDecimal);
+      const direction = classifyCashflowJournal(j);
+      const amount = cashflowAmount(j);
 
-      if (amount > 0) {
+      if (direction === 'income') {
         dailyIncome.set(day, (dailyIncome.get(day) ?? 0) + amount);
+      } else if (direction === 'expense') {
+        dailyExpenses.set(day, (dailyExpenses.get(day) ?? 0) + amount);
       } else {
-        dailyExpenses.set(day, (dailyExpenses.get(day) ?? 0) + Math.abs(amount));
+        continue;
       }
 
       const catId = j.categoryId ?? '__uncategorized';
       const catName = j.category?.name ?? 'Uncategorized';
       const catIcon = j.category?.icon ?? null;
-      const catType = j.category?.type ?? 'EXPENSE';
-
       // Merchant key: use merchantId if present, else fall back to description
       const mKey = j.merchantId ?? `__desc_${j.description}`;
       const mName = j.merchant?.name ?? j.description;
       const mId = j.merchantId ?? null;
 
-      if (catType?.toUpperCase() === 'INCOME' || amount > 0) {
+      if (direction === 'income') {
         const existing = incomeByCategory.get(catId);
         if (existing) {
-          existing.amount += amount > 0 ? amount : Math.abs(amount);
+          existing.amount += amount;
         } else {
           incomeByCategory.set(catId, {
             categoryId: catId,
             categoryName: catName,
             categoryIcon: catIcon,
-            amount: amount > 0 ? amount : Math.abs(amount),
+            amount,
           });
         }
 
         const mExisting = incomeByMerchantMap.get(mKey);
         if (mExisting) {
-          mExisting.amount += amount > 0 ? amount : Math.abs(amount);
+          mExisting.amount += amount;
           mExisting.transactionCount += 1;
         } else {
           incomeByMerchantMap.set(mKey, {
             merchantId: mId,
             merchantName: mName,
-            amount: amount > 0 ? amount : Math.abs(amount),
+            amount,
             transactionCount: 1,
           });
         }
@@ -219,13 +283,13 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
         const groupId = j.category?.groupId ?? '__ungrouped';
         const existing = expenseByCategory.get(catId);
         if (existing) {
-          existing.amount += Math.abs(amount);
+          existing.amount += amount;
         } else {
           expenseByCategory.set(catId, {
             categoryId: catId,
             categoryName: catName,
             categoryIcon: catIcon,
-            amount: Math.abs(amount),
+            amount,
             groupName,
             groupId,
           });
@@ -233,13 +297,13 @@ router.get('/month', async (req: AuthRequest, res: Response) => {
 
         const mExisting = expenseByMerchantMap.get(mKey);
         if (mExisting) {
-          mExisting.amount += Math.abs(amount);
+          mExisting.amount += amount;
           mExisting.transactionCount += 1;
         } else {
           expenseByMerchantMap.set(mKey, {
             merchantId: mId,
             merchantName: mName,
-            amount: Math.abs(amount),
+            amount,
             transactionCount: 1,
           });
         }
@@ -395,8 +459,9 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
             bucketType: true,
           },
         },
+        transactionType: true,
       },
-    });
+    }) as SankeyCashflowJournal[];
 
     // --- Income sources: group by category ---
     type IncomeSource = { id: string; name: string; icon: string; amount: number };
@@ -410,20 +475,20 @@ router.get('/sankey', async (req: AuthRequest, res: Response) => {
       const catId = j.categoryId ?? '__uncategorized';
       const catName = j.category?.name ?? 'Uncategorized';
       const catIcon = j.category?.icon ?? '';
-      const catType = j.category?.type ?? 'EXPENSE';
       const bucketType = j.category?.bucketType ?? 'uncategorized';
-      const amount = Number(j.amountDecimal);
+      const direction = classifyCashflowJournal(j);
+      const amount = cashflowAmount(j);
 
-      if (catType?.toUpperCase() === 'INCOME' || amount > 0) {
-        const amt = Math.abs(amount);
+      if (direction === 'income') {
+        const amt = amount;
         const existing = incomeMap.get(catId);
         if (existing) {
           existing.amount += amt;
         } else {
           incomeMap.set(catId, { id: catId, name: catName, icon: catIcon, amount: amt });
         }
-      } else if (amount < 0) {
-        const amt = Math.abs(amount);
+      } else if (direction === 'expense') {
+        const amt = amount;
         const existing = expenseCatMap.get(catId);
         if (existing) {
           existing.amount += amt;
@@ -534,15 +599,16 @@ router.get('/forecast', async (req: AuthRequest, res: Response) => {
         isDeleted: false,
         ...reportableCategoryFilter(),
       },
-      select: { amountDecimal: true },
-    });
+      select: { amountDecimal: true, transactionType: true, category: { select: { type: true } } },
+    }) as CashflowJournal[];
 
     let totalIncome = 0;
     let totalExpenses = 0;
     for (const j of historicalJournals) {
-      const amount = Number(j.amountDecimal);
-      if (amount > 0) totalIncome += amount;
-      else totalExpenses += Math.abs(amount);
+      const direction = classifyCashflowJournal(j);
+      const amount = cashflowAmount(j);
+      if (direction === 'income') totalIncome += amount;
+      if (direction === 'expense') totalExpenses += amount;
     }
 
     const avgDailyIncome = historicalJournals.length > 0 ? totalIncome / 90 : 0;

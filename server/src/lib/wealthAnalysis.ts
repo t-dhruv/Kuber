@@ -25,6 +25,7 @@ export interface BucketData {
 
 export interface TransactionInput {
   amount: number;
+  transactionType?: string | null;
   categoryId?: string | null;
   category?: {
     id: string;
@@ -64,8 +65,8 @@ export function computeTargets(income: number | null): {
 
 /**
  * Groups spending transactions into bucket totals and a per-category map.
- * Only negative-amount transactions are considered (spending).
- * Positive amounts are ignored.
+ * Withdrawal journals are spending regardless of amount sign; otherwise only
+ * negative-amount transactions are considered spending.
  */
 export function bucketTransactions(transactions: TransactionInput[]): {
   bucketTotals: Record<BucketKey, number>;
@@ -80,8 +81,8 @@ export function bucketTransactions(transactions: TransactionInput[]): {
   const catMap = new Map<string, CategoryTotal>();
 
   for (const tx of transactions) {
-    // Only spending (negative amounts) contribute
-    if (tx.amount >= 0) continue;
+    const isWithdrawal = tx.transactionType?.toLowerCase() === 'withdrawal';
+    if (!isWithdrawal && tx.amount >= 0) continue;
 
     const bucket = (tx.category?.bucketType ?? 'uncategorized') as BucketKey;
     const absAmount = Math.abs(tx.amount);

@@ -201,8 +201,8 @@ export function buildJournalReportFilters(query: Record<string, unknown>): Journ
     categoryIds: splitCsv(query.categoryIds),
     accountIds: splitCsv(query.accountIds),
     tagIds: splitCsv(query.tagIds),
-    excludeCategoryIds: splitCsv(query.excludeCategoryIds),
-    excludeAccountIds: splitCsv(query.excludeAccountIds),
+    excludeCategoryIds: splitCsv(query.excludeCategoryIds ?? query.excludeCategories),
+    excludeAccountIds: splitCsv(query.excludeAccountIds ?? query.excludeAccounts),
     minAmount: query.minAmount ? Number(query.minAmount) : undefined,
     maxAmount: query.maxAmount ? Number(query.maxAmount) : undefined,
   };
@@ -225,11 +225,15 @@ function passesFilters(row: JournalReportRow, input: JournalReportFilters) {
   return true;
 }
 
+function isTransferLikeReportRow(row: JournalReportRow) {
+  return row.transactionType === 'transfer' || row.category?.type === 'transfer';
+}
+
 function rowsForMode(rows: JournalReportRow[], input: JournalGroupedReportInput) {
   return rows.filter((row) => {
     if (!dateInRange(row.date, input)) return false;
     if (!passesFilters(row, input)) return false;
-    if (row.transactionType === 'transfer') return false;
+    if (isTransferLikeReportRow(row)) return false;
     if (row.category?.type === 'investment') return false;
     if (input.mode === 'income') {
       return row.signedAmount > 0 && (!row.category || row.category.type === 'income');
@@ -333,7 +337,7 @@ export function buildJournalCashflowReport(rows: JournalReportRow[], input: Jour
   const filtered = rows.filter((row) => {
     if (!dateInRange(row.date, input)) return false;
     if (!passesFilters(row, input)) return false;
-    if (row.transactionType === 'transfer') return false;
+    if (isTransferLikeReportRow(row)) return false;
     if (row.category?.type === 'investment') return false;
     return true;
   });

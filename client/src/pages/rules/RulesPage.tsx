@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -9,6 +9,8 @@ import {
   PlayCircle,
   ChevronUp,
   ChevronDown,
+  Download,
+  Upload,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import {
@@ -58,6 +60,11 @@ interface Rule {
   isActive: boolean;
   sortOrder: number;
   matchCount?: number;
+}
+
+interface RulesImportResponse {
+  imported: number;
+  rules: Rule[];
 }
 
 interface Category {
@@ -445,6 +452,7 @@ function actionLabel(a: RuleAction, categories: Category[]): string {
 export default function RulesPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [modal, setModal] = useState<{
     mode: "add" | "edit";
     rule?: Rule;
@@ -554,6 +562,47 @@ export default function RulesPage() {
     onError: () => notify.error("Failed to apply rules"),
   });
 
+  const importMutation = useMutation({
+    mutationFn: (payload: unknown) =>
+      api.post<RulesImportResponse>("/rules/import", payload).then((r) => r.data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["rules"] });
+      notify.success(
+        "Rules imported",
+        `Imported ${data.imported} rule${data.imported !== 1 ? "s" : ""}`,
+      );
+    },
+    onError: () => notify.error("Failed to import rules"),
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: () => api.get("/rules/export").then((r) => r.data),
+    onSuccess: (data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `kuber-rules-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
+    onError: () => notify.error("Failed to export rules"),
+  });
+
+  async function handleImportFile(file: File | undefined) {
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      importMutation.mutate(parsed);
+    } catch {
+      notify.error("Invalid rules file");
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  }
+
   function handleSave(form: RuleFormState) {
     if (modal?.mode === "edit" && modal.rule) {
       updateMutation.mutate({
@@ -617,6 +666,32 @@ export default function RulesPage() {
           </p>
         </div>
         <div className="flex gap-3">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => handleImportFile(event.target.files?.[0])}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Upload size={15} />}
+            loading={importMutation.isPending}
+            onClick={() => importInputRef.current?.click()}
+          >
+            Import
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Download size={15} />}
+            loading={exportMutation.isPending}
+            disabled={rules.length === 0}
+            onClick={() => exportMutation.mutate()}
+          >
+            Export
+          </Button>
           <Button
             variant="secondary"
             size="sm"

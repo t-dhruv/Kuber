@@ -5,6 +5,10 @@ import * as settingsService from '../services/settingsService';
 
 const router = Router();
 const requireHouseholdAdmin = requireHouseholdRole(['owner', 'admin']);
+const categoryTypeSchema = z.string().min(1).transform((value) => value.toLowerCase()).refine(
+  (value) => ['income', 'expense', 'transfer'].includes(value),
+  'type must be income, expense, or transfer',
+);
 
 // GET /api/v1/settings/profile
 router.get('/profile', async (req: AuthRequest, res: Response) => {
@@ -140,10 +144,26 @@ router.get('/categories', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/v1/settings/categories
+const categoryCreateSchema = z.object({
+  name: z.string().min(1),
+  icon: z.string().optional().nullable(),
+  groupId: z.string().optional().nullable(),
+  type: categoryTypeSchema,
+  bucketType: z.enum(['needs', 'wants', 'savings']).optional(),
+});
+
 router.post('/categories', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { name, groupId, icon, type = 'expense', bucketType } = req.body;
+    if (req.body?.type === undefined || req.body?.type === null || req.body?.type === '') {
+      return res.status(400).json({ error: 'type is required' });
+    }
+    const parsed = categoryCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.errors[0];
+      return res.status(400).json({ error: issue?.message ?? 'Invalid request' });
+    }
+    const { name, groupId, icon, type, bucketType } = parsed.data;
 
     const category = await settingsService.createCategory(householdId, { name, groupId, icon, type, bucketType });
     return res.status(201).json(category);
@@ -151,6 +171,7 @@ router.post('/categories', async (req: AuthRequest, res: Response) => {
     req.log.error({ err }, 'settings/categories POST');
     if (err instanceof Error) {
       if (err.message.includes('name is required')) return res.status(400).json({ error: err.message });
+      if (err.message.includes('type must be')) return res.status(400).json({ error: err.message });
       if (err.message.includes('not found')) return res.status(400).json({ error: err.message });
     }
     return res.status(500).json({ error: 'Internal server error' });
@@ -163,8 +184,8 @@ const categoryUpdateSchema = z.object({
   groupId: z.string().optional().nullable(),
   isTaxDeductible: z.boolean().optional(),
   excludeFromReports: z.boolean().optional(),
-  bucketType: z.enum(['needs', 'wants', 'savings', 'uncategorized']).optional(),
-  type: z.enum(['income', 'expense', 'transfer']).optional(),
+  bucketType: z.enum(['needs', 'wants', 'savings']).optional(),
+  type: categoryTypeSchema.optional(),
 });
 
 // PUT /api/v1/settings/categories/:id
@@ -234,15 +255,14 @@ router.get('/category-groups', async (req: AuthRequest, res: Response) => {
 router.post('/category-groups', async (req: AuthRequest, res: Response) => {
   try {
     const householdId = req.householdId!;
-    const { name, type = 'expense' } = req.body;
+    const { name } = req.body;
 
-    const group = await settingsService.createCategoryGroup(householdId, { name, type });
+    const group = await settingsService.createCategoryGroup(householdId, { name });
     return res.status(201).json(group);
   } catch (err) {
     req.log.error({ err }, 'settings/category-groups POST');
     if (err instanceof Error) {
       if (err.message.includes('name is required')) return res.status(400).json({ error: err.message });
-      if (err.message.includes('type must be')) return res.status(400).json({ error: err.message });
       if (err.message.includes('already exists')) return res.status(409).json({ error: err.message });
     }
     return res.status(500).json({ error: 'Internal server error' });

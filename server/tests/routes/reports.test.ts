@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import reportsRouter from '../../src/routes/reports';
+import { prisma } from '../../src/lib/prisma';
 import { fetchJournalReportRows, type JournalReportRow } from '../../src/lib/journalReportingCore';
 
 vi.mock('../../src/lib/prisma', () => ({
@@ -126,6 +127,50 @@ describe('journal-backed report routes', () => {
     expect(res.body.byMonth).toEqual([{ year: 2026, month: 1, income: 300, expenses: 75, net: 225 }]);
   });
 
+  it('classifies category-level transfers separately in report overview', async () => {
+    vi.mocked(prisma.account.findMany).mockResolvedValue([] as any);
+    vi.mocked(prisma.investmentHolding.findMany).mockResolvedValue([] as any);
+    vi.mocked(fetchJournalReportRows).mockResolvedValue([
+      ...rows,
+      {
+        ...rows[0],
+        id: 'journal-emergency-fund',
+        description: 'Emergency fund transfer',
+        amount: 250,
+        signedAmount: -250,
+        category: {
+          id: 'cat-emergency-fund',
+          name: 'Emergency Fund',
+          icon: 'banknote',
+          type: 'transfer',
+          isTaxDeductible: false,
+        },
+      },
+    ]);
+
+    const res = await request(makeApp()).get('/reports/overview?year=2026&month=1');
+
+    expect(res.status).toBe(200);
+    expect(res.body.cashFlow).toMatchObject({
+      income: 300,
+      expense: 125,
+      transferTotal: 350,
+    });
+  });
+
+  it('honors reports page excludeCategory and excludeAccount aliases', async () => {
+    const res = await request(makeApp()).get(
+      '/reports/spending?startDate=2026-01-01&endDate=2026-01-31&groupBy=category&excludeCategories=cat-food&excludeAccounts=acct-hidden',
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      total: 0,
+      transactionCount: 0,
+      items: [],
+    });
+  });
+
   it('returns journal drilldown rows for a report segment', async () => {
     const res = await request(makeApp()).get('/reports/drill?startDate=2026-01-01&endDate=2026-01-31&groupBy=category&groupId=cat-food&mode=spending');
 
@@ -170,6 +215,31 @@ describe('journal-backed report routes', () => {
       householdId: 'hh-1',
       start: new Date(2026, 0, 1),
       end: new Date(2026, 11, 31, 23, 59, 59, 999),
+    });
+  });
+
+  it('excludes soft-deleted budgets from budget variance', async () => {
+    vi.mocked(prisma.budget.findMany).mockResolvedValue([
+      {
+        id: 'budget-food',
+        categoryId: 'cat-food',
+        amount: 100,
+        category: { id: 'cat-food', name: 'Food', icon: 'cart' },
+      },
+    ] as any);
+
+    const res = await request(makeApp()).get('/reports/budget-variance?from=2026-01-01&to=2026-01-31');
+
+    expect(res.status).toBe(200);
+    expect(prisma.budget.findMany).toHaveBeenCalledWith({
+      where: { householdId: 'hh-1', isDeleted: false },
+      include: { category: { select: { id: true, name: true, icon: true } } },
+    });
+    expect(res.body.categories[0]).toMatchObject({
+      categoryId: 'cat-food',
+      budgeted: 100,
+      actual: 75,
+      variance: 25,
     });
   });
 });
