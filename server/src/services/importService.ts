@@ -378,7 +378,7 @@ async function suggestCategoriesForRows(
   const catMap = new Map(categories.map((c) => [c.id, c.name]));
 
   const activeRules = rules
-    .map((r) => ({ conditions: r.conditions as RuleCondition[], actions: r.actions as RuleAction[] }))
+    .map((r) => ({ conditions: r.conditions as RuleCondition[], actions: r.actions as RuleAction[], strict: r.strict ?? true }))
     .filter((r) => r.actions.some((a) => a.type === 'setCategory' && a.value));
 
   const result = new Map<string, { categoryId: string; categoryName: string } | null>();
@@ -388,7 +388,10 @@ async function suggestCategoriesForRows(
     let matched: { categoryId: string; categoryName: string } | null = null;
     for (const rule of activeRules) {
       const tx = { description: row.description, amount: row.amount };
-      if (rule.conditions.every((c) => evalRuleCond(c, tx))) {
+      const matchedRule = rule.strict
+        ? rule.conditions.every((c) => evalRuleCond(c, tx))
+        : rule.conditions.some((c) => evalRuleCond(c, tx));
+      if (matchedRule) {
         const action = rule.actions.find((a) => a.type === 'setCategory' && a.value);
         if (action?.value) {
           matched = { categoryId: action.value, categoryName: catMap.get(action.value) ?? 'Unknown' };

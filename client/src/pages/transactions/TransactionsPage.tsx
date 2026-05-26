@@ -20,6 +20,7 @@ import { ReceiptOcrModal } from './components/ReceiptOcrModal';
 import { InstitutionLogo } from '@/components/ui';
 import { InlineSuggestionStrip } from './components/InlineSuggestionStrip';
 import { getCategoryPillStyle } from '@/lib/displayStyles';
+import { buildTransactionRulePrefill } from './rulePrefill';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -377,11 +378,12 @@ interface DrawerProps {
   transaction: Transaction | null;
   categories: Category[];
   accounts: Account[];
+  onCreateRule: (txn: Transaction) => void;
   onClose: () => void;
   onSaved: () => void;
 }
 
-function TransactionDrawer({ transaction, categories, accounts, onClose, onSaved }: DrawerProps) {
+function TransactionDrawer({ transaction, categories, accounts, onCreateRule, onClose, onSaved }: DrawerProps) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<Partial<Transaction> & { tagInput?: string }>({});
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -800,7 +802,14 @@ function TransactionDrawer({ transaction, categories, accounts, onClose, onSaved
 
         {/* Footer */}
         {transaction && (
-          <div className="px-5 py-4 border-t border-[var(--color-border)] flex gap-2 shrink-0">
+          <div className="px-5 py-4 border-t border-[var(--color-border)] flex flex-wrap gap-2 shrink-0">
+            <Button
+              variant="secondary"
+              icon={<Sparkles size={14} />}
+              onClick={() => onCreateRule(transaction)}
+            >
+              Create rule
+            </Button>
             <Button
               variant="primary"
               loading={saveMutation.isPending}
@@ -1407,6 +1416,7 @@ interface TransactionRowProps {
   onSelect: (id: string, checked: boolean) => void;
   onOpen: (txn: Transaction) => void;
   onMerchantEdit: (id: string, merchant: string) => void;
+  onCreateRule: (txn: Transaction) => void;
   onSplit: (txn: Transaction) => void;
   expandedReviewId: string | null;
   onToggleReview: (id: string) => void;
@@ -1415,7 +1425,7 @@ interface TransactionRowProps {
   budgetStatus: BudgetStatus;
 }
 
-function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSplit, expandedReviewId, onToggleReview, onReviewDone, categories, budgetStatus }: TransactionRowProps) {
+function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onCreateRule, onSplit, expandedReviewId, onToggleReview, onReviewDone, categories, budgetStatus }: TransactionRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(txn.merchantName);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1543,7 +1553,17 @@ function TransactionRow({ txn, selected, onSelect, onOpen, onMerchantEdit, onSpl
         </div>
       </div>
 
-      {/* Split button — hidden on mobile */}
+      {/* Row actions — hidden on mobile */}
+      <button
+        className="hidden sm:flex items-center justify-center gap-1 bg-transparent border-none cursor-pointer p-1.5 shrink-0 rounded-sm transition-colors duration-150 hover:bg-[var(--color-surface-hover)]"
+        onClick={(e) => { e.stopPropagation(); onCreateRule(txn); }}
+        title="Create rule from transaction"
+        aria-label="Create rule from transaction"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        <Sparkles size={14} />
+      </button>
+
       <button
         className="hidden sm:flex items-center justify-center gap-1 bg-transparent border-none cursor-pointer p-1.5 shrink-0 rounded-sm transition-colors duration-150 hover:bg-[var(--color-surface-hover)]"
         onClick={(e) => { e.stopPropagation(); onSplit(txn); }}
@@ -1760,6 +1780,12 @@ export default function TransactionsPage() {
 
   const accounts = accountsData?.groups?.flatMap((g) => g.accounts) ?? [];
   const categories = categoriesData ?? [];
+
+  const handleCreateRuleFromTransaction = (txn: Transaction) => {
+    navigate(`/rules?prefill=${encodeURIComponent(JSON.stringify(
+      buildTransactionRulePrefill(txn),
+    ))}`);
+  };
   const transactions: Transaction[] = txnPages?.pages.flatMap((p) => p.transactions) ?? [];
 
   // Cleanup polling interval on unmount
@@ -2257,6 +2283,7 @@ export default function TransactionsPage() {
                     onSelect={toggleSelect}
                     onOpen={setDrawerTxn}
                     onMerchantEdit={handleMerchantEdit}
+                    onCreateRule={handleCreateRuleFromTransaction}
                     onSplit={setSplitTxn}
                     expandedReviewId={expandedReviewId}
                     onToggleReview={(id) =>
@@ -2313,6 +2340,7 @@ export default function TransactionsPage() {
         transaction={drawerTxn}
         categories={categories}
         accounts={accounts}
+        onCreateRule={handleCreateRuleFromTransaction}
         onClose={() => setDrawerTxn(null)}
         onSaved={() => setDrawerTxn(null)}
       />

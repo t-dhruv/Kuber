@@ -299,7 +299,7 @@ export async function startBatchAutoCategorize(
         amount:      Number(txn.amountDecimal),
         notes:       txn.notes,
       };
-      if (ruleMatches(conditions, matchInput)) {
+      if (ruleMatches(conditions, matchInput, rule.strict ?? true)) {
         await prisma.transactionJournal.update({
           where: { id: txn.id },
           data: { categoryId: setCatAction.value!, needsReview: false },
