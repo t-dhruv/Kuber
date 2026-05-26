@@ -25,7 +25,8 @@ interface Props {
     categoryId?: string,
     createCategory?: { name: string; type: string; icon?: string | null }
   ) => Promise<void>;
-  onCreateRule?: (pattern: string) => void;
+  onSuggestRule?: (pattern: string) => void;
+  onCreateRule?: (transaction: ReviewTransaction) => void;
 }
 
 function confidenceColor(confidence: number | null): string {
@@ -35,7 +36,7 @@ function confidenceColor(confidence: number | null): string {
   return 'bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]';
 }
 
-export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, onCreateRule }: Props) {
+export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, onSuggestRule, onCreateRule }: Props) {
   const [mode, setMode] = useState<'idle' | 'rejecting' | 'creating'>('idle');
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -66,7 +67,7 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, 
     try {
       await onConfirm(txn.id, 'reject', selectedCategoryId);
       if (selectedCategoryId !== txn.aiSuggestedCategoryId) {
-        onCreateRule?.(txn.description);
+        onSuggestRule?.(txn.description);
       }
     } finally {
       setLoading(false);
@@ -96,7 +97,7 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, 
   return (
     <div className="p-4 border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-surface)]">
       {/* Top row */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex-1 min-w-0">
           <p className="font-medium text-[var(--color-text)] truncate">{txn.description}</p>
           <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
@@ -110,7 +111,7 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, 
 
       {/* Suggestion row */}
       <div className="flex items-center justify-between mt-3 gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {isNoMatch ? (
             <span className="text-sm text-[var(--color-text-secondary)]">
               AI suggests new category:{' '}
@@ -132,7 +133,12 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, 
         </div>
 
         {mode === 'idle' && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {onCreateRule && (
+              <Button size="sm" variant="ghost" onClick={() => onCreateRule(txn)} disabled={loading}>
+                <Plus size={14} className="mr-1" /> Create rule
+              </Button>
+            )}
             {!isNoMatch && (
               <Button size="sm" onClick={handleApprove} disabled={loading}>
                 <Check size={14} className="mr-1" /> Approve
@@ -155,7 +161,7 @@ export function ReviewTransactionRow({ transaction: txn, categories, onConfirm, 
 
       {/* Reject — pick category */}
       {mode === 'rejecting' && (
-        <div className="flex items-center gap-2 mt-3">
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
           <CategoryCombobox
             categories={categories}
             value={selectedCategoryId}

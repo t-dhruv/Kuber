@@ -88,7 +88,7 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
       aria-modal="true"
       aria-labelledby={title ? 'modal-title' : undefined}
       aria-describedby={description ? 'modal-description' : undefined}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-3 sm:p-4"
       onClick={handleBackdropClick}
     >
       {/* Backdrop */}
@@ -97,11 +97,11 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
       {/* Panel */}
       <div
         ref={contentRef}
-        className={`relative z-10 w-full ${sizeStyles[size]} rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] border border-[var(--color-border)]`}
+        className={`relative z-10 flex max-h-[calc(100dvh-1.5rem)] w-full ${sizeStyles[size]} flex-col overflow-hidden rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] border border-[var(--color-border)] sm:max-h-[calc(100dvh-2rem)]`}
       >
         {/* Header */}
         {(title || description) && (
-          <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b border-[var(--color-border)]">
+          <div className="flex shrink-0 items-start justify-between gap-4 px-4 pt-5 pb-4 border-b border-[var(--color-border)] sm:px-6 sm:pt-6">
             <div>
               {title && <h2 id="modal-title" className="text-base font-semibold text-[var(--color-text)]">{title}</h2>}
               {description && <p id="modal-description" className="mt-1 text-sm text-[var(--color-text-muted)]">{description}</p>}
@@ -118,7 +118,7 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
         )}
 
         {/* Content */}
-        <div className="px-6 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">{children}</div>
       </div>
     </div>,
     document.body
@@ -130,7 +130,7 @@ interface ModalFooterProps extends HTMLAttributes<HTMLDivElement> {}
 export function ModalFooter({ children, className = '', ...props }: ModalFooterProps) {
   return (
     <div
-      className={`flex items-center justify-end gap-3 pt-4 border-t border-[var(--color-border)] mt-4 ${className}`}
+      className={`sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-3 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 pt-4 pb-1 sm:-mx-6 sm:px-6 ${className}`}
       {...props}
     >
       {children}

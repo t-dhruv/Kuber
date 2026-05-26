@@ -7,6 +7,7 @@ import { Button, Skeleton, notify } from '@/components/ui';
 import { ReviewTransactionRow, ReviewTransaction } from './components/ReviewTransactionRow';
 import { RuleSuggestionBanner, RuleSuggestion } from './components/RuleSuggestionBanner';
 import type { ReviewCategory } from './types';
+import { buildTransactionRulePrefill } from './rulePrefill';
 
 interface ReviewQueueResponse {
   transactions: ReviewTransaction[];
@@ -126,9 +127,15 @@ export default function ReviewQueuePage() {
     setPendingRulePattern(val);
   };
 
-  const handleCreateRuleFromRow = (description: string) => {
+  const handleSuggestRuleFromRow = (description: string) => {
     const firstToken = description.toLowerCase().split(/[\s_-]/)[0].trim();
     setPendingRulePatternPersisted(firstToken);
+  };
+
+  const handleCreateRuleFromTransaction = (transaction: ReviewTransaction) => {
+    navigate(`/rules?prefill=${encodeURIComponent(JSON.stringify(
+      buildTransactionRulePrefill(transaction),
+    ))}`);
   };
 
   const handleCreateRule = (suggestion: RuleSuggestion) => {
@@ -149,9 +156,9 @@ export default function ReviewQueuePage() {
   const hasMatched = transactions.some((t) => t.aiSuggestedCategoryId !== null);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6">
+    <div className="w-full max-w-none px-3 py-4 sm:px-4 sm:py-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--color-text)]">Review AI Suggestions</h1>
           {!isLoading && (
@@ -160,7 +167,7 @@ export default function ReviewQueuePage() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="ghost"
             onClick={() => reRunMutation.mutate()}
@@ -275,7 +282,8 @@ export default function ReviewQueuePage() {
                   transaction={txn}
                   categories={categories}
                   onConfirm={handleConfirm}
-                  onCreateRule={handleCreateRuleFromRow}
+                  onSuggestRule={handleSuggestRuleFromRow}
+                  onCreateRule={handleCreateRuleFromTransaction}
                 />
               ))}
           </div>
@@ -297,7 +305,8 @@ export default function ReviewQueuePage() {
                   transaction={txn}
                   categories={categories}
                   onConfirm={handleConfirm}
-                  onCreateRule={handleCreateRuleFromRow}
+                  onSuggestRule={handleSuggestRuleFromRow}
+                  onCreateRule={handleCreateRuleFromTransaction}
                 />
               ))}
           </div>

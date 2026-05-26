@@ -54,8 +54,15 @@ export function evalCondition(cond: RuleCondition, tx: RuleMatchInput): boolean 
   return false;
 }
 
-export function ruleMatches(conditions: RuleCondition[], tx: RuleMatchInput): boolean {
-  return conditions.every(c => evalCondition(c, tx));
+export function ruleMatches(
+  conditions: RuleCondition[],
+  tx: RuleMatchInput,
+  strict = true,
+): boolean {
+  if (conditions.length === 0) return false;
+  return strict
+    ? conditions.every(c => evalCondition(c, tx))
+    : conditions.some(c => evalCondition(c, tx));
 }
 
 function sortByOrder<T extends { sortOrder?: number }>(items: T[]): T[] {
@@ -248,7 +255,7 @@ export async function applyActiveRulesToTransaction(
   });
   const fired: string[] = [];
   for (const rule of rules) {
-    if (ruleMatches(rule.conditions as RuleCondition[], txData)) {
+    if (ruleMatches(rule.conditions as RuleCondition[], txData, rule.strict ?? true)) {
       await applyActionsToTransaction(prisma, txId, rule.actions as RuleAction[], householdId);
       fired.push(rule.id);
     }
@@ -271,7 +278,7 @@ export async function applyActiveRulesToTransactionGrouped(
   for (const group of groups) {
     let groupFired = false;
     for (const rule of group.rules) {
-      if (ruleMatches(rule.conditions as RuleCondition[], txData)) {
+      if (ruleMatches(rule.conditions as RuleCondition[], txData, rule.strict ?? true)) {
         await applyActionsToTransaction(prisma, txId, rule.actions as RuleAction[], householdId);
         fired.push(rule.id);
         groupFired = true;
