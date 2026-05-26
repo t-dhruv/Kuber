@@ -105,6 +105,7 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
   const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [reviewedCount, setReviewedCount] = useState(0);
+  const [dismissAllConfirm, setDismissAllConfirm] = useState(false);
 
   const { data, isLoading } = useQuery<DuplicatesResponse>({
     queryKey: ['transactions', 'duplicates'],
@@ -115,22 +116,27 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
 
   const groups = data?.groups ?? [];
   const total = groups.length;
-  const allDone = total > 0 && reviewedCount >= total;
+  const allDone = !isLoading && total === 0 && reviewedCount > 0;
   const current = groups[currentIndex];
 
-  function advanceOrClose() {
+  function removeReviewedGroup(ids: string[]) {
+    const idSet = new Set(ids);
+    queryClient.setQueryData<DuplicatesResponse>(['transactions', 'duplicates'], (prev) => {
+      if (!prev) return prev;
+      const nextGroups = prev.groups.filter((group) =>
+        !group.transactions.some((tx) => idSet.has(tx.id))
+      );
+      return { count: nextGroups.length, groups: nextGroups };
+    });
     setReviewedCount((c) => c + 1);
-    if (currentIndex < total - 1) {
-      setCurrentIndex((i) => i + 1);
-    }
+    setCurrentIndex((i) => Math.max(0, Math.min(i, total - 2)));
   }
 
   const dismissMutation = useMutation({
     mutationFn: (ids: { transactionId1: string; transactionId2: string }) =>
       api.post('/transactions/duplicates/dismiss', ids),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions', 'duplicates'] });
-      advanceOrClose();
+    onSuccess: (_data, ids) => {
+      removeReviewedGroup([ids.transactionId1, ids.transactionId2]);
     },
     onError: (err: AxiosError<{ error: string }>) => {
       toast.error(err.response?.data?.error ?? 'Failed to dismiss');
@@ -140,10 +146,9 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
   const mergeMutation = useMutation({
     mutationFn: (ids: { keepId: string; removeId: string }) =>
       api.post('/transactions/duplicates/merge', ids),
-    onSuccess: () => {
+    onSuccess: (_data, ids) => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['transactions', 'duplicates'] });
-      advanceOrClose();
+      removeReviewedGroup([ids.keepId, ids.removeId]);
     },
     onError: (err: AxiosError<{ error: string }>) => {
       toast.error(err.response?.data?.error ?? 'Failed to merge');
@@ -152,9 +157,32 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
 
   const isBusy = dismissMutation.isPending || mergeMutation.isPending;
 
+  const dismissAllMutation = useMutation({
+    mutationFn: async () => {
+      for (const group of groups) {
+        await api.post('/transactions/duplicates/dismiss', {
+          transactionId1: group.transactions[0].id,
+          transactionId2: group.transactions[1].id,
+        });
+      }
+    },
+    onSuccess: () => {
+      setReviewedCount((c) => c + groups.length);
+      setCurrentIndex(0);
+      setDismissAllConfirm(false);
+      queryClient.setQueryData<DuplicatesResponse>(['transactions', 'duplicates'], { count: 0, groups: [] });
+      queryClient.invalidateQueries({ queryKey: ['transactions', 'duplicates', 'count'] });
+      toast.success('Dismissed all duplicate reviews');
+    },
+    onError: (err: AxiosError<{ error: string }>) => {
+      toast.error(err.response?.data?.error ?? 'Failed to dismiss all duplicate reviews');
+    },
+  });
+
   function handleClose() {
     setCurrentIndex(0);
     setReviewedCount(0);
+    setDismissAllConfirm(false);
     onClose();
   }
 
@@ -205,6 +233,15 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
             </div>
 
             <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={isBusy || dismissAllMutation.isPending}
+                onClick={() => setDismissAllConfirm(true)}
+              >
+                Dismiss All
+              </Button>
+
               {/* Confidence badge */}
               <span
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-full)] text-xs font-semibold"
@@ -308,6 +345,29 @@ export function DuplicateReviewModal({ isOpen, onClose }: DuplicateReviewModalPr
           </div>
         ) : null}
       </ModalFooter>
+
+      <Modal
+        open={dismissAllConfirm}
+        onClose={() => setDismissAllConfirm(false)}
+        title="Dismiss All Duplicate Reviews"
+        size="sm"
+      >
+        <p className="text-sm text-[var(--color-text)]">
+          Mark all {groups.length} visible duplicate review{groups.length !== 1 ? 's' : ''} as not duplicates?
+        </p>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setDismissAllConfirm(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            loading={dismissAllMutation.isPending}
+            onClick={() => dismissAllMutation.mutate()}
+          >
+            Dismiss all
+          </Button>
+        </ModalFooter>
+      </Modal>
     </Modal>
   );
 }

@@ -127,6 +127,14 @@ function parseEncryptedFieldInput(value: unknown, fieldName: string) {
   return parsed.data;
 }
 
+export function getAccountEntryAmount(
+  journal: { amountDecimal: unknown; entries?: Array<{ accountId: string; amountDecimal: unknown }> },
+  accountId: string,
+): number {
+  const entry = journal.entries?.find((e) => e.accountId === accountId);
+  return Number(entry?.amountDecimal ?? journal.amountDecimal);
+}
+
 // GET /api/v1/accounts
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
@@ -293,7 +301,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         isHidden: false,
         isDeleted: false,
       },
-      select: { date: true, amountDecimal: true },
+      select: { date: true, amountDecimal: true, entries: { select: { accountId: true, amountDecimal: true } } },
       orderBy: { date: 'asc' },
     });
 
@@ -301,7 +309,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     const monthlySums = new Map<string, number>();
     for (const j of journals) {
       const key = `${j.date.getFullYear()}-${String(j.date.getMonth() + 1).padStart(2, '0')}`;
-      monthlySums.set(key, (monthlySums.get(key) ?? 0) + Number(j.amountDecimal));
+      monthlySums.set(key, (monthlySums.get(key) ?? 0) + getAccountEntryAmount(j, id));
     }
 
     // Back-project from current balance: start at current, walk backwards subtracting each month's net
@@ -323,6 +331,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       orderBy: { date: 'desc' },
       take: 10,
       include: {
+        entries: { select: { accountId: true, amountDecimal: true } },
         category: { select: { name: true, icon: true } },
         merchant: { select: { displayName: true } },
       },
@@ -332,7 +341,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       id: j.id,
       date: j.date.toISOString(),
       merchantName: j.merchant?.displayName ?? j.description,
-      amount: Number(j.amountDecimal),
+      amount: getAccountEntryAmount(j, id),
       categoryName: j.category?.name ?? null,
       categoryIcon: j.category?.icon ?? null,
     }));
@@ -651,6 +660,7 @@ router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
         skip,
         take: limit,
         include: {
+          entries: { select: { accountId: true, amountDecimal: true } },
           category: { select: { name: true, icon: true } },
           merchant: { select: { displayName: true } },
         },
@@ -662,7 +672,7 @@ router.get('/:id/transactions', async (req: AuthRequest, res: Response) => {
       date: j.date.toISOString(),
       description: j.description,
       merchantName: j.merchant?.displayName ?? j.description,
-      amount: Number(j.amountDecimal),
+      amount: getAccountEntryAmount(j, id),
       categoryName: j.category?.name ?? null,
       categoryIcon: j.category?.icon ?? null,
       isRecurring: j.isRecurring,

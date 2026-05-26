@@ -130,10 +130,17 @@ const PORT = process.env.PORT ?? 9002;
 const clientUrl = process.env.CLIENT_URL ?? 'http://localhost:3000';
 
 // ── Rate limiters ─────────────────────────────────────────────────────────────
+function positiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 // Auth endpoints: strict limit to slow brute-force attacks
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
+  windowMs: positiveIntEnv('AUTH_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
+  max: positiveIntEnv('AUTH_RATE_LIMIT_MAX', 50),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
@@ -142,8 +149,8 @@ const authLimiter = rateLimit({
 
 // General API: generous limit to prevent abuse
 const apiLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 200,
+  windowMs: positiveIntEnv('API_RATE_LIMIT_WINDOW_MS', 60 * 1000),
+  max: positiveIntEnv('API_RATE_LIMIT_MAX', 2000),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },

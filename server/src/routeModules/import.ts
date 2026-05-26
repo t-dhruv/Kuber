@@ -21,6 +21,8 @@ import { detectColumnMapping } from '../lib/csvColumnDetector.js';
 import { detectLocaleFormat, parseAmount, mergeDebitCredit } from '../lib/amountParser.js';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration.js';
 import { saveImport, getImportSessions, undoImportSession } from '../services/importService.js';
+import { applyActiveRulesToJournal } from '../lib/ruleEngine.js';
+import { buildRuleMatchInputFromJournal } from '../lib/transactionJournalService.js';
 
 const router = Router();
 
@@ -688,11 +690,12 @@ router.post('/webhook', async (req: AuthRequest, res) => {
     let imported = 0;
     if (toCreate.length > 0) {
       const virtualAccounts = await getVirtualAccountsByType(req.householdId!);
+      const journalIds: string[] = [];
 
       await prisma.$transaction(async (tx) => {
         for (const row of toCreate) {
           try {
-            await createJournalFromLegacyTransaction(
+            const journal = await createJournalFromLegacyTransaction(
               tx,
               {
                 householdId: row.householdId,
@@ -704,6 +707,7 @@ router.post('/webhook', async (req: AuthRequest, res) => {
               row.amount < 0 ? (virtualAccounts.expenseAccountId ?? undefined) : undefined,
               row.amount > 0 ? (virtualAccounts.revenueAccountId ?? undefined) : undefined,
             );
+            journalIds.push(journal.journalId);
             imported++;
           } catch (err) {
             // Skip individual errors in bulk import
@@ -711,6 +715,24 @@ router.post('/webhook', async (req: AuthRequest, res) => {
           }
         }
       });
+
+      const journals = await prisma.transactionJournal.findMany({
+        where: { id: { in: journalIds }, householdId: req.householdId!, isDeleted: false },
+        include: {
+          entries: true,
+          tags: { include: { tag: true } },
+          meta: true,
+          category: true,
+        },
+      });
+
+      for (const journal of journals) {
+        await applyActiveRulesToJournal(prisma, {
+          journalId: journal.id,
+          householdId: req.householdId!,
+          matchInput: buildRuleMatchInputFromJournal(journal),
+        });
+      }
     }
 
     const webhookJournalIds = imported > 0
