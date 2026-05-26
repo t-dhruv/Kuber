@@ -1074,6 +1074,7 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
   const [localNeedsReview, setLocalNeedsReview] = useState(searchParams.get('needsReview') === 'true');
   const [localRecurring, setLocalRecurring] = useState(searchParams.get('recurring') === 'true');
   const [localHidden, setLocalHidden] = useState(searchParams.get('hidden') === 'true');
+  const [localUncategorized, setLocalUncategorized] = useState(searchParams.get('uncategorized') === 'true');
   const [localType, setLocalType] = useState<'all' | 'income' | 'expense'>(
     (searchParams.get('type') as 'income' | 'expense' | null) ?? 'all'
   );
@@ -1103,6 +1104,7 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
     next.delete('needsReview');
     next.delete('recurring');
     next.delete('hidden');
+    next.delete('uncategorized');
     next.delete('type');
     next.delete('pending');
     next.delete('from');
@@ -1116,6 +1118,7 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
     if (localNeedsReview) next.set('needsReview', 'true');
     if (localRecurring) next.set('recurring', 'true');
     if (localHidden) next.set('hidden', 'true');
+    if (localUncategorized) next.set('uncategorized', 'true');
     if (localType !== 'all') next.set('type', localType);
     if (localPending) next.set('pending', 'true');
     if (orderedRange.from) next.set('from', orderedRange.from);
@@ -1133,6 +1136,7 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
     setLocalNeedsReview(false);
     setLocalRecurring(false);
     setLocalHidden(false);
+    setLocalUncategorized(false);
     setLocalType('all');
     setLocalPending(false);
     setLocalFrom('');
@@ -1223,11 +1227,24 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
               Categories
             </div>
             <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={localUncategorized}
+                  onChange={(e) => {
+                    setLocalUncategorized(e.target.checked);
+                    if (e.target.checked) setLocalCategoryIds([]);
+                  }}
+                  className="accent-[var(--color-accent)]"
+                />
+                <span className="text-sm text-[var(--color-text)]">Uncategorized only</span>
+              </label>
               {categories.map((cat) => (
                 <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={localCategoryIds.includes(cat.id)}
+                    disabled={localUncategorized}
                     onChange={() => toggleCategory(cat.id)}
                     className="accent-[var(--color-accent)]"
                   />
@@ -1887,6 +1904,7 @@ export default function TransactionsPage() {
     searchParams.get('needsReview'),
     searchParams.get('recurring'),
     searchParams.get('hidden'),
+    searchParams.get('uncategorized'),
     searchParams.get('type'),
     searchParams.get('pending'),
     searchParams.get('from'),

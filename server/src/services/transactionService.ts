@@ -113,7 +113,8 @@ interface ListTransactionsParams {
   page?: number;
   cursorParam?: string;
   accountId?: string;
-  categoryId?: string;
+  categoryId?: string | string[];
+  uncategorized?: string;
   startDate?: string;
   endDate?: string;
   from?: string;
@@ -130,6 +131,130 @@ interface ListTransactionsParams {
   pending?: string;
 }
 
+type JournalCursor = { date: Date; id: string };
+
+export function buildTransactionJournalWhere(params: {
+  householdId: string;
+  accountId?: string;
+  categoryIds?: string[];
+  uncategorized?: string;
+  startDate?: string;
+  endDate?: string;
+  from?: string;
+  to?: string;
+  minAmount?: string;
+  maxAmount?: string;
+  search?: string;
+  isRecurring?: string;
+  needsReview?: string;
+  tagIds?: string;
+  type?: 'income' | 'expense';
+  pending?: string;
+  cursor?: JournalCursor;
+  sortOrder?: 'asc' | 'desc';
+}) {
+  const {
+    householdId,
+    accountId,
+    categoryIds = [],
+    uncategorized,
+    startDate,
+    endDate,
+    from,
+    to,
+    minAmount,
+    maxAmount,
+    search,
+    isRecurring,
+    needsReview,
+    tagIds,
+    type,
+    pending,
+    cursor,
+    sortOrder = 'desc',
+  } = params;
+
+  const where: any = { householdId, isDeleted: false, isHidden: false };
+  const andClauses: any[] = [];
+
+  if (accountId) where.entries = { some: { accountId } };
+  if (uncategorized === 'true') {
+    where.categoryId = null;
+  } else if (categoryIds.length === 1) {
+    where.categoryId = categoryIds[0];
+  } else if (categoryIds.length > 1) {
+    where.categoryId = { in: categoryIds };
+  }
+
+  const dateFrom = from ?? startDate;
+  const dateTo = to ?? endDate;
+  if (dateFrom || dateTo) {
+    where.date = {};
+    if (dateFrom) where.date.gte = new Date(dateFrom);
+    if (dateTo) where.date.lte = new Date(dateTo);
+  }
+
+  if (minAmount !== undefined || maxAmount !== undefined) {
+    where.amountDecimal = {};
+    if (minAmount !== undefined) where.amountDecimal.gte = parseFloat(minAmount);
+    if (maxAmount !== undefined) where.amountDecimal.lte = parseFloat(maxAmount);
+  }
+
+  if (type === 'income') {
+    where.amountDecimal = { ...(where.amountDecimal ?? {}), gt: 0 };
+  } else if (type === 'expense') {
+    where.amountDecimal = { ...(where.amountDecimal ?? {}), lt: 0 };
+  }
+
+  if (pending !== undefined) where.isPending = pending === 'true';
+  if (isRecurring !== undefined) where.isRecurring = isRecurring === 'true';
+  if (needsReview !== undefined) where.needsReview = needsReview === 'true';
+
+  if (tagIds) {
+    const ids = tagIds.split(',').map(s => s.trim()).filter(Boolean);
+    if (ids.length > 0) where.tags = { some: { tagId: { in: ids } } };
+  }
+
+  if (search) {
+    const parsed = buildSearchWhere(search);
+    if (parsed.AND && (parsed.AND as unknown[]).length > 0) {
+      andClauses.push(...(parsed.AND as unknown[]));
+    } else {
+      andClauses.push({
+        OR: [
+          { description: { contains: search, mode: 'insensitive' } },
+          { originalDescription: { contains: search, mode: 'insensitive' } },
+          {
+            merchant: {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { displayName: { contains: search, mode: 'insensitive' } },
+              ],
+            },
+          },
+        ],
+      });
+    }
+  }
+
+  if (cursor) {
+    andClauses.push({
+      OR: sortOrder === 'desc'
+        ? [
+            { date: { lt: cursor.date } },
+            { date: cursor.date, id: { lt: cursor.id } },
+          ]
+        : [
+            { date: { gt: cursor.date } },
+            { date: cursor.date, id: { gt: cursor.id } },
+          ],
+    });
+  }
+
+  if (andClauses.length > 0) where.AND = andClauses;
+  return where;
+}
+
 export async function listTransactions(params: ListTransactionsParams) {
   const {
     householdId,
@@ -138,6 +263,7 @@ export async function listTransactions(params: ListTransactionsParams) {
     cursorParam,
     accountId,
     categoryId,
+    uncategorized,
     startDate,
     endDate,
     from,
@@ -154,67 +280,7 @@ export async function listTransactions(params: ListTransactionsParams) {
     pending,
   } = params;
 
-  // Build where clause
-  const where: any = { householdId, ...NOT_DELETED };
-  where.isHidden = false;
-
-  if (accountId) where.accountId = accountId;
-  if (categoryId) where.categoryId = categoryId;
-
-  // Date filters: from/to take precedence, fall back to legacy startDate/endDate
-  const dateFrom = from ?? startDate;
-  const dateTo = to ?? endDate;
-  if (dateFrom || dateTo) {
-    where.date = {};
-    if (dateFrom) where.date.gte = new Date(dateFrom);
-    if (dateTo) where.date.lte = new Date(dateTo);
-  }
-
-  if (minAmount !== undefined || maxAmount !== undefined) {
-    where.amount = {};
-    if (minAmount !== undefined) where.amount.gte = parseFloat(minAmount);
-    if (maxAmount !== undefined) where.amount.lte = parseFloat(maxAmount);
-  }
-
-  // Type filter (income / expense)
-  if (type === 'income') {
-    where.amount = { ...(where.amount ?? {}), gt: 0 };
-  } else if (type === 'expense') {
-    where.amount = { ...(where.amount ?? {}), lt: 0 };
-  }
-
-  // Pending filter
-  if (pending !== undefined) {
-    where.isPending = pending === 'true';
-  }
-
-  if (search) {
-    const parsed = buildSearchWhere(search);
-    if (parsed.AND && (parsed.AND as unknown[]).length > 0) {
-      Object.assign(where, parsed);
-    } else {
-      where.OR = [
-        { description: { contains: search, mode: 'insensitive' } },
-        { originalDescription: { contains: search, mode: 'insensitive' } },
-        {
-          merchant: {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } },
-              { displayName: { contains: search, mode: 'insensitive' } },
-            ],
-          },
-        },
-      ];
-    }
-  }
-
-  if (isRecurring !== undefined) where.isRecurring = isRecurring === 'true';
-  if (needsReview !== undefined) where.needsReview = needsReview === 'true';
-
-  if (tagIds) {
-    const ids = tagIds.split(',').map(s => s.trim()).filter(Boolean);
-    if (ids.length > 0) where.tags = { some: { tagId: { in: ids } } };
-  }
+  const categoryIds = Array.isArray(categoryId) ? categoryId : categoryId ? [categoryId] : [];
 
   const sortField = sort === 'amount' ? 'amountDecimal' : 'date';
   const sortOrder = order === 'asc' ? 'asc' : 'desc';
@@ -231,19 +297,26 @@ export async function listTransactions(params: ListTransactionsParams) {
     }
 
     const cursorDate = new Date(cursor.date);
-    const journalWhere: any = { ...where, isDeleted: false };
-
-    if (sortOrder === 'desc') {
-      journalWhere.OR = [
-        { date: { lt: cursorDate } },
-        { date: cursorDate, id: { lt: cursor.id } },
-      ];
-    } else {
-      journalWhere.OR = [
-        { date: { gt: cursorDate } },
-        { date: cursorDate, id: { gt: cursor.id } },
-      ];
-    }
+    const journalWhere = buildTransactionJournalWhere({
+      householdId,
+      accountId,
+      categoryIds,
+      uncategorized,
+      startDate,
+      endDate,
+      from,
+      to,
+      minAmount,
+      maxAmount,
+      search,
+      isRecurring,
+      needsReview,
+      tagIds,
+      type,
+      pending,
+      cursor: { date: cursorDate, id: cursor.id },
+      sortOrder,
+    });
     const rows = await prisma.transactionJournal.findMany({
       where: journalWhere,
       include: {
@@ -276,17 +349,24 @@ export async function listTransactions(params: ListTransactionsParams) {
   // ── Offset-based path (journal) ────────────────────────────────────────────
   const skip = (page - 1) * limit;
 
-  // Build journal where directly from parsed filter vars (mirrors cursor path)
-  const journalOffsetWhere: any = { householdId, isDeleted: false, isHidden: false };
-  if (accountId) journalOffsetWhere.entries = { some: { accountId } };
-  if (categoryId) journalOffsetWhere.categoryId = categoryId;
-  if (where.date) journalOffsetWhere.date = where.date;
-  if (where.amount) journalOffsetWhere.amountDecimal = where.amount;
-  if (where.isPending !== undefined) journalOffsetWhere.isPending = where.isPending;
-  if (where.isRecurring !== undefined) journalOffsetWhere.isRecurring = where.isRecurring;
-  if (where.needsReview !== undefined) journalOffsetWhere.needsReview = where.needsReview;
-  if (where.tags) journalOffsetWhere.tags = where.tags;
-  if (where.OR) journalOffsetWhere.OR = where.OR;
+  const journalOffsetWhere = buildTransactionJournalWhere({
+    householdId,
+    accountId,
+    categoryIds,
+    uncategorized,
+    startDate,
+    endDate,
+    from,
+    to,
+    minAmount,
+    maxAmount,
+    search,
+    isRecurring,
+    needsReview,
+    tagIds,
+    type,
+    pending,
+  });
 
   const [transactions, total] = await Promise.all([
     prisma.transactionJournal.findMany({

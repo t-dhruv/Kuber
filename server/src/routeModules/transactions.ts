@@ -55,7 +55,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     const ListQuerySchema = z.object({
       accountId:   z.string().optional(),
-      categoryId:  z.string().optional(),
+      categoryId:  z.union([z.string(), z.array(z.string())]).optional(),
+      uncategorized: z.enum(['true', 'false']).optional(),
       startDate:   z.string().optional(),
       endDate:     z.string().optional(),
       from:        z.string().optional(),
@@ -468,9 +469,8 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
     const virtualAccounts = await getVirtualAccountsByType(householdId);
 
     // Run all inserts in a transaction (including balance update for atomicity)
-    const [created, createdJournals] = await prisma.$transaction(async (tx) => {
+    const created = await prisma.$transaction(async (tx) => {
       const results: string[] = [];
-      const journals: any[] = [];
       let totalAmount = 0;
 
       for (const row of parsed) {
@@ -516,7 +516,6 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
           row.amount < 0 ? (virtualAccounts.expenseAccountId ?? undefined) : undefined,
           row.amount > 0 ? (virtualAccounts.revenueAccountId ?? undefined) : undefined,
         );
-        journals.push(journal);
         results.push(journal.journalId);
         totalAmount += row.amount;
       }
@@ -529,8 +528,20 @@ router.post('/import', upload.single('file'), async (req: AuthRequest, res: Resp
         });
       }
 
-      return [results, journals] as const;
+      return results;
     });
+
+    const createdJournals = created.length > 0
+      ? await prisma.transactionJournal.findMany({
+          where: { id: { in: created }, householdId, isDeleted: false },
+          include: {
+            entries: true,
+            tags: { include: { tag: true } },
+            meta: true,
+            category: true,
+          },
+        })
+      : [];
 
     for (const journal of createdJournals) {
       await applyActiveRulesToJournal(prisma, {

@@ -17,6 +17,10 @@ All variables live in a single `.env` file at the repository root. The productio
 | `PORT` | No | `4000` | Port the Express server listens on inside its container. The nginx proxy routes to this internally. |
 | `NODE_ENV` | No | `production` | Set to `production` for deployments. Controls error verbosity and security headers. |
 | `CLIENT_URL` | Yes | `http://localhost` | Public-facing URL of your Kuber instance (no trailing slash). Used for CORS and email links. |
+| `API_RATE_LIMIT_WINDOW_MS` | No | `60000` | General API rate-limit window in milliseconds. |
+| `API_RATE_LIMIT_MAX` | No | `2000` | General API requests allowed per window per client IP. |
+| `AUTH_RATE_LIMIT_WINDOW_MS` | No | `900000` | Auth endpoint rate-limit window in milliseconds. |
+| `AUTH_RATE_LIMIT_MAX` | No | `50` | Auth requests allowed per window per client IP. |
 | `SMTP_HOST` | No | — | SMTP server hostname. Leave blank to disable email. Example: `smtp.gmail.com`. |
 | `SMTP_PORT` | No | `587` | SMTP port. `587` for STARTTLS (recommended), `465` for SSL. |
 | `SMTP_USER` | No | — | SMTP username / login email. |

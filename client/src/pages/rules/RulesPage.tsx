@@ -653,9 +653,9 @@ export default function RulesPage() {
       : (prefillForm ?? defaultForm());
 
   return (
-    <div className="max-w-[760px]">
+    <div className="w-full max-w-none">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-[var(--color-text)] m-0">
             Rules
@@ -665,7 +665,7 @@ export default function RulesPage() {
             conditions.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <input
             ref={importInputRef}
             type="file"
@@ -734,10 +734,10 @@ export default function RulesPage() {
           </Button>
         </Card>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
           {sortedRules.map((rule, idx) => (
             <Card key={rule.id} padding="md">
-              <div className="flex gap-3 items-start">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                 {/* Reorder buttons */}
                 <div className="flex flex-col gap-0.5 shrink-0 mt-0.5">
                   <button
@@ -843,7 +843,7 @@ export default function RulesPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-1.5 shrink-0">
+                <div className="flex flex-wrap gap-1.5 shrink-0 sm:justify-end">
                   <Button
                     variant="ghost"
                     size="sm"

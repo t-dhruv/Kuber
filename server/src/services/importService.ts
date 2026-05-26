@@ -9,6 +9,8 @@ import { createCheckpoint, rollbackCheckpoint } from '../lib/checkpoint';
 import { normalizeMerchant, buildLearningMap } from '../lib/autoCategorize';
 import { createJournalFromLegacyTransaction, getVirtualAccountsByType } from '../lib/legacyToJournalMigration';
 import { transactionsImportedTotal } from '../lib/metrics';
+import { applyActiveRulesToJournal } from '../lib/ruleEngine';
+import { buildRuleMatchInputFromJournal } from '../lib/transactionJournalService';
 
 // ─── DB Writes for Import Confirmation ────────────────────────────────────────
 
@@ -232,6 +234,24 @@ export async function saveImport(
       where: { id: accountId },
       data: { balance: { increment: importedAmountSum } },
     });
+
+    const importedJournals = await prisma.transactionJournal.findMany({
+      where: { id: { in: importedJournalIds }, householdId, isDeleted: false },
+      include: {
+        entries: true,
+        tags: { include: { tag: true } },
+        meta: true,
+        category: true,
+      },
+    });
+
+    for (const journal of importedJournals) {
+      await applyActiveRulesToJournal(prisma, {
+        journalId: journal.id,
+        householdId,
+        matchInput: buildRuleMatchInputFromJournal(journal),
+      });
+    }
   }
 
   // Create rollback checkpoint
