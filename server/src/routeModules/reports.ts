@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest } from '../middleware/auth';
@@ -19,6 +20,18 @@ import {
   type JournalReportGroupBy,
   type JournalReportMode,
 } from '../lib/journalReportingCore';
+import {
+  buildReportDrilldown,
+  fetchStandardAuditContext,
+  fetchStandardBudgetLimits,
+  fetchStandardInvestmentContext,
+  fetchStandardWealthContext,
+  fetchStandardReportRows,
+  normalizeReportQuery,
+  standardReportRegistry,
+  type StandardReportResponse,
+  type StandardReportType,
+} from '../lib/reporting/standard';
 
 const router = Router();
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -154,6 +167,183 @@ async function loadJournalRowsForRequest(req: AuthRequest, range?: { start: Date
     end: range?.end,
   });
 }
+
+const STANDARD_REPORT_LABELS: Record<StandardReportType, string> = {
+  overview: 'Overview Report',
+  income_vs_expense: 'Income vs Expense Report',
+  cash_flow: 'Cash Flow Report',
+  category: 'Category Report',
+  budget: 'Budget Report',
+  tag: 'Tag Report',
+  account: 'Account Report',
+  merchant: 'Merchant/Payee Report',
+  audit: 'Audit / Data Quality Report',
+  net_worth: 'Net Worth Report',
+  investment: 'Investment Report',
+};
+
+router.get('/standard/options', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const [accounts, categories, categoryGroups, budgets, tags, merchants] = await Promise.all([
+      prisma.account.findMany({
+        where: { householdId, isDeleted: false },
+        select: { id: true, name: true, type: true, currency: true },
+        orderBy: [{ isHidden: 'asc' }, { name: 'asc' }],
+      }),
+      prisma.category.findMany({
+        where: { householdId, isDeleted: false },
+        select: { id: true, name: true, type: true, groupId: true, icon: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+      prisma.categoryGroup.findMany({
+        where: { householdId },
+        select: { id: true, name: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+      prisma.budget.findMany({
+        where: { householdId, isDeleted: false },
+        select: { id: true, name: true, categoryId: true, category: { select: { name: true } } },
+        orderBy: [{ name: 'asc' }, { category: { name: 'asc' } }],
+      }),
+      prisma.tag.findMany({
+        where: { householdId },
+        select: { id: true, name: true, color: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.merchant.findMany({
+        where: { householdId },
+        select: { id: true, displayName: true },
+        orderBy: { displayName: 'asc' },
+      }),
+    ]);
+
+    return res.json({
+      reportTypes: Object.entries(STANDARD_REPORT_LABELS).map(([type, label]) => ({
+        type,
+        label,
+        available: type in standardReportRegistry,
+      })),
+      groupBy: ['day', 'week', 'month', 'quarter', 'year'],
+      comparisonModes: ['none', 'previous_period', 'previous_year'],
+      accounts,
+      categories,
+      categoryGroups,
+      budgets: budgets.map((budget) => ({
+        id: budget.id,
+        name: budget.name ?? budget.category?.name ?? 'Uncategorized Budget',
+        categoryId: budget.categoryId,
+        categoryName: budget.category?.name ?? null,
+      })),
+      tags,
+      merchants: merchants.map((merchant) => ({ id: merchant.id, name: merchant.displayName })),
+    });
+  } catch (err) {
+    req.log.error({ err }, 'reports/standard/options');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+async function buildStandardReportForRequest(req: AuthRequest): Promise<StandardReportResponse> {
+  const query = normalizeReportQuery(req.query as Record<string, unknown>);
+  const generator = standardReportRegistry[query.reportType];
+  if (!generator) throw new Error(`${STANDARD_REPORT_LABELS[query.reportType]} is not implemented yet`);
+  const rows = await fetchStandardReportRows({
+    householdId: req.householdId!,
+    startDate: query.startDate,
+    endDate: query.endDate,
+  });
+  const budgets = query.reportType === 'budget'
+    ? await fetchStandardBudgetLimits({
+        householdId: req.householdId!,
+        startDate: query.startDate,
+        endDate: query.endDate,
+        budgetIds: query.budgetIds,
+      })
+    : undefined;
+  const audit = query.reportType === 'audit'
+    ? await fetchStandardAuditContext({ householdId: req.householdId!, startDate: query.startDate, endDate: query.endDate })
+    : undefined;
+  const wealth = query.reportType === 'net_worth'
+    ? await fetchStandardWealthContext({ householdId: req.householdId!, startDate: query.startDate, endDate: query.endDate })
+    : undefined;
+  const investments = query.reportType === 'investment'
+    ? await fetchStandardInvestmentContext({ householdId: req.householdId!, startDate: query.startDate, endDate: query.endDate })
+    : undefined;
+  return generator({ query, rows, budgets, audit, wealth, investments });
+}
+
+router.get('/standard/generate', async (req: AuthRequest, res: Response) => {
+  try {
+    return res.json(await buildStandardReportForRequest(req));
+  } catch (err) {
+    if (err instanceof Error) return res.status(400).json({ error: err.message });
+    req.log.error({ err }, 'reports/standard/generate');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/standard/preview', async (req: AuthRequest, res: Response) => {
+  try {
+    req.query.limit = req.query.limit ?? '10';
+    return res.json(await buildStandardReportForRequest(req));
+  } catch (err) {
+    if (err instanceof Error) return res.status(400).json({ error: err.message });
+    req.log.error({ err }, 'reports/standard/preview');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/standard/export/json', async (req: AuthRequest, res: Response) => {
+  try {
+    return res.json(await buildStandardReportForRequest(req));
+  } catch (err) {
+    if (err instanceof Error) return res.status(400).json({ error: err.message });
+    req.log.error({ err }, 'reports/standard/export/json');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/standard/export/csv', async (req: AuthRequest, res: Response) => {
+  try {
+    const report = await buildStandardReportForRequest(req);
+    const tableKey = (req.query.tableKey as string | undefined) ?? report.tables[0]?.key;
+    const table = report.tables.find((item) => item.key === tableKey);
+    if (!table) return res.status(400).json({ error: 'tableKey does not match a report table' });
+    setCsvHeaders(res, `report-${report.reportType}-${new Date().toISOString().slice(0, 10)}.csv`);
+    return res.send(toCSV(table.rows, table.columns.map((column) => ({ key: column.key, header: column.label }))));
+  } catch (err) {
+    if (err instanceof Error) return res.status(400).json({ error: err.message });
+    req.log.error({ err }, 'reports/standard/export/csv');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/standard/drilldown', async (req: AuthRequest, res: Response) => {
+  try {
+    const query = normalizeReportQuery(req.query as Record<string, unknown>);
+    const rows = await fetchStandardReportRows({
+      householdId: req.householdId!,
+      startDate: query.startDate,
+      endDate: query.endDate,
+    });
+    return res.json(buildReportDrilldown({
+      query,
+      rows,
+      params: {
+        categoryId: req.query.categoryId as string | undefined,
+        accountId: req.query.accountId as string | undefined,
+        merchantId: req.query.merchantId as string | undefined,
+        tagId: req.query.tagId as string | undefined,
+        transactionType: req.query.transactionType as string | undefined,
+      },
+    }));
+  } catch (err) {
+    if (err instanceof Error) return res.status(400).json({ error: err.message });
+    req.log.error({ err }, 'reports/standard/drilldown');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 router.get('/catalog', async (_req: AuthRequest, res: Response) => {
   return res.json({ reports: buildJournalReportCatalog() });
@@ -600,35 +790,10 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
 
 const SavedReportSchema = z.object({
   name: z.string().min(1, 'name is required').max(100),
-  filters: z.object({
-    tab: z.enum([
-      'overview',
-      'cashflow',
-      'savings',
-      'spending',
-      'income',
-      'forecast',
-      'tax',
-      'variance',
-      'benchmarks',
-      'networth',
-      'assetsliabilities',
-      'investmentperformance',
-      'allocationdrift',
-      'contributionroom',
-      'dividendforecast',
-      'retirementsimulation',
-    ]).optional(),
-    datePreset: z.string().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-    excludeCategoryIds: z.array(z.string()).optional(),
-    excludeAccountIds: z.array(z.string()).optional(),
-  }),
+  filters: z.record(z.unknown()),
 });
 
-// GET /api/v1/reports/saved
-router.get('/saved', async (req: AuthRequest, res: Response) => {
+async function listSavedReports(req: AuthRequest, res: Response) {
   try {
     const householdId = req.householdId!;
     const saved = await prisma.savedReport.findMany({
@@ -640,10 +805,9 @@ router.get('/saved', async (req: AuthRequest, res: Response) => {
     req.log.error({ err }, 'reports/saved GET');
     return res.status(500).json({ error: 'Internal server error' });
   }
-});
+}
 
-// POST /api/v1/reports/saved
-router.post('/saved', async (req: AuthRequest, res: Response) => {
+async function createSavedReport(req: AuthRequest, res: Response) {
   try {
     const householdId = req.householdId!;
     const parsed = SavedReportSchema.safeParse(req.body);
@@ -652,14 +816,47 @@ router.post('/saved', async (req: AuthRequest, res: Response) => {
     }
     const { name, filters } = parsed.data;
     const saved = await prisma.savedReport.create({
-      data: { householdId, name, filters },
+      data: { householdId, name, filters: filters as Prisma.InputJsonValue },
     });
     return res.status(201).json(saved);
   } catch (err) {
     req.log.error({ err }, 'reports/saved POST');
     return res.status(500).json({ error: 'Internal server error' });
   }
-});
+}
+
+async function updateSavedReport(req: AuthRequest, res: Response) {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+    const parsed = SavedReportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message ?? 'Invalid input' });
+    }
+    const existing = await prisma.savedReport.findFirst({ where: { id, householdId } });
+    if (!existing) return res.status(404).json({ error: 'Saved report not found' });
+    const saved = await prisma.savedReport.update({
+      where: { id },
+      data: { name: parsed.data.name, filters: parsed.data.filters as Prisma.InputJsonValue },
+    });
+    return res.json(saved);
+  } catch (err) {
+    req.log.error({ err }, 'reports/saved PUT');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// GET /api/v1/reports/saved
+router.get('/saved', listSavedReports);
+router.get('/saved-views', listSavedReports);
+
+// POST /api/v1/reports/saved
+router.post('/saved', createSavedReport);
+router.post('/saved-views', createSavedReport);
+
+// PUT /api/v1/reports/saved/:id
+router.put('/saved/:id', updateSavedReport);
+router.put('/saved-views/:id', updateSavedReport);
 
 // DELETE /api/v1/reports/saved/:id
 router.delete('/saved/:id', async (req: AuthRequest, res: Response) => {
@@ -672,6 +869,19 @@ router.delete('/saved/:id', async (req: AuthRequest, res: Response) => {
     return res.json({ message: 'Deleted' });
   } catch (err) {
     req.log.error({ err }, 'reports/saved DELETE');
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+router.delete('/saved-views/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const householdId = req.householdId!;
+    const { id } = req.params;
+    const existing = await prisma.savedReport.findFirst({ where: { id, householdId } });
+    if (!existing) return res.status(404).json({ error: 'Saved report not found' });
+    await prisma.savedReport.delete({ where: { id } });
+    return res.json({ message: 'Deleted' });
+  } catch (err) {
+    req.log.error({ err }, 'reports/saved-views DELETE');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

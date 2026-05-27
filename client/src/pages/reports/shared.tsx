@@ -8,16 +8,22 @@ import { DATE_PRESETS, type DatePreset } from "./dateRange";
 export type ReportTab =
   | "overview"
   | "cashflow"
+  | "category"
+  | "income"
+  | "budget"
+  | "tag"
+  | "account"
+  | "merchant"
+  | "audit"
+  | "networth"
+  | "investmentperformance"
   | "savings"
   | "spending"
-  | "income"
   | "forecast"
   | "tax"
   | "variance"
   | "benchmarks"
-  | "networth"
   | "assetsliabilities"
-  | "investmentperformance"
   | "allocationdrift"
   | "contributionroom"
   | "dividendforecast"
@@ -189,14 +195,14 @@ export const TAB_GROUPS: {
     label: "Core",
     tabs: [
       { value: "overview", label: "Overview" },
+      { value: "income", label: "Income vs Expense" },
       { value: "cashflow", label: "Cash Flow" },
-      { value: "savings", label: "Savings" },
-      { value: "spending", label: "Spending" },
-      { value: "income", label: "Income" },
-      { value: "variance", label: "Variance" },
-      { value: "forecast", label: "Forecast" },
-      { value: "tax", label: "Tax Summary" },
-      { value: "benchmarks", label: "Benchmarks" },
+      { value: "category", label: "Categories" },
+      { value: "budget", label: "Budgets" },
+      { value: "tag", label: "Tags" },
+      { value: "account", label: "Accounts" },
+      { value: "merchant", label: "Merchants" },
+      { value: "audit", label: "Audit" },
     ],
   },
   {
@@ -204,14 +210,20 @@ export const TAB_GROUPS: {
     label: "Wealth",
     tabs: [
       { value: "networth", label: "Net Worth" },
-      { value: "assetsliabilities", label: "Assets / Liabilities" },
       { value: "investmentperformance", label: "Investment Performance" },
     ],
   },
   {
     id: "advanced",
-    label: "Advanced",
+    label: "Legacy",
     tabs: [
+      { value: "savings", label: "Savings" },
+      { value: "spending", label: "Spending" },
+      { value: "variance", label: "Variance" },
+      { value: "forecast", label: "Forecast" },
+      { value: "tax", label: "Tax Summary" },
+      { value: "benchmarks", label: "Benchmarks" },
+      { value: "assetsliabilities", label: "Assets / Liabilities" },
       { value: "allocationdrift", label: "Allocation & Drift" },
       { value: "contributionroom", label: "Contribution Room" },
       { value: "dividendforecast", label: "Dividend Forecast" },
