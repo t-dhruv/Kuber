@@ -12,7 +12,6 @@ const money = (value: number) =>
 
 interface Scenario {
   label: string;
-  success: number;
   endingBalance: number;
   returnRate?: number;
 }
@@ -21,6 +20,7 @@ export function RetirementSimulationSection() {
   const { data, isLoading, isError } = useQuery<{
     scenarios: Scenario[];
     portfolioValue: number;
+    projectionYears?: number;
     note: string;
   }>({
     queryKey: ["reports", "investments", "retirement-simulation"],
@@ -80,26 +80,25 @@ export function RetirementSimulationSection() {
                   {scenario.label}
                 </div>
                 <div className="text-xs text-[var(--color-text-muted)]">
-                  Projected terminal balance
+                  Assumed annual return
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-sm font-semibold text-[var(--color-text)]">
-                  {scenario.success}%
+                  {scenario.returnRate != null
+                    ? `${(scenario.returnRate * 100).toFixed(0)}%`
+                    : "—"}
                 </div>
                 <div className="text-xs text-[var(--color-text-muted)]">
-                  Success probability
+                  per year
                 </div>
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-3">
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--color-surface-hover)]">
-                <div
-                  className="h-full rounded-full bg-[var(--color-accent)]"
-                  style={{ width: `${Math.min(scenario.success, 100)}%` }}
-                />
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="text-xs text-[var(--color-text-muted)]">
+                Projected balance after {data.projectionYears ?? 30} years
               </div>
-              <div className="text-xs font-semibold text-[var(--color-text)]">
+              <div className="text-sm font-semibold text-[var(--color-text)]">
                 {money(scenario.endingBalance)}
               </div>
             </div>
