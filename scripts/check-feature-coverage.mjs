@@ -26,7 +26,7 @@ const rows = fs
   .split(/\r?\n/)
   .filter((line) => line.startsWith('| ') && line.endsWith(' |'))
   .map(splitRow)
-  .filter((cells) => cells.length === 7 && cells[0] !== 'Feature' && !cells[0].startsWith('---'));
+  .filter((cells) => cells.length === 8 && cells[0] !== 'Feature' && !cells[0].startsWith('---'));
 
 if (rows.length === 0) {
   console.error('Feature coverage matrix has no feature rows.');
@@ -41,8 +41,15 @@ const counts = {
 };
 const invalidRows = [];
 
+function citedPaths(cell) {
+  return cell
+    .split(/[,\s]*<br>[,\s]*|,\s*/)
+    .map((entry) => entry.trim().replace(/^`|`$/g, ''))
+    .filter(Boolean);
+}
+
 for (const row of rows) {
-  const [feature, , unit, api, e2e, status, nextRequiredTest] = row;
+  const [feature, , unit, api, e2e, tests, status, nextRequiredTest] = row;
 
   if (!allowedStatuses.has(status)) {
     invalidRows.push(`${feature}: invalid status "${status}"`);
@@ -51,8 +58,28 @@ for (const row of rows) {
 
   counts[status] += 1;
 
-  if (!unit || !api || !e2e || !nextRequiredTest) {
+  if (!unit || !api || !e2e) {
     invalidRows.push(`${feature}: missing coverage detail`);
+  }
+
+  // A row may only claim COVERED if it cites test files that actually exist.
+  // Without this the gate passes on edited markdown alone.
+  if (status === 'COVERED') {
+    const paths = citedPaths(tests);
+
+    if (paths.length === 0) {
+      invalidRows.push(`${feature}: COVERED but cites no test files`);
+    }
+
+    for (const testPath of paths) {
+      if (!fs.existsSync(path.resolve(testPath))) {
+        invalidRows.push(`${feature}: cited test file does not exist: ${testPath}`);
+      }
+    }
+  } else if (!nextRequiredTest) {
+    // Rows that are not COVERED are exempt from the path check, but must say
+    // what would close the gap.
+    invalidRows.push(`${feature}: ${status} but no next required test recorded`);
   }
 }
 

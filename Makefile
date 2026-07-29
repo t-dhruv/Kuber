@@ -1,5 +1,6 @@
 .PHONY: help dev dev-client dev-server build build-client build-server \
         test test-server test-client test-unit test-coverage test-e2e \
+        gate release-gate \
         clean db-reset db-env-check db-drop db-migrate db-generate db-seed db-studio \
         lint typecheck format start install up down logs \
         prod-up prod-down prod-logs
@@ -115,6 +116,15 @@ test-coverage:
 
 test-e2e:
 	$(WITH_ROOT_ENV) npx playwright test
+
+# Ratchet: fails only if coverage or the feature matrix regresses. Run on push.
+gate:
+	$(WITH_ROOT_ENV) npm run qa:gate
+
+# Release targets: 90% per metric, 90% of files in scope, all features COVERED.
+# Does not pass today — see docs/QA_TESTING_STRATEGY.md.
+release-gate:
+	$(WITH_ROOT_ENV) npm run qa:release-gate
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
