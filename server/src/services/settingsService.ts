@@ -1030,7 +1030,7 @@ export async function exportHouseholdData(householdId: string): Promise<ExcelJS.
 
   // Investments
   const investments = await prisma.investmentHolding.findMany({
-    where: { account: { householdId } },
+    where: { account: { householdId }, isDeleted: false },
     orderBy: { symbol: 'asc' },
   });
   const investSheet = workbook.addWorksheet('Investments');

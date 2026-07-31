@@ -97,11 +97,12 @@ describe('investments route integration', () => {
     expect(prisma.recurringInvestment.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         status: 'active',
-        holding: { account: { householdId: 'household-1', isDeleted: false } },
+        isDeleted: false,
+        holding: { isDeleted: false, account: { householdId: 'household-1', isDeleted: false } },
       }),
     }));
     expect(prisma.investmentHolding.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { account: { householdId: 'household-1', isDeleted: false } },
+      where: { isDeleted: false, account: { householdId: 'household-1', isDeleted: false } },
     }));
     expect(getQuotes).toHaveBeenCalledWith(['AAPL']);
     expect(res.body).toMatchObject({
@@ -131,6 +132,7 @@ describe('investments route integration', () => {
     expect(prisma.holdingLot.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         status: 'pending',
+        isDeleted: false,
         holding: { account: { householdId: 'household-1', isDeleted: false } },
       },
     }));
@@ -147,7 +149,7 @@ describe('investments route integration', () => {
 
     expect(res.status).toBe(200);
     expect(prisma.investmentHolding.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { account: { householdId: 'household-1', isDeleted: false } },
+      where: { isDeleted: false, account: { householdId: 'household-1', isDeleted: false } },
     }));
     expect(res.body).toMatchObject({
       totalValue: 1200,
@@ -167,7 +169,7 @@ describe('investments route integration', () => {
 
     expect(res.status).toBe(200);
     expect(prisma.investmentHolding.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { account: { householdId: 'household-1', isDeleted: false } },
+      where: { isDeleted: false, account: { householdId: 'household-1', isDeleted: false } },
     }));
     expect(res.body).toMatchObject({
       period: '1M',

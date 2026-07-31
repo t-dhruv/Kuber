@@ -41,7 +41,7 @@ function nextRunDate(frequency: string, dayOfMonth: number, from: Date): Date {
 
 export async function computeAvgCostBasis(holdingId: string): Promise<number> {
   const lots = await prisma.holdingLot.findMany({
-    where: { holdingId, status: 'confirmed' },
+    where: { holdingId, status: 'confirmed', ...NOT_DELETED },
     orderBy: { date: 'asc' },
   });
   if (lots.length === 0) return 0;
@@ -59,7 +59,8 @@ export async function generatePendingLots(householdId: string): Promise<number> 
     where: {
       status: 'active',
       nextRunAt: { lte: now },
-      holding: { account: { householdId, ...NOT_DELETED } },
+      ...NOT_DELETED,
+      holding: { ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
     },
     include: { holding: true },
   });
@@ -71,6 +72,7 @@ export async function generatePendingLots(householdId: string): Promise<number> 
       where: {
         holdingId: schedule.holdingId,
         status: 'pending',
+        ...NOT_DELETED,
         createdAt: { gte: schedule.lastRunAt ?? new Date(0) },
       },
     });
@@ -246,14 +248,14 @@ export function buildHoldingFallback(h: RawHolding, avgCostBasis: number) {
 export async function getHoldings(householdId: string, accountId?: string) {
   await generatePendingLots(householdId).catch(() => {});
 
-  const where: Record<string, unknown> = { account: { householdId, ...NOT_DELETED } };
+  const where: Record<string, unknown> = { ...NOT_DELETED, account: { householdId, ...NOT_DELETED } };
   if (accountId) where.accountId = accountId;
 
   const rawHoldings = await prisma.investmentHolding.findMany({
     where,
     include: {
       account: { select: { name: true, householdId: true } },
-      lots: { orderBy: { date: 'asc' } },
+      lots: { where: NOT_DELETED, orderBy: { date: 'asc' } },
     },
   });
 
@@ -303,7 +305,7 @@ export async function getHoldings(householdId: string, accountId?: string) {
   // Total return = unrealized + realized + dividends
   const dividendRecordTotals = await prisma.dividendRecord.groupBy({
     by: ['holdingId'],
-    where: { holding: { account: { householdId, ...NOT_DELETED } } },
+    where: { ...NOT_DELETED, holding: { account: { householdId, ...NOT_DELETED } } },
     _sum: { amountDecimal: true },
   });
   const totalRecordedDividends = dividendRecordTotals.reduce(
@@ -387,10 +389,10 @@ export async function createHolding(
 
 export async function updateHolding(householdId: string, id: string, shares?: number, costBasis?: number) {
   const existing = await prisma.investmentHolding.findFirst({
-    where: { id, account: { householdId, ...NOT_DELETED } },
+    where: { id, ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
     include: {
       account: { select: { name: true } },
-      lots: true,
+      lots: { where: NOT_DELETED },
     },
   });
   if (!existing) return null;
@@ -406,7 +408,7 @@ export async function updateHolding(householdId: string, id: string, shares?: nu
     data: { shares: updatedShares, costBasis: updatedCostBasis, currentPrice: livePrice },
     include: {
       account: { select: { name: true } },
-      lots: { orderBy: { date: 'asc' } },
+      lots: { where: NOT_DELETED, orderBy: { date: 'asc' } },
     },
   });
 
@@ -418,11 +420,45 @@ export async function updateHolding(householdId: string, id: string, shares?: nu
   return buildHoldingFallback(updated as unknown as RawHolding, avg);
 }
 
+/**
+ * Soft-delete holdings and every record that hangs off them.
+ *
+ * HoldingLot, DividendRecord and RecurringInvestment all cascade from
+ * InvestmentHolding at the database level, so hard-deleting a holding
+ * permanently destroys its trade history and cost basis. Financial records are
+ * never hard-deleted, and the children are marked alongside the parent so a
+ * restore brings back a consistent holding.
+ */
+export async function softDeleteHoldingsByIds(ids: string[]) {
+  if (ids.length === 0) return 0;
+  await prisma.$transaction([
+    prisma.holdingLot.updateMany({
+      where: { holdingId: { in: ids }, ...NOT_DELETED },
+      data: { isDeleted: true },
+    }),
+    prisma.dividendRecord.updateMany({
+      where: { holdingId: { in: ids }, ...NOT_DELETED },
+      data: { isDeleted: true },
+    }),
+    prisma.recurringInvestment.updateMany({
+      where: { holdingId: { in: ids }, ...NOT_DELETED },
+      data: { isDeleted: true },
+    }),
+    prisma.investmentHolding.updateMany({
+      where: { id: { in: ids }, ...NOT_DELETED },
+      data: { isDeleted: true },
+    }),
+  ]);
+  return ids.length;
+}
+
 export async function deleteHolding(householdId: string, id: string) {
-  const existing = await prisma.investmentHolding.findFirst({ where: { id, account: { householdId, ...NOT_DELETED } } });
+  const existing = await prisma.investmentHolding.findFirst({
+    where: { id, ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
+  });
   if (!existing) return null;
 
-  await prisma.investmentHolding.delete({ where: { id } });
+  await softDeleteHoldingsByIds([id]);
   return { success: true };
 }
 
@@ -430,28 +466,21 @@ export async function deleteHoldingsByAccountId(householdId: string, accountId: 
   const account = await prisma.account.findFirst({ where: { id: accountId, householdId, ...NOT_DELETED } });
   if (!account) return null;
 
-  const holdings = await prisma.investmentHolding.findMany({ where: { accountId }, select: { id: true } });
-  const holdingIds = holdings.map((h) => h.id);
-  await prisma.$transaction([
-    prisma.holdingLot.deleteMany({ where: { holdingId: { in: holdingIds } } }),
-    prisma.recurringInvestment.deleteMany({ where: { holdingId: { in: holdingIds } } }),
-    prisma.investmentHolding.deleteMany({ where: { id: { in: holdingIds } } }),
-  ]);
-  return { deleted: holdingIds.length };
+  const holdings = await prisma.investmentHolding.findMany({
+    where: { accountId, ...NOT_DELETED },
+    select: { id: true },
+  });
+  const deleted = await softDeleteHoldingsByIds(holdings.map((h) => h.id));
+  return { deleted };
 }
 
 export async function deleteHoldingsByIds(householdId: string, ids: string[]) {
   const verified = await prisma.investmentHolding.findMany({
-    where: { id: { in: ids }, account: { householdId, ...NOT_DELETED } },
+    where: { id: { in: ids }, ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
     select: { id: true },
   });
-  const verifiedIds = verified.map((h) => h.id);
-  await prisma.$transaction([
-    prisma.holdingLot.deleteMany({ where: { holdingId: { in: verifiedIds } } }),
-    prisma.recurringInvestment.deleteMany({ where: { holdingId: { in: verifiedIds } } }),
-    prisma.investmentHolding.deleteMany({ where: { id: { in: verifiedIds } } }),
-  ]);
-  return { deleted: verifiedIds.length };
+  const deleted = await softDeleteHoldingsByIds(verified.map((h) => h.id));
+  return { deleted };
 }
 
 export async function importHoldings(
@@ -495,7 +524,7 @@ export async function importHoldings(
     const lotNote = row.batchId ? `[batch:${row.batchId}]` : undefined;
 
     const existing = await prisma.investmentHolding.findFirst({
-      where: { accountId: row.accountId, symbol },
+      where: { accountId: row.accountId, symbol, ...NOT_DELETED },
     });
 
     if (existing) {
@@ -569,14 +598,14 @@ export async function createLot(
   const priceNum = Number(pricePerShare);
 
   const holding = await prisma.investmentHolding.findFirst({
-    where: { id: holdingId, account: { householdId, ...NOT_DELETED } },
+    where: { id: holdingId, ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
   });
   if (!holding) return null;
 
   // Validate sell quantity
   if (transactionType === 'sell') {
     const existingLots = await prisma.holdingLot.findMany({
-      where: { holdingId, status: 'confirmed' },
+      where: { holdingId, status: 'confirmed', ...NOT_DELETED },
     });
     const currentShares = existingLots.reduce(
       (s, l) => s + (l.transactionType === 'buy' ? l.shares : -l.shares),
@@ -610,7 +639,7 @@ export async function createLot(
 
   // Recompute holding totals
   const allConfirmedLots = await prisma.holdingLot.findMany({
-    where: { holdingId, status: 'confirmed' },
+    where: { holdingId, status: 'confirmed', ...NOT_DELETED },
   });
   const totalShares = allConfirmedLots.reduce(
     (s, l) => s + (l.transactionType === 'buy' ? l.shares : l.transactionType === 'sell' ? -Math.abs(l.shares) : 0),
@@ -637,16 +666,16 @@ export async function createLot(
 
 export async function deleteLot(householdId: string, id: string) {
   const lot = await prisma.holdingLot.findFirst({
-    where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
+    where: { id, ...NOT_DELETED, holding: { account: { householdId, ...NOT_DELETED } } },
   });
   if (!lot) return null;
 
   const holdingId = lot.holdingId;
-  await prisma.holdingLot.delete({ where: { id } });
+  await prisma.holdingLot.update({ where: { id }, data: { isDeleted: true } });
 
   // Recompute avg and total shares
   const remaining = await prisma.holdingLot.findMany({
-    where: { holdingId, status: 'confirmed' },
+    where: { holdingId, status: 'confirmed', ...NOT_DELETED },
   });
   const totalShares = remaining.reduce(
     (s, l) => s + (l.transactionType === 'buy' ? l.shares : l.transactionType === 'sell' ? -Math.abs(l.shares) : 0),
@@ -663,7 +692,7 @@ export async function deleteLot(householdId: string, id: string) {
 
 export async function confirmLot(householdId: string, id: string) {
   const lot = await prisma.holdingLot.findFirst({
-    where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
+    where: { id, ...NOT_DELETED, holding: { account: { householdId, ...NOT_DELETED } } },
     include: { holding: true },
   });
   if (!lot) return null;
@@ -685,7 +714,7 @@ export async function confirmLot(householdId: string, id: string) {
 
   // Update total shares and avg on holding
   const allConfirmed = await prisma.holdingLot.findMany({
-    where: { holdingId: lot.holdingId, status: 'confirmed' },
+    where: { holdingId: lot.holdingId, status: 'confirmed', ...NOT_DELETED },
   });
   const totalShares = allConfirmed.reduce((s, l) => s + l.shares, 0);
   const avg = await computeAvgCostBasis(lot.holdingId);
@@ -706,11 +735,11 @@ export async function confirmLot(householdId: string, id: string) {
 
 export async function skipLot(householdId: string, id: string) {
   const lot = await prisma.holdingLot.findFirst({
-    where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
+    where: { id, ...NOT_DELETED, holding: { account: { householdId, ...NOT_DELETED } } },
   });
   if (!lot) return null;
 
-  await prisma.holdingLot.delete({ where: { id } });
+  await prisma.holdingLot.update({ where: { id }, data: { isDeleted: true } });
   return { message: 'Lot skipped' };
 }
 
@@ -720,6 +749,7 @@ export async function getPendingLots(householdId: string) {
   const lots = await prisma.holdingLot.findMany({
     where: {
       status: 'pending',
+      ...NOT_DELETED,
       holding: { account: { householdId, ...NOT_DELETED } },
     },
     include: {
@@ -744,7 +774,7 @@ export async function getPendingLots(householdId: string) {
 
 export async function getAllocation(householdId: string) {
   const rawHoldings = await prisma.investmentHolding.findMany({
-    where: { account: { householdId, ...NOT_DELETED } },
+    where: { ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
     include: { account: { select: { id: true, name: true } } },
   });
 
@@ -812,7 +842,7 @@ export async function getPerformance(householdId: string, period: string = '1Y')
   const months = periodMap[period] ?? 12;
 
   const rawHoldings = await prisma.investmentHolding.findMany({
-    where: { account: { householdId, ...NOT_DELETED } },
+    where: { ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
     include: { account: { select: { id: true } } },
   });
 
@@ -878,7 +908,7 @@ export async function getDividendForecast(householdId: string, years: number = 3
   const numYears = Math.min(Math.max(years, 1), 10);
 
   const holdings = await prisma.investmentHolding.findMany({
-    where: { account: { householdId, ...NOT_DELETED } },
+    where: { ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
     select: { symbol: true, shares: true, currentPrice: true, name: true },
   });
 
@@ -913,12 +943,12 @@ export async function getDividendForecast(householdId: string, years: number = 3
 
 export async function getHoldingRecurring(householdId: string, holdingId: string) {
   const holding = await prisma.investmentHolding.findFirst({
-    where: { id: holdingId, account: { householdId, ...NOT_DELETED } },
+    where: { id: holdingId, ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
   });
   if (!holding) return null;
 
   const schedules = await prisma.recurringInvestment.findMany({
-    where: { holdingId },
+    where: { holdingId, ...NOT_DELETED },
     orderBy: { createdAt: 'asc' },
   });
 
@@ -951,7 +981,7 @@ export async function createHoldingRecurring(
   }
 
   const holding = await prisma.investmentHolding.findFirst({
-    where: { id: holdingId, account: { householdId, ...NOT_DELETED } },
+    where: { id: holdingId, ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
   });
   if (!holding) return null;
 
@@ -990,7 +1020,7 @@ export async function updateHoldingRecurring(
   status?: string,
 ) {
   const schedule = await prisma.recurringInvestment.findFirst({
-    where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
+    where: { id, ...NOT_DELETED, holding: { account: { householdId, ...NOT_DELETED } } },
   });
   if (!schedule) return null;
 
@@ -1022,10 +1052,10 @@ export async function updateHoldingRecurring(
 
 export async function deleteHoldingRecurring(householdId: string, id: string) {
   const schedule = await prisma.recurringInvestment.findFirst({
-    where: { id, holding: { account: { householdId, ...NOT_DELETED } } },
+    where: { id, ...NOT_DELETED, holding: { account: { householdId, ...NOT_DELETED } } },
   });
   if (!schedule) return null;
 
-  await prisma.recurringInvestment.delete({ where: { id } });
+  await prisma.recurringInvestment.update({ where: { id }, data: { isDeleted: true } });
   return { message: 'Deleted' };
 }

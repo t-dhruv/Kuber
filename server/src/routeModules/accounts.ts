@@ -603,9 +603,32 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       await tx.reportingRollup.deleteMany({
         where: { householdId, kind: 'account_balance', subjectId: id },
       });
-      await tx.investmentHolding.deleteMany({
-        where: { accountId: id },
+      // Soft-delete, never hard-delete: holding_lots, dividend_records and
+      // recurring_investments all cascade from investment_holdings, so a hard
+      // delete here destroys the account's entire trade history and cost basis.
+      const holdings = await tx.investmentHolding.findMany({
+        where: { accountId: id, isDeleted: false },
+        select: { id: true },
       });
+      const holdingIds = holdings.map((h) => h.id);
+      if (holdingIds.length > 0) {
+        await tx.holdingLot.updateMany({
+          where: { holdingId: { in: holdingIds }, isDeleted: false },
+          data: { isDeleted: true },
+        });
+        await tx.dividendRecord.updateMany({
+          where: { holdingId: { in: holdingIds }, isDeleted: false },
+          data: { isDeleted: true },
+        });
+        await tx.recurringInvestment.updateMany({
+          where: { holdingId: { in: holdingIds }, isDeleted: false },
+          data: { isDeleted: true },
+        });
+        await tx.investmentHolding.updateMany({
+          where: { id: { in: holdingIds } },
+          data: { isDeleted: true },
+        });
+      }
       await tx.account.update({
         where: { id },
         data: { isDeleted: true, isHidden: true },

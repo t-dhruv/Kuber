@@ -225,7 +225,7 @@ export async function getInvestmentContext(
   householdId: string,
 ): Promise<{ holdings: HoldingSummary[]; totalValue: number; currency: string }> {
   const holdings = await prisma.investmentHolding.findMany({
-    where: { account: { householdId } },
+    where: { account: { householdId }, isDeleted: false },
     include: { account: true },
   });
 

@@ -58,7 +58,7 @@ router.get('/net-worth-breakdown', async (req: AuthRequest, res: Response) => {
     const investmentAccountIds = investmentAccounts.map((a) => a.id);
 
     const holdings = await prisma.investmentHolding.findMany({
-      where: { accountId: { in: investmentAccountIds } },
+      where: { accountId: { in: investmentAccountIds }, isDeleted: false },
       select: { currentPrice: true, shares: true },
     });
     const investmentsTotal = holdings.reduce((sum, h) => sum + h.currentPrice * h.shares, 0);

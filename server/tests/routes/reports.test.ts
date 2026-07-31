@@ -583,9 +583,15 @@ describe('journal-backed report routes', () => {
     expect(res.body.summaryCards.find((card: any) => card.key === 'realizedGainLoss').value).toBe('45.25');
     expect(res.body.metadata.warnings.join(' ')).not.toContain('realized performance is audited');
     expect(prisma.investmentHolding.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ isDeleted: false }),
       include: expect.objectContaining({
         lots: expect.objectContaining({
-          where: { date: { gte: new Date('2026-01-01T00:00:00.000Z'), lte: new Date('2026-01-31T23:59:59.999Z') }, transactionType: 'sell', status: 'confirmed' },
+          where: {
+            date: { gte: new Date('2026-01-01T00:00:00.000Z'), lte: new Date('2026-01-31T23:59:59.999Z') },
+            transactionType: 'sell',
+            status: 'confirmed',
+            isDeleted: false,
+          },
         }),
       }),
     }));

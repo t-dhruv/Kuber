@@ -85,6 +85,7 @@ router.get('/overview', async (req: AuthRequest, res: Response) => {
       prisma.investmentHolding.findMany({
         where: {
           account: { householdId, isHidden: false, type: 'investment' },
+          isDeleted: false,
         },
         select: { currentPrice: true, shares: true },
       }),

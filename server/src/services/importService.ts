@@ -85,7 +85,7 @@ export async function saveImport(
         if (isInvestmentAccount && row.investmentType === 'dividend') {
           // ── Investment dividend: find/create holding, create DividendRecord linked to journal ──
           const ticker = row.ticker ?? extractTicker(row.description) ?? 'UNKNOWN';
-          let holding = await tx.investmentHolding.findFirst({ where: { accountId, symbol: ticker } });
+          let holding = await tx.investmentHolding.findFirst({ where: { accountId, symbol: ticker, isDeleted: false } });
           if (!holding) {
             holding = await tx.investmentHolding.create({
               data: { accountId, symbol: ticker, name: ticker, shares: 0, costBasis: 0, currentPrice: 0 },
@@ -102,7 +102,7 @@ export async function saveImport(
           const price = row.pricePerShare ?? (shareDelta > 0 ? Math.abs(row.amount) / shareDelta : 0);
 
           let holding = await tx.investmentHolding.findFirst({
-            where: { accountId, symbol: ticker },
+            where: { accountId, symbol: ticker, isDeleted: false },
           });
 
           if (!holding) {
