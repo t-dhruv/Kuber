@@ -375,35 +375,37 @@ router.get('/retirement-simulation', async (req: AuthRequest, res: Response) => 
       0,
     );
 
-    // Simple Monte Carlo simulation (deterministic for now — real sim needs more inputs)
+    // Deterministic compound-growth projections over a 30-year horizon.
+    // These are NOT probabilistic outcomes: Kuber does not collect the inputs
+    // a real Monte Carlo needs (retirement age, target spending, withdrawal
+    // strategy), so no success probability is reported.
     // Conservative: 5% return, 70% stocks/30% bonds allocation
     // Base: 7% return, 80/20 allocation
     // Growth: 9% return, 90/10 allocation
+    const PROJECTION_YEARS = 30;
     const scenarios = [
       {
         label: 'Conservative',
         returnRate: 0.05,
-        success: Math.round(85 + Math.random() * 10), // simulated 85-95%
-        endingBalance: Math.round(totalValue * 1.05 ** 30),
+        endingBalance: Math.round(totalValue * 1.05 ** PROJECTION_YEARS),
       },
       {
         label: 'Base case',
         returnRate: 0.07,
-        success: Math.round(70 + Math.random() * 15), // simulated 70-85%
-        endingBalance: Math.round(totalValue * 1.07 ** 30),
+        endingBalance: Math.round(totalValue * 1.07 ** PROJECTION_YEARS),
       },
       {
         label: 'Growth',
         returnRate: 0.09,
-        success: Math.round(55 + Math.random() * 15), // simulated 55-70%
-        endingBalance: Math.round(totalValue * 1.09 ** 30),
+        endingBalance: Math.round(totalValue * 1.09 ** PROJECTION_YEARS),
       },
     ];
 
     return res.json({
       scenarios,
+      projectionYears: PROJECTION_YEARS,
       portfolioValue: Math.round(totalValue * 100) / 100,
-      note: 'Projections based on portfolio value, allocation, and historical return assumptions. Connect detailed inputs for Monte Carlo simulation.',
+      note: 'Deterministic projections of your current portfolio value compounded at fixed assumed annual return rates over 30 years. Assumes no future contributions or withdrawals. These are illustrative scenarios, not predictions or probabilities.',
     });
   } catch (err) {
     req.log.error({ err }, 'investments/retirement-simulation');

@@ -105,13 +105,14 @@ describe("wealth and advanced report sections", () => {
   it("renders the retirement simulation section", () => {
     const html = renderWithClient(<RetirementSimulationSection />, (client) => {
       client.setQueryData(["reports", "investments", "retirement-simulation"], {
-        scenarios: [{ label: "Base case", success: 82, endingBalance: 945000 }],
+        scenarios: [{ label: "Base case", returnRate: 0.07, endingBalance: 945000 }],
         portfolioValue: 314800,
+        projectionYears: 30,
         note: "Projection uses current savings rate",
       });
     });
     expect(html).toContain("Retirement Simulation");
-    expect(html).toContain("Success probability");
+    expect(html).toContain("Assumed annual return");
     expect(html).toContain("Base case");
   });
 });
