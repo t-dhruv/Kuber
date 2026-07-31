@@ -911,18 +911,19 @@ function AddTransactionModal({ open, onClose, accounts, categories }: AddModalPr
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async (): Promise<void> => {
       const amt = parseFloat(form.amount) || 0;
       if (txType === 'transfer') {
-        return api.post('/transactions/transfer', {
+        await api.post('/transactions/transfer', {
           fromAccountId: form.fromAccountId,
           toAccountId: form.toAccountId,
           amount: Math.abs(amt),
           date: form.date,
           notes: form.notes || undefined,
         });
+        return;
       }
-      return api.post('/transactions', {
+      await api.post('/transactions', {
         date: form.date,
         description: form.description,
         amount: txType === 'expense' ? -Math.abs(amt) : Math.abs(amt),
