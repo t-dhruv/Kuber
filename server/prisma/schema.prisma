@@ -607,6 +607,7 @@ model InvestmentHolding {
   priceHistory          Json?
   totalDividendsDecimal Decimal?              @db.Decimal(19, 4)
   lastPriceUpdatedAt    DateTime?
+  isDeleted             Boolean               @default(false)
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
   account               Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -614,6 +615,7 @@ model InvestmentHolding {
   dividends             DividendRecord[]
   recurringInvestments  RecurringInvestment[]
 
+  @@index([accountId, isDeleted])
   @@map("investment_holdings")
 }
 
@@ -631,10 +633,12 @@ model HoldingLot {
   realizedGainDecimal  Decimal?          @db.Decimal(19, 4)
   note                 String?
   status               String            @default("confirmed") // "confirmed" | "pending"
+  isDeleted            Boolean           @default(false)
   createdAt            DateTime          @default(now())
   holding              InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
 
   @@index([holdingId, date])
+  @@index([holdingId, isDeleted])
   @@map("holding_lots")
 }
 
@@ -645,10 +649,12 @@ model DividendRecord {
   amountDecimal Decimal           @db.Decimal(19, 4)
   currencyCode  String            @default("CAD")
   journalId     String?
+  isDeleted     Boolean           @default(false)
   createdAt     DateTime          @default(now())
   holding       InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
 
   @@index([holdingId, date])
+  @@index([holdingId, isDeleted])
   @@map("dividend_records")
 }
 
@@ -662,10 +668,12 @@ model RecurringInvestment {
   status        String            @default("active") // "active" | "paused"
   lastRunAt     DateTime?
   nextRunAt     DateTime
+  isDeleted     Boolean           @default(false)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   holding       InvestmentHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
 
+  @@index([holdingId, isDeleted])
   @@map("recurring_investments")
 }
 

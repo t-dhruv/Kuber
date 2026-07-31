@@ -366,7 +366,7 @@ router.get('/retirement-simulation', async (req: AuthRequest, res: Response) => 
 
     // Get portfolio value and holdings data
     const holdings = await prisma.investmentHolding.findMany({
-      where: { account: { householdId, ...NOT_DELETED } },
+      where: { ...NOT_DELETED, account: { householdId, ...NOT_DELETED } },
       select: { shares: true, currentPrice: true, costBasis: true },
     });
 

@@ -1089,7 +1089,10 @@ export async function fetchStandardWealthContext(
     prisma.manualAsset.findMany({ where: { householdId: input.householdId }, select: { currentValue: true, currentValueDecimal: true } }),
     prisma.manualLiability.findMany({ where: { householdId: input.householdId }, select: { currentBalance: true, currentBalanceDecimal: true } }),
     prisma.investmentHolding.findMany({
-      where: { account: { householdId: input.householdId, isDeleted: false, isHidden: false, excludeFromNetWorth: false } },
+      where: {
+        isDeleted: false,
+        account: { householdId: input.householdId, isDeleted: false, isHidden: false, excludeFromNetWorth: false },
+      },
       select: { shares: true, sharesDecimal: true, currentPrice: true, currentPriceDecimal: true },
     }),
   ]);
@@ -1130,15 +1133,26 @@ export async function fetchStandardInvestmentContext(
   const start = new Date(`${input.startDate}T00:00:00.000Z`);
   const end = new Date(`${input.endDate}T23:59:59.999Z`);
   const holdings = await prisma.investmentHolding.findMany({
-    where: { account: { householdId: input.householdId, isDeleted: false, isHidden: false } },
+    where: {
+      isDeleted: false,
+      account: { householdId: input.householdId, isDeleted: false, isHidden: false },
+    },
     include: {
       account: { select: { id: true, name: true } },
       lots: {
-        where: { date: { gte: start, lte: end }, transactionType: 'sell', status: 'confirmed' },
+        where: {
+          date: { gte: start, lte: end },
+          transactionType: 'sell',
+          status: 'confirmed',
+          isDeleted: false,
+        },
         select: { realizedGainDecimal: true },
       },
-      dividends: { where: { date: { gte: start, lte: end } }, select: { amountDecimal: true } },
-      recurringInvestments: { where: { status: 'active' }, select: { id: true } },
+      dividends: {
+        where: { date: { gte: start, lte: end }, isDeleted: false },
+        select: { amountDecimal: true },
+      },
+      recurringInvestments: { where: { status: 'active', isDeleted: false }, select: { id: true } },
     },
     orderBy: [{ accountId: 'asc' }, { symbol: 'asc' }],
   });

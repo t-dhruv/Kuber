@@ -85,7 +85,7 @@ router.get('/projections', async (req: AuthRequest, res: Response) => {
 
     // Monthly contributions estimate from recurring investments
     const recurringInvestments = await prisma.recurringInvestment.findMany({
-      where: { holding: { account: { householdId } }, status: 'active' },
+      where: { holding: { account: { householdId } }, status: 'active', isDeleted: false },
       select: { amount: true, frequency: true },
     });
 

@@ -37,6 +37,20 @@ vi.mock('../../src/lib/prisma', () => ({
       deleteMany: vi.fn(),
     },
     investmentHolding: {
+      findMany: vi.fn(),
+      updateMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    holdingLot: {
+      updateMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    dividendRecord: {
+      updateMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    recurringInvestment: {
+      updateMany: vi.fn(),
       deleteMany: vi.fn(),
     },
     transactionJournal: {
@@ -219,7 +233,11 @@ describe('accounts route integration', () => {
     vi.mocked(prisma.reconciliation.deleteMany).mockResolvedValue({ count: 1 } as any);
     vi.mocked(prisma.reportingSnapshot.deleteMany).mockResolvedValue({ count: 1 } as any);
     vi.mocked(prisma.reportingRollup.deleteMany).mockResolvedValue({ count: 1 } as any);
-    vi.mocked(prisma.investmentHolding.deleteMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.investmentHolding.findMany).mockResolvedValue([{ id: 'holding-1' }] as any);
+    vi.mocked(prisma.investmentHolding.updateMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.holdingLot.updateMany).mockResolvedValue({ count: 2 } as any);
+    vi.mocked(prisma.dividendRecord.updateMany).mockResolvedValue({ count: 1 } as any);
+    vi.mocked(prisma.recurringInvestment.updateMany).mockResolvedValue({ count: 1 } as any);
     vi.mocked(prisma.account.update).mockResolvedValue({
       ...baseAccount,
       isDeleted: true,
@@ -260,9 +278,34 @@ describe('accounts route integration', () => {
     expect(prisma.reportingRollup.deleteMany).toHaveBeenCalledWith({
       where: { householdId: 'household-1', kind: 'account_balance', subjectId: 'account-1' },
     });
-    expect(prisma.investmentHolding.deleteMany).toHaveBeenCalledWith({
-      where: { accountId: 'account-1' },
+    // Investment records are soft-deleted, never hard-deleted: holding_lots,
+    // dividend_records and recurring_investments all cascade from
+    // investment_holdings, so a hard delete would destroy the account's entire
+    // trade history and cost basis.
+    expect(prisma.investmentHolding.findMany).toHaveBeenCalledWith({
+      where: { accountId: 'account-1', isDeleted: false },
+      select: { id: true },
     });
+    expect(prisma.holdingLot.updateMany).toHaveBeenCalledWith({
+      where: { holdingId: { in: ['holding-1'] }, isDeleted: false },
+      data: { isDeleted: true },
+    });
+    expect(prisma.dividendRecord.updateMany).toHaveBeenCalledWith({
+      where: { holdingId: { in: ['holding-1'] }, isDeleted: false },
+      data: { isDeleted: true },
+    });
+    expect(prisma.recurringInvestment.updateMany).toHaveBeenCalledWith({
+      where: { holdingId: { in: ['holding-1'] }, isDeleted: false },
+      data: { isDeleted: true },
+    });
+    expect(prisma.investmentHolding.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['holding-1'] } },
+      data: { isDeleted: true },
+    });
+    expect(prisma.investmentHolding.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.holdingLot.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.dividendRecord.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.recurringInvestment.deleteMany).not.toHaveBeenCalled();
     expect(prisma.account.update).toHaveBeenCalledWith({
       where: { id: 'account-1' },
       data: { isDeleted: true, isHidden: true },
