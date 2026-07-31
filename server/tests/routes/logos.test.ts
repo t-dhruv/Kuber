@@ -26,6 +26,22 @@ describe('logo routes', () => {
     expect(getOrFetchBankLogo).not.toHaveBeenCalled();
   });
 
+  it('rejects an over-long name before it becomes a cache key', async () => {
+    const res = await request(makeApp()).get(`/logos/bank?name=${'a'.repeat(129)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('name is too long');
+    expect(getOrFetchBankLogo).not.toHaveBeenCalled();
+  });
+
+  it('rejects an over-long merchant domain', async () => {
+    const res = await request(makeApp()).get(`/logos/merchant?name=Amazon&domain=${'a'.repeat(129)}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('domain is too long');
+    expect(getOrFetchMerchantLogo).not.toHaveBeenCalled();
+  });
+
   it('returns cached bank logo bytes with cache headers', async () => {
     vi.mocked(getOrFetchBankLogo).mockResolvedValue({
       data: Buffer.from('bank-logo'),

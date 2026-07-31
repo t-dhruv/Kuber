@@ -172,6 +172,18 @@ const authLimiter = rateLimit({
   skip: () => process.env.NODE_ENV === 'test',
 });
 
+// Logos: unauthenticated by necessity — the client loads these as <img src>,
+// which cannot carry an Authorization header — and a cache miss triggers
+// outbound fetches. Limit it far more tightly than the general API.
+const logoLimiter = rateLimit({
+  windowMs: positiveIntEnv('LOGO_RATE_LIMIT_WINDOW_MS', 60 * 1000),
+  max: positiveIntEnv('LOGO_RATE_LIMIT_MAX', 120),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
 // General API: generous limit to prevent abuse
 const apiLimiter = rateLimit({
   windowMs: positiveIntEnv('API_RATE_LIMIT_WINDOW_MS', 60 * 1000),
@@ -264,7 +276,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', name: 'Kuber API' }))
 app.get('/metrics', metricsHandler);
 
 app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/logos', logosRouter);
+app.use('/api/v1/logos', logoLimiter, logosRouter);
 app.use('/api/v1/users', requireAuth, usersRouter);
 app.use('/api/v1/dashboard', requireAuth, dashboardRouter);
 app.use('/api/v1/accounts', requireAuth, accountsRouter);

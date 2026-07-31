@@ -350,7 +350,7 @@ router.post('/confirm-bulk', async (req: AuthRequest, res: Response) => {
     );
 
     if (items.length > 0) {
-      rulesAppliedTotal.inc({ household_id: householdId });
+      rulesAppliedTotal.inc();
       logAudit({
         householdId,
         userId: req.userId!,

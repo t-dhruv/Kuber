@@ -92,14 +92,25 @@ function deriveDomain(name: string): string {
   return `${cleaned}.com`;
 }
 
+// A logo is an icon. Anything larger is not one, and reading it would let an
+// upstream response of arbitrary size land in memory and then in the database.
+const MAX_LOGO_BYTES = 512 * 1024;
+
+async function readCappedBody(res: globalThis.Response): Promise<Buffer | null> {
+  const declared = Number(res.headers.get('content-length') ?? '');
+  if (Number.isFinite(declared) && declared > MAX_LOGO_BYTES) return null;
+  const data = Buffer.from(await res.arrayBuffer());
+  return data.byteLength > MAX_LOGO_BYTES ? null : data;
+}
+
 async function fetchLogoBytes(domain: string): Promise<{ data: Buffer; mimeType: string; source: string } | null> {
   // Primary: Clearbit Logo API
   try {
     const res = await fetch(`https://logo.clearbit.com/${domain}`, { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
       const mimeType = res.headers.get('content-type') ?? 'image/png';
-      const data = Buffer.from(await res.arrayBuffer());
-      return { data, mimeType: mimeType.split(';')[0].trim(), source: 'clearbit' };
+      const data = await readCappedBody(res);
+      if (data) return { data, mimeType: mimeType.split(';')[0].trim(), source: 'clearbit' };
     }
   } catch {
     // fall through
@@ -110,14 +121,29 @@ async function fetchLogoBytes(domain: string): Promise<{ data: Buffer; mimeType:
     const res = await fetch(`https://icons.duckduckgo.com/ip3/${domain}.ico`, { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
       const mimeType = res.headers.get('content-type') ?? 'image/x-icon';
-      const data = Buffer.from(await res.arrayBuffer());
-      return { data, mimeType: mimeType.split(';')[0].trim(), source: 'duckduckgo' };
+      const data = await readCappedBody(res);
+      if (data) return { data, mimeType: mimeType.split(';')[0].trim(), source: 'duckduckgo' };
     }
   } catch {
     // fall through
   }
 
   return null;
+}
+
+/**
+ * Record a miss so the next request for the same name is answered from the
+ * database instead of firing two more outbound fetches. Without this, any
+ * unknown ?name= triggers upstream traffic on every single request, which on
+ * an unauthenticated endpoint is a free outbound-request amplifier.
+ * Reads already treat a row with no logoData as "known missing".
+ */
+async function cacheMiss(type: 'bank' | 'merchant', key: string): Promise<void> {
+  await prisma.logoCache.upsert({
+    where: { type_key: { type, key } },
+    create: { type, key, source: 'miss' },
+    update: { source: 'miss', fetchedAt: new Date() },
+  });
 }
 
 export async function getOrFetchBankLogo(institutionName: string): Promise<LogoResult | null> {
@@ -131,7 +157,10 @@ export async function getOrFetchBankLogo(institutionName: string): Promise<LogoR
 
   const domain = deriveDomain(institutionName);
   const result = await fetchLogoBytes(domain);
-  if (!result) return null;
+  if (!result) {
+    await cacheMiss('bank', key);
+    return null;
+  }
 
   await prisma.logoCache.upsert({
     where: { type_key: { type: 'bank', key } },
@@ -153,7 +182,10 @@ export async function getOrFetchMerchantLogo(merchantName: string, domain?: stri
 
   const lookupDomain = domain ?? deriveDomain(merchantName);
   const result = await fetchLogoBytes(lookupDomain);
-  if (!result) return null;
+  if (!result) {
+    await cacheMiss('merchant', key);
+    return null;
+  }
 
   await prisma.logoCache.upsert({
     where: { type_key: { type: 'merchant', key } },
