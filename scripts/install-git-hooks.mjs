@@ -16,4 +16,11 @@ execFileSync('git', ['config', 'core.hooksPath', hooksPath], {
   stdio: 'inherit',
 });
 
+// Git silently ignores hooks that are not executable, which makes a broken
+// hook look exactly like a passing one. Set the bit on install so a fresh
+// clone actually runs the gate.
+for (const hook of fs.readdirSync(path.join(repoRoot, hooksPath))) {
+  fs.chmodSync(path.join(repoRoot, hooksPath, hook), 0o755);
+}
+
 console.log(`Git hooks installed from ${hooksPath}`);
