@@ -74,6 +74,8 @@ jobs:
       DATABASE_URL: postgresql://kuber:kuber_test@localhost:5432/kuber_test
       JWT_SECRET: test_jwt_secret_at_least_64_characters_long_for_ci_pipeline_run
       JWT_REFRESH_SECRET: test_refresh_secret_at_least_64_characters_long_for_ci_pipeline
+      # Required by REQUIRED_ENV in server/src/index.ts; must be 64 hex chars.
+      AI_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       # The server must not think it is behind a proxy here; nothing sets
       # X-Forwarded-For in CI.
       TRUST_PROXY: 0
