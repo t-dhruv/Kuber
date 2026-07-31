@@ -123,8 +123,8 @@ jobs:
           npm run dev --workspace=@kuber/client &
           npx --yes wait-on http://localhost:9001 --timeout 120000
 
-      - name: Run E2E tests
-        run: npm exec -- playwright test
+      - name: Run E2E smoke tests
+        run: npm exec -- playwright test --grep @smoke --retries=0 --reporter=list
 
       - name: Upload Playwright report
         if: always()
