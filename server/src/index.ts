@@ -125,6 +125,31 @@ if (process.env.NODE_ENV === 'production' && !process.env.CLIENT_URL) {
 }
 
 const app = express();
+
+// ── Reverse proxy trust ───────────────────────────────────────────────────────
+// Kuber's bundled deployment puts the API behind one Nginx hop
+// (docker-compose.prod.yml → nginx/prod.conf), which sets X-Forwarded-For.
+// Express must be told how many proxy hops to trust so that req.ip — and
+// therefore express-rate-limit's bucket key — resolves to the real client
+// rather than the proxy's container IP.
+//
+// This is deliberately a HOP COUNT, never `true`: with `true`, Express takes
+// the left-most X-Forwarded-For entry, which any client can forge, turning
+// rate limiting into a bypass. A hop count reads the Nth entry from the right,
+// which a client cannot forge.
+//
+// TRUST_PROXY=0 disables it (use when the API is exposed directly).
+function trustProxyHops(): number {
+  const raw = process.env.TRUST_PROXY;
+  if (raw === undefined || raw === '') return 1;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1;
+}
+
+const trustProxy = trustProxyHops();
+app.set('trust proxy', trustProxy);
+logger.info({ trustProxy }, 'reverse proxy hops trusted');
+
 const PORT = process.env.PORT ?? 9002;
 
 const clientUrl = process.env.CLIENT_URL ?? 'http://localhost:3000';
