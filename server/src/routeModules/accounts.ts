@@ -204,7 +204,9 @@ router.get('/export/csv', async (req: AuthRequest, res: Response) => {
       type: a.type,
       institution: a.institution ?? '',
       lastFour: a.lastFour ?? '',
-      balance: a.balanceDecimal ? Number(a.balanceDecimal) : a.balance,
+      // Float, not balanceDecimal: nothing at runtime writes the Decimal shadow
+      // column, so preferring it exported the migration-day balance.
+      balance: a.balance,
       currency: a.currency,
       hidden: a.isHidden ? 'Yes' : 'No',
       excludeFromNetWorth: a.excludeFromNetWorth ? 'Yes' : 'No',

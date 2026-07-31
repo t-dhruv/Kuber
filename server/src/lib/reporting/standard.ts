@@ -1096,20 +1096,26 @@ export async function fetchStandardWealthContext(
       select: { shares: true, sharesDecimal: true, currentPrice: true, currentPriceDecimal: true },
     }),
   ]);
+  // Read the Float, not the Decimal shadow column. The Decimal columns on
+  // Account / InvestmentHolding / ManualAsset / ManualLiability were backfilled
+  // once by the incomplete Float->Decimal migration and no runtime code writes
+  // them, so preferring them here returned migration-day values forever while
+  // reconciles, imports, transfers and the nightly balance job moved only the
+  // Float. (NetWorthSnapshot below is different — see the comment there.)
   const cashValue = accounts
     .filter((account) => account.type !== 'investment')
-    .reduce((sum, account) => sum.plus(decimal(account.balanceDecimal ?? account.balance ?? 0)), ZERO);
+    .reduce((sum, account) => sum.plus(decimal(account.balance ?? 0)), ZERO);
   const investmentValue = holdings.reduce((sum, holding) => {
-    const shares = decimal(holding.sharesDecimal ?? holding.shares ?? 0);
-    const price = decimal(holding.currentPriceDecimal ?? holding.currentPrice ?? 0);
+    const shares = decimal(holding.shares ?? 0);
+    const price = decimal(holding.currentPrice ?? 0);
     return sum.plus(shares.times(price));
   }, ZERO);
-  const manualAssetValue = manualAssets.reduce((sum, asset) => sum.plus(decimal(asset.currentValueDecimal ?? asset.currentValue ?? 0)), ZERO);
-  const manualLiabilityValue = manualLiabilities.reduce((sum, liability) => sum.plus(decimal(liability.currentBalanceDecimal ?? liability.currentBalance ?? 0)), ZERO);
+  const manualAssetValue = manualAssets.reduce((sum, asset) => sum.plus(decimal(asset.currentValue ?? 0)), ZERO);
+  const manualLiabilityValue = manualLiabilities.reduce((sum, liability) => sum.plus(decimal(liability.currentBalance ?? 0)), ZERO);
   const accountContributions = accounts.map((account) => ({
     id: account.id,
     name: account.name,
-    value: decimal(account.balanceDecimal ?? account.balance ?? 0),
+    value: decimal(account.balance ?? 0),
   }));
   return {
     cashValue,
@@ -1117,6 +1123,9 @@ export async function fetchStandardWealthContext(
     manualAssetValue,
     manualLiabilityValue,
     accountContributions,
+    // NetWorthSnapshot intentionally still prefers the Decimal column. These
+    // rows are immutable history: once written they are never updated, so the
+    // Decimal and the Float agree by construction and cannot drift.
     snapshots: snapshots.map((snapshot) => ({
       date: snapshot.date.toISOString().slice(0, 10),
       assets: decimal(snapshot.assetsDecimal ?? snapshot.assets ?? 0),
@@ -1158,8 +1167,11 @@ export async function fetchStandardInvestmentContext(
   });
   return {
     holdings: holdings.map((holding) => {
-      const shares = decimal(holding.sharesDecimal ?? holding.shares ?? 0);
-      const price = decimal(holding.currentPriceDecimal ?? holding.currentPrice ?? 0);
+      // Float, not the Decimal shadow column — see the note in the net-worth
+      // generator above. realizedGainDecimal below is different: it has no
+      // Float counterpart and investmentService writes it directly.
+      const shares = decimal(holding.shares ?? 0);
+      const price = decimal(holding.currentPrice ?? 0);
       return {
         id: holding.id,
         accountId: holding.account.id,
@@ -1168,7 +1180,7 @@ export async function fetchStandardInvestmentContext(
         name: holding.name,
         shares,
         currentValue: shares.times(price),
-        costBasis: decimal(holding.costBasisDecimal ?? holding.costBasis ?? 0),
+        costBasis: decimal(holding.costBasis ?? 0),
         realizedGainLoss: (holding.lots ?? []).reduce((sum, lot) => sum.plus(decimal(lot.realizedGainDecimal ?? 0)), ZERO),
         assetClass: holding.assetClass,
       };

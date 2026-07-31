@@ -249,10 +249,10 @@ model Account {
   institutionLogo      String?
   lastFour             String?
   balance              Float                    @default(0)
-  balanceDecimal       Decimal?                 @db.Decimal(19, 4)
+  balanceDecimal       Decimal?                 @db.Decimal(19, 4) // UNMAINTAINED: backfill-only shadow column; see plans/021
   currency             String                   @default("USD")
   creditLimit          Float?
-  creditLimitDecimal   Decimal?                 @db.Decimal(19, 4)
+  creditLimitDecimal   Decimal?                 @db.Decimal(19, 4) // UNMAINTAINED: backfill-only shadow column; see plans/021
   providerConnectionId String?
   isHidden             Boolean                  @default(false)
   excludeFromNetWorth  Boolean                  @default(false)
@@ -598,11 +598,11 @@ model InvestmentHolding {
   symbol                String
   name                  String
   shares                Float
-  sharesDecimal         Decimal?              @db.Decimal(19, 4)
+  sharesDecimal         Decimal?              @db.Decimal(19, 4) // UNMAINTAINED: backfill-only shadow column; see plans/021
   costBasis             Float
-  costBasisDecimal      Decimal?              @db.Decimal(19, 4)
+  costBasisDecimal      Decimal?              @db.Decimal(19, 4) // UNMAINTAINED: backfill-only shadow column; see plans/021
   currentPrice          Float
-  currentPriceDecimal   Decimal?              @db.Decimal(19, 4)
+  currentPriceDecimal   Decimal?              @db.Decimal(19, 4) // UNMAINTAINED: backfill-only shadow column; see plans/021
   assetClass            String                @default("us_stock")
   priceHistory          Json?
   totalDividendsDecimal Decimal?              @db.Decimal(19, 4)
@@ -683,9 +683,9 @@ model ManualAsset {
   name                 String
   type                 String                @default("other") // real_estate | vehicle | crypto | collectible | other
   currentValue         Float
-  currentValueDecimal  Decimal?              @db.Decimal(19, 4)
+  currentValueDecimal  Decimal?              @db.Decimal(19, 4) // UNMAINTAINED: backfill-only shadow column; see plans/021
   purchaseValue        Float?
-  purchaseValueDecimal Decimal?              @db.Decimal(19, 4)
+  purchaseValueDecimal Decimal?              @db.Decimal(19, 4) // UNMAINTAINED: backfill-only shadow column; see plans/021
   purchaseDate         DateTime?
   notes                String?
   currency             String                @default("USD")
@@ -704,9 +704,9 @@ model ManualLiability {
   name                  String
   type                  String    @default("other") // mortgage | auto_loan | student_loan | credit_card | other
   originalAmount        Float
-  originalAmountDecimal Decimal?  @db.Decimal(19, 4)
+  originalAmountDecimal Decimal?  @db.Decimal(19, 4) // UNMAINTAINED: backfill-only shadow column; see plans/021
   currentBalance        Float
-  currentBalanceDecimal Decimal?  @db.Decimal(19, 4)
+  currentBalanceDecimal Decimal?  @db.Decimal(19, 4) // UNMAINTAINED: backfill-only shadow column; see plans/021
   interestRate          Float?
   interestRateDecimal   Decimal?  @db.Decimal(19, 4)
   monthlyPayment        Float?
