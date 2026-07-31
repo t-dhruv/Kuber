@@ -48,13 +48,16 @@ export default async function globalSetup(_config: FullConfig) {
   }
 
   await page.getByRole('button', { name: /sign up|create account/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/signup'), { timeout: 20_000 });
 
-  // Signup returns { requireEmailVerification: true } and no tokens, and login
-  // is blocked until the address is verified. The verification token is only
-  // ever emailed and is stored hashed, so a browser-only flow cannot complete
-  // it. Mark the address verified directly — this is test setup standing in
-  // for the user clicking the link in their inbox.
+  // Signup returns { requireEmailVerification: true } and no tokens, so the
+  // page stays on /signup and renders a "Check your email" view rather than
+  // navigating. Wait for that view to confirm the account was created.
+  await page.getByRole('heading', { name: /check your email/i }).waitFor({ timeout: 20_000 });
+
+  // Login is blocked until the address is verified, and the verification token
+  // is only ever emailed and is stored hashed, so a browser-only flow cannot
+  // complete it. Mark the address verified directly — this is test setup
+  // standing in for the user clicking the link in their inbox.
   await markEmailVerified(email);
 
   await page.goto(`${BASE_URL}/login`);
