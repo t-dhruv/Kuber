@@ -50,9 +50,87 @@ jobs:
           JWT_SECRET: test_jwt_secret_at_least_64_characters_long_for_ci_pipeline_run
           JWT_REFRESH_SECRET: test_refresh_secret_at_least_64_characters_long_for_ci_pipeline
 
-      # E2E tests require a running PostgreSQL + seeded data.
-      # Skipped here — run locally with `npm run test:e2e` or add a service container.
-      # See: https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: lint-typecheck-test
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kuber
+          POSTGRES_PASSWORD: kuber_test
+          POSTGRES_DB: kuber_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://kuber:kuber_test@localhost:5432/kuber_test
+      JWT_SECRET: test_jwt_secret_at_least_64_characters_long_for_ci_pipeline_run
+      JWT_REFRESH_SECRET: test_refresh_secret_at_least_64_characters_long_for_ci_pipeline
+      # The server must not think it is behind a proxy here; nothing sets
+      # X-Forwarded-For in CI.
+      TRUST_PROXY: 0
+      PORT: 9002
+      CLIENT_URL: http://localhost:9001
+      E2E_BASE_URL: http://localhost:9001
+      VITE_API_URL: http://localhost:9002/api/v1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm exec --workspace=server -- prisma generate
+
+      - name: Run migrations
+        run: npm exec --workspace=server -- prisma migrate deploy
+
+      - name: Seed database
+        run: npm run db:seed --workspace=server
+
+      - name: Install Playwright browsers
+        run: npm exec -- playwright install --with-deps chromium
+
+      - name: Start server
+        run: |
+          npm run build --workspace=server
+          node server/dist/index.js &
+          npx --yes wait-on http://localhost:9002/health --timeout 60000
+
+      # The Vite dev server, not a static build: the client calls the API on a
+      # relative '/api/v1' path and only the dev server proxies that to :9002
+      # (client/vite.config.ts). A static file server would 404 every API call.
+      - name: Start client
+        run: |
+          npm run dev --workspace=@kuber/client &
+          npx --yes wait-on http://localhost:9001 --timeout 120000
+
+      - name: Run E2E tests
+        run: npm exec -- playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
 
   build:
     name: Build (TypeScript + Vite)

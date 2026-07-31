@@ -7,6 +7,20 @@ const AUTH_DIR = path.join(__dirname, '.auth');
 const STATE_PATH = path.join(AUTH_DIR, 'user.json');
 const CREDS_PATH = path.join(AUTH_DIR, 'credentials.json');
 
+async function markEmailVerified(email: string): Promise<void> {
+  // Imported lazily so the Prisma client is only required when setup runs.
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient();
+  try {
+    await prisma.user.update({
+      where: { email },
+      data: { emailVerifiedAt: new Date() },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 export default async function globalSetup(_config: FullConfig) {
   if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 
@@ -36,12 +50,18 @@ export default async function globalSetup(_config: FullConfig) {
   await page.getByRole('button', { name: /sign up|create account/i }).click();
   await page.waitForURL((url) => !url.pathname.startsWith('/signup'), { timeout: 20_000 });
 
-  if (page.url().includes('/login')) {
-    await page.locator('input[name="email"], #email').fill(email);
-    await page.locator('input[name="password"], #password').fill(password);
-    await page.getByRole('button', { name: /sign in|log in/i }).click();
-    await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
-  }
+  // Signup returns { requireEmailVerification: true } and no tokens, and login
+  // is blocked until the address is verified. The verification token is only
+  // ever emailed and is stored hashed, so a browser-only flow cannot complete
+  // it. Mark the address verified directly — this is test setup standing in
+  // for the user clicking the link in their inbox.
+  await markEmailVerified(email);
+
+  await page.goto(`${BASE_URL}/login`);
+  await page.locator('input[name="email"], #email').fill(email);
+  await page.locator('input[name="password"], #password').fill(password);
+  await page.getByRole('button', { name: /sign in|log in/i }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15_000 });
 
   await page.evaluate(() => localStorage.setItem('kuber-onboarding-done', '1'));
 
