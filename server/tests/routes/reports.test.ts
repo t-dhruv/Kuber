@@ -472,11 +472,11 @@ describe('journal-backed report routes', () => {
       { date: new Date('2026-01-31T00:00:00.000Z'), assetsDecimal: '4000.00', assets: 0, liabilitiesDecimal: '500.00', liabilities: 0, netWorthDecimal: '3500.00', netWorth: 0 },
     ] as any);
     vi.mocked(prisma.account.findMany).mockResolvedValue([
-      { id: 'acct-checking', name: 'Checking', type: 'bank', balanceDecimal: '1000.00', balance: 0 },
+      { id: 'acct-checking', name: 'Checking', type: 'bank', balanceDecimal: '1.00', balance: 1000 },
     ] as any);
-    vi.mocked(prisma.manualAsset.findMany).mockResolvedValue([{ currentValueDecimal: '750.00', currentValue: 0 }] as any);
-    vi.mocked(prisma.manualLiability.findMany).mockResolvedValue([{ currentBalanceDecimal: '300.00', currentBalance: 0 }] as any);
-    vi.mocked(prisma.investmentHolding.findMany).mockResolvedValue([{ sharesDecimal: '10', shares: 0, currentPriceDecimal: '250.00', currentPrice: 0 }] as any);
+    vi.mocked(prisma.manualAsset.findMany).mockResolvedValue([{ currentValueDecimal: '1.00', currentValue: 750 }] as any);
+    vi.mocked(prisma.manualLiability.findMany).mockResolvedValue([{ currentBalanceDecimal: '1.00', currentBalance: 300 }] as any);
+    vi.mocked(prisma.investmentHolding.findMany).mockResolvedValue([{ sharesDecimal: '1', shares: 10, currentPriceDecimal: '1.00', currentPrice: 250 }] as any);
 
     const res = await request(makeApp()).get('/reports/standard/generate?reportType=net_worth&startDate=2026-01-01&endDate=2026-01-31&currencyCode=CAD');
 
@@ -493,12 +493,12 @@ describe('journal-backed report routes', () => {
         accountId: 'acct-invest',
         symbol: 'ABC',
         name: 'ABC Fund',
-        sharesDecimal: '10',
-        shares: 0,
-        currentPriceDecimal: '120.00',
-        currentPrice: 0,
-        costBasisDecimal: '1000.00',
-        costBasis: 0,
+        sharesDecimal: '1',
+        shares: 10,
+        currentPriceDecimal: '1.00',
+        currentPrice: 120,
+        costBasisDecimal: '1.00',
+        costBasis: 1000,
         assetClass: 'equity',
         account: { id: 'acct-invest', name: 'Investing' },
         dividends: [{ amountDecimal: '25.00' }],
