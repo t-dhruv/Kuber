@@ -281,7 +281,7 @@ export async function saveImport(
   });
 
   if (imported > 0) {
-    transactionsImportedTotal.inc({ household_id: householdId, source: bankSource ?? 'generic' });
+    transactionsImportedTotal.inc({ source: bankSource ?? 'generic' });
   }
 
   return { imported, skipped, errors };

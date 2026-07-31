@@ -47,10 +47,14 @@ export const jobLastRunTimestamp = new Gauge({
 
 // ── Business Metrics ──────────────────────────────────────────────────────────
 
+// Deliberately not labelled by household_id. Prometheus creates one time
+// series per label-value combination, so a per-household label grows without
+// bound as households are added — the classic Prometheus OOM pattern — and it
+// publishes household identifiers into the metrics endpoint.
 export const transactionsImportedTotal = new Counter({
   name: 'transactions_imported_total',
   help: 'Total transactions imported',
-  labelNames: ['household_id', 'source'],
+  labelNames: ['source'],
   registers: [register],
 });
 
@@ -61,10 +65,10 @@ export const aiAdvisorRequestsTotal = new Counter({
   registers: [register],
 });
 
+// See the note on transactionsImportedTotal: no household_id label.
 export const rulesAppliedTotal = new Counter({
   name: 'rules_applied_total',
   help: 'Total categorization rules applied',
-  labelNames: ['household_id'],
   registers: [register],
 });
 
