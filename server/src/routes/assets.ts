@@ -22,7 +22,7 @@ const assetUpdateSchema = assetSchema.partial();
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const assets = await prisma.manualAsset.findMany({
-      where: { householdId: req.householdId! },
+      where: { householdId: req.householdId!, isDeleted: false },
       include: { _count: { select: { snapshots: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -65,13 +65,13 @@ router.get('/net-worth-breakdown', async (req: AuthRequest, res: Response) => {
 
     // Manual assets
     const manualAssetsAgg = await prisma.manualAsset.aggregate({
-      where: { householdId },
+      where: { householdId, isDeleted: false },
       _sum: { currentValue: true },
     });
 
     // Manual liabilities
     const manualLiabilitiesAgg = await prisma.manualLiability.aggregate({
-      where: { householdId },
+      where: { householdId, isDeleted: false },
       _sum: { currentBalance: true },
     });
 
@@ -126,7 +126,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   }
   try {
     const existing = await prisma.manualAsset.findFirst({
-      where: { id: req.params.id, householdId: req.householdId! },
+      where: { id: req.params.id, householdId: req.householdId!, isDeleted: false },
     });
     if (!existing) return res.status(404).json({ error: 'Asset not found' });
 
@@ -156,11 +156,12 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const existing = await prisma.manualAsset.findFirst({
-      where: { id: req.params.id, householdId: req.householdId! },
+      where: { id: req.params.id, householdId: req.householdId!, isDeleted: false },
     });
     if (!existing) return res.status(404).json({ error: 'Asset not found' });
 
-    await prisma.manualAsset.delete({ where: { id: req.params.id } });
+    // Soft delete: manual assets feed historical net-worth reporting.
+    await prisma.manualAsset.update({ where: { id: req.params.id }, data: { isDeleted: true } });
     res.json({ message: 'Deleted' });
   } catch (err) {
     req.log.error({ err }, 'error');

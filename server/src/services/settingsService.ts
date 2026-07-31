@@ -1054,7 +1054,7 @@ export async function exportHouseholdData(householdId: string): Promise<ExcelJS.
   );
 
   // Assets
-  const assets = await prisma.manualAsset.findMany({ where: { householdId }, orderBy: { name: 'asc' } });
+  const assets = await prisma.manualAsset.findMany({ where: { householdId, isDeleted: false }, orderBy: { name: 'asc' } });
   const assetsSheet = workbook.addWorksheet('Assets');
   assetsSheet.columns = [
     { header: 'Name', key: 'name', width: 24 },
@@ -1075,7 +1075,7 @@ export async function exportHouseholdData(householdId: string): Promise<ExcelJS.
 
   // Liabilities
   const liabilities = await prisma.manualLiability.findMany({
-    where: { householdId },
+    where: { householdId, isDeleted: false },
     orderBy: { name: 'asc' },
   });
   const liabSheet = workbook.addWorksheet('Liabilities');

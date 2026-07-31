@@ -1086,8 +1086,8 @@ export async function fetchStandardWealthContext(
       where: { householdId: input.householdId, isDeleted: false, isHidden: false, excludeFromNetWorth: false },
       select: { id: true, name: true, type: true, balance: true, balanceDecimal: true },
     }),
-    prisma.manualAsset.findMany({ where: { householdId: input.householdId }, select: { currentValue: true, currentValueDecimal: true } }),
-    prisma.manualLiability.findMany({ where: { householdId: input.householdId }, select: { currentBalance: true, currentBalanceDecimal: true } }),
+    prisma.manualAsset.findMany({ where: { householdId: input.householdId, isDeleted: false }, select: { currentValue: true, currentValueDecimal: true } }),
+    prisma.manualLiability.findMany({ where: { householdId: input.householdId, isDeleted: false }, select: { currentBalance: true, currentBalanceDecimal: true } }),
     prisma.investmentHolding.findMany({
       where: {
         isDeleted: false,

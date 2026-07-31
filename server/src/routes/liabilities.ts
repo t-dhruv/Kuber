@@ -63,7 +63,7 @@ function resolveRate(liability: {
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const liabilities = await prisma.manualLiability.findMany({
-      where: { householdId: req.householdId! },
+      where: { householdId: req.householdId!, isDeleted: false },
       orderBy: { createdAt: 'desc' },
     });
     return res.json(liabilities);
@@ -106,7 +106,7 @@ router.get('/debt-payoff', async (req: AuthRequest, res: Response) => {
     const extra = Math.max(0, parseFloat(req.query.extraMonthly as string) || 0);
 
     const liabilities = await prisma.manualLiability.findMany({
-      where: { householdId, interestRate: { gt: 0 } },
+      where: { householdId, interestRate: { gt: 0 }, isDeleted: false },
       select: {
         id: true,
         name: true,
@@ -236,7 +236,7 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
   }
   try {
     const existing = await prisma.manualLiability.findFirst({
-      where: { id: req.params.id, householdId: req.householdId! },
+      where: { id: req.params.id, householdId: req.householdId!, isDeleted: false },
     });
     if (!existing) return res.status(404).json({ error: 'Liability not found' });
 
@@ -261,11 +261,12 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const existing = await prisma.manualLiability.findFirst({
-      where: { id: req.params.id, householdId: req.householdId! },
+      where: { id: req.params.id, householdId: req.householdId!, isDeleted: false },
     });
     if (!existing) return res.status(404).json({ error: 'Liability not found' });
 
-    await prisma.manualLiability.delete({ where: { id: req.params.id } });
+    // Soft delete: manual liabilities feed historical net-worth reporting.
+    await prisma.manualLiability.update({ where: { id: req.params.id }, data: { isDeleted: true } });
     return res.json({ message: 'Deleted' });
   } catch (err) {
     req.log.error({ err }, 'liabilities/DELETE /:id');
@@ -279,7 +280,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 router.get('/:id/amortization', async (req: AuthRequest, res: Response) => {
   try {
     const liability = await prisma.manualLiability.findFirst({
-      where: { id: req.params.id, householdId: req.householdId! },
+      where: { id: req.params.id, householdId: req.householdId!, isDeleted: false },
     });
     if (!liability) return res.status(404).json({ error: 'Liability not found' });
 
@@ -348,7 +349,7 @@ router.get('/:id/amortization', async (req: AuthRequest, res: Response) => {
 router.post('/:id/payoff-simulator', async (req: AuthRequest, res: Response) => {
   try {
     const liability = await prisma.manualLiability.findFirst({
-      where: { id: req.params.id, householdId: req.householdId! },
+      where: { id: req.params.id, householdId: req.householdId!, isDeleted: false },
     });
     if (!liability) return res.status(404).json({ error: 'Liability not found' });
 

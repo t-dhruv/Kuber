@@ -71,7 +71,7 @@ describe('liabilities route integration', () => {
 
     expect(res.status).toBe(200);
     expect(prisma.manualLiability.findMany).toHaveBeenCalledWith({
-      where: { householdId: 'household-1' },
+      where: { householdId: 'household-1', isDeleted: false },
       orderBy: { createdAt: 'desc' },
     });
     expect(res.body[0]).toMatchObject({ id: 'liability-1', name: 'Mortgage' });
@@ -124,7 +124,7 @@ describe('liabilities route integration', () => {
 
     expect(res.status).toBe(200);
     expect(prisma.manualLiability.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { householdId: 'household-1', interestRate: { gt: 0 } },
+      where: { householdId: 'household-1', interestRate: { gt: 0 }, isDeleted: false },
     }));
     expect(res.body).toMatchObject({
       totalMinMonthly: 350,
@@ -148,7 +148,7 @@ describe('liabilities route integration', () => {
 
     expect(res.status).toBe(200);
     expect(prisma.manualLiability.findFirst).toHaveBeenCalledWith({
-      where: { id: 'liability-1', householdId: 'household-1' },
+      where: { id: 'liability-1', householdId: 'household-1', isDeleted: false },
     });
     expect(prisma.manualLiability.update).toHaveBeenCalledWith({
       where: { id: 'liability-1' },
@@ -166,14 +166,20 @@ describe('liabilities route integration', () => {
     expect(prisma.manualLiability.delete).not.toHaveBeenCalled();
   });
 
-  it('deletes a household liability', async () => {
+  it('soft-deletes a household liability instead of destroying it', async () => {
     vi.mocked(prisma.manualLiability.findFirst).mockResolvedValue(liability as any);
-    vi.mocked(prisma.manualLiability.delete).mockResolvedValue(liability as any);
+    vi.mocked(prisma.manualLiability.update).mockResolvedValue(liability as any);
 
     const res = await request(makeApp()).delete('/liability-1');
 
     expect(res.status).toBe(200);
-    expect(prisma.manualLiability.delete).toHaveBeenCalledWith({ where: { id: 'liability-1' } });
+    // Manual liabilities feed historical net-worth reporting, so they are
+    // never hard-deleted.
+    expect(prisma.manualLiability.update).toHaveBeenCalledWith({
+      where: { id: 'liability-1' },
+      data: { isDeleted: true },
+    });
+    expect(prisma.manualLiability.delete).not.toHaveBeenCalled();
   });
 
   it('returns amortization details for liabilities with rate metadata', async () => {
