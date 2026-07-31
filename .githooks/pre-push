@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-echo "Running Kuber release QA gate before push..."
-echo "This checks 90% server code coverage and 100% feature coverage."
+echo "Running Kuber QA ratchet gate before push..."
+echo "This checks that coverage and feature coverage have not regressed."
 
-npm run qa:release-gate
+npm run qa:gate

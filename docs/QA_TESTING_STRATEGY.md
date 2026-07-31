@@ -32,13 +32,14 @@ The release target is:
 - At least 90% automated code coverage for statements, branches, functions, and lines across production TypeScript code.
 - 100% feature coverage, meaning every shipped user-visible feature and critical backend capability has a mapped automated test at the right level: unit, API integration, e2e, or a documented combination.
 
-Current release-gate baseline, measured on 2026-05-15:
+Current release-gate baseline, measured on 2026-07-29. Each percentage is stated with the scope it was measured over, because a high percentage over a hand-picked subset is what made the previous baseline misleading:
 
-- Server Vitest release coverage: 98.73% statements, 96.91% branches, 99.08% functions, 99.06% lines across the deterministic in-process business module coverage scope.
-- Client Vitest release coverage: 100% statements, 95.45% branches, 100% functions, 100% lines across the deterministic client utility/store coverage scope.
-- Feature coverage matrix: 39/39 shipped feature rows covered for the release gate.
+- Server Vitest release coverage: 96.11% statements across 25 of 154 server source files in the enforced coverage scope (16.2%). Workspace-wide coverage is not yet enforced.
+- Client Vitest release coverage: 100% statements across 3 of 162 client source files in the enforced coverage scope (1.9%).
+- Feature coverage matrix: 21/39 rows COVERED with cited test files, 14 PARTIAL, 4 MISSING — 53.85% feature coverage.
 - Shared coverage is not yet enforced as a release gate.
 - Smoke e2e now selects a real critical subset, but this is a release-safety smoke layer, not full feature coverage.
+- CI does not run the 21 Playwright specs in `tests/e2e/`, so any matrix row resting mainly on E2E is weaker than it appears.
 
 Coverage gates should be added in two steps:
 
@@ -65,6 +66,13 @@ No production release unless all required gates pass:
 | Visual/accessibility smoke | for UI changes | yes | responsive screenshots, keyboard basics, no console errors |
 | Code coverage | no, ratchet until target is reachable | yes | at least 90% statements, branches, functions, and lines |
 | Feature coverage | yes for touched features | yes | 100% of shipped features mapped to passing tests |
+
+Two gates, deliberately separated:
+
+- `npm run qa:gate` (`make gate`) is the **ratchet**, and is what the pre-push hook runs. It fails only if coverage regresses below `scripts/coverage-baseline.json` or the feature matrix is malformed. Raise the baseline as coverage improves; that is the ratchet.
+- `npm run qa:release-gate` (`make release-gate`) enforces the **release targets**: 90% per metric, 90% of each workspace's source files inside the coverage scope, and every matrix row `COVERED`.
+
+`qa:release-gate` does not pass today, and is not expected to. It fails on coverage scope (16.2% server, 1.9% client) and on feature coverage (21 of 39 rows). Those are the real gaps to close before GA — do not lower the thresholds to make it green.
 
 ## Coverage Model
 
