@@ -689,12 +689,14 @@ model ManualAsset {
   purchaseDate         DateTime?
   notes                String?
   currency             String                @default("USD")
+  isDeleted            Boolean               @default(false)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   household            Household             @relation(fields: [householdId], references: [id], onDelete: Cascade)
   snapshots            ManualAssetSnapshot[]
 
   @@index([householdId])
+  @@index([householdId, isDeleted])
   @@map("manual_assets")
 }
 
@@ -725,11 +727,13 @@ model ManualLiability {
   amortizationYears Int? // e.g. 25 or 30
   paymentFrequency  String? // 'monthly' | 'biweekly' | 'weekly'
 
+  isDeleted Boolean   @default(false)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
 
   @@index([householdId])
+  @@index([householdId, isDeleted])
   @@map("manual_liabilities")
 }
 

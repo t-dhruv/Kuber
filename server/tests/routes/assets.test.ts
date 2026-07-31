@@ -56,7 +56,7 @@ describe('assets route integration', () => {
 
     expect(res.status).toBe(200);
     expect(prisma.manualAsset.findMany).toHaveBeenCalledWith({
-      where: { householdId: 'household-1' },
+      where: { householdId: 'household-1', isDeleted: false },
       include: { _count: { select: { snapshots: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -142,7 +142,7 @@ describe('assets route integration', () => {
 
     expect(res.status).toBe(200);
     expect(prisma.manualAsset.findFirst).toHaveBeenCalledWith({
-      where: { id: 'asset-1', householdId: 'household-1' },
+      where: { id: 'asset-1', householdId: 'household-1', isDeleted: false },
     });
     expect(prisma.manualAsset.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'asset-1' },
@@ -163,14 +163,20 @@ describe('assets route integration', () => {
     expect(prisma.manualAsset.delete).not.toHaveBeenCalled();
   });
 
-  it('deletes a household manual asset', async () => {
+  it('soft-deletes a household manual asset instead of destroying it', async () => {
     vi.mocked(prisma.manualAsset.findFirst).mockResolvedValue(asset as any);
-    vi.mocked(prisma.manualAsset.delete).mockResolvedValue(asset as any);
+    vi.mocked(prisma.manualAsset.update).mockResolvedValue(asset as any);
 
     const res = await request(makeApp()).delete('/asset-1');
 
     expect(res.status).toBe(200);
-    expect(prisma.manualAsset.delete).toHaveBeenCalledWith({ where: { id: 'asset-1' } });
+    // Manual assets feed historical net-worth reporting, so they are never
+    // hard-deleted.
+    expect(prisma.manualAsset.update).toHaveBeenCalledWith({
+      where: { id: 'asset-1' },
+      data: { isDeleted: true },
+    });
+    expect(prisma.manualAsset.delete).not.toHaveBeenCalled();
   });
 });
 

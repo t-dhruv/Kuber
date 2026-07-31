@@ -540,11 +540,11 @@ router.get('/breakdown', async (req: AuthRequest, res: Response) => {
         },
       }),
       prisma.manualAsset.findMany({
-        where: { householdId },
+        where: { householdId, isDeleted: false },
         select: { id: true, name: true, type: true, currentValue: true },
       }),
       prisma.manualLiability.findMany({
-        where: { householdId },
+        where: { householdId, isDeleted: false },
         select: { id: true, name: true, type: true, currentBalance: true },
       }),
     ]);
