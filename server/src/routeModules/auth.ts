@@ -135,18 +135,6 @@ router.post('/signup', async (req: Request, res: Response) => {
 
     const { email, password, firstName, lastName, householdName, inviteToken } = parsed.data;
     const normalizedEmail = email.toLowerCase();
-    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (existing) {
-      // ADR-0004. Redeeming an invite as someone who already has a Household
-      // would hit the database constraint; say why rather than letting it
-      // surface as a generic collision on the email address.
-      if (inviteToken && (await prisma.householdMember.findUnique({ where: { userId: existing.id } }))) {
-        return res.status(409).json({
-          error: 'That account already belongs to a household. A user can belong to only one household.',
-        });
-      }
-      return res.status(409).json({ error: 'Email already in use' });
-    }
 
     let invite: { id: string; householdId: string; email: string; role: string; expiresAt: Date; usedAt: Date | null } | null = null;
     if (inviteToken) {
@@ -160,8 +148,28 @@ router.post('/signup', async (req: Request, res: Response) => {
     }
 
     // Open registration is gated; an invite is its own authorisation and is not.
+    //
+    // This runs BEFORE the address is looked up on purpose. The other order
+    // answers "is this address registered here?" to anyone who can reach a
+    // closed Instance — 409 for a known address, 403 for an unknown one — which
+    // is an unauthenticated oracle over the Instance's Users.
     if (!invite && !(await isOpenSignupAllowed())) {
       return res.status(403).json({ error: REGISTRATION_CLOSED_MESSAGE });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existing) {
+      // ADR-0004. Redeeming an invite as someone who already has a Household
+      // would hit the database constraint; say why rather than letting it
+      // surface as a generic collision on the email address. Only an invite
+      // holder gets this far on a closed Instance, so it discloses nothing they
+      // were not already told.
+      if (invite && (await prisma.householdMember.findUnique({ where: { userId: existing.id } }))) {
+        return res.status(409).json({
+          error: 'That user already belongs to a household. A user can belong to only one household.',
+        });
+      }
+      return res.status(409).json({ error: 'Email already in use' });
     }
 
     // ADR-0003: with no transport, a verification message is never sent, so

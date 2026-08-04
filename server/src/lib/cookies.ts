@@ -12,7 +12,7 @@ import { logger } from './logger.js';
 /**
  * Whether the refresh cookie carries `Secure`.
  *
- * Defaults to enabled: the safe configuration is the one an operator gets
+ * Defaults to enabled: the safe configuration is the one a Self-hoster gets
  * without thinking about it. Only an explicit, recognised falsy value turns it
  * off, so a typo fails towards security rather than away from it.
  *
@@ -26,7 +26,7 @@ export function isCookieSecure(): boolean {
 }
 
 /**
- * Warns at boot when secure cookies are off, so the operator understands the
+ * Warns at boot when secure cookies are off, so the Self-hoster understands the
  * trade-off they have accepted rather than discovering it in a packet capture.
  *
  * Called from the entry point; `createApp()` stays free of side effects.

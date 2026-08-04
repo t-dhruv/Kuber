@@ -107,21 +107,31 @@ describe('the migration that introduces the constraint', () => {
       .map((statement) => statement.trim())
       .filter((statement) => statement.length > 0);
 
-    // Rewind to the pre-migration schema, then create the state the constraint
-    // is meant to resolve.
-    await prisma.$executeRawUnsafe('DROP INDEX IF EXISTS "household_members_userId_key"');
-    const fixture = await createHousehold();
-    const second = await prisma.household.create({ data: { name: 'The Other Books' } });
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "household_members" ("id", "userId", "householdId", "role", "joinedAt")
-       VALUES ('later-membership', $1, $2, 'member', NOW() + INTERVAL '1 day')`,
-      fixture.user.id,
-      second.id,
-    );
-    expect(await prisma.householdMember.count({ where: { userId: fixture.user.id } })).toBe(2);
+    // This is the one test that touches the schema rather than only the data,
+    // and the database is shared by every file in the run. The finally block is
+    // what stops a failure here from leaving the constraint missing for
+    // everything that comes after.
+    let fixture: Awaited<ReturnType<typeof createHousehold>>;
+    let second: { id: string };
+    try {
+      await prisma.$executeRawUnsafe('DROP INDEX IF EXISTS "household_members_userId_key"');
+      fixture = await createHousehold();
+      second = await prisma.household.create({ data: { name: 'The Other Books' } });
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "household_members" ("id", "userId", "householdId", "role", "joinedAt")
+         VALUES ('later-membership', $1, $2, 'member', NOW() + INTERVAL '1 day')`,
+        fixture.user.id,
+        second.id,
+      );
+      expect(await prisma.householdMember.count({ where: { userId: fixture.user.id } })).toBe(2);
 
-    for (const statement of statements) {
-      await prisma.$executeRawUnsafe(statement);
+      for (const statement of statements) {
+        await prisma.$executeRawUnsafe(statement);
+      }
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'CREATE UNIQUE INDEX IF NOT EXISTS "household_members_userId_key" ON "household_members"("userId")',
+      );
     }
 
     // The earliest membership is the one kept, so the User stays in the

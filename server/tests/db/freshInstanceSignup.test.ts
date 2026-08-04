@@ -147,6 +147,22 @@ describe('open registration closes once the first Household exists', () => {
     expect(res.body.error).toMatch(/invite/i);
   });
 
+  it('answers the same way whether or not the address is already registered', async () => {
+    // Otherwise a closed Instance is an unauthenticated oracle over its own
+    // Users: 409 "email already in use" for a registered address, 403 for an
+    // unknown one, to anyone who can reach the signup endpoint.
+    const existing = await createHousehold();
+
+    const known = await request(createTestApp())
+      .post('/api/v1/auth/signup')
+      .send(signupBody({ email: existing.user.email }));
+    const unknown = await request(createTestApp()).post('/api/v1/auth/signup').send(signupBody());
+
+    expect(known.status).toBe(403);
+    expect(unknown.status).toBe(403);
+    expect(known.body).toEqual(unknown.body);
+  });
+
   it('reopens when ALLOW_SIGNUP is deliberately enabled', async () => {
     await createHousehold();
     process.env.ALLOW_SIGNUP = 'true';

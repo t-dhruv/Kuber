@@ -137,6 +137,10 @@ describe('auth email verification', () => {
   // The registration gate is pure request/response branching, which is what
   // this seam is for. Whether the gate reads the Household count correctly
   // against a real database is proven in tests/db/freshInstanceSignup.test.ts.
+  // TODO: the `as any` casts below match this file's existing idiom for Prisma
+  // mock returns — the mocks are deliberately partial, and typing them fully
+  // would mean restating whole Prisma model shapes per case. Removing them is
+  // part of the repo-wide `any` cleanup, which PRD #151 puts out of scope.
   describe('the registration gate', () => {
     function signup(body: Record<string, unknown> = {}) {
       return request(makeApp()).post('/auth/signup').send({

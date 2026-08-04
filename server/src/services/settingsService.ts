@@ -210,10 +210,12 @@ export async function inviteMember(
     where: { user: { email: normalizedEmail } },
   });
   if (existingMember) {
+    // One message for both cases on purpose. Distinguishing "already in this
+    // household" from "already in another one" would tell an owner whether an
+    // arbitrary address belongs to some other household on the instance, which
+    // is not theirs to learn.
     throw new Error(
-      existingMember.householdId === householdId
-        ? 'That person already belongs to a household — this one.'
-        : 'That person already belongs to a household. A user can belong to only one household, so they cannot be invited to this one.',
+      'That user already belongs to a household. A user can belong to only one household.',
     );
   }
 
