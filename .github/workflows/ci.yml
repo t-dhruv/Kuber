@@ -1,167 +1,63 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - "**"
-      - "!master"
-      - "!main"
   pull_request:
-    branches: ["**"]
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
-  REGISTRY: ghcr.io
+  # Nothing in this workflow touches a database. Prisma still resolves the
+  # datasource block when it generates a client, so the URL has to parse.
+  # Database-backed suites arrive with their own service container.
+  DATABASE_URL: postgresql://kuber:kuber@localhost:5432/kuber_ci
+  TURBO_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
 
 jobs:
-  lint-typecheck-test:
-    name: Lint, Typecheck & Unit Tests
+  ci:
+    name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: 24
+          cache: npm
+
+      # Pin to the version declared in packageManager. npm 12 blocks package
+      # install scripts by default, which leaves Prisma without its engines and
+      # esbuild without its binary; the failure surfaces much later, as a build
+      # error. Pinning keeps CI on the version the repository is built against
+      # rather than whatever the runner's Node happens to bundle.
+      - name: Pin npm
+        run: npm i -g npm@11.6.2
 
       - name: Install dependencies
         run: npm ci
+
+      # The server's types come from the generated Prisma client, so this has
+      # to precede both typecheck and the tests.
+      - name: Generate Prisma client
+        run: npm run db:generate
 
       - name: Lint
         run: npm run lint
 
-      - name: Generate Prisma client
-        run: npm exec --workspace=server -- prisma generate
+      - name: Typecheck
+        run: npm run typecheck
 
-      - name: Typecheck (server)
-        run: npm exec --workspace=server -- tsc --noEmit
+      - name: Unit tests
+        run: npm test
 
-      - name: Typecheck (client)
-        run: npm exec --workspace=client -- tsc --noEmit
-
-      - name: Unit tests (server)
-        run: npm run test --workspace=server
-        env:
-          NODE_ENV: test
-          DATABASE_URL: postgresql://kuber:kuber_test@localhost:5432/kuber_test
-          JWT_SECRET: test_jwt_secret_at_least_64_characters_long_for_ci_pipeline_run
-          JWT_REFRESH_SECRET: test_refresh_secret_at_least_64_characters_long_for_ci_pipeline
-
-      # E2E tests require a running PostgreSQL + seeded data.
-      # Skipped here — run locally with `npm run test:e2e` or add a service container.
-      # See: https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers
-
-  build:
-    name: Build (TypeScript + Vite)
-    runs-on: ubuntu-latest
-    needs: lint-typecheck-test
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npm exec --workspace=server -- prisma generate
-
-      - name: Build all packages
+      - name: Build
         run: npm run build
-
-  docker-preview:
-    name: Build & Push Pre-release Image
-    runs-on: ubuntu-latest
-    needs: build
-    # Only push Docker images on direct branch pushes, not on PRs
-    # (PRs from forks don't have write access to GHCR)
-    # Skip for Dependabot — it only bumps deps, no image needed
-    if: github.event_name == 'push' && github.actor != 'dependabot[bot]'
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Produces tags:
-      #   ghcr.io/<owner>/kuber-server:branch-<safe-name>
-      #   ghcr.io/<owner>/kuber-server:branch-<safe-name>-<sha8>
-      - name: Docker metadata — server
-        id: meta-server
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kuber-server
-          tags: |
-            type=ref,event=branch,prefix=branch-
-            type=sha,format=short,prefix=branch-{{branch}}-
-          flavor: |
-            latest=false
-
-      - name: Docker metadata — client
-        id: meta-client
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/kuber-client
-          tags: |
-            type=ref,event=branch,prefix=branch-
-            type=sha,format=short,prefix=branch-{{branch}}-
-          flavor: |
-            latest=false
-
-      - name: Build and push server image (pre-release)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          target: server-runner
-          push: true
-          tags: ${{ steps.meta-server.outputs.tags }}
-          labels: ${{ steps.meta-server.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push client image (pre-release)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          target: client-runner
-          push: true
-          tags: ${{ steps.meta-client.outputs.tags }}
-          labels: ${{ steps.meta-client.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Summary
-        run: |
-          echo "### Pre-release images published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Server tags:**" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta-server.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "**Client tags:**" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta-client.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY

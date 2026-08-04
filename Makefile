@@ -1,11 +1,12 @@
 .PHONY: help dev dev-client dev-server build build-client build-server \
         test test-server test-client test-unit test-coverage test-e2e \
-        gate release-gate \
         clean db-reset db-env-check db-drop db-migrate db-generate db-seed db-studio \
         lint typecheck format start install up down logs \
         prod-up prod-down prod-logs
 
-WITH_ROOT_ENV = node scripts/run-with-root-env.mjs
+# Workspace npm scripts load the root .env themselves via dotenv-cli. This is
+# only for targets that invoke a binary directly and so get no .env otherwise.
+DOTENV = npx dotenv -e .env --
 
 # ── Default ──────────────────────────────────────────────────────────────────
 
@@ -55,15 +56,15 @@ help:
 # ── Dev ──────────────────────────────────────────────────────────────────────
 
 dev:
-	$(WITH_ROOT_ENV) npx concurrently --kill-others-on-fail \
+	npx concurrently --kill-others-on-fail \
 		"cd server && npm run dev" \
 		"cd client && npm run dev"
 
 dev-client:
-	$(WITH_ROOT_ENV) sh -c 'cd client && npm run dev'
+	cd client && npm run dev
 
 dev-server:
-	$(WITH_ROOT_ENV) sh -c 'cd server && npm run dev'
+	cd server && npm run dev
 
 # ── Install ───────────────────────────────────────────────────────────────────
 
@@ -77,79 +78,70 @@ install:
 build: build-server build-client
 
 build-client:
-	$(WITH_ROOT_ENV) sh -c 'cd client && npm run build'
+	cd client && npm run build
 
 build-server:
-	$(WITH_ROOT_ENV) sh -c 'cd server && npm run build'
+	cd server && npm run build
 
 # ── Quality ───────────────────────────────────────────────────────────────────
 
 lint:
-	$(WITH_ROOT_ENV) sh -c 'cd server && npm run lint'
-	$(WITH_ROOT_ENV) sh -c 'cd client && npm run lint'
+	cd server && npm run lint
+	cd client && npm run lint
 
 typecheck:
-	$(WITH_ROOT_ENV) sh -c 'cd server && npx tsc --noEmit'
-	$(WITH_ROOT_ENV) sh -c 'cd client && npx tsc --noEmit'
-	$(WITH_ROOT_ENV) sh -c 'cd shared && npx tsc --noEmit 2>/dev/null || true'
+	cd server && npx tsc --noEmit
+	cd client && npx tsc --noEmit
+	cd shared && npx tsc --noEmit 2>/dev/null || true
 
 format:
-	$(WITH_ROOT_ENV) sh -c 'cd server && npx prettier --check "src/**/*.{ts,json}"'
-	$(WITH_ROOT_ENV) sh -c 'cd client && npx prettier --check "src/**/*.{ts,tsx,css}"'
+	cd server && npx prettier --check "src/**/*.{ts,json}"
+	cd client && npx prettier --check "src/**/*.{ts,tsx,css}"
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 
 test:
-	$(WITH_ROOT_ENV) npm run test
+	npm run test
 
 test-server:
-	$(WITH_ROOT_ENV) sh -c 'cd server && npm run test'
+	cd server && npm run test
 
 test-client:
-	$(WITH_ROOT_ENV) sh -c 'cd client && npm run test'
+	cd client && npm run test
 
 test-unit:
-	$(WITH_ROOT_ENV) npm run test
+	npm run test
 
 test-coverage:
-	$(WITH_ROOT_ENV) npm run test:coverage
+	npm run test:coverage
 
 test-e2e:
-	$(WITH_ROOT_ENV) npx playwright test
-
-# Ratchet: fails only if coverage or the feature matrix regresses. Run on push.
-gate:
-	$(WITH_ROOT_ENV) npm run qa:gate
-
-# Release targets: 90% per metric, 90% of files in scope, all features COVERED.
-# Does not pass today — see docs/QA_TESTING_STRATEGY.md.
-release-gate:
-	$(WITH_ROOT_ENV) npm run qa:release-gate
+	npm run test:e2e
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
 db-reset: db-env-check db-drop db-migrate db-seed
 
 db-env-check:
-	@$(WITH_ROOT_ENV) sh -c 'if [ -z "$$DATABASE_URL" ]; then \
+	@$(DOTENV) sh -c 'if [ -z "$$DATABASE_URL" ]; then \
 		echo "DATABASE_URL is not set. Create .env from .env.example or export DATABASE_URL."; \
 		exit 1; \
 	fi'
 
 db-drop: db-env-check
-	$(WITH_ROOT_ENV) sh -c 'cd server && npx prisma migrate reset --force --skip-seed'
+	cd server && npx dotenv -e ../.env -- prisma migrate reset --force --skip-seed
 
 db-migrate: db-env-check
-	$(WITH_ROOT_ENV) sh -c 'cd server && npm run db:migrate'
+	cd server && npm run db:migrate
 
 db-generate:
-	$(WITH_ROOT_ENV) sh -c 'cd server && npm run db:generate'
+	cd server && npm run db:generate
 
 db-seed: db-env-check
-	$(WITH_ROOT_ENV) sh -c 'cd server && npm run db:seed'
+	cd server && npm run db:seed
 
 db-studio: db-env-check
-	$(WITH_ROOT_ENV) sh -c 'cd server && npx prisma studio'
+	cd server && npm run db:studio
 
 # ── Docker (dev) ──────────────────────────────────────────────────────────────
 
@@ -186,7 +178,7 @@ prod-logs:
 # ── Misc ──────────────────────────────────────────────────────────────────────
 
 start:
-	$(WITH_ROOT_ENV) sh -c 'cd server && npm run start'
+	cd server && npm run start
 
 clean:
 	rm -rf client/dist server/dist node_modules client/node_modules server/node_modules shared/node_modules .turbo

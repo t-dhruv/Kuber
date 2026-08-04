@@ -4,12 +4,16 @@
   "version": "1.0.0-beta",
   "type": "module",
   "scripts": {
-    "dev": "node ../scripts/run-with-root-env.mjs --cwd client vite",
-    "build": "node ../scripts/run-with-root-env.mjs --cwd client sh -c \"tsc -b && vite build\"",
-    "preview": "node ../scripts/run-with-root-env.mjs --cwd client vite preview",
-    "lint": "node ../scripts/run-with-root-env.mjs --cwd client eslint .",
-    "test": "node ../scripts/run-with-root-env.mjs --cwd client vitest run",
-    "test:coverage": "node ../scripts/run-with-root-env.mjs --cwd client vitest run --coverage"
+    "dev": "dotenv -e ../.env -- vite",
+    "build": "dotenv -e ../.env -- sh -c \"tsc -b && vite build\"",
+    "preview": "dotenv -e ../.env -- vite preview",
+    "lint": "dotenv -e ../.env -- eslint .",
+    "typecheck": "dotenv -e ../.env -- tsc --noEmit",
+    "test": "dotenv -e ../.env -- vitest run",
+    "test:coverage": "dotenv -e ../.env -- vitest run --coverage"
+  },
+  "engines": {
+    "node": ">=24 <25"
   },
   "dependencies": {
     "@kuber/shared": "*",
@@ -33,6 +37,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.1.6",
+    "dotenv-cli": "^11.0.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.5.3",
     "vite": "^7.3.2",
