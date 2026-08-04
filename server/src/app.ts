@@ -109,6 +109,12 @@ export function createApp(): express.Express {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 
+  // All three limiters used to carry `skip: () => NODE_ENV === 'test'`, which
+  // made the only control protecting login untestable — and therefore untested.
+  // They now run in every environment, exactly as a Self-hoster runs them; a
+  // test that does not want to be limited raises its own limit through the env
+  // vars below, and tests/db/entryPointSecurity.test.ts asserts the bucketing.
+
   // Auth endpoints: strict limit to slow brute-force attacks
   const authLimiter = rateLimit({
     windowMs: positiveIntEnv('AUTH_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
@@ -116,7 +122,6 @@ export function createApp(): express.Express {
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later.' },
-    skip: () => process.env.NODE_ENV === 'test',
   });
 
   // Logos: unauthenticated by necessity — the client loads these as <img src>,
@@ -128,7 +133,6 @@ export function createApp(): express.Express {
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later.' },
-    skip: () => process.env.NODE_ENV === 'test',
   });
 
   // General API: generous limit to prevent abuse
@@ -138,7 +142,6 @@ export function createApp(): express.Express {
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later.' },
-    skip: () => process.env.NODE_ENV === 'test',
   });
 
   app.use(helmet({
