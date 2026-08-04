@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import type { Express } from 'express';
+import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
 
 import { createApp } from '../../src/app';
@@ -151,4 +152,23 @@ export async function createHousehold(
   });
 
   return { household, user, member: { ...member, role }, password };
+}
+
+/**
+ * Logs a fixture in through the real login endpoint and returns its access
+ * token, for tests that need to call an authenticated route.
+ *
+ * Deliberately a real login rather than a hand-signed JWT: the token then
+ * carries whatever claims the application actually issues, so a test cannot
+ * accidentally assert against a session shape the app never produces.
+ */
+export async function accessTokenFor(app: Express, fixture: HouseholdFixture): Promise<string> {
+  const res = await request(app)
+    .post('/api/v1/auth/login')
+    .send({ email: fixture.user.email, password: fixture.password });
+
+  if (res.status !== 200 || !res.body.accessToken) {
+    throw new Error(`Could not log in fixture ${fixture.user.email}: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return res.body.accessToken as string;
 }

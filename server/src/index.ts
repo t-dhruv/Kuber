@@ -11,6 +11,7 @@ import { runCategoryBucketJob } from './lib/categoryBucketJob';
 import { runIconAssignmentJob } from './lib/iconAssignmentJob.js';
 import { prisma } from './lib/prisma';
 import { logger } from './lib/logger.js';
+import { warnIfCookiesInsecure } from './lib/cookies.js';
 import { jobRunsTotal, jobDurationSeconds, jobLastRunTimestamp } from './lib/metrics.js';
 
 const jobLog = logger.child({ module: 'jobs' });
@@ -61,6 +62,8 @@ if (process.env.NODE_ENV === 'production' && !process.env.CLIENT_URL) {
   logger.fatal('CLIENT_URL must be set in production');
   process.exit(1);
 }
+
+warnIfCookiesInsecure();
 
 const app = createApp();
 

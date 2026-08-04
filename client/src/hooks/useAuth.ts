@@ -20,11 +20,18 @@ export function mfaMethodLabel(method: MfaMethod): string {
   return 'Backup';
 }
 
-type SignupResponse = {
-  requireEmailVerification: true;
-  email: string;
-  message: string;
-};
+// ADR-0003. On an Instance with no email provider, signup verifies the address
+// immediately and signs the new Owner in — there is no inbox to send them to.
+// With a provider configured, verification is still required first.
+export type SignupResponse =
+  | { requireEmailVerification: true; email: string; message: string }
+  | { requireEmailVerification: false; user: UserDto; accessToken: string };
+
+export function isPendingVerificationSignup(
+  data: SignupResponse,
+): data is Extract<SignupResponse, { requireEmailVerification: true }> {
+  return data.requireEmailVerification;
+}
 
 type EmailVerificationResponse = {
   message: string;
@@ -45,9 +52,16 @@ export function useLogin() {
 }
 
 export function useSignup() {
+  const { setAuth } = useAuthStore();
+  const navigate = useNavigate();
   return useMutation({
     mutationFn: (data: { email: string; password: string; firstName: string; lastName: string; householdName?: string; inviteToken?: string }) =>
       api.post<SignupResponse>('/auth/signup', data).then(r => r.data),
+    onSuccess: (data) => {
+      if (isPendingVerificationSignup(data)) return; // caller shows the check-your-email step
+      setAuth(data.user, data.accessToken);
+      navigate('/');
+    },
   });
 }
 

@@ -202,11 +202,19 @@ export async function inviteMember(
 
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
+  // ADR-0004: a User belongs to exactly one Household, so this looks across all
+  // of them, not just the inviting one. Creating the invite anyway would produce
+  // a link that can never be redeemed — signup would hit the database constraint
+  // and fail with nothing the invitee could act on.
   const existingMember = await prisma.householdMember.findFirst({
-    where: { householdId, user: { email: normalizedEmail } },
+    where: { user: { email: normalizedEmail } },
   });
   if (existingMember) {
-    throw new Error('User is already a member of this household');
+    throw new Error(
+      existingMember.householdId === householdId
+        ? 'That person already belongs to a household — this one.'
+        : 'That person already belongs to a household. A user can belong to only one household, so they cannot be invited to this one.',
+    );
   }
 
   const invite = await prisma.householdInvite.create({

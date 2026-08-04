@@ -181,8 +181,12 @@ model ConversationMessage {
 }
 
 model HouseholdMember {
-  id          String    @id @default(cuid())
-  userId      String
+  id String @id @default(cuid())
+  // ADR-0004: a User belongs to exactly one Household. The join table is kept
+  // rather than collapsed into a column on User, so multi-Household support
+  // stays reachable later without a destructive migration — but until then this
+  // unique is what makes the code's long-standing assumption true.
+  userId      String    @unique
   householdId String
   role        String    @default("member")
   joinedAt    DateTime  @default(now())

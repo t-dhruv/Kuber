@@ -68,6 +68,29 @@ function getSmtpTransport(cfg?: ResolvedEmailConfig): { transport: ReturnType<ty
   };
 }
 
+/**
+ * Whether any email provider is configured and usable.
+ *
+ * ADR-0003: signup verifies the address immediately when this is false, because
+ * a verification message that no transport can deliver protects nothing and
+ * locks the Owner out of their own Instance permanently.
+ *
+ * Deliberately resolved through the same `getResendClient` / `getSmtpTransport`
+ * helpers `sendMail` uses, in the same order — including the fall back to the
+ * environment when a database row names a provider whose settings are
+ * incomplete. A predicate that reasoned about configuration separately could
+ * disagree with what sending actually does, and this decision is only safe while
+ * the two agree.
+ */
+export async function isEmailProviderConfigured(): Promise<boolean> {
+  const dbCfg = await getDbEmailConfig();
+  if (dbCfg) {
+    if (dbCfg.provider === 'resend' && getResendClient(dbCfg)) return true;
+    if (dbCfg.provider === 'smtp' && getSmtpTransport(dbCfg)) return true;
+  }
+  return getResendClient() !== null || getSmtpTransport() !== null;
+}
+
 // ─── Core send ────────────────────────────────────────────────────────────────
 
 export async function sendMail(opts: { to: string; subject: string; html: string; text: string }) {

@@ -60,6 +60,7 @@ it('does not leak one Household into another', async () => {
 | `prisma`           | A real client pointed at the test database. The app under test reads the same rows.       |
 | `resetDatabase()`  | Truncates every application table, keeping the migration history. Call it in `beforeEach`. |
 | `createHousehold()`| A Household with one User who belongs to it. Returns the plaintext `password` so the User can log in. Call it twice for an isolation test. |
+| `accessTokenFor()`  | Logs a fixture in through the real login endpoint and returns its access token, for calling authenticated routes. A real login rather than a hand-signed JWT, so the token carries the claims the app actually issues. |
 | `testDatabaseUrl`  | The resolved URL, for tests that shell out to the Prisma CLI.                              |
 
 `createHousehold()` marks the User's email verified by default, because login
