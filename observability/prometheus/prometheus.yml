@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: kuber-server
+    static_configs:
+      - targets: ['server:9002']
+    metrics_path: /metrics
+    scrape_interval: 15s

@@ -50,32 +50,39 @@ Kuber is a full-featured personal finance web app you run on your own server. Tr
 
 ## Documentation
 
-Kuber comes with full documentation for self-hosted users and contributors:
-
 | Doc | What's Inside |
 |-----|-----------------|
-| [📖 Tutorial](docs/01-tutorial.md) | Install Kuber + record your first transaction in 30min |
-| [🍳 How-to Guides](docs/02-how-to/00-index.md) | HTTPS, email, backups, accounts, budgets, 2FA, AI Advisor |
-| [📋 Reference](docs/03-reference.md) | Env vars, Docker services, API endpoints, CSV format |
-| [💡 Explanations](docs/04-explanation.md) | Why self-hosting, data model, security, 50/30/20 rule |
+| [CONTEXT.md](CONTEXT.md) | The domain language — what an Instance, a Household, a Split and a Transfer each mean |
+| [docs/adr/](docs/adr/) | Architecture decisions and their consequences |
+| [AGENTS.md](AGENTS.md) | Contributor and agent guide |
 
-**Contributors:** See [Development Setup](#development-setup), [DEV.md](DEV.md), and [docs/audits/](docs/audits/) for QA reports, regression tests, and audit plans.
+> The user-facing guides — tutorial, how-tos, reference and deployment — are
+> being rewritten for 1.0 and are tracked by
+> [#162](https://github.com/t-dhruv/Kuber/issues/162) and
+> [#163](https://github.com/t-dhruv/Kuber/issues/163). Until they land, the
+> Quick Start below and `.env.example` are the deployment reference.
 
 ---
 
 ## Self-Hosting
 
-Kuber is built to run on your own hardware. The full deployment guide covers quick start, environment variables, HTTPS with Let's Encrypt, backups, updates, and troubleshooting:
+Kuber is built to run on your own hardware. The default production stack is
+three services — Postgres, the server, and the client — and the client is the
+edge: it serves the app and proxies the API, so nothing else needs to sit in
+front of it.
 
-**[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**
+**It does not terminate TLS.** On a trusted LAN you can run it as-is over plain
+HTTP. To expose an Instance to the internet, front it with your own reverse
+proxy or tunnel and let that handle certificates. See
+[ADR-0001](docs/adr/0001-three-service-deploy-with-optional-observability.md).
 
 ### Quick Start
 
 **Prerequisites:** Docker and Docker Compose v2.
 
 ```bash
-git clone https://github.com/yourusername/kuber.git
-cd kuber
+git clone https://github.com/t-dhruv/Kuber.git
+cd Kuber
 cp .env.example .env
 # Edit .env — set JWT_SECRET, JWT_REFRESH_SECRET, AI_ENCRYPTION_KEY, and POSTGRES_PASSWORD
 docker compose -f docker-compose.prod.yml up -d
@@ -84,18 +91,25 @@ docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
 
 Visit **http://localhost** and create your account on first run.
 
-> At minimum, set `JWT_SECRET`, `JWT_REFRESH_SECRET`, `AI_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` before going live. Generate JWT secrets with `openssl rand -base64 64` and the encryption key with `openssl rand -hex 32`. See the [full self-hosting guide](docs/SELF_HOSTING.md) for all configuration options, HTTPS setup, and backup instructions.
+> At minimum, set `JWT_SECRET`, `JWT_REFRESH_SECRET`, `AI_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` before going live. Generate JWT secrets with `openssl rand -base64 64` and the encryption key with `openssl rand -hex 32`. See `.env.example` for every option.
+
+To run Prometheus, Loki, Promtail and Grafana alongside the stack, compose the
+optional overlay:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.observability.yml up -d
+```
 
 ---
 
 ## Development Setup
 
-See [DEV.md](DEV.md) for all Makefile commands and setup instructions.
+See [AGENTS.md](AGENTS.md) for the contributor guide.
 
 ```bash
-# Prerequisites: Node.js 20+, Docker, npm
-git clone https://github.com/yourusername/kuber.git
-cd kuber
+# Prerequisites: Node.js 24, Docker, npm
+git clone https://github.com/t-dhruv/Kuber.git
+cd Kuber
 npm install
 cp .env.example .env   # fill in values
 make dev-server       # starts backend on localhost:9002
@@ -179,7 +193,7 @@ Contributions toward any of these are welcome. Open an issue to discuss before s
 
 Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, code conventions, and the PR process.
 
-For bugs, open a [GitHub Issue](https://github.com/yourusername/kuber/issues). For security vulnerabilities, see the reporting instructions in CONTRIBUTING.md — do not use public issues.
+For bugs, open a [GitHub Issue](https://github.com/t-dhruv/Kuber/issues). For security vulnerabilities, see the reporting instructions in CONTRIBUTING.md — do not use public issues.
 
 ---
 

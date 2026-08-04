@@ -1,0 +1,85 @@
+# Kuber — Observability overlay (opt-in)
+#
+# Prometheus, Loki, Promtail and Grafana. Not part of the default deploy: a
+# household running a budget should not have to operate eight services to do
+# it. See ADR-0001.
+#
+# Compose it alongside the default file — on its own it is incomplete, because
+# it only adds the LOKI_URL to a server service defined there:
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.observability.yml up -d
+#
+# Requires the observability/ configuration directory beside it. The default
+# stack does not, and starts without it.
+
+services:
+  # Overlay-only addition: point the server's log transport at Loki. Absent
+  # from the default stack, where the server logs to stdout alone.
+  server:
+    environment:
+      LOKI_URL: http://loki:3100
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: kuber_prometheus
+    restart: unless-stopped
+    ports:
+      - "9004:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    networks:
+      - kuber_network
+
+  loki:
+    image: grafana/loki:latest
+    container_name: kuber_loki
+    restart: unless-stopped
+    ports:
+      - "9005:3100"
+    volumes:
+      - ./observability/loki/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - kuber_network
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: kuber_promtail
+    restart: unless-stopped
+    volumes:
+      - ./observability/promtail/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - kuber_network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: kuber_grafana
+    restart: unless-stopped
+    ports:
+      - "9003:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:?Set GRAFANA_USER in .env}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in .env}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - kuber_network
+
+volumes:
+  prometheus_data:
+  loki_data:
+  grafana_data:
