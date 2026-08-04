@@ -2,11 +2,10 @@
 # Targets: server-runner, client-runner
 
 # ─── Shared base ──────────────────────────────────────────────────────────────
-FROM node:25-alpine AS base
+FROM node:24-alpine AS base
 RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
-COPY scripts ./scripts
 COPY shared ./shared
 
 # ─── Server: install + build ──────────────────────────────────────────────────
@@ -19,11 +18,10 @@ COPY server/tsconfig.json ./server/
 WORKDIR /app/server
 RUN npx prisma generate && npm run build
 
-FROM node:25-alpine AS server-runner
+FROM node:24-alpine AS server-runner
 RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package.json package-lock.json ./
-COPY scripts ./scripts
 COPY shared ./shared
 COPY server/package.json ./server/
 RUN CI=true npm ci --workspace=server --omit=dev
