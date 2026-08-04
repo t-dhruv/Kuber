@@ -21,7 +21,8 @@ Thank you for your interest in contributing. Kuber is a self-hostable personal f
 
 ### Prerequisites
 
-- **Node.js 20+** — [nodejs.org](https://nodejs.org)
+- **Node.js 24 (active LTS)** — [nodejs.org](https://nodejs.org). Dev, CI and the shipped
+  images all run Node 24; the `engines` field in each manifest enforces it.
 - **Docker + Docker Compose** — [docker.com](https://www.docker.com)
 - **npm** (bundled with Node)
 

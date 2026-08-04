@@ -1,7 +1,12 @@
 #!/bin/sh
 set -eu
 
-echo "Running Kuber QA ratchet gate before push..."
-echo "This checks that coverage and feature coverage have not regressed."
+# This hook used to run the coverage ratchet, which was dropped along with the
+# rest of the old script layer. It now runs the checks that must hold on every
+# push and that CI will re-run anyway.
 
-npm run qa:gate
+echo "Running lint..."
+npm run lint
+
+echo "Running tests..."
+npm test
