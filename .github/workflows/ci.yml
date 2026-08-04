@@ -34,6 +34,14 @@ jobs:
           node-version: 24
           cache: npm
 
+      # Pin to the version declared in packageManager. npm 12 blocks package
+      # install scripts by default, which leaves Prisma without its engines and
+      # esbuild without its binary; the failure surfaces much later, as a build
+      # error. Pinning keeps CI on the version the repository is built against
+      # rather than whatever the runner's Node happens to bundle.
+      - name: Pin npm
+        run: npm i -g npm@11.6.2
+
       - name: Install dependencies
         run: npm ci
 
