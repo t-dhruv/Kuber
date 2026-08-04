@@ -1,12 +1,18 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  // Turborepo runs tasks in strict env mode, so a task sees only what is
+  // declared here. Every script reads the database through `dotenv -e .env`,
+  // which hides the omission on a developer machine and surfaces it in CI,
+  // where there is no .env file and the values arrive as real environment
+  // variables.
+  "globalEnv": ["NODE_ENV", "DATABASE_URL"],
   "tasks": {
     "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
     "dev": { "persistent": true, "cache": false },
     "lint": {},
     "typecheck": {},
     "test": { "cache": false },
-    "test:db": { "cache": false },
+    "test:db": { "cache": false, "env": ["TEST_DATABASE_URL"] },
     "test:e2e": { "cache": false },
     "db:generate": { "cache": false },
     "db:migrate": { "cache": false },
