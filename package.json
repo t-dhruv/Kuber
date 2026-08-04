@@ -17,6 +17,7 @@
     "typecheck": "dotenv -e .env -- turbo typecheck",
     "db:generate": "dotenv -e .env -- turbo run db:generate --filter=@kuber/server",
     "test": "dotenv -e .env -- turbo test",
+    "test:db": "dotenv -e .env -- turbo run test:db --filter=@kuber/server",
     "test:coverage": "dotenv -e .env -- sh -c \"npm run test:coverage --workspace=server && npm run test:coverage --workspace=@kuber/client\"",
     "test:e2e": "dotenv -e .env -- playwright test",
     "test:smoke": "dotenv -e .env -- playwright test --grep @smoke",

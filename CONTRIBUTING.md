@@ -68,6 +68,7 @@ Demo credentials (after seeding): `demo@kuber.app` / `password123`
 | `npm run lint` | Run ESLint across all workspaces |
 | `npm run typecheck` | Run `tsc --noEmit` across all workspaces |
 | `npm run test` | Run all unit tests (Vitest) |
+| `npm run test:db` | Run the database-backed server tests against a real Postgres (see `server/tests/db/README.md`) |
 | `npm run test:e2e` | Run Playwright end-to-end tests |
 
 ---

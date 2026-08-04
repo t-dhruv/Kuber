@@ -13,6 +13,7 @@
     "db:studio": "dotenv -e ../.env -- prisma studio",
     "db:generate": "dotenv -e ../.env -- prisma generate",
     "test": "dotenv -e ../.env -- vitest run",
+    "test:db": "dotenv -e ../.env -- vitest run --config vitest.db.config.ts",
     "test:coverage": "dotenv -e ../.env -- vitest run --coverage --maxWorkers=1"
   },
   "engines": {

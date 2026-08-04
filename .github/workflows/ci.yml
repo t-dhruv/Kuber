@@ -13,9 +13,9 @@ permissions:
   contents: read
 
 env:
-  # Nothing in this workflow touches a database. Prisma still resolves the
-  # datasource block when it generates a client, so the URL has to parse.
-  # Database-backed suites arrive with their own service container.
+  # Prisma resolves the datasource block when it generates a client, so the URL
+  # has to parse even for the steps that never open a connection. The
+  # database-backed suite overrides this with TEST_DATABASE_URL.
   DATABASE_URL: postgresql://kuber:kuber@localhost:5432/kuber_ci
   TURBO_TELEMETRY_DISABLED: 1
   DO_NOT_TRACK: 1
@@ -25,6 +25,25 @@ jobs:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    # The database-backed suite (Seam B) boots the real application against a
+    # real, migrated Postgres. It proves the migration history a new
+    # Self-hoster replays on first boot, so it runs on every pull request
+    # rather than on a schedule.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kuber
+          POSTGRES_PASSWORD: kuber
+          POSTGRES_DB: kuber_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kuber"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +77,13 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      # Creates its own database, replays every migration into it, then boots
+      # the real app against the result. Red here fails the build.
+      - name: Database-backed tests
+        run: npm run test:db
+        env:
+          TEST_DATABASE_URL: postgresql://kuber:kuber@localhost:5432/kuber_ci_test
 
       - name: Build
         run: npm run build
