@@ -85,7 +85,7 @@ router.post('/household/invite', async (req: AuthRequest, res: Response) => {
     if (err instanceof Error) {
       if (err.message.includes('role must be')) return res.status(400).json({ error: err.message });
       if (err.message.includes('Only owners')) return res.status(403).json({ error: err.message });
-      if (err.message.includes('already a member')) return res.status(409).json({ error: err.message });
+      if (err.message.includes('already belongs to a household')) return res.status(409).json({ error: err.message });
     }
     return res.status(500).json({ error: 'Internal server error' });
   }

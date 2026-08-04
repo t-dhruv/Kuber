@@ -1229,7 +1229,10 @@ export function HouseholdSection() {
       notify.success('Invite sent', `An invitation was sent to ${inviteEmail}`);
       setInviteEmail('');
     },
-    onError: () => notify.error('Failed to send invite'),
+    // The server refuses to invite someone who already belongs to a household
+    // (ADR-0004), and that reason is the whole content of the failure — a
+    // generic "failed to send" would leave the Owner retyping a valid address.
+    onError: (err) => notify.error(getApiErrorMessage(err, 'Failed to send invite')),
   });
 
   const removeMutation = useMutation({

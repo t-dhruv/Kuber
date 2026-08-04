@@ -8,7 +8,9 @@ import { toDataURL } from 'qrcode';
 import { prisma } from '../lib/prisma';
 import { createRefreshToken, invalidateFamily, hashToken, DEFAULT_REFRESH_TTL_MS, REMEMBER_ME_REFRESH_TTL_MS } from '../lib/token';
 import { consumeSecurityToken, createSecurityToken } from '../lib/securityTokens';
-import { sendPasswordResetEmail, sendAccountLockoutEmail, sendWelcomeEmail, sendEmailVerificationEmail } from '../lib/email';
+import { isCookieSecure } from '../lib/cookies';
+import { sendPasswordResetEmail, sendAccountLockoutEmail, sendWelcomeEmail, sendEmailVerificationEmail, isEmailProviderConfigured } from '../lib/email';
+import { isOpenSignupAllowed, REGISTRATION_CLOSED_MESSAGE } from '../lib/registration';
 import { requireAuth } from '../middleware/auth';
 import { seedDefaultCategories } from '../lib/default-categories';
 import type { AuthRequest } from '../middleware/auth';
@@ -115,7 +117,7 @@ function setRefreshCookie(res: Response, rawToken: string, rememberMe = false) {
   const maxAge = rememberMe ? REMEMBER_ME_REFRESH_TTL_MS : DEFAULT_REFRESH_TTL_MS;
   res.cookie('refreshToken', rawToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isCookieSecure(),
     sameSite: 'lax',
     maxAge,
     path: '/',
@@ -133,8 +135,6 @@ router.post('/signup', async (req: Request, res: Response) => {
 
     const { email, password, firstName, lastName, householdName, inviteToken } = parsed.data;
     const normalizedEmail = email.toLowerCase();
-    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (existing) return res.status(409).json({ error: 'Email already in use' });
 
     let invite: { id: string; householdId: string; email: string; role: string; expiresAt: Date; usedAt: Date | null } | null = null;
     if (inviteToken) {
@@ -147,11 +147,46 @@ router.post('/signup', async (req: Request, res: Response) => {
       }
     }
 
+    // Open registration is gated; an invite is its own authorisation and is not.
+    //
+    // This runs BEFORE the address is looked up on purpose. The other order
+    // answers "is this address registered here?" to anyone who can reach a
+    // closed Instance — 409 for a known address, 403 for an unknown one — which
+    // is an unauthenticated oracle over the Instance's Users.
+    if (!invite && !(await isOpenSignupAllowed())) {
+      return res.status(403).json({ error: REGISTRATION_CLOSED_MESSAGE });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existing) {
+      // ADR-0004. Redeeming an invite as someone who already has a Household
+      // would hit the database constraint; say why rather than letting it
+      // surface as a generic collision on the email address. Only an invite
+      // holder gets this far on a closed Instance, so it discloses nothing they
+      // were not already told.
+      if (invite && (await prisma.householdMember.findUnique({ where: { userId: existing.id } }))) {
+        return res.status(409).json({
+          error: 'That user already belongs to a household. A user can belong to only one household.',
+        });
+      }
+      return res.status(409).json({ error: 'Email already in use' });
+    }
+
+    // ADR-0003: with no transport, a verification message is never sent, so
+    // gating login on it locks the Owner out of their own Instance forever.
+    const emailProviderConfigured = await isEmailProviderConfigured();
+
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     const result = await prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
-        data: { email: normalizedEmail, passwordHash, firstName, lastName },
+        data: {
+          email: normalizedEmail,
+          passwordHash,
+          firstName,
+          lastName,
+          emailVerifiedAt: emailProviderConfigured ? null : new Date(),
+        },
       });
       if (invite) {
         await tx.householdMember.create({
@@ -172,15 +207,28 @@ router.post('/signup', async (req: Request, res: Response) => {
       return { user: newUser, householdId: household.id };
     });
 
-    const { rawToken } = await createSecurityToken(result.user.id, 'email_verification');
+    if (emailProviderConfigured) {
+      const { rawToken } = await createSecurityToken(result.user.id, 'email_verification');
+      sendEmailVerificationEmail(result.user.email, rawToken).catch(() => {});
+      sendWelcomeEmail(result.user.email, result.user.firstName).catch(() => {});
 
-    sendEmailVerificationEmail(result.user.email, rawToken).catch(() => {});
-    sendWelcomeEmail(result.user.email, result.user.firstName).catch(() => {});
+      return res.status(201).json({
+        requireEmailVerification: true,
+        email: result.user.email,
+        message: 'Check your email to verify your account.',
+      });
+    }
+
+    // No provider: the User is already verified, so sign them in rather than
+    // sending them to a login screen that would have accepted them anyway.
+    const accessToken = signAccessToken(result.user.id, result.householdId, result.user.email);
+    const { rawToken } = await createRefreshToken(result.user.id);
+    setRefreshCookie(res, rawToken);
 
     return res.status(201).json({
-      requireEmailVerification: true,
-      email: result.user.email,
-      message: 'Check your email to verify your account.',
+      requireEmailVerification: false,
+      user: toUserDto(result.user, result.householdId),
+      accessToken,
     });
   } catch (err) {
     log.error({ err }, 'auth/signup');

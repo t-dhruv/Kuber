@@ -5,6 +5,9 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // The database-backed suite runs under vitest.db.config.ts against a real
+    // Postgres. It must not load the global Prisma mock this config installs.
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/db/**'],
     setupFiles: ['src/test-setup.ts'],
     coverage: {
       provider: 'v8',

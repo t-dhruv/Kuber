@@ -1,5 +1,5 @@
 .PHONY: help dev dev-client dev-server build build-client build-server \
-        test test-server test-client test-unit test-coverage test-e2e \
+        test test-server test-client test-unit test-db test-coverage test-e2e \
         clean db-reset db-env-check db-drop db-migrate db-generate db-seed db-studio \
         lint typecheck format start install up down logs \
         prod-up prod-down prod-logs
@@ -29,6 +29,7 @@ help:
 	@echo "  test           Run server + client unit tests"
 	@echo "  test-server    Run server unit tests"
 	@echo "  test-client    Run client unit tests"
+	@echo "  test-db        Database-backed server tests (needs Postgres running)"
 	@echo "  test-coverage  Server + client unit tests with coverage"
 	@echo "  test-e2e       Playwright E2E tests"
 	@echo ""
@@ -111,6 +112,9 @@ test-client:
 
 test-unit:
 	npm run test
+
+test-db:
+	npm run test:db
 
 test-coverage:
 	npm run test:coverage

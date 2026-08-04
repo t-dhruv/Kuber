@@ -30,6 +30,9 @@ vi.mock('../../src/lib/prisma', () => ({
 
 vi.mock('../../src/lib/email', () => ({
   sendHouseholdInviteEmail: vi.fn(),
+  // These cases are about invites, not about ADR-0003 — keep them on the branch
+  // where an email provider exists and signup still requires verification.
+  isEmailProviderConfigured: vi.fn(() => Promise.resolve(true)),
   sendPasswordResetEmail: vi.fn(),
   sendAccountLockoutEmail: vi.fn(),
   sendEmailVerificationEmail: vi.fn(() => Promise.resolve()),

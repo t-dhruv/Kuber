@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
-import { useSignup } from '@/hooks/useAuth';
+import { isPendingVerificationSignup, useSignup } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
 import { getApiErrorMessage } from '@/lib/apiError';
 
@@ -43,7 +43,11 @@ export default function SignupPage() {
         inviteToken,
       },
       {
-        onSuccess: (data) => setPendingVerificationEmail(data.email),
+        // With no email provider the hook has already signed us in and routed
+        // away; there is nothing to verify and no inbox to point at.
+        onSuccess: (data) => {
+          if (isPendingVerificationSignup(data)) setPendingVerificationEmail(data.email);
+        },
       },
     );
   }
