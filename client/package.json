@@ -8,6 +8,7 @@
     "build": "dotenv -e ../.env -- sh -c \"tsc -b && vite build\"",
     "preview": "dotenv -e ../.env -- vite preview",
     "lint": "dotenv -e ../.env -- eslint .",
+    "typecheck": "dotenv -e ../.env -- tsc --noEmit",
     "test": "dotenv -e ../.env -- vitest run",
     "test:coverage": "dotenv -e ../.env -- vitest run --coverage"
   },
