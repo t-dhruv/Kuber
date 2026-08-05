@@ -60,6 +60,8 @@ it('does not leak one Household into another', async () => {
 | `prisma`           | A real client pointed at the test database. The app under test reads the same rows.       |
 | `resetDatabase()`  | Truncates every application table, keeping the migration history. Call it in `beforeEach`. |
 | `createHousehold()`| A Household with one User who belongs to it. Returns the plaintext `password` so the User can log in. Call it twice for an isolation test. |
+| `createAccount()`  | An Account, created through the real `POST /api/v1/accounts` as the holder of an access token — so the row has the shape the application actually writes. |
+| `createTransaction()` | A Transaction on a given Account, created through the real `POST /api/v1/transactions`. |
 | `accessTokenFor()`  | Logs a fixture in through the real login endpoint and returns its access token, for calling authenticated routes. A real login rather than a hand-signed JWT, so the token carries the claims the app actually issues. |
 | `testDatabaseUrl`  | The resolved URL, for tests that shell out to the Prisma CLI.                              |
 
@@ -94,11 +96,18 @@ If a migration ever seeds reference data into a new table, add that table to
 `MIGRATION_SEEDED_TABLES` in `harness.ts`. `resetDatabase()` would otherwise
 empty it on the first `beforeEach` with nothing to put the rows back.
 
-### Known gap: rate limiting
+### Rate limiting is live here
 
-All three rate limiters in `src/app.ts` carry
-`skip: () => process.env.NODE_ENV === 'test'`, and this suite runs with
-`NODE_ENV=test`, so they do nothing here. A test asserting that the auth limiter
-buckets per client address has to change that skip condition first — it is not
-something the harness can paper over.
+The limiters in `src/app.ts` used to carry
+`skip: () => process.env.NODE_ENV === 'test'`. They no longer do: a control that
+cannot run under test cannot be tested, and this is the only control standing
+between a login form and a brute-force attempt.
+
+So the limits apply to this suite exactly as they apply to a Self-hoster. The
+defaults are generous (50 auth requests per fifteen minutes, 2000 API requests
+per minute) and `createTestApp()` returns a fresh app with a fresh counter, so a
+test only has to think about this if a single app makes a large burst. To pick
+your own limit, set `AUTH_RATE_LIMIT_MAX` / `API_RATE_LIMIT_MAX` **before**
+calling `createTestApp()` — the values are read when the app is built — and
+restore them afterwards. `entryPointSecurity.test.ts` does exactly that.
 

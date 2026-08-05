@@ -38,12 +38,11 @@ export const prisma = new PrismaClient({ datasourceUrl: testDatabaseUrl });
  * controls and mounted routers — with no listener and no background jobs.
  *
  * Each call yields a fresh app, so no per-app middleware state leaks between
- * tests.
+ * tests — including a fresh rate-limit counter.
  *
- * Caveat for a rate-limiting test: all three limiters carry
- * `skip: () => process.env.NODE_ENV === 'test'`, and this suite runs with
- * `NODE_ENV=test`, so they are no-ops here. Asserting that the auth limiter
- * buckets per client means changing that skip condition first.
+ * The rate limiters are live here, as they are in production. Set
+ * `AUTH_RATE_LIMIT_MAX` or `API_RATE_LIMIT_MAX` before calling this to choose
+ * your own limit; the values are read while the app is being built.
  */
 export function createTestApp(): Express {
   return createApp();
@@ -152,6 +151,60 @@ export async function createHousehold(
   });
 
   return { household, user, member: { ...member, role }, password };
+}
+
+export type AccountFixture = { id: string; name: string };
+export type TransactionFixture = { id: string; description: string; amount: number };
+
+/**
+ * Creates an Account through the real endpoint, as the User holding `accessToken`.
+ *
+ * Deliberately the API rather than a direct `prisma.account.create`: the row
+ * then carries whatever shape the application actually writes, so an isolation
+ * test cannot pass against a record no endpoint would ever produce.
+ */
+export async function createAccount(
+  app: Express,
+  accessToken: string,
+  options: { name?: string; type?: string; balance?: number } = {},
+): Promise<AccountFixture> {
+  // `CHECKING` is the type string the API validates against, whatever the
+  // domain glossary calls it in prose.
+  const { name = `Test Account ${++fixtureCount}`, type = 'CHECKING', balance = 1000 } = options;
+
+  const res = await request(app)
+    .post('/api/v1/accounts')
+    .set('Authorization', `Bearer ${accessToken}`)
+    .send({ name, type, balance });
+
+  if (res.status !== 201) {
+    throw new Error(`Could not create Account: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return { id: res.body.account.id as string, name: res.body.account.name as string };
+}
+
+/** Creates a Transaction on `accountId` through the real endpoint. */
+export async function createTransaction(
+  app: Express,
+  accessToken: string,
+  input: { accountId: string; amount?: number; description?: string; date?: string },
+): Promise<TransactionFixture> {
+  const {
+    accountId,
+    amount = -42.5,
+    description = `Test Transaction ${++fixtureCount}`,
+    date = new Date().toISOString().slice(0, 10),
+  } = input;
+
+  const res = await request(app)
+    .post('/api/v1/transactions')
+    .set('Authorization', `Bearer ${accessToken}`)
+    .send({ accountId, amount, description, date });
+
+  if (res.status !== 201) {
+    throw new Error(`Could not create Transaction: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+  return { id: res.body.id as string, description, amount };
 }
 
 /**
