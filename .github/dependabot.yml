@@ -1,0 +1,67 @@
+version: 2
+
+# Everything here is grouped. Twelve separate dependency pull requests is not a
+# reviewable surface for a single-maintainer repository — one batch per
+# ecosystem per week is. Each group opens at most one pull request, so the
+# review unit is "this week's dependencies", not "this dependency".
+
+updates:
+  # npm — the root manifest covers every workspace (client, server, shared).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    open-pull-requests-limit: 2
+    groups:
+      # The routine batch: everything that should not change behaviour.
+      npm:
+        update-types:
+          - minor
+          - patch
+      # Majors are batched too, but kept in their own pull request so a
+      # breaking change is never buried in a routine update. Previously they
+      # were ignored outright, which quietly meant never updating them.
+      npm-major:
+        update-types:
+          - major
+    labels:
+      - dependencies
+
+  # GitHub Actions used by the CI and release workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    open-pull-requests-limit: 1
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    labels:
+      - dependencies
+      - github-actions
+
+  # Docker base images. There is one Dockerfile, at the repository root, which
+  # builds both the server and client images. The previous configuration
+  # watched /server and /client, where no Dockerfile has ever existed.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    open-pull-requests-limit: 1
+    groups:
+      docker:
+        patterns:
+          - "*"
+    labels:
+      - dependencies
+      - docker
