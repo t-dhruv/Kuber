@@ -87,3 +87,99 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # ─── Critical paths, against the stack a Self-hoster actually runs ──────────
+  # Not a development server. The images are built from this commit and started
+  # with the default production Compose file, so a green run means both "the
+  # three-service deployment works" and "the critical paths work". That is why
+  # there is no separate install-smoke job.
+  e2e:
+    name: Critical paths (Compose stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Pin npm
+        run: npm i -g npm@11.6.2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Loaded into the local daemon under the tag Compose resolves, so the
+      # stack runs these images rather than pulling anything from a registry.
+      - name: Build server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: server-runner
+          tags: ghcr.io/t-dhruv/kuber-server:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build client image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: client-runner
+          tags: ghcr.io/t-dhruv/kuber-client:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The Compose file reads secrets from .env, exactly as a Self-hoster's
+      # does. COOKIE_SECURE=false is the trusted-LAN configuration: the stack is
+      # plain HTTP, and a Secure cookie would be silently discarded — which is
+      # the defect 02-session.spec.ts exists to catch.
+      - name: Write stack configuration
+        run: |
+          cat > .env <<'ENV'
+          POSTGRES_PASSWORD=ci_postgres_password
+          JWT_SECRET=ci_jwt_secret_at_least_64_characters_long_for_the_pipeline_run_ok
+          JWT_REFRESH_SECRET=ci_refresh_secret_at_least_64_characters_long_for_pipeline_run
+          NODE_ENV=production
+          PORT=9002
+          CLIENT_URL=http://localhost:8080
+          TRUST_PROXY=1
+          COOKIE_SECURE=false
+          HTTP_PORT=8080
+          ENV
+
+      - name: Start the stack
+        run: IMAGE_TAG=ci docker compose -f docker-compose.prod.yml up -d --wait
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run critical-path specs
+        run: npm run test:e2e
+        env:
+          E2E_BASE_URL: http://localhost:8080
+          E2E_COOKIE_SECURE: "false"
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml logs --no-color --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down -v
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
