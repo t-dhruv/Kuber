@@ -24,7 +24,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 See [self-hosting](docs/02-how-to/self-hosting.md) for the full procedure.
 
-### Fixed — a fresh Instance is now usable
+### Fixed
 
 - **First run no longer locks its Owner out.** Signup always issued an email
   verification token and login refused unverified Users, but email is optional
@@ -41,13 +41,14 @@ See [self-hosting](docs/02-how-to/self-hosting.md) for the full procedure.
   fifteen minutes. `COOKIE_SECURE` now controls this, defaults to enabled, and
   warns at startup when disabled
   ([ADR-0002](docs/adr/0002-cookie-secure-is-configurable.md)).
-- **A User belongs to exactly one Household.** Login resolved the session
-  Household as the first membership with no ordering, so a User with two
-  memberships could land in arbitrary books. A database constraint now permits
-  one membership per User, and invite acceptance rejects Users who already have
-  one ([ADR-0004](docs/adr/0004-a-user-belongs-to-exactly-one-household.md)).
+- **A User belongs to exactly one Household.** The session Household was
+  resolved as the User's first Member row with no ordering, so a User who was a
+  Member of two Households could land in arbitrary books. A database constraint
+  now permits one Member row per User, and invite acceptance rejects a User who
+  already is a Member somewhere
+  ([ADR-0004](docs/adr/0004-a-user-belongs-to-exactly-one-household.md)).
 
-### Changed — deployment
+### Changed
 
 - **Production runs three services instead of eight**: Postgres, the server, and
   the client. The standalone edge nginx is gone as redundant — the client image
@@ -64,7 +65,7 @@ See [self-hosting](docs/02-how-to/self-hosting.md) for the full procedure.
 - Node is standardised on 24 LTS across the images, CI, and every manifest. The
   image previously shipped Node 25 while CI tested on Node 20.
 
-### Added — release and confidence
+### Added
 
 - Images published to GHCR as `ghcr.io/t-dhruv/kuber-server` and
   `kuber-client`. Tagging a version builds, publishes, and cuts a Release.
@@ -79,7 +80,8 @@ See [self-hosting](docs/02-how-to/self-hosting.md) for the full procedure.
 - Documentation rewritten against what the software actually does: tutorial,
   how-to guides, environment reference, and explanation.
 
-### Added — application
+Application surface, as shipped:
+
 - **Dashboard** — Net worth widget, weekly recap (spending Δ, net worth Δ, top category, upcoming bills), customizable widget layout with drag-and-drop reorder/hide
 - **Transactions** — Cursor pagination, bulk actions, rules engine (auto-categorize), CSV export, CSV import (3-step: upload → column mapping → import), needs-review flag
 - **Budget v2** — Fixed / Flexible / Non-Monthly split, left-to-budget banner, savings rate, unbudgeted category alerts
@@ -104,9 +106,10 @@ See [self-hosting](docs/02-how-to/self-hosting.md) for the full procedure.
 - Express 4 + Prisma 5 + PostgreSQL 16
 - TanStack React Query v5, Zustand, React Router v6
 - Recharts for all data visualizations
-- Playwright E2E tests (smoke + auth), Vitest unit tests (69 passing, 97-100% coverage on lib)
-- GitHub Actions CI (lint + build on push/PR)
-- GitHub Container Registry publish on release tag
+- Vitest: 741 unit tests, plus 66 database-backed tests against a real Postgres
+- Playwright critical-path tests, run against the production Compose stack
+- GitHub Actions CI on every pull request; tagging publishes images and a Release
+- Node 24 LTS across the images, CI, and every manifest
 
-[Unreleased]: https://github.com/tdhruv/kuber/compare/v1.0.0-beta...HEAD
-[1.0.0-beta]: https://github.com/tdhruv/kuber/releases/tag/v1.0.0-beta
+[Unreleased]: https://github.com/t-dhruv/Kuber/compare/v1.0.0-beta...HEAD
+[1.0.0-beta]: https://github.com/t-dhruv/Kuber/releases/tag/v1.0.0-beta
