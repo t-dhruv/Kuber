@@ -52,15 +52,15 @@ Kuber is a full-featured personal finance web app you run on your own server. Tr
 
 | Doc | What's Inside |
 |-----|-----------------|
+| [docs/](docs/README.md) | Documentation index — tutorial, how-to guides, reference |
+| [docs/01-tutorial.md](docs/01-tutorial.md) | From nothing to your first recorded Transaction |
+| [docs/02-how-to/self-hosting.md](docs/02-how-to/self-hosting.md) | Deploying and running an Instance |
+| [docs/02-how-to/backup.md](docs/02-how-to/backup.md) | Backing up, restoring, and verifying a restore |
+| [docs/02-how-to/https.md](docs/02-how-to/https.md) | Serving Kuber over HTTPS behind your own proxy |
+| [docs/03-reference.md](docs/03-reference.md) | Environment variables, ports, and the CSV import format |
 | [CONTEXT.md](CONTEXT.md) | The domain language — what an Instance, a Household, a Split and a Transfer each mean |
 | [docs/adr/](docs/adr/) | Architecture decisions and their consequences |
 | [AGENTS.md](AGENTS.md) | Contributor and agent guide |
-
-> The user-facing guides — tutorial, how-tos, reference and deployment — are
-> being rewritten for 1.0 and are tracked by
-> [#162](https://github.com/t-dhruv/Kuber/issues/162) and
-> [#163](https://github.com/t-dhruv/Kuber/issues/163). Until they land, the
-> Quick Start below and `.env.example` are the deployment reference.
 
 ---
 
