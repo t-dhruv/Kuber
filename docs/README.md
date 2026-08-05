@@ -16,7 +16,8 @@ Start here if you have never run Kuber.
 
 ## How-to guides
 
-Task-focused instructions for a specific job.
+Task-focused instructions for a specific job. Full list in the
+[how-to index](02-how-to/00-index.md).
 
 **Running an Instance**
 
@@ -27,11 +28,19 @@ Task-focused instructions for a specific job.
 - [Configuring email](02-how-to/email.md)
 - [Adding the observability overlay](02-how-to/observability.md)
 
+**Using Kuber**
+
+Accounts, Transactions, Categories and tags, Budgets, Goals, recurring bills,
+Investments, MFA, Household management and the AI advisor are all covered in the
+[how-to index](02-how-to/00-index.md).
+
 ## Reference
 
 - [Environment variables, ports, and the CSV import format](03-reference.md)
 
 ## Explanation
 
+- [Understanding Kuber](04-explanation.md) — why self-host, the data model, the
+  50/30/20 approach, and the security posture.
 - [Architecture decisions](adr/) — why the deployment, cookie, email
   verification and Household decisions are what they are.

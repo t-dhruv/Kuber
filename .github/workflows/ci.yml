@@ -143,12 +143,18 @@ jobs:
       # does. COOKIE_SECURE=false is the trusted-LAN configuration: the stack is
       # plain HTTP, and a Secure cookie would be silently discarded — which is
       # the defect 02-session.spec.ts exists to catch.
+      #
+      # AI_ENCRYPTION_KEY is one of the server's REQUIRED_ENV keys and must be
+      # exactly 64 hex characters; without it the server fatals on boot, never
+      # goes healthy, and `up --wait` fails on the dependency rather than on
+      # anything the specs cover.
       - name: Write stack configuration
         run: |
           cat > .env <<'ENV'
           POSTGRES_PASSWORD=ci_postgres_password
           JWT_SECRET=ci_jwt_secret_at_least_64_characters_long_for_the_pipeline_run_ok
           JWT_REFRESH_SECRET=ci_refresh_secret_at_least_64_characters_long_for_pipeline_run
+          AI_ENCRYPTION_KEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
           NODE_ENV=production
           PORT=9002
           CLIENT_URL=http://localhost:8080
