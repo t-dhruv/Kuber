@@ -3,7 +3,6 @@ import * as path from 'path';
 
 const AUTH_DIR = path.join(__dirname, '.auth');
 
-export const STORAGE_STATE_PATH = path.join(AUTH_DIR, 'user.json');
 const CREDENTIALS_PATH = path.join(AUTH_DIR, 'credentials.json');
 
 export interface Credentials {

@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { STORAGE_STATE_PATH, writeCredentials } from './credentials';
+import { writeCredentials } from './credentials';
 
 /**
  * The defect this guards: every fresh Instance used to lock its Owner out
@@ -55,7 +55,6 @@ test.describe('First run', () => {
     });
 
     writeCredentials({ email, password, householdName });
-    await page.context().storageState({ path: STORAGE_STATE_PATH });
   });
 
   test('registration closes once the Household exists', async ({ browser }) => {

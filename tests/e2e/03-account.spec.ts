@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { waitForToast } from './helpers';
+import { signIn, waitForToast } from './helpers';
 import { ACCOUNT_NAME } from './constants';
 
 /**
@@ -8,9 +8,16 @@ import { ACCOUNT_NAME } from './constants';
  * against the same Instance the first-run spec claimed.
  */
 
+// Each test signs in for itself; see signIn for why a shared session cannot be
+// carried on disk.
+test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Accounts', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+  });
+
   test('the Owner adds an Account @smoke', async ({ page }) => {
     await page.goto('/accounts');
 

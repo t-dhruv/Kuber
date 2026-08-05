@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { waitForToast } from './helpers';
+import { signIn, waitForToast } from './helpers';
 import { ACCOUNT_NAME, MERCHANT } from './constants';
 
 /**
@@ -9,9 +9,16 @@ import { ACCOUNT_NAME, MERCHANT } from './constants';
  * the session — has to have worked for this to pass.
  */
 
+// Each test signs in for itself; see signIn for why a shared session cannot be
+// carried on disk.
+test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Transactions', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+  });
+
   test('the Owner records a Transaction against the Account @smoke', async ({ page }) => {
     await page.goto('/transactions');
 
