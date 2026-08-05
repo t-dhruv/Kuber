@@ -32,13 +32,15 @@ Kuber is a full-featured personal finance web app you run on your own server. Tr
 - Two-factor authentication (TOTP — works with any authenticator app)
 - Account lockout after failed login attempts
 - Audit log for financial record changes
-- Household-scoped data — multi-user households supported
+- Household-scoped data — several Users per Household, each User in exactly one
 - Export and deletion controls for self-hosted data ownership
 
 ### AI Advisor
-- Chat with an AI financial advisor that has context about your accounts and spending
-- Bring your own provider: **Claude, OpenAI, Gemini, Ollama, OpenRouter**, or disable entirely
-- API key stored encrypted; never leaves your server
+- Chat with an AI financial advisor that has context about your Accounts and spending
+- Bring your own provider: **Claude, OpenAI, Gemini, OpenRouter, Nvidia NIM, Ollama**, any OpenAI-compatible endpoint, or disable entirely
+- Off by default. Your API key is stored encrypted and never leaves your server; the
+  financial summaries the advisor reasons over are sent to whichever provider you
+  configure, so run Ollama locally if that matters to you
 
 ### Self-Hosting
 - Single `docker compose up` deployment
@@ -52,15 +54,17 @@ Kuber is a full-featured personal finance web app you run on your own server. Tr
 
 | Doc | What's Inside |
 |-----|-----------------|
+| [docs/](docs/README.md) | Documentation index — tutorial, how-to guides, reference |
+| [docs/01-tutorial.md](docs/01-tutorial.md) | From nothing to your first recorded Transaction |
+| [docs/02-how-to/](docs/02-how-to/00-index.md) | How-to index — Accounts, Transactions, Budgets, Goals, Investments, MFA, Household |
+| [docs/02-how-to/self-hosting.md](docs/02-how-to/self-hosting.md) | Deploying and running an Instance |
+| [docs/02-how-to/backup.md](docs/02-how-to/backup.md) | Backing up, restoring, and verifying a restore |
+| [docs/02-how-to/https.md](docs/02-how-to/https.md) | Serving Kuber over HTTPS behind your own proxy |
+| [docs/03-reference.md](docs/03-reference.md) | Environment variables, ports, and the CSV import format |
+| [docs/04-explanation.md](docs/04-explanation.md) | Why self-host, the data model, the 50/30/20 approach, and the security posture |
 | [CONTEXT.md](CONTEXT.md) | The domain language — what an Instance, a Household, a Split and a Transfer each mean |
 | [docs/adr/](docs/adr/) | Architecture decisions and their consequences |
 | [AGENTS.md](AGENTS.md) | Contributor and agent guide |
-
-> The user-facing guides — tutorial, how-tos, reference and deployment — are
-> being rewritten for 1.0 and are tracked by
-> [#162](https://github.com/t-dhruv/Kuber/issues/162) and
-> [#163](https://github.com/t-dhruv/Kuber/issues/163). Until they land, the
-> Quick Start below and `.env.example` are the deployment reference.
 
 ---
 
@@ -89,7 +93,8 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
 ```
 
-Visit **http://localhost** and create your account on first run.
+Visit **http://localhost** and create your User and Household on first run. No
+email server is required — see [ADR-0003](docs/adr/0003-email-verification-is-skipped-when-no-provider-is-configured.md).
 
 > At minimum, set `JWT_SECRET`, `JWT_REFRESH_SECRET`, `AI_ENCRYPTION_KEY`, and `POSTGRES_PASSWORD` before going live. Generate JWT secrets with `openssl rand -base64 64` and the encryption key with `openssl rand -hex 32`. See `.env.example` for every option.
 

@@ -10,7 +10,8 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:9001',
     trace: 'on-first-retry',
-    storageState: 'tests/e2e/.auth/user.json',
+    // No shared storage state: refresh tokens rotate, so a saved session is
+    // spent by the first context that loads it. Specs sign in for themselves.
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     acceptDownloads: true,

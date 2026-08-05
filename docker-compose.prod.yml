@@ -72,10 +72,15 @@ services:
       server:
         condition: service_healthy
     healthcheck:
+      # 127.0.0.1, not localhost: the image's IPv6 listener is only added when
+      # the config is named default.conf, which this one is not, so nginx binds
+      # IPv4 only. `localhost` resolves to ::1 first and the check would never
+      # pass — taking `up --wait` and anything depending on client health with
+      # it, on a stack that is in fact serving fine.
       test:
         [
           "CMD-SHELL",
-          "wget -q -O /dev/null http://localhost/health || exit 1",
+          "wget -q -O /dev/null http://127.0.0.1/health || exit 1",
         ]
       interval: 15s
       timeout: 5s
