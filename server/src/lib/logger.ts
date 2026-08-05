@@ -1,8 +1,23 @@
 import pino from 'pino';
 
 const isDev = process.env.NODE_ENV !== 'production';
-const globalLevel = process.env.LOG_LEVEL ?? (isDev ? 'debug' : 'info');
-const lokiUrl = process.env.LOKI_URL;
+
+/**
+ * Reads an optional environment variable, treating blank as absent.
+ *
+ * A variable declared without a value — `LOG_LEVEL=` in an env file, which is
+ * how every optional setting ships in `.env.example` — arrives as an empty
+ * string, not as undefined, so `??` never reaches its fallback. Handing that
+ * empty string to pino as a level throws at import time and takes the process
+ * down before it binds a port.
+ */
+function envOrUndefined(key: string): string | undefined {
+  const raw = process.env[key]?.trim();
+  return raw ? raw : undefined;
+}
+
+const globalLevel = envOrUndefined('LOG_LEVEL') ?? (isDev ? 'debug' : 'info');
+const lokiUrl = envOrUndefined('LOKI_URL');
 
 const pinoOpts: pino.LoggerOptions = {
   level: globalLevel,
@@ -60,7 +75,7 @@ export const logger = stream ? pino(pinoOpts, stream) : pino(pinoOpts);
  */
 export function createModuleLogger(moduleName: string): pino.Logger {
   // Read env at call time so per-module overrides work after module load
-  const override = process.env[`LOG_LEVEL_${moduleName.toUpperCase()}`];
+  const override = envOrUndefined(`LOG_LEVEL_${moduleName.toUpperCase()}`);
   const child = logger.child({ module: moduleName });
   if (override) {
     child.level = override;

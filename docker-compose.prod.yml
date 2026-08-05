@@ -12,8 +12,10 @@
 #   docker compose -f docker-compose.prod.yml pull
 #   docker compose -f docker-compose.prod.yml up -d
 #
-# Pin a version:
-#   IMAGE_TAG=v1.2.3 docker compose -f docker-compose.prod.yml up -d
+# Pin a version. Note there is no `v` — the git tag `v1.2.3` publishes images
+# tagged `1.2.3`. While Kuber is in beta, pinning is required: `latest` only
+# ever points at a stable release.
+#   IMAGE_TAG=1.0.0-beta docker compose -f docker-compose.prod.yml up -d
 #
 # With observability (Prometheus, Loki, Promtail, Grafana):
 #   docker compose -f docker-compose.prod.yml -f docker-compose.observability.yml up -d
