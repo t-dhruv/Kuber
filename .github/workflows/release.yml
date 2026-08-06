@@ -83,6 +83,23 @@ jobs:
           fi
           echo "Releasing version $PKG"
 
+      # The Release job reads its body out of the changelog, but it runs after
+      # both images are published. Checking here means a missing entry costs a
+      # failed gate rather than published images with no Release to explain
+      # them. `scripts/release.sh` runs the same check before it tags.
+      - name: Verify the changelog has an entry for this version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk -v want="## [$VERSION]" '
+            index($0, want) == 1 { flag = 1; next }
+            /^## \[/            { flag = 0 }
+            flag                { print }
+          ' CHANGELOG.md)
+          if [ -z "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
+            echo "::error::CHANGELOG.md has no entry for [$VERSION]. Add one before tagging."
+            exit 1
+          fi
+
       # The server's types come from the generated Prisma client, so this has
       # to precede both typecheck and the tests.
       - name: Generate Prisma client
