@@ -6,6 +6,58 @@ Kuber uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0-beta] - 2026-08-06
+
+A theming release. 1.0.0-beta shipped six accents and a dark mode that large
+parts of the interface quietly ignored; this makes the tokens the app defines
+the ones it actually renders.
+
+**Installing:** pin the version, because a pre-release never moves `latest`.
+
+```bash
+echo 'IMAGE_TAG=1.1.0-beta' >> .env
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Fixed
+
+- **The accent you choose is the accent you get.** The bottom navigation
+  hardcoded the orange hex, so on mobile the active tab stayed orange under
+  every other accent. The AI nudge and its suggestion strip were fixed indigo,
+  and the bottom sheet was fixed slate — both stayed dark-styled in light
+  themes.
+- **Text on accent-coloured surfaces is legible under the lime accent.**
+  Buttons, chat bubbles and avatar badges hardcoded white text. Lime is a light
+  accent, so that was near-white on near-white. They now use the token that
+  exists for this and already carries a dark value for lime.
+- **Styles that referenced undefined tokens no longer vanish.** Rules across the
+  app named `--color-primary`, `--color-error`, `--color-surface-raised` and
+  others that were never declared, and a CSS variable resolving to nothing drops
+  the entire declaration — silently. They are now aliases of the canonical
+  tokens and track accent and dark mode.
+- **An explicit theme choice wins over the OS preference.** Tailwind's `dark:`
+  variant followed `prefers-color-scheme` while the app applies its own
+  `data-theme`, so a User on a light OS who picked dark got a mix of both.
+- **Full-height screens are no longer clipped by mobile browser chrome**, which
+  had been cutting off the bottom of the login, offline, and sheet layouts on
+  phones.
+
+### Changed
+
+- Overlapping layers (navigation, popovers, modals, toasts, tooltips) draw from
+  a named z-index scale instead of competing ad-hoc values.
+- Headings and body copy set `text-wrap: balance` / `pretty`, and the offline
+  screen uses the shared button rather than inline hover handlers.
+
+### Added
+
+- `npm run release <version>` cuts releases. Tagging is the whole release
+  procedure, so a hand-pushed tag that fails the gate burns that version
+  permanently — as happened to 1.0.1-beta and 1.0.2-beta. The script runs the
+  workflow's checks first, including that this file has an entry, then bumps
+  every manifest and the lockfile before tagging. See
+  [CONTRIBUTING](CONTRIBUTING.md#cutting-a-release).
+
 ## [1.0.0-beta] - 2026-08-05
 
 The first published Kuber. Every earlier version existed only as source — there
@@ -111,5 +163,6 @@ Application surface, as shipped:
 - GitHub Actions CI on every pull request; tagging publishes images and a Release
 - Node 24 LTS across the images, CI, and every manifest
 
-[Unreleased]: https://github.com/t-dhruv/Kuber/compare/v1.0.0-beta...HEAD
+[Unreleased]: https://github.com/t-dhruv/Kuber/compare/v1.1.0-beta...HEAD
+[1.1.0-beta]: https://github.com/t-dhruv/Kuber/compare/v1.0.0-beta...v1.1.0-beta
 [1.0.0-beta]: https://github.com/t-dhruv/Kuber/releases/tag/v1.0.0-beta
