@@ -924,7 +924,7 @@ function DetectedSubscriptionsBanner({ onAdd }: { onAdd: (item: DetectedSubscrip
               </div>
               <button
                 onClick={() => onAdd(item)}
-                className="shrink-0 py-1 px-3 rounded-[var(--radius-sm)] border-none cursor-pointer text-xs font-semibold bg-[var(--color-accent)] text-white"
+                className="shrink-0 py-1 px-3 rounded-[var(--radius-sm)] border-none cursor-pointer text-xs font-semibold bg-[var(--color-accent)] text-[var(--color-on-accent)]"
               >
                 Add
               </button>

@@ -99,7 +99,7 @@ export function Tooltip({ content, children, placement = 'top', delay = 300, dis
         <div
           role="tooltip"
           style={{ top: coords.top, left: coords.left }}
-          className={`fixed z-[9999] px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-inverse)] bg-[var(--color-text)] rounded-[var(--radius-sm)] shadow-[var(--shadow-md)] pointer-events-none whitespace-nowrap max-w-xs ${placementClasses[placement]}`}
+          className={`fixed z-[var(--z-tooltip)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-text-inverse)] bg-[var(--color-text)] rounded-[var(--radius-sm)] shadow-[var(--shadow-md)] pointer-events-none whitespace-nowrap max-w-xs ${placementClasses[placement]}`}
         >
           {content}
         </div>,

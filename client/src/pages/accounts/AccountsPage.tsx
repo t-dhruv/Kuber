@@ -1228,7 +1228,7 @@ function AccountDetailDrawer({
                     {txns.map((txn, idx) => (
                       <div key={txn.id}>
                         <div className="flex items-center gap-3 py-2.5 px-3.5">
-                          <div className="w-[30px] h-[30px] rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-white text-[0.6875rem] font-bold shrink-0">
+                          <div className="w-[30px] h-[30px] rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-[var(--color-on-accent)] text-[0.6875rem] font-bold shrink-0">
                             {(txn.merchantName ?? '?')[0].toUpperCase()}
                           </div>
                           <div className="flex-1 min-w-0">

@@ -252,7 +252,7 @@ function CategoryPicker({
                 {cat.icon ? (
                   <span className="text-base shrink-0 leading-none w-6 text-center">{cat.icon}</span>
                 ) : (
-                  <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0 text-white">{cat.name[0]}</span>
+                  <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0 text-[var(--color-on-accent)]">{cat.name[0]}</span>
                 )}
                 <span className={`text-sm text-[var(--color-text)] ${selectedId === cat.id ? 'font-semibold' : 'font-normal'}`}>
                   {cat.name}
@@ -637,7 +637,7 @@ function TransactionDrawer({ transaction, categories, accounts, onCreateRule, on
                       {selectedCategory.icon ? (
                         <span className="text-base shrink-0 leading-none">{selectedCategory.icon}</span>
                       ) : (
-                        <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0 text-white">{selectedCategory.name[0]}</span>
+                        <span className="w-6 h-6 rounded-[var(--radius-full)] bg-[var(--color-accent)] flex items-center justify-center text-xs shrink-0 text-[var(--color-on-accent)]">{selectedCategory.name[0]}</span>
                       )}
                       <span className="text-sm text-[var(--color-text)] flex-1">{selectedCategory.name}</span>
                     </>
@@ -866,7 +866,7 @@ function TypeToggle({ value, onChange, disabled }: TypeToggleProps) {
           className={[
             'flex-1 py-1.5 text-sm font-medium transition-colors',
             value === opt.value
-              ? 'bg-[var(--color-accent)] text-white'
+              ? 'bg-[var(--color-accent)] text-[var(--color-on-accent)]'
               : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)]',
             disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
           ].join(' ')}
@@ -1168,7 +1168,7 @@ function FiltersPanel({ open, onClose, accounts, categories, searchParams, setSe
         />
       )}
       <div
-        className="fixed top-0 right-0 bottom-0 w-full sm:w-[320px] z-[35] bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[var(--shadow-lg)] flex flex-col overflow-y-auto transition-transform duration-[250ms] ease-[ease]"
+        className="fixed top-0 right-0 bottom-0 w-full sm:w-[320px] z-[var(--z-overlay)] bg-[var(--color-surface)] border-l border-[var(--color-border)] shadow-[var(--shadow-lg)] flex flex-col overflow-y-auto transition-transform duration-[250ms] ease-[ease]"
         style={{ transform: open ? 'translateX(0)' : 'translateX(100%)' }}
       >
         {/* Header */}

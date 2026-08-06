@@ -31,7 +31,7 @@ export default function VerifyEmailPage() {
         : 'Please wait while we verify your email.';
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] p-4">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-bg)] p-4">
       <div className="w-full max-w-[440px] bg-[var(--color-surface)] rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] p-10">
         <h1 className="text-[2rem] font-extrabold text-[var(--color-accent)] m-0">{title}</h1>
         <p className="text-[var(--color-text-secondary)] mt-4 text-sm">{body}</p>

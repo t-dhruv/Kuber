@@ -83,20 +83,6 @@ const controlStyle: React.CSSProperties = {
   fontSize: "0.875rem",
 };
 
-const dropdownPanelStyle: React.CSSProperties = {
-  position: "absolute",
-  zIndex: 30,
-  top: "calc(100% + 0.375rem)",
-  left: 0,
-  right: 0,
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-lg)",
-  background: "var(--color-surface-elevated)",
-  color: "var(--color-text)",
-  boxShadow: "var(--shadow-lg)",
-  padding: "0.5rem",
-};
-
 function FilterField({
   label,
   children,

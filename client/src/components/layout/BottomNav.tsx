@@ -26,7 +26,7 @@ export function BottomNav({ onOpenSidebar }: BottomNavProps) {
           className={({ isActive }) =>
             `flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[44px] py-2 text-[0.625rem] font-medium transition-colors ${
               isActive
-                ? 'text-[#E5622A]'
+                ? 'text-[var(--color-accent)]'
                 : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
             }`
           }

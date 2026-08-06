@@ -481,7 +481,7 @@ function InvestmentLadder({ analysis }: { analysis: WealthAnalysis }) {
                   Step {step.step}: {step.label}
                 </span>
                 {step.status === 'inprogress' && step.amount !== undefined && (
-                  <span className="text-xs bg-[var(--color-accent)] text-white px-2 py-0.5 rounded-full">
+                  <span className="text-xs bg-[var(--color-accent)] text-[var(--color-on-accent)] px-2 py-0.5 rounded-full">
                     {fmtCurrency(step.amount)} needed
                   </span>
                 )}

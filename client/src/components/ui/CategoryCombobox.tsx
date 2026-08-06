@@ -81,7 +81,7 @@ export function CategoryCombobox({
               {selected.icon ? (
                 <span className="text-base shrink-0 leading-none">{selected.icon}</span>
               ) : (
-                <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[0.625rem] shrink-0 text-white">
+                <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[0.625rem] shrink-0 text-[var(--color-on-accent)]">
                   {selected.name[0]}
                 </span>
               )}
@@ -136,7 +136,7 @@ export function CategoryCombobox({
                         {cat.icon ? (
                           <span className="text-base shrink-0 leading-none">{cat.icon}</span>
                         ) : (
-                          <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[0.625rem] shrink-0 text-white">
+                          <span className="w-5 h-5 rounded-full bg-[var(--color-accent)] flex items-center justify-center text-[0.625rem] shrink-0 text-[var(--color-on-accent)]">
                             {cat.name[0]}
                           </span>
                         )}

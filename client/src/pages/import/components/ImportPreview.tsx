@@ -199,7 +199,7 @@ export default function ImportPreview({ result, filename, accountId, onDone, onC
             onClick={() => setShowDuplicates((v) => !v)}
           >
             {showDuplicates ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            <XCircle size={15} className="text-gray-400" />
+            <XCircle size={15} className="text-[var(--color-text-muted)]" />
             Duplicates ({dupRows.length}) — already in Kuber
           </button>
           {showDuplicates && (
