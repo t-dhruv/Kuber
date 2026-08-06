@@ -6,13 +6,22 @@
   // where there is no .env file and the values arrive as real environment
   // variables.
   "globalEnv": ["NODE_ENV", "DATABASE_URL"],
+  // The server's types come from the generated Prisma client, which is build
+  // output living in node_modules — nothing in the repository guarantees it
+  // exists, and its absence surfaces as a hundred TS7006 errors that name it
+  // nowhere. So every task that compiles server code declares it as a
+  // prerequisite; `prisma generate` only parses the schema and opens no
+  // connection, making it safe to run ahead of them. `lint` is exempt because
+  // no rule here reads types, and `test:e2e` because it drives a built stack
+  // rather than compiling. On the install hook that used to cover this, and why
+  // the npm version is pinned, see the "Pin npm" step in ci.yml.
   "tasks": {
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
-    "dev": { "persistent": true, "cache": false },
+    "build": { "dependsOn": ["^build", "db:generate"], "outputs": ["dist/**"] },
+    "dev": { "dependsOn": ["db:generate"], "persistent": true, "cache": false },
     "lint": {},
-    "typecheck": {},
-    "test": { "cache": false },
-    "test:db": { "cache": false, "env": ["TEST_DATABASE_URL"] },
+    "typecheck": { "dependsOn": ["db:generate"] },
+    "test": { "dependsOn": ["db:generate"], "cache": false },
+    "test:db": { "dependsOn": ["db:generate"], "cache": false, "env": ["TEST_DATABASE_URL"] },
     "test:e2e": { "cache": false },
     "db:generate": { "cache": false },
     "db:migrate": { "cache": false },
