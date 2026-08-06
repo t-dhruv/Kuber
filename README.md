@@ -89,9 +89,15 @@ git clone https://github.com/t-dhruv/Kuber.git
 cd Kuber
 cp .env.example .env
 # Edit .env — set JWT_SECRET, JWT_REFRESH_SECRET, AI_ENCRYPTION_KEY, and POSTGRES_PASSWORD
+echo 'IMAGE_TAG=1.0.0-beta' >> .env
 docker compose -f docker-compose.prod.yml up -d
-docker compose -f docker-compose.prod.yml exec server npx prisma migrate deploy
 ```
+
+Kuber is in beta, so the version must be pinned: `latest` only ever points at a
+stable release, and pre-releases are published under their exact version alone.
+
+Migrations apply themselves — the server runs them on every start, before it
+accepts traffic.
 
 Visit **http://localhost** and create your User and Household on first run. No
 email server is required — see [ADR-0003](docs/adr/0003-email-verification-is-skipped-when-no-provider-is-configured.md).

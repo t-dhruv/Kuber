@@ -36,7 +36,7 @@ export function EmojiPicker({ value, onChange }: EmojiPickerProps) {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 z-[100] mt-1">
+        <div className="absolute top-full left-0 z-[var(--z-popover)] mt-1">
           <EmojiPickerLib
             onEmojiClick={handleSelect}
             theme={Theme.AUTO}

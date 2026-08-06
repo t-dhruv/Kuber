@@ -21,7 +21,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] p-4">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-[var(--color-bg)] p-4">
       <div className="w-full max-w-[400px] bg-[var(--color-surface)] rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] p-10">
         <div className="text-center mb-8">
           <h1 className="text-[2rem] font-extrabold text-[var(--color-accent)] m-0 tracking-[-0.02em]">
@@ -72,7 +72,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="w-full py-3 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-white font-semibold text-[0.9375rem] border-none transition-opacity duration-150"
+              className="w-full py-3 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-[var(--color-on-accent)] font-semibold text-[0.9375rem] border-none transition-opacity duration-150"
               style={{ cursor: mutation.isPending ? 'not-allowed' : 'pointer', opacity: mutation.isPending ? 0.7 : 1 }}
             >
               {mutation.isPending ? 'Sending…' : 'Send reset link'}

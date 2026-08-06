@@ -170,7 +170,7 @@ function EditableBudgetCell({
         <div className="flex gap-1">
           <button
             onClick={commit}
-            className="text-xs px-2 py-1 border border-[var(--color-accent)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-white cursor-pointer"
+            className="text-xs px-2 py-1 border border-[var(--color-accent)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-[var(--color-on-accent)] cursor-pointer"
           >
             Save
           </button>

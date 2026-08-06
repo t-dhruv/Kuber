@@ -193,7 +193,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                       <span className="flex-1 flex items-center justify-between truncate">
                         <span className="truncate">{item.label}</span>
                         {item.badge !== undefined && (
-                          <span className="ml-2 flex-shrink-0 text-xs font-bold bg-[var(--color-accent)] text-white rounded-full px-1.5 py-0.5 leading-none">
+                          <span className="ml-2 flex-shrink-0 text-xs font-bold bg-[var(--color-accent)] text-[var(--color-on-accent)] rounded-full px-1.5 py-0.5 leading-none">
                             {item.badge > 99 ? '99+' : item.badge}
                           </span>
                         )}

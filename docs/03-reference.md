@@ -28,7 +28,7 @@ Changing `JWT_SECRET` or `JWT_REFRESH_SECRET` signs everyone out. Changing
 
 | Variable      | Default    | Description                                                                    |
 | ------------- | ---------- | ------------------------------------------------------------------------------ |
-| `IMAGE_TAG`   | `latest`   | Image tag both services pull. Pin to a version to keep an Instance stable.      |
+| `IMAGE_TAG`   | `latest`   | Image tag both services pull, without a `v` prefix. `latest` only ever points at a stable release, so while Kuber is in beta this must be set — e.g. `1.0.0-beta`. |
 | `HTTP_PORT`   | `80`       | Host port the client publishes. Accepts `127.0.0.1:8080` to bind loopback only. |
 | `PORT`        | `9002`     | Port the server listens on inside the network. Rarely changed.                  |
 | `NODE_ENV`    | `production` | Leave as `production` for a deployed Instance.                                |

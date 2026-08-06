@@ -34,13 +34,19 @@ curl -fsSLO https://raw.githubusercontent.com/t-dhruv/Kuber/master/docker-compos
 curl -fsSL  https://raw.githubusercontent.com/t-dhruv/Kuber/master/.env.example -o .env
 ```
 
-Generate the three secrets. Kuber refuses to start without them:
+Generate the four secrets. Kuber refuses to start without them:
 
 ```bash
 printf 'POSTGRES_PASSWORD=%s\n'   "$(openssl rand -base64 32 | tr -d '/+=')" >> .env
 printf 'JWT_SECRET=%s\n'          "$(openssl rand -base64 48 | tr -d '/+=')" >> .env
 printf 'JWT_REFRESH_SECRET=%s\n'  "$(openssl rand -base64 48 | tr -d '/+=')" >> .env
+printf 'AI_ENCRYPTION_KEY=%s\n'   "$(openssl rand -hex 32)" >> .env
 ```
+
+`AI_ENCRYPTION_KEY` must be exactly 64 hex characters — `openssl rand -hex 32`
+produces that. The server checks the length at startup and exits if it is wrong.
+It encrypts stored AI provider keys, and is required even if you never configure
+an AI provider.
 
 If a variable appears twice in `.env`, the later line wins — so the lines you
 just appended override the empty ones in the example file.
@@ -50,6 +56,16 @@ Pick the port you want to reach Kuber on. The default is 80:
 ```bash
 echo 'HTTP_PORT=8080' >> .env
 ```
+
+Choose the version to run. The Compose file defaults to `latest`, which only
+ever points at a stable release — pre-releases are published under their exact
+version and nothing else, so while Kuber is in beta you must pin it:
+
+```bash
+echo 'IMAGE_TAG=1.0.0-beta' >> .env
+```
+
+Note there is no `v` in the image tag, even though the git tag is `v1.0.0-beta`.
 
 Start it:
 
@@ -93,9 +109,14 @@ Follow the [tutorial](../01-tutorial.md) to record your first Transaction.
 `latest` moves. To keep an Instance stable across restarts, pin the tag:
 
 ```bash
-echo 'IMAGE_TAG=v1.0.0' >> .env
+echo 'IMAGE_TAG=1.0.0' >> .env
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+The image tag carries no `v` prefix: the git tag `v1.0.0` publishes images
+tagged `1.0.0`, `1.0` and `1`, plus `latest`. A pre-release tag such as
+`v1.0.0-beta` publishes `1.0.0-beta` only — it never moves `latest`, and never
+claims a major or minor line.
 
 ## Running on a LAN without HTTPS
 
@@ -114,6 +135,15 @@ docker compose -f docker-compose.prod.yml up -d
 The server logs a warning at startup when this is disabled, so the trade-off is
 visible rather than forgotten. Do not do this on an Instance reachable from the
 internet — see [ADR-0002](../adr/0002-cookie-secure-is-configurable.md).
+
+Set `CLIENT_URL` to the same address while you are here. The example file ships
+`http://localhost`, and every link Kuber emails — password reset, email
+verification, Household invites — is built from it, so on a LAN Instance those
+links point at the recipient's own machine unless you correct it:
+
+```bash
+echo 'CLIENT_URL=http://192.168.1.50:8080' >> .env
+```
 
 ## Behind a reverse proxy
 

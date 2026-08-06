@@ -137,7 +137,7 @@ export function InlineSuggestionStrip({
             <button
               onClick={submitRejectWithCategory}
               disabled={loading || !rejectCategoryId}
-              className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] text-[0.75rem] font-medium bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] text-[0.75rem] font-medium bg-[var(--color-accent)] text-[var(--color-on-accent)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
               Confirm

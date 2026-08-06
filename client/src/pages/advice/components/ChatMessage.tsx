@@ -42,7 +42,7 @@ export function ChatMessage({ message }: Props) {
         <div
           className={`rounded-2xl px-4 py-3 text-[0.9375rem] leading-relaxed shadow-sm ${
             isUser
-              ? 'bg-gradient-to-br from-[var(--color-accent)] to-[#7c3aed] text-white rounded-tr-md'
+              ? 'bg-gradient-to-br from-[var(--color-accent)] to-[#7c3aed] text-[var(--color-on-accent)] rounded-tr-md'
               : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] rounded-tl-md'
           }`}
         >

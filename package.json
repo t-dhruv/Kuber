@@ -23,7 +23,8 @@
     "test:smoke": "dotenv -e .env -- playwright test --grep @smoke",
     "db:migrate": "dotenv -e .env -- turbo run db:migrate --filter=@kuber/server",
     "db:seed": "dotenv -e .env -- turbo run db:seed --filter=@kuber/server",
-    "db:studio": "dotenv -e .env -- turbo run db:studio --filter=@kuber/server"
+    "db:studio": "dotenv -e .env -- turbo run db:studio --filter=@kuber/server",
+    "release": "bash scripts/release.sh"
   },
   "engines": {
     "node": ">=24 <25"

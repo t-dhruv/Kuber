@@ -21,7 +21,7 @@ function ChatMessageItem({ message }: { message: ChatMessage }) {
         ) : <span>✨</span>}
       </div>
       <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-[0.8125rem] leading-relaxed ${
-        isUser ? 'bg-[var(--color-accent)] text-white rounded-tr-md' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] rounded-tl-md'
+        isUser ? 'bg-[var(--color-accent)] text-[var(--color-on-accent)] rounded-tr-md' : 'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] rounded-tl-md'
       }`}>
         {isUser ? (
           <span className="whitespace-pre-wrap">{message.content}</span>
@@ -114,7 +114,7 @@ export function FloatingChat() {
       {/* Floating Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-5 right-5 w-14 h-14 rounded-2xl bg-gradient-to-br from-[var(--color-accent)] to-purple-500 text-white shadow-lg hover:shadow-xl hover:shadow-[var(--color-accent)]/30 transition-all flex items-center justify-center z-40"
+        className="fixed bottom-5 right-5 w-14 h-14 rounded-2xl bg-gradient-to-br from-[var(--color-accent)] to-purple-500 text-[var(--color-on-accent)] shadow-lg hover:shadow-xl hover:shadow-[var(--color-accent)]/30 transition-all flex items-center justify-center z-40"
       >
         <MessageCircle size={24} />
       </button>
@@ -168,7 +168,7 @@ export function FloatingChat() {
                 {isNotConfigured ? (
                   <a
                     href="/settings"
-                    className="text-xs px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
+                    className="text-xs px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-[var(--color-on-accent)] hover:opacity-90 transition-opacity"
                   >
                     Configure in Settings
                   </a>
@@ -226,7 +226,7 @@ export function FloatingChat() {
               <button
                 onClick={() => handleSend()}
                 disabled={isDisabled || !inputValue.trim()}
-                className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-purple-500 text-white flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
+                className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-purple-500 text-[var(--color-on-accent)] flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <Send size={14} />
               </button>

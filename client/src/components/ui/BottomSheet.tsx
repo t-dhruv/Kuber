@@ -33,19 +33,20 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
       {/* Sheet */}
       <div
         ref={sheetRef}
-        className="relative w-full md:w-auto md:min-w-[400px] md:max-w-lg bg-slate-900 border border-slate-700 rounded-t-2xl md:rounded-2xl shadow-2xl animate-slide-up md:animate-none max-h-[90vh] flex flex-col"
+        className="relative w-full md:w-auto md:min-w-[400px] md:max-w-lg bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-t-[var(--radius-xl)] md:rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] animate-slide-up md:animate-none max-h-[90dvh] flex flex-col"
       >
         {/* Drag handle (mobile only) */}
         <div className="flex justify-center pt-3 pb-1 md:hidden">
-          <div className="w-10 h-1 bg-slate-600 rounded-full" />
+          <div className="w-10 h-1 bg-[var(--color-border-strong)] rounded-full" />
         </div>
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700">
-            <h3 className="text-base font-semibold text-white">{title}</h3>
+          <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)]">
+            <h3 className="kb-h2">{title}</h3>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white transition-colors p-1"
+              aria-label="Close"
+              className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors duration-150 p-1 rounded-[var(--radius-sm)]"
             >
               <X className="w-5 h-5" />
             </button>

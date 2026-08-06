@@ -54,7 +54,7 @@ export function ChatInput({ onSend, disabled, placeholder = 'Ask me anything abo
         <button
           onClick={handleSend}
           disabled={disabled || !value.trim()}
-          className="flex-shrink-0 h-11 w-11 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[#7c3aed] text-white flex items-center justify-center hover:opacity-90 hover:shadow-lg hover:shadow-[var(--color-accent)]/25 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          className="flex-shrink-0 h-11 w-11 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[#7c3aed] text-[var(--color-on-accent)] flex items-center justify-center hover:opacity-90 hover:shadow-lg hover:shadow-[var(--color-accent)]/25 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           title="Send (Enter)"
           aria-label="Send message"
         >

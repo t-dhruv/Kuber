@@ -102,11 +102,11 @@ export function AppShell() {
   const sidebarWidth = collapsed ? 'md:pl-16' : 'md:pl-64';
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
+    <div className="min-h-[100dvh] bg-[var(--color-bg)]">
       {/* Skip nav */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-[var(--color-accent)] focus:text-white focus:rounded-[var(--radius-md)] focus:text-sm focus:font-medium"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[var(--z-skip-link)] focus:px-4 focus:py-2 focus:bg-[var(--color-accent)] focus:text-[var(--color-on-accent)] focus:rounded-[var(--radius-md)] focus:text-sm focus:font-medium"
       >
         Skip to main content
       </a>
@@ -128,7 +128,7 @@ export function AppShell() {
 
       <div
         ref={contentRef}
-        className={`flex flex-col min-h-screen transition-all duration-200 ${sidebarWidth}`}
+        className={`flex flex-col min-h-[100dvh] transition-all duration-200 ${sidebarWidth}`}
         aria-hidden={mobileOpen ? true : undefined}
       >
         <Header

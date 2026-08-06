@@ -22,7 +22,7 @@ version between yours and the one you are moving to, not just the newest.
 If you pin a version, edit it in `.env`:
 
 ```bash
-sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=v1.1.0/' .env
+sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=1.1.0/' .env
 ```
 
 Then pull and restart:
@@ -68,7 +68,7 @@ Kuber's migrations are not reversible. Rolling back means restoring the backup
 you took before upgrading, into the version you were on before:
 
 ```bash
-sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=v1.0.0/' .env
+sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=1.0.0/' .env
 docker compose -f docker-compose.prod.yml down
 docker compose -f docker-compose.prod.yml up -d postgres
 docker compose -f docker-compose.prod.yml exec -T postgres \

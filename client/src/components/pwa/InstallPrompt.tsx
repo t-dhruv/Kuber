@@ -55,30 +55,36 @@ export default function InstallPrompt() {
   if (!visible) return null
 
   return (
-    <div className="fixed bottom-20 md:bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-4 z-50 flex items-start gap-3">
-      <div className="flex-shrink-0 w-10 h-10 bg-[#E5622A] rounded-lg flex items-center justify-center">
-        <Download className="w-5 h-5 text-white" />
+    <div className="fixed bottom-20 md:bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-[var(--color-surface-elevated)] border border-[var(--color-border)] rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] p-4 z-50 flex items-start gap-3">
+      <div className="flex-shrink-0 w-10 h-10 bg-[var(--color-accent)] rounded-[var(--radius-md)] flex items-center justify-center">
+        <Download className="w-5 h-5 text-[var(--color-on-accent)]" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-white">Install Kuber</p>
+        <p className="text-sm font-semibold text-[var(--color-text)]">Install Kuber</p>
         {showIOSInstructions ? (
-          <p className="text-xs text-slate-400 mt-1">
-            Tap <span className="text-white">Share</span> then{' '}
-            <span className="text-white">Add to Home Screen</span> to install.
+          <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+            Tap <span className="font-medium text-[var(--color-text)]">Share</span> then{' '}
+            <span className="font-medium text-[var(--color-text)]">Add to Home Screen</span> to install.
           </p>
         ) : (
           <>
-            <p className="text-xs text-slate-400 mt-1">Install for quick access, even offline.</p>
+            <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+              Install for quick access, even offline.
+            </p>
             <button
               onClick={handleInstall}
-              className="mt-2 text-xs bg-[#E5622A] hover:bg-[#d4531e] text-white px-3 py-1.5 rounded-md font-medium transition-colors"
+              className="mt-2 text-xs bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[var(--color-on-accent)] px-3 py-1.5 rounded-[var(--radius-md)] font-medium transition-colors duration-150 active:scale-[0.98]"
             >
               Install
             </button>
           </>
         )}
       </div>
-      <button onClick={handleDismiss} className="flex-shrink-0 text-slate-400 hover:text-white transition-colors">
+      <button
+        onClick={handleDismiss}
+        aria-label="Dismiss install prompt"
+        className="flex-shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors duration-150"
+      >
         <X className="w-4 h-4" />
       </button>
     </div>

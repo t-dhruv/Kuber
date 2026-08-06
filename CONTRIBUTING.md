@@ -11,6 +11,7 @@ Thank you for your interest in contributing. Kuber is a self-hostable personal f
 - [Branch Strategy](#branch-strategy)
 - [Commit Style](#commit-style)
 - [Pull Request Checklist](#pull-request-checklist)
+- [Cutting a Release](#cutting-a-release)
 - [Code Conventions](#code-conventions)
 - [Reporting Bugs](#reporting-bugs)
 - [Security Vulnerabilities](#security-vulnerabilities)
@@ -120,6 +121,28 @@ Before submitting a PR, confirm the following:
 - [ ] New features include at minimum a smoke test
 - [ ] `AUDITOR.md` updated if the PR introduces meaningful new work or resolves known debt
 - [ ] The PR description clearly explains what changed and why
+
+---
+
+## Cutting a Release
+
+Do not tag by hand. A tag is what triggers the release workflow, and that
+workflow refuses to publish unless the tag, the manifests and the changelog all
+agree — a mismatched tag fails the gate and cannot be reused.
+
+Instead, write the release notes in `CHANGELOG.md` under a `## [X.Y.Z]` heading,
+merge that to `master`, then run:
+
+```bash
+npm run release 1.0.2-beta   # the version, without the leading v
+```
+
+The script checks everything the workflow will check, bumps `package.json` in
+the root, `client` and `server`, updates the lockfile, then commits, tags and
+pushes after showing you the diff. From there
+[the release workflow](.github/workflows/release.yml) runs the full quality
+gate, publishes both images and cuts the GitHub Release from your changelog
+entry.
 
 ---
 

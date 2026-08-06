@@ -61,7 +61,7 @@ function TopicDetailPanel({
       onClick={onClose}
     >
       <div
-        className="w-full sm:w-[480px] h-screen bg-[var(--color-surface)] flex flex-col overflow-hidden"
+        className="w-full sm:w-[480px] h-[100dvh] bg-[var(--color-surface)] flex flex-col overflow-hidden"
         style={{ boxShadow: '-4px 0 24px rgba(0,0,0,0.18)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -372,7 +372,7 @@ function AiChatTab() {
                 <div className="flex justify-center mt-4">
                   <button
                     onClick={() => navigate('/settings')}
-                    className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                    className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-on-accent)] text-sm font-medium hover:opacity-90 transition-opacity"
                   >
                     Go to Settings → AI Advisor
                   </button>
