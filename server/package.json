@@ -1,7 +1,7 @@
 {
   "name": "@kuber/server",
   "private": true,
-  "version": "1.0.0-beta",
+  "version": "1.1.0-beta",
   "scripts": {
     "dev": "dotenv -e ../.env -- tsx watch src/index.ts",
     "build": "dotenv -e ../.env -- tsc",
