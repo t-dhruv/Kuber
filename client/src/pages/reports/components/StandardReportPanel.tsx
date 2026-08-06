@@ -112,7 +112,7 @@ export function StandardReportPanel({ filters }: { filters: StandardReportFilter
       {report.charts.map((chart) => (
         <Card key={chart.key} style={{ padding: "1rem" }}>
           <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>{chart.title}</h2>
-          {chart.data.length === 0 ? (
+          {!("data" in chart) || chart.data.length === 0 ? (
             <p style={{ color: "var(--color-text-secondary)", margin: 0 }}>No chart data for this range.</p>
           ) : (
             <div style={{ overflowX: "auto" }}>

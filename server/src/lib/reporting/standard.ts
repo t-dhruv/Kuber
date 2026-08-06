@@ -127,6 +127,74 @@ export interface StandardInvestmentInput {
   recurringInvestmentCount: number;
 }
 
+export type ChartValueFormat = 'currency' | 'percent' | 'number' | 'date';
+
+export interface ChartSeries {
+  /** Key into each data row. */
+  key: string;
+  /** Human label shown in legend and tooltip. */
+  label: string;
+  format: ChartValueFormat;
+  /** Semantic colour role; the client maps these to CSS custom properties. */
+  role: 'income' | 'expense' | 'net' | 'budget' | 'actual' | 'neutral' | 'categorical';
+  /** Stack group name. Series sharing a group stack together. */
+  stack?: string;
+}
+
+export interface ChartAxis {
+  key: string;
+  label: string;
+  format: ChartValueFormat;
+}
+
+/** Rows for cartesian charts: one object per x-axis position. */
+export type ChartRow = Record<string, string | number | null>;
+
+export interface CartesianChartSpec {
+  kind: 'line' | 'area' | 'bar' | 'stackedBar' | 'groupedBar' | 'waterfall';
+  key: string;
+  title: string;
+  x: ChartAxis;
+  series: ChartSeries[];
+  data: ChartRow[];
+  /** Optional reference line, e.g. a zero baseline or a budget limit. */
+  reference?: { value: number; label: string };
+}
+
+export interface PartitionChartSpec {
+  kind: 'pie' | 'donut' | 'treemap';
+  key: string;
+  title: string;
+  /** Row key holding the slice label. */
+  nameKey: string;
+  /** Row key holding the slice magnitude. Always non-negative. */
+  valueKey: string;
+  format: ChartValueFormat;
+  data: ChartRow[];
+}
+
+export interface SankeyChartSpec {
+  kind: 'sankey';
+  key: string;
+  title: string;
+  format: ChartValueFormat;
+  nodes: Array<{ id: string; label: string; column: number; role: 'income' | 'total' | 'bucket' | 'category' }>;
+  links: Array<{ source: string; target: string; value: number }>;
+}
+
+export interface HeatmapChartSpec {
+  kind: 'heatmap';
+  key: string;
+  title: string;
+  xKey: string;
+  yKey: string;
+  valueKey: string;
+  format: ChartValueFormat;
+  data: ChartRow[];
+}
+
+export type ChartSpec = CartesianChartSpec | PartitionChartSpec | SankeyChartSpec | HeatmapChartSpec;
+
 export interface StandardReportResponse {
   reportType: StandardReportType;
   title: string;
@@ -140,7 +208,7 @@ export interface StandardReportResponse {
     change?: { value: number; direction: 'up' | 'down' | 'flat'; label: string };
     drilldown?: Record<string, string>;
   }>;
-  charts: Array<{ key: string; title: string; type: 'line' | 'bar' | 'table'; data: Array<Record<string, string | number | null>> }>;
+  charts: ChartSpec[];
   tables: Array<{
     key: string;
     title: string;
@@ -418,7 +486,39 @@ export function buildOverviewReport(input: { query: NormalizedReportQuery; rows:
   ];
 
   const trend = periodBuckets(filtered, input.query);
-  response.charts = [{ key: 'incomeExpenseTrend', title: 'Income vs Expenses', type: 'line', data: trend }];
+  const spendingByCategory = categoryAmounts(filtered, true, input.query);
+  response.charts = [
+    {
+      kind: 'area',
+      key: 'incomeExpenseTrend',
+      title: 'Income vs Expenses',
+      x: PERIOD_AXIS,
+      series: [MONEY_SERIES.income, MONEY_SERIES.expenses],
+      data: trend,
+    },
+    {
+      kind: 'donut',
+      key: 'spendingByCategory',
+      title: 'Spending by Category',
+      nameKey: 'name',
+      valueKey: 'amount',
+      format: 'currency',
+      data: spendingByCategory.slice(0, input.query.limit).map((item) => ({
+        id: item.id,
+        name: item.name,
+        amount: money(item.amount),
+      })),
+    },
+    {
+      kind: 'bar',
+      key: 'netByPeriod',
+      title: 'Net by Period',
+      x: PERIOD_AXIS,
+      series: [MONEY_SERIES.net],
+      data: trend,
+      reference: { value: 0, label: 'Break even' },
+    },
+  ];
   response.tables = [
     {
       key: 'topSpendingCategories',
@@ -449,6 +549,14 @@ export function buildOverviewReport(input: { query: NormalizedReportQuery; rows:
   }));
   return response;
 }
+
+const MONEY_SERIES: Record<'income' | 'expenses' | 'net', ChartSeries> = {
+  income: { key: 'income', label: 'Income', format: 'currency', role: 'income' },
+  expenses: { key: 'expenses', label: 'Expenses', format: 'currency', role: 'expense' },
+  net: { key: 'net', label: 'Net', format: 'currency', role: 'net' },
+};
+
+const PERIOD_AXIS: ChartAxis = { key: 'period', label: 'Period', format: 'date' };
 
 function groupedBy(rows: StandardReportRow[], idFor: (row: StandardReportRow) => string, nameFor: (row: StandardReportRow) => string) {
   const map = new Map<string, { id: string; name: string; amount: Decimal; count: number }>();
@@ -491,7 +599,25 @@ export function buildIncomeExpenseReport(input: { query: NormalizedReportQuery; 
     card('totalExpenses', 'Total Expenses', expenses, response.currencyCode),
     card('netAmount', 'Net Amount', income.minus(expenses), response.currencyCode),
   ];
-  response.charts = [{ key: 'incomeExpenseTrend', title: 'Income vs Expenses', type: 'line', data: periods }];
+  response.charts = [
+    {
+      kind: 'groupedBar',
+      key: 'incomeExpenseTrend',
+      title: 'Income vs Expenses',
+      x: PERIOD_AXIS,
+      series: [MONEY_SERIES.income, MONEY_SERIES.expenses],
+      data: periods,
+    },
+    {
+      kind: 'line',
+      key: 'netTrend',
+      title: 'Net Trend',
+      x: PERIOD_AXIS,
+      series: [MONEY_SERIES.net],
+      data: periods,
+      reference: { value: 0, label: 'Break even' },
+    },
+  ];
   response.tables = [{ key: 'periods', title: 'Period Totals', columns: [{ key: 'period', label: 'Period' }, { key: 'income', label: 'Income' }, { key: 'expenses', label: 'Expenses' }, { key: 'net', label: 'Net' }], rows: periods }];
   response.drilldowns = periods.map((period) => ({ key: `period-${period.period}`, label: `View ${period.period} Transactions`, params: { period: String(period.period) } }));
   return response;
@@ -512,8 +638,37 @@ export function buildCashFlowReport(input: { query: NormalizedReportQuery; rows:
     card('netCashFlow', 'Net Cash Flow', running, response.currencyCode),
   ];
   response.charts = [
-    { key: 'cashFlowByPeriod', title: 'Cash Flow by Period', type: 'bar', data: periods },
-    { key: 'runningCashFlow', title: 'Running Cash Flow', type: 'line', data: runningData },
+    {
+      kind: 'stackedBar',
+      key: 'cashFlowByPeriod',
+      title: 'Cash Flow by Period',
+      x: PERIOD_AXIS,
+      series: [
+        { ...MONEY_SERIES.income, stack: 'flow' },
+        { ...MONEY_SERIES.expenses, stack: 'flow' },
+      ],
+      data: periods,
+    },
+    {
+      kind: 'line',
+      key: 'runningCashFlow',
+      title: 'Running Cash Flow',
+      x: PERIOD_AXIS,
+      series: [
+        MONEY_SERIES.net,
+        { key: 'runningBalance', label: 'Running Balance', format: 'currency', role: 'neutral' },
+      ],
+      data: runningData,
+    },
+    {
+      kind: 'waterfall',
+      key: 'cashFlowWaterfall',
+      title: 'Cash Flow Waterfall',
+      x: PERIOD_AXIS,
+      series: [MONEY_SERIES.net],
+      data: runningData,
+      reference: { value: 0, label: 'Break even' },
+    },
   ];
   response.tables = [{ key: 'cashFlowPeriods', title: 'Cash Flow by Period', columns: [{ key: 'period', label: 'Period' }, { key: 'income', label: 'Inflows' }, { key: 'expenses', label: 'Outflows' }, { key: 'net', label: 'Net' }], rows: periods }];
   return response;
@@ -543,7 +698,37 @@ export function buildCategoryReport(input: { query: NormalizedReportQuery; rows:
     card('categoryIncome', 'Category Income', totalIncome, response.currencyCode),
     { key: 'uncategorizedCount', label: 'Uncategorized', value: String(spending.find((item) => item.id === '__uncategorized__')?.count ?? 0), formattedValue: String(spending.find((item) => item.id === '__uncategorized__')?.count ?? 0) },
   ];
-  response.charts = [{ key: 'categoryTrend', title: 'Category Trend', type: 'bar', data: periodBuckets(filtered, input.query) }];
+  response.charts = [
+    {
+      kind: 'stackedBar',
+      key: 'categoryTrend',
+      title: 'Category Trend',
+      x: PERIOD_AXIS,
+      series: [
+        { ...MONEY_SERIES.income, stack: 'flow' },
+        { ...MONEY_SERIES.expenses, stack: 'flow' },
+      ],
+      data: periodBuckets(filtered, input.query),
+    },
+    {
+      kind: 'treemap',
+      key: 'categorySpendingShare',
+      title: 'Spending Share by Category',
+      nameKey: 'name',
+      valueKey: 'amount',
+      format: 'currency',
+      data: spending.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, amount: money(item.amount) })),
+    },
+    {
+      kind: 'donut',
+      key: 'categoryIncomeShare',
+      title: 'Income Share by Category',
+      nameKey: 'name',
+      valueKey: 'amount',
+      format: 'currency',
+      data: income.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, amount: money(item.amount) })),
+    },
+  ];
   response.tables = [
     {
       key: 'categoryTotals',
@@ -618,7 +803,28 @@ export function buildBudgetReport(input: { query: NormalizedReportQuery; rows: S
     columns: [{ key: 'name', label: 'Budget' }, { key: 'budgeted', label: 'Budgeted' }, { key: 'actualSpent', label: 'Actual' }, { key: 'remaining', label: 'Remaining' }, { key: 'utilizationPercent', label: 'Utilization' }],
     rows,
   }];
-  response.charts = [{ key: 'budgetVsActual', title: 'Budget vs Actual', type: 'bar', data: rows.map((item) => ({ name: item.name, budgeted: item.budgeted, actualSpent: item.actualSpent })) }];
+  response.charts = [
+    {
+      kind: 'groupedBar',
+      key: 'budgetVsActual',
+      title: 'Budget vs Actual',
+      x: { key: 'name', label: 'Budget', format: 'number' },
+      series: [
+        { key: 'budgeted', label: 'Budgeted', format: 'currency', role: 'budget' },
+        { key: 'actualSpent', label: 'Actual', format: 'currency', role: 'actual' },
+      ],
+      data: rows.map((item) => ({ id: item.id, name: item.name, budgeted: item.budgeted, actualSpent: item.actualSpent })),
+    },
+    {
+      kind: 'bar',
+      key: 'budgetUtilization',
+      title: 'Budget Utilization',
+      x: { key: 'name', label: 'Budget', format: 'number' },
+      series: [{ key: 'utilizationPercent', label: 'Utilization', format: 'percent', role: 'categorical' }],
+      data: rows.map((item) => ({ id: item.id, name: item.name, utilizationPercent: item.utilizationPercent })),
+      reference: { value: 100, label: 'Limit' },
+    },
+  ];
   response.metadata.calculationNotes.push('Budget report uses existing BudgetLimit values when provided.');
   if (!budgets.length) response.metadata.warnings.push('No BudgetLimit records were found for the selected period. Live budget calculations are not included in this response.');
   return response;
@@ -649,7 +855,29 @@ export function buildTagReport(input: { query: NormalizedReportQuery; rows: Stan
     columns: [{ key: 'name', label: 'Tag' }, { key: 'spending', label: 'Spending' }, { key: 'income', label: 'Income' }, { key: 'count', label: 'Transactions' }],
     rows: rows.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, color: item.color, spending: money(item.spending), income: money(item.income), count: item.count })),
   }];
-  response.charts = [{ key: 'tagTrend', title: 'Tag Trend', type: 'bar', data: periodBuckets(filtered, input.query) }];
+  response.charts = [
+    {
+      kind: 'stackedBar',
+      key: 'tagTrend',
+      title: 'Tag Trend',
+      x: PERIOD_AXIS,
+      series: [
+        { ...MONEY_SERIES.income, stack: 'flow' },
+        { ...MONEY_SERIES.expenses, stack: 'flow' },
+      ],
+      data: periodBuckets(filtered, input.query),
+    },
+    {
+      kind: 'donut',
+      key: 'tagSpendingShare',
+      title: 'Spending Share by Tag',
+      nameKey: 'name',
+      valueKey: 'spending',
+      format: 'currency',
+      data: rows.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, spending: money(item.spending) })),
+    },
+  ];
+  response.metadata.calculationNotes.push('Tag share percentages can exceed 100% because one Transaction can carry several tags.');
   return response;
 }
 
@@ -678,7 +906,28 @@ export function buildAccountReport(input: { query: NormalizedReportQuery; rows: 
     columns: [{ key: 'name', label: 'Account' }, { key: 'inflow', label: 'Inflow' }, { key: 'outflow', label: 'Outflow' }, { key: 'netChange', label: 'Net Change' }],
     rows: rows.map((item) => ({ id: item.id, name: item.name, type: item.type, inflow: money(item.inflow), outflow: money(item.outflow), netChange: money(item.inflow.minus(item.outflow)), count: item.count })),
   }];
-  response.charts = [{ key: 'accountComparison', title: 'Account Comparison', type: 'bar', data: response.tables[0].rows }];
+  response.charts = [
+    {
+      kind: 'groupedBar',
+      key: 'accountComparison',
+      title: 'Account Comparison',
+      x: { key: 'name', label: 'Account', format: 'number' },
+      series: [
+        { key: 'inflow', label: 'Inflow', format: 'currency', role: 'income' },
+        { key: 'outflow', label: 'Outflow', format: 'currency', role: 'expense' },
+      ],
+      data: response.tables[0].rows,
+    },
+    {
+      kind: 'bar',
+      key: 'accountNetChange',
+      title: 'Net Change by Account',
+      x: { key: 'name', label: 'Account', format: 'number' },
+      series: [{ key: 'netChange', label: 'Net Change', format: 'currency', role: 'net' }],
+      data: response.tables[0].rows,
+      reference: { value: 0, label: 'No change' },
+    },
+  ];
   return response;
 }
 
@@ -696,7 +945,27 @@ export function buildMerchantReport(input: { query: NormalizedReportQuery; rows:
     columns: [{ key: 'name', label: 'Merchant' }, { key: 'spending', label: 'Spending' }, { key: 'count', label: 'Transactions' }],
     rows: merchants.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, spending: money(item.amount), formattedSpending: formatMoney(item.amount, response.currencyCode), count: item.count })),
   }];
-  response.charts = [{ key: 'merchantTrend', title: 'Merchant Trend', type: 'bar', data: periodBuckets(filtered, input.query) }];
+  response.charts = [
+    {
+      kind: 'stackedBar',
+      key: 'merchantTrend',
+      title: 'Merchant Trend',
+      x: PERIOD_AXIS,
+      series: [
+        { ...MONEY_SERIES.income, stack: 'flow' },
+        { ...MONEY_SERIES.expenses, stack: 'flow' },
+      ],
+      data: periodBuckets(filtered, input.query),
+    },
+    {
+      kind: 'bar',
+      key: 'topMerchants',
+      title: 'Top Merchants',
+      x: { key: 'name', label: 'Merchant', format: 'number' },
+      series: [{ key: 'spending', label: 'Spending', format: 'currency', role: 'expense' }],
+      data: merchants.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, spending: money(item.amount) })),
+    },
+  ];
   return response;
 }
 
@@ -726,6 +995,16 @@ export function buildAuditDataQualityReport(input: { query: NormalizedReportQuer
   response.summaryCards = [
     { key: 'totalIssues', label: 'Total Issues', value: String(totalIssues), formattedValue: String(totalIssues) },
     { key: 'actionableIssueTypes', label: 'Issue Types', value: String(issueRows.length), formattedValue: String(issueRows.length) },
+  ];
+  response.charts = [
+    {
+      kind: 'bar',
+      key: 'auditIssueCounts',
+      title: 'Issues by Type',
+      x: { key: 'label', label: 'Issue', format: 'number' },
+      series: [{ key: 'count', label: 'Count', format: 'number', role: 'categorical' }],
+      data: issueRows.map((item) => ({ id: item.issueType, label: item.label, count: item.count })),
+    },
   ];
   response.tables = [{
     key: 'auditIssues',
@@ -757,17 +1036,39 @@ export function buildNetWorthReport(input: { query: NormalizedReportQuery; rows:
     card('manualAssetValue', 'Manual Assets', wealth?.manualAssetValue ?? ZERO, response.currencyCode),
     card('manualLiabilityValue', 'Manual Liabilities', wealth?.manualLiabilityValue ?? ZERO, response.currencyCode),
   ];
-  response.charts = [{
-    key: 'netWorthTrend',
-    title: 'Net Worth Trend',
-    type: 'line',
-    data: (wealth?.snapshots ?? []).map((snapshot) => ({
-      date: snapshot.date,
-      assets: money(snapshot.assets),
-      liabilities: money(snapshot.liabilities),
-      netWorth: money(snapshot.netWorth),
-    })),
-  }];
+  const snapshots = (wealth?.snapshots ?? []).map((snapshot) => ({
+    date: snapshot.date,
+    assets: money(snapshot.assets),
+    liabilities: money(snapshot.liabilities),
+    netWorth: money(snapshot.netWorth),
+  }));
+  response.charts = [
+    {
+      kind: 'area',
+      key: 'netWorthTrend',
+      title: 'Net Worth Trend',
+      x: { key: 'date', label: 'Date', format: 'date' },
+      series: [
+        { key: 'assets', label: 'Assets', format: 'currency', role: 'income' },
+        { key: 'liabilities', label: 'Liabilities', format: 'currency', role: 'expense' },
+        { key: 'netWorth', label: 'Net Worth', format: 'currency', role: 'net' },
+      ],
+      data: snapshots,
+    },
+    {
+      kind: 'donut',
+      key: 'netWorthComposition',
+      title: 'Net Worth Composition',
+      nameKey: 'name',
+      valueKey: 'value',
+      format: 'currency',
+      data: [
+        { name: 'Cash', value: money(wealth?.cashValue ?? ZERO) },
+        { name: 'Investments', value: money(wealth?.investmentValue ?? ZERO) },
+        { name: 'Manual Assets', value: money(wealth?.manualAssetValue ?? ZERO) },
+      ],
+    },
+  ];
   response.tables = [{
     key: 'accountContribution',
     title: 'Account Contribution to Net Worth',
@@ -811,6 +1112,36 @@ export function buildInvestmentReport(input: { query: NormalizedReportQuery; row
       realizedGainLoss: money(item.realizedGainLoss ?? ZERO),
     })),
   }];
+  const holdings = investments?.holdings ?? [];
+  response.charts = [
+    {
+      kind: 'donut',
+      key: 'allocationByAssetClass',
+      title: 'Allocation by Asset Class',
+      nameKey: 'name',
+      valueKey: 'value',
+      format: 'currency',
+      data: Array.from(
+        holdings.reduce((map, holding) => {
+          const current = map.get(holding.assetClass) ?? ZERO;
+          return map.set(holding.assetClass, current.plus(holding.currentValue));
+        }, new Map<string, Decimal>()),
+      ).map(([name, value]) => ({ name, value: money(value) })),
+    },
+    {
+      kind: 'bar',
+      key: 'holdingGainLoss',
+      title: 'Unrealized Gain/Loss by Holding',
+      x: { key: 'symbol', label: 'Symbol', format: 'number' },
+      series: [{ key: 'unrealizedGainLoss', label: 'Unrealized Gain/Loss', format: 'currency', role: 'net' }],
+      data: holdings.map((holding) => ({
+        id: holding.id,
+        symbol: holding.symbol,
+        unrealizedGainLoss: money(holding.currentValue.minus(holding.costBasis)),
+      })),
+      reference: { value: 0, label: 'Break even' },
+    },
+  ];
   response.metadata.warnings.push('Investment performance excludes TWR/MWR return calculations until portfolio cash-flow timing is audited.');
   response.metadata.calculationNotes.push('Realized gain/loss uses confirmed sell lots with stored realizedGainDecimal in the selected date range.');
   return response;

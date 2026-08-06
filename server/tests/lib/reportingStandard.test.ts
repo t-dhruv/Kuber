@@ -363,4 +363,86 @@ describe('standard reporting module', () => {
       expect.objectContaining({ id: 'holding-1', currentValue: '1200.00', costBasis: '1000.00', unrealizedGainLoss: '200.00' }),
     ]);
   });
+
+  it('emits a donut spec whose slice values are all non-negative', () => {
+    const report = buildOverviewReport({
+      query: normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31' }),
+      rows: [
+        row({ id: 'income', transactionType: 'deposit', signedAmountDecimal: new Decimal('1000.00'), amountDecimal: new Decimal('1000.00') }),
+        row({ id: 'expense', signedAmountDecimal: new Decimal('-200.25'), amountDecimal: new Decimal('200.25') }),
+      ],
+    });
+
+    const chart = report.charts.find((item) => item.key === 'spendingByCategory');
+    expect(chart?.kind).toBe('donut');
+    expect(chart && 'data' in chart ? chart.data : []).not.toHaveLength(0);
+    if (chart && 'valueKey' in chart) {
+      for (const dataRow of chart.data) {
+        expect(Number(dataRow[chart.valueKey])).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it('marks stacked series with a shared stack group', () => {
+    const query = normalizeReportQuery({ reportType: 'cash_flow', startDate: '2026-01-01', endDate: '2026-01-31' });
+    const report = buildCashFlowReport({
+      query,
+      rows: [
+        row({ id: 'income', transactionType: 'deposit', signedAmountDecimal: new Decimal('500.00'), amountDecimal: new Decimal('500.00') }),
+        row({ id: 'expense', signedAmountDecimal: new Decimal('-100.00'), amountDecimal: new Decimal('100.00') }),
+      ],
+    });
+
+    const chart = report.charts.find((item) => item.key === 'cashFlowByPeriod');
+    expect(chart && 'series' in chart ? chart.series.map((series) => series.stack) : []).toEqual(['flow', 'flow']);
+  });
+
+  it('keeps net worth composition free of negative slices', () => {
+    const report = buildNetWorthReport({
+      query: normalizeReportQuery({ reportType: 'net_worth', startDate: '2026-01-01', endDate: '2026-01-31', currencyCode: 'CAD' }),
+      rows: [],
+      wealth: {
+        cashValue: new Decimal('1000.00'),
+        investmentValue: new Decimal('2500.00'),
+        manualAssetValue: new Decimal('750.00'),
+        manualLiabilityValue: new Decimal('300.00'),
+        accountContributions: [],
+        snapshots: [],
+      },
+    });
+
+    const chart = report.charts.find((item) => item.key === 'netWorthComposition');
+    expect(chart?.kind).toBe('donut');
+    const data = chart && 'data' in chart ? chart.data : [];
+    expect(data).toEqual([
+      { name: 'Cash', value: '1000.00' },
+      { name: 'Investments', value: '2500.00' },
+      { name: 'Manual Assets', value: '750.00' },
+    ]);
+    for (const dataRow of data) {
+      expect(Number(dataRow.value)).toBeGreaterThanOrEqual(0);
+    }
+    expect(data.some((dataRow) => dataRow.name === 'Manual Liabilities')).toBe(false);
+  });
+
+  it('emits a chart for the audit and investment reports', () => {
+    const auditReport = buildAuditDataQualityReport({
+      query: normalizeReportQuery({ reportType: 'audit', startDate: '2026-01-01', endDate: '2026-01-31' }),
+      rows: [row({ id: 'uncategorized', category: null, merchant: null, tags: [], reconciled: false })],
+    });
+    const investmentReport = buildInvestmentReport({
+      query: normalizeReportQuery({ reportType: 'investment', startDate: '2026-01-01', endDate: '2026-01-31' }),
+      rows: [],
+      investments: {
+        holdings: [
+          { id: 'holding-1', accountId: 'acct-invest', accountName: 'Investing', symbol: 'ABC', name: 'ABC Fund', shares: new Decimal('10'), currentValue: new Decimal('1200.00'), costBasis: new Decimal('1000.00'), realizedGainLoss: new Decimal('0'), assetClass: 'equity' },
+        ],
+        dividendTotal: new Decimal('25.00'),
+        recurringInvestmentCount: 2,
+      },
+    });
+
+    expect(auditReport.charts.length).toBeGreaterThan(0);
+    expect(investmentReport.charts.length).toBeGreaterThan(0);
+  });
 });

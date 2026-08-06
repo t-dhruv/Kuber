@@ -41,6 +41,74 @@ export interface StandardSavedReport {
   updatedAt: string;
 }
 
+export type ChartValueFormat = "currency" | "percent" | "number" | "date";
+
+export interface ChartSeries {
+  /** Key into each data row. */
+  key: string;
+  /** Human label shown in legend and tooltip. */
+  label: string;
+  format: ChartValueFormat;
+  /** Semantic colour role; the client maps these to CSS custom properties. */
+  role: "income" | "expense" | "net" | "budget" | "actual" | "neutral" | "categorical";
+  /** Stack group name. Series sharing a group stack together. */
+  stack?: string;
+}
+
+export interface ChartAxis {
+  key: string;
+  label: string;
+  format: ChartValueFormat;
+}
+
+/** Rows for cartesian charts: one object per x-axis position. */
+export type ChartRow = Record<string, string | number | null>;
+
+export interface CartesianChartSpec {
+  kind: "line" | "area" | "bar" | "stackedBar" | "groupedBar" | "waterfall";
+  key: string;
+  title: string;
+  x: ChartAxis;
+  series: ChartSeries[];
+  data: ChartRow[];
+  /** Optional reference line, e.g. a zero baseline or a budget limit. */
+  reference?: { value: number; label: string };
+}
+
+export interface PartitionChartSpec {
+  kind: "pie" | "donut" | "treemap";
+  key: string;
+  title: string;
+  /** Row key holding the slice label. */
+  nameKey: string;
+  /** Row key holding the slice magnitude. Always non-negative. */
+  valueKey: string;
+  format: ChartValueFormat;
+  data: ChartRow[];
+}
+
+export interface SankeyChartSpec {
+  kind: "sankey";
+  key: string;
+  title: string;
+  format: ChartValueFormat;
+  nodes: Array<{ id: string; label: string; column: number; role: "income" | "total" | "bucket" | "category" }>;
+  links: Array<{ source: string; target: string; value: number }>;
+}
+
+export interface HeatmapChartSpec {
+  kind: "heatmap";
+  key: string;
+  title: string;
+  xKey: string;
+  yKey: string;
+  valueKey: string;
+  format: ChartValueFormat;
+  data: ChartRow[];
+}
+
+export type ChartSpec = CartesianChartSpec | PartitionChartSpec | SankeyChartSpec | HeatmapChartSpec;
+
 export interface StandardReportResponse {
   reportType: StandardReportType;
   title: string;
@@ -53,7 +121,7 @@ export interface StandardReportResponse {
     formattedValue: string;
     drilldown?: Record<string, string>;
   }>;
-  charts: Array<{ key: string; title: string; type: "line" | "bar" | "table"; data: Array<Record<string, string | number | null>> }>;
+  charts: ChartSpec[];
   tables: Array<{
     key: string;
     title: string;
