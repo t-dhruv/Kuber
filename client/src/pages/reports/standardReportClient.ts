@@ -31,7 +31,57 @@ export interface StandardReportFilters {
   includePending: boolean;
   includeTransfers: boolean;
   currencyCode?: string;
+  categoryGroupIds: string[];
+  transactionTypes: string[];
+  includeHidden: boolean;
+  includeSplits: boolean;
+  includeExcludedFromReports: boolean;
+  comparisonMode: "none" | "previous_period" | "previous_year";
+  sortBy?: string;
+  sortDirection: "asc" | "desc";
+  limit: number;
+  minAmount?: number;
+  maxAmount?: number;
+  searchText?: string;
+  onlyUncategorized: boolean;
+  reconciledState: "any" | "reconciled" | "unreconciled";
 }
+
+/**
+ * The single source of truth for what "unfiltered" means. Used by initial state, URL
+ * omission, chip visibility and saved-report fallback. A filter added without a default
+ * here shows up as a permanent chip nobody can remove.
+ *
+ * `includeSplits: true` and `limit: 25` mirror the server's own defaults in
+ * `normalizeReportQuery` — keep them in step.
+ */
+export const DEFAULT_STANDARD_FILTERS: Omit<StandardReportFilters, "tab" | "startDate" | "endDate"> = {
+  groupBy: "month",
+  accountIds: [],
+  categoryIds: [],
+  categoryGroupIds: [],
+  budgetIds: [],
+  tagIds: [],
+  merchantIds: [],
+  transactionTypes: [],
+  includePending: false,
+  includeTransfers: false,
+  includeHidden: false,
+  includeSplits: true,
+  includeExcludedFromReports: false,
+  comparisonMode: "none",
+  sortDirection: "desc",
+  limit: 25,
+  onlyUncategorized: false,
+  reconciledState: "any",
+};
+
+/** Transaction types the Journal records, as filtered by `normalizeReportQuery`. */
+export const TRANSACTION_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "deposit", label: "Deposit" },
+  { value: "withdrawal", label: "Withdrawal" },
+  { value: "transfer", label: "Transfer" },
+];
 
 export interface StandardSavedReport {
   id: string;
@@ -196,6 +246,17 @@ function bool(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function numberOrUndefined(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
 export function normalizeSavedReportFilters(filters: Record<string, unknown>): Partial<StandardReportFilters> & { isFavorite?: boolean } {
   const reportType = typeof filters.reportType === "string" ? filters.reportType as StandardReportType : undefined;
   const tab = typeof filters.tab === "string" ? filters.tab as StandardReportTab : reportType ? TYPE_TO_TAB[reportType] : undefined;
@@ -210,9 +271,33 @@ export function normalizeSavedReportFilters(filters: Record<string, unknown>): P
     budgetIds: stringArray(filters.budgetIds),
     tagIds: stringArray(filters.tagIds),
     merchantIds: stringArray(filters.merchantIds),
-    includePending: bool(filters.includePending, false),
-    includeTransfers: bool(filters.includeTransfers, false),
+    includePending: bool(filters.includePending, DEFAULT_STANDARD_FILTERS.includePending),
+    includeTransfers: bool(filters.includeTransfers, DEFAULT_STANDARD_FILTERS.includeTransfers),
     currencyCode: typeof filters.currencyCode === "string" ? filters.currencyCode : undefined,
+    categoryGroupIds: stringArray(filters.categoryGroupIds),
+    transactionTypes: stringArray(filters.transactionTypes),
+    includeHidden: bool(filters.includeHidden, DEFAULT_STANDARD_FILTERS.includeHidden),
+    includeSplits: bool(filters.includeSplits, DEFAULT_STANDARD_FILTERS.includeSplits),
+    includeExcludedFromReports: bool(
+      filters.includeExcludedFromReports,
+      DEFAULT_STANDARD_FILTERS.includeExcludedFromReports,
+    ),
+    comparisonMode:
+      filters.comparisonMode === "previous_period" || filters.comparisonMode === "previous_year"
+        ? filters.comparisonMode
+        : DEFAULT_STANDARD_FILTERS.comparisonMode,
+    sortBy: typeof filters.sortBy === "string" && filters.sortBy ? filters.sortBy : undefined,
+    sortDirection: filters.sortDirection === "asc" ? "asc" : DEFAULT_STANDARD_FILTERS.sortDirection,
+    limit: numberOrUndefined(filters.limit) ?? DEFAULT_STANDARD_FILTERS.limit,
+    minAmount: numberOrUndefined(filters.minAmount),
+    maxAmount: numberOrUndefined(filters.maxAmount),
+    searchText:
+      typeof filters.searchText === "string" && filters.searchText.trim() ? filters.searchText.trim() : undefined,
+    onlyUncategorized: bool(filters.onlyUncategorized, DEFAULT_STANDARD_FILTERS.onlyUncategorized),
+    reconciledState:
+      filters.reconciledState === "reconciled" || filters.reconciledState === "unreconciled"
+        ? filters.reconciledState
+        : DEFAULT_STANDARD_FILTERS.reconciledState,
     isFavorite: bool(filters.isFavorite, false),
   };
 }
@@ -233,6 +318,20 @@ export function serializeReportFilters(filters: StandardReportFilters, isFavorit
     includePending: filters.includePending,
     includeTransfers: filters.includeTransfers,
     currencyCode: filters.currencyCode,
+    categoryGroupIds: filters.categoryGroupIds,
+    transactionTypes: filters.transactionTypes,
+    includeHidden: filters.includeHidden,
+    includeSplits: filters.includeSplits,
+    includeExcludedFromReports: filters.includeExcludedFromReports,
+    comparisonMode: filters.comparisonMode,
+    sortBy: filters.sortBy,
+    sortDirection: filters.sortDirection,
+    limit: filters.limit,
+    minAmount: filters.minAmount,
+    maxAmount: filters.maxAmount,
+    searchText: filters.searchText,
+    onlyUncategorized: filters.onlyUncategorized,
+    reconciledState: filters.reconciledState,
     isFavorite,
   };
 }
@@ -246,15 +345,30 @@ export function buildStandardReportParams(filters: StandardReportFilters): URLSe
   const multi: Array<[string, string[]]> = [
     ["accountIds", filters.accountIds],
     ["categoryIds", filters.categoryIds],
+    ["categoryGroupIds", filters.categoryGroupIds],
     ["budgetIds", filters.budgetIds],
     ["tagIds", filters.tagIds],
     ["merchantIds", filters.merchantIds],
+    ["transactionTypes", filters.transactionTypes],
   ];
   for (const [key, values] of multi) {
-    if (values.length) params.set(key, values.join(","));
+    if (values?.length) params.set(key, values.join(","));
   }
   params.set("includePending", String(filters.includePending));
   params.set("includeTransfers", String(filters.includeTransfers));
+  params.set("includeHidden", String(filters.includeHidden));
+  params.set("includeSplits", String(filters.includeSplits));
+  params.set("includeExcludedFromReports", String(filters.includeExcludedFromReports));
+  params.set("comparisonMode", filters.comparisonMode);
+  params.set("sortDirection", filters.sortDirection);
+  params.set("limit", String(filters.limit));
+  params.set("onlyUncategorized", String(filters.onlyUncategorized));
+  params.set("reconciledState", filters.reconciledState);
+  if (filters.sortBy) params.set("sortBy", filters.sortBy);
+  // An absent bound and a bound of zero are different filters, so only send when present.
+  if (filters.minAmount !== undefined) params.set("minAmount", String(filters.minAmount));
+  if (filters.maxAmount !== undefined) params.set("maxAmount", String(filters.maxAmount));
+  if (filters.searchText) params.set("searchText", filters.searchText);
   if (filters.currencyCode) params.set("currencyCode", filters.currencyCode.toUpperCase());
   return params;
 }

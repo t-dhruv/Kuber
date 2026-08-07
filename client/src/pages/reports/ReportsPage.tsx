@@ -1,16 +1,8 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type Dispatch,
-  type ReactNode,
-  type SetStateAction,
-} from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkPlus, Download, Save, Star, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { ReportTab, TabBar, DatePresetDropdown } from "./shared";
+import { ReportTab, TabBar } from "./shared";
 import { CashFlowTab } from "./tabs/CashFlowTab";
 import { SavingsTab } from "./tabs/SavingsTab";
 import { SpendingTab } from "./tabs/SpendingTab";
@@ -28,7 +20,10 @@ import { DividendForecastSection } from "./components/DividendForecastSection";
 import { RetirementSimulationSection } from "./components/RetirementSimulationSection";
 import { TaxSummaryTab } from "./components/TaxSummaryTab";
 import { StandardReportPanel } from "./components/StandardReportPanel";
+import { ReportFilterBar } from "./components/ReportFilterBar";
+import { FilterField, NativeSelect } from "./components/filterControls";
 import {
+  DEFAULT_STANDARD_FILTERS,
   normalizeSavedReportFilters,
   serializeReportFilters,
   standardExportPath,
@@ -36,6 +31,8 @@ import {
   type StandardReportOptions,
   type StandardSavedReport,
 } from "./standardReportClient";
+
+type MutationError = { response?: { data?: { error?: string } } };
 
 const STANDARD_TABS = new Set<ReportTab>([
   "overview",
@@ -51,11 +48,6 @@ const STANDARD_TABS = new Set<ReportTab>([
   "investmentperformance",
 ]);
 
-type SelectOption = {
-  label: string;
-  value: string;
-};
-
 function csv(value: string | null): string[] {
   return value
     ? value
@@ -65,424 +57,27 @@ function csv(value: string | null): string[] {
     : [];
 }
 
-function updateMulti<K extends keyof StandardReportFilters>(
-  setFilters: Dispatch<SetStateAction<StandardReportFilters>>,
-  key: K,
-  value: StandardReportFilters[K],
-) {
-  setFilters((current) => ({ ...current, [key]: value }));
+function boolParam(value: string | null, fallback: boolean): boolean {
+  if (value === null) return fallback;
+
+  return value === "true";
 }
 
-const controlStyle: React.CSSProperties = {
-  width: "100%",
-  minHeight: "2.5rem",
-  border: "1px solid var(--color-border)",
-  borderRadius: "var(--radius-md)",
-  background: "var(--color-surface)",
-  color: "var(--color-text)",
-  fontSize: "0.875rem",
-};
+function numberParam(value: string | null): number | undefined {
+  if (value === null || !value.trim()) return undefined;
 
-function FilterField({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-      <span
-        style={{
-          fontSize: "0.8125rem",
-          fontWeight: 600,
-          color: "var(--color-text)",
-        }}
-      >
-        {label}
-      </span>
-      {children}
-    </div>
-  );
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function NativeSelect({
-  value,
-  onChange,
-  options,
-  placeholder,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: SelectOption[];
-  placeholder?: string;
-  ariaLabel?: string;
-}) {
-  return (
-    <select
-      value={value}
-      aria-label={ariaLabel ?? placeholder}
-      onChange={(event) => onChange(event.target.value)}
-      style={{
-        ...controlStyle,
-        padding: "0 0.625rem",
-      }}
-    >
-      {placeholder && <option value="">{placeholder}</option>}
-
-      {options.map((option) => (
-        <option
-          key={option.value}
-          value={option.value}
-          style={{
-            background: "var(--color-surface)",
-            color: "var(--color-text)",
-          }}
-        >
-          {option.label}
-        </option>
-      ))}
-    </select>
-  );
+function enumParam<T extends string>(value: string | null, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
-function ToggleField({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={checked}
-      onClick={() => onChange(!checked)}
-      style={{
-        ...controlStyle,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "0.75rem",
-        padding: "0 0.75rem",
-        cursor: "pointer",
-      }}
-    >
-      <span>{label}</span>
-
-      <span
-        aria-hidden="true"
-        style={{
-          width: "2rem",
-          height: "1.125rem",
-          borderRadius: "var(--radius-full)",
-          border: "1px solid var(--color-border-strong)",
-          background: checked ? "var(--color-accent-light)" : "var(--color-surface-alt)",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: checked ? "flex-end" : "flex-start",
-          padding: "0.125rem",
-        }}
-      >
-        <span
-          style={{
-            width: "0.75rem",
-            height: "0.75rem",
-            borderRadius: "var(--radius-full)",
-            background: checked ? "var(--color-accent)" : "var(--color-text-muted)",
-          }}
-        />
-      </span>
-    </button>
-  );
-}
-
-function SearchableMultiSelect({
-  value,
-  options,
-  placeholder,
-  searchPlaceholder,
-  emptyMessage,
-  onChange,
-}: {
-  value: string[];
-  options: SelectOption[];
-  placeholder: string;
-  searchPlaceholder: string;
-  emptyMessage: string;
-  onChange: (value: string[]) => void;
-}) {
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-
-  const selectedValueSet = useMemo(() => new Set(value), [value]);
-
-  const selectedOptions = useMemo(
-    () => options.filter((option) => selectedValueSet.has(option.value)),
-    [options, selectedValueSet],
-  );
-
-  const filteredOptions = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) return options;
-
-    return options.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
-  }, [options, query]);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (!wrapperRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const timeout = window.setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 0);
-
-    return () => window.clearTimeout(timeout);
-  }, [open]);
-
-  const toggleValue = (nextValue: string) => {
-    if (selectedValueSet.has(nextValue)) {
-      onChange(value.filter((item) => item !== nextValue));
-      return;
-    }
-
-    onChange([...value, nextValue]);
-  };
-
-  const selectVisible = () => {
-    const next = new Set(value);
-
-    filteredOptions.forEach((option) => {
-      next.add(option.value);
-    });
-
-    onChange(Array.from(next));
-  };
-
-  const clearVisible = () => {
-    const visibleValues = new Set(filteredOptions.map((option) => option.value));
-
-    onChange(value.filter((item) => !visibleValues.has(item)));
-  };
-
-  const summary =
-    selectedOptions.length === 0
-      ? placeholder
-      : selectedOptions.length === 1
-        ? selectedOptions[0].label
-        : `${selectedOptions.length} selected`;
-
-  return (
-    <div ref={wrapperRef} style={{ position: "relative" }}>
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
-        }}
-        style={{
-          width: "100%",
-          minHeight: "2.5rem",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "0.5rem",
-          padding: "0.375rem 0.625rem",
-          border: "1px solid var(--color-border, ButtonBorder)",
-          borderRadius: "0.5rem",
-          background: "var(--color-surface, ButtonFace)",
-          color: "var(--color-text, ButtonText)",
-          cursor: "pointer",
-          textAlign: "left",
-        }}
-      >
-        <span
-          style={{
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            fontSize: "0.875rem",
-          }}
-        >
-          {summary}
-        </span>
-
-        <span aria-hidden="true">▾</span>
-      </button>
-
-      {open && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 30,
-            top: "calc(100% + 0.375rem)",
-            left: 0,
-            right: 0,
-            border: "1px solid var(--color-border, ButtonBorder)",
-            borderRadius: "0.75rem",
-            background: "var(--color-surface, Canvas)",
-            boxShadow: "var(--shadow-lg, 0 12px 30px rgba(0, 0, 0, 0.14))",
-            padding: "0.5rem",
-          }}
-        >
-          <Input
-            ref={searchInputRef}
-            value={query}
-            placeholder={searchPlaceholder}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                setOpen(false);
-              }
-            }}
-          />
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: "0.5rem",
-              marginTop: "0.5rem",
-              marginBottom: "0.5rem",
-            }}
-          >
-            <Button size="sm" variant="ghost" onClick={selectVisible}>
-              Select visible
-            </Button>
-
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={clearVisible}
-              disabled={value.length === 0}
-            >
-              Clear visible
-            </Button>
-          </div>
-
-          <div
-            role="listbox"
-            aria-multiselectable="true"
-            style={{
-              maxHeight: "16rem",
-              overflowY: "auto",
-              display: "grid",
-              gap: "0.25rem",
-            }}
-          >
-            {filteredOptions.length === 0 && (
-              <div
-                style={{
-                  padding: "0.75rem",
-                  fontSize: "0.875rem",
-                  color: "var(--color-text-secondary)",
-                }}
-              >
-                {emptyMessage}
-              </div>
-            )}
-
-            {filteredOptions.map((option) => {
-              const selected = selectedValueSet.has(option.value);
-
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  onClick={() => toggleValue(option.value)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.75rem",
-                    width: "100%",
-                    padding: "0.5rem 0.625rem",
-                    border: 0,
-                    borderRadius: "0.5rem",
-                    background: selected ? "var(--color-surface-muted, ButtonFace)" : "transparent",
-                    color: "var(--color-text, ButtonText)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    fontSize: "0.875rem",
-                  }}
-                >
-                  <span>{option.label}</span>
-                  {selected && <span aria-hidden="true">✓</span>}
-                </button>
-              );
-            })}
-          </div>
-
-          {selectedOptions.length > 0 && (
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "0.375rem",
-                marginTop: "0.5rem",
-                paddingTop: "0.5rem",
-                borderTop: "1px solid var(--color-border, ButtonBorder)",
-              }}
-            >
-              {selectedOptions.slice(0, 4).map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => toggleValue(option.value)}
-                  title={`Remove ${option.label}`}
-                  style={{
-                    border: "1px solid var(--color-border, ButtonBorder)",
-                    borderRadius: "999px",
-                    background: "transparent",
-                    color: "var(--color-text, ButtonText)",
-                    cursor: "pointer",
-                    fontSize: "0.75rem",
-                    padding: "0.25rem 0.5rem",
-                  }}
-                >
-                  {option.label} ×
-                </button>
-              ))}
-
-              {selectedOptions.length > 4 && (
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--color-text-secondary)",
-                    padding: "0.25rem 0",
-                  }}
-                >
-                  +{selectedOptions.length - 4} more
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+const COMPARISON_MODES = ["none", "previous_period", "previous_year"] as const;
+const RECONCILED_STATES = ["any", "reconciled", "unreconciled"] as const;
+const SORT_DIRECTIONS = ["asc", "desc"] as const;
 
 export default function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -503,6 +98,38 @@ export default function ReportsPage() {
     includePending: searchParams.get("includePending") === "true",
     includeTransfers: searchParams.get("includeTransfers") === "true",
     currencyCode: searchParams.get("currencyCode") ?? undefined,
+    categoryGroupIds: csv(searchParams.get("categoryGroupIds")),
+    transactionTypes: csv(searchParams.get("transactionTypes")),
+    includeHidden: boolParam(searchParams.get("includeHidden"), DEFAULT_STANDARD_FILTERS.includeHidden),
+    includeSplits: boolParam(searchParams.get("includeSplits"), DEFAULT_STANDARD_FILTERS.includeSplits),
+    includeExcludedFromReports: boolParam(
+      searchParams.get("includeExcludedFromReports"),
+      DEFAULT_STANDARD_FILTERS.includeExcludedFromReports,
+    ),
+    comparisonMode: enumParam(
+      searchParams.get("comparisonMode"),
+      COMPARISON_MODES,
+      DEFAULT_STANDARD_FILTERS.comparisonMode,
+    ),
+    sortBy: searchParams.get("sortBy") ?? undefined,
+    sortDirection: enumParam(
+      searchParams.get("sortDirection"),
+      SORT_DIRECTIONS,
+      DEFAULT_STANDARD_FILTERS.sortDirection,
+    ),
+    limit: numberParam(searchParams.get("limit")) ?? DEFAULT_STANDARD_FILTERS.limit,
+    minAmount: numberParam(searchParams.get("minAmount")),
+    maxAmount: numberParam(searchParams.get("maxAmount")),
+    searchText: searchParams.get("searchText") ?? undefined,
+    onlyUncategorized: boolParam(
+      searchParams.get("onlyUncategorized"),
+      DEFAULT_STANDARD_FILTERS.onlyUncategorized,
+    ),
+    reconciledState: enumParam(
+      searchParams.get("reconciledState"),
+      RECONCILED_STATES,
+      DEFAULT_STANDARD_FILTERS.reconciledState,
+    ),
   }));
 
   const [drillPanel, setDrillPanel] = useState<{
@@ -551,9 +178,46 @@ export default function ReportsPage() {
     if (filters.budgetIds.length) next.set("budgetIds", filters.budgetIds.join(","));
     if (filters.tagIds.length) next.set("tagIds", filters.tagIds.join(","));
     if (filters.merchantIds.length) next.set("merchantIds", filters.merchantIds.join(","));
+    if (filters.categoryGroupIds.length) next.set("categoryGroupIds", filters.categoryGroupIds.join(","));
+    if (filters.transactionTypes.length) next.set("transactionTypes", filters.transactionTypes.join(","));
     if (filters.includePending) next.set("includePending", "true");
     if (filters.includeTransfers) next.set("includeTransfers", "true");
     if (filters.currencyCode) next.set("currencyCode", filters.currencyCode);
+
+    // Only non-default values reach the URL, so a plain /reports link stays short.
+    if (filters.includeHidden !== DEFAULT_STANDARD_FILTERS.includeHidden) {
+      next.set("includeHidden", String(filters.includeHidden));
+    }
+
+    if (filters.includeSplits !== DEFAULT_STANDARD_FILTERS.includeSplits) {
+      next.set("includeSplits", String(filters.includeSplits));
+    }
+
+    if (filters.includeExcludedFromReports !== DEFAULT_STANDARD_FILTERS.includeExcludedFromReports) {
+      next.set("includeExcludedFromReports", String(filters.includeExcludedFromReports));
+    }
+
+    if (filters.onlyUncategorized !== DEFAULT_STANDARD_FILTERS.onlyUncategorized) {
+      next.set("onlyUncategorized", String(filters.onlyUncategorized));
+    }
+
+    if (filters.comparisonMode !== DEFAULT_STANDARD_FILTERS.comparisonMode) {
+      next.set("comparisonMode", filters.comparisonMode);
+    }
+
+    if (filters.reconciledState !== DEFAULT_STANDARD_FILTERS.reconciledState) {
+      next.set("reconciledState", filters.reconciledState);
+    }
+
+    if (filters.sortDirection !== DEFAULT_STANDARD_FILTERS.sortDirection) {
+      next.set("sortDirection", filters.sortDirection);
+    }
+
+    if (filters.limit !== DEFAULT_STANDARD_FILTERS.limit) next.set("limit", String(filters.limit));
+    if (filters.sortBy) next.set("sortBy", filters.sortBy);
+    if (filters.minAmount !== undefined) next.set("minAmount", String(filters.minAmount));
+    if (filters.maxAmount !== undefined) next.set("maxAmount", String(filters.maxAmount));
+    if (filters.searchText) next.set("searchText", filters.searchText);
 
     setSearchParams(next, { replace: true });
   }, [filters, setSearchParams]);
@@ -570,6 +234,8 @@ export default function ReportsPage() {
       queryClient.invalidateQueries({ queryKey: ["reports-saved-views"] });
       notify.success("Report saved");
     },
+    onError: (err: MutationError) =>
+      notify.error("Could not save report", err.response?.data?.error),
   });
 
   const updateMutation = useMutation({
@@ -582,6 +248,8 @@ export default function ReportsPage() {
       queryClient.invalidateQueries({ queryKey: ["reports-saved-views"] });
       notify.success("Saved report updated");
     },
+    onError: (err: MutationError) =>
+      notify.error("Could not update saved report", err.response?.data?.error),
   });
 
   const deleteMutation = useMutation({
@@ -592,6 +260,8 @@ export default function ReportsPage() {
       queryClient.invalidateQueries({ queryKey: ["reports-saved-views"] });
       notify.success("Saved report deleted");
     },
+    onError: (err: MutationError) =>
+      notify.error("Could not delete saved report", err.response?.data?.error),
   });
 
   const exportMutation = useMutation({
@@ -612,30 +282,6 @@ export default function ReportsPage() {
       URL.revokeObjectURL(objectUrl);
     },
   });
-
-  const currencies = useMemo(() => {
-    const values = new Set(
-      (optionsQuery.data?.accounts ?? [])
-        .map((account) => account.currency)
-        .filter(Boolean),
-    );
-
-    return Array.from(values).sort();
-  }, [optionsQuery.data?.accounts]);
-
-  const handleDatePresetChange = (preset: DatePreset) => {
-    const range = computeDateRange(preset, {
-      startDate: filters.startDate,
-      endDate: filters.endDate,
-    });
-
-    setFilters((current) => ({
-      ...current,
-      datePreset: preset,
-      startDate: range.startDate,
-      endDate: range.endDate,
-    }));
-  };
 
   const applySavedView = (id: string) => {
     setSelectedSavedViewId(id);
@@ -669,167 +315,7 @@ export default function ReportsPage() {
 
       <Card style={{ marginBottom: "1.5rem", padding: "1rem" }}>
         <div className="grid gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-3">
-            <FilterField label="Date Range">
-              <DatePresetDropdown
-                value={filters.datePreset ?? "custom"}
-                onChange={handleDatePresetChange}
-              />
-            </FilterField>
-
-            <FilterField label="Start Date">
-              <Input
-                type="date"
-                value={filters.startDate}
-                onChange={(e) =>
-                  setFilters((current) => ({
-                    ...current,
-                    datePreset: "custom",
-                    startDate: e.target.value,
-                  }))
-                }
-              />
-            </FilterField>
-
-            <FilterField label="End Date">
-              <Input
-                type="date"
-                value={filters.endDate}
-                onChange={(e) =>
-                  setFilters((current) => ({
-                    ...current,
-                    datePreset: "custom",
-                    endDate: e.target.value,
-                  }))
-                }
-              />
-            </FilterField>
-
-            <FilterField label="Group By">
-              <NativeSelect
-                value={filters.groupBy}
-                ariaLabel="Group by"
-                onChange={(value) =>
-                  updateMulti(
-                    setFilters,
-                    "groupBy",
-                    value as StandardReportFilters["groupBy"],
-                  )
-                }
-                options={["day", "week", "month", "quarter", "year"].map((item) => ({
-                  value: item,
-                  label: item.charAt(0).toUpperCase() + item.slice(1),
-                }))}
-              />
-            </FilterField>
-
-            <FilterField label="Currency">
-              <NativeSelect
-                value={filters.currencyCode ?? ""}
-                placeholder="All currencies"
-                ariaLabel="Currency"
-                onChange={(value) =>
-                  updateMulti(setFilters, "currencyCode", value || undefined)
-                }
-                options={currencies.map((currency) => ({
-                  value: currency,
-                  label: currency,
-                }))}
-              />
-            </FilterField>
-
-            <div style={{ display: "flex", alignItems: "end" }}>
-              <ToggleField
-                label="Pending"
-                checked={filters.includePending}
-                onChange={(checked) =>
-                  updateMulti(setFilters, "includePending", checked)
-                }
-              />
-            </div>
-
-            <div style={{ display: "flex", alignItems: "end" }}>
-              <ToggleField
-                label="Transfers"
-                checked={filters.includeTransfers}
-                onChange={(checked) =>
-                  updateMulti(setFilters, "includeTransfers", checked)
-                }
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
-            <FilterField label="Accounts">
-              <SearchableMultiSelect
-                value={filters.accountIds}
-                options={(optionsQuery.data?.accounts ?? []).map((account) => ({
-                  label: account.name,
-                  value: account.id,
-                }))}
-                placeholder="All accounts"
-                searchPlaceholder="Search accounts..."
-                emptyMessage="No accounts found"
-                onChange={(value) => updateMulti(setFilters, "accountIds", value)}
-              />
-            </FilterField>
-
-            <FilterField label="Categories">
-              <SearchableMultiSelect
-                value={filters.categoryIds}
-                options={(optionsQuery.data?.categories ?? []).map((category) => ({
-                  label: category.name,
-                  value: category.id,
-                }))}
-                placeholder="All categories"
-                searchPlaceholder="Search categories..."
-                emptyMessage="No categories found"
-                onChange={(value) => updateMulti(setFilters, "categoryIds", value)}
-              />
-            </FilterField>
-
-            <FilterField label="Budgets">
-              <SearchableMultiSelect
-                value={filters.budgetIds}
-                options={(optionsQuery.data?.budgets ?? []).map((budget) => ({
-                  label: budget.name,
-                  value: budget.id,
-                }))}
-                placeholder="All budgets"
-                searchPlaceholder="Search budgets..."
-                emptyMessage="No budgets found"
-                onChange={(value) => updateMulti(setFilters, "budgetIds", value)}
-              />
-            </FilterField>
-
-            <FilterField label="Tags">
-              <SearchableMultiSelect
-                value={filters.tagIds}
-                options={(optionsQuery.data?.tags ?? []).map((tag) => ({
-                  label: tag.name,
-                  value: tag.id,
-                }))}
-                placeholder="All tags"
-                searchPlaceholder="Search tags..."
-                emptyMessage="No tags found"
-                onChange={(value) => updateMulti(setFilters, "tagIds", value)}
-              />
-            </FilterField>
-
-            <FilterField label="Merchants">
-              <SearchableMultiSelect
-                value={filters.merchantIds}
-                options={(optionsQuery.data?.merchants ?? []).map((merchant) => ({
-                  label: merchant.name,
-                  value: merchant.id,
-                }))}
-                placeholder="All merchants"
-                searchPlaceholder="Search merchants..."
-                emptyMessage="No merchants found"
-                onChange={(value) => updateMulti(setFilters, "merchantIds", value)}
-              />
-            </FilterField>
-          </div>
+          <ReportFilterBar filters={filters} options={optionsQuery.data} onChange={setFilters} />
 
           <div
             style={{
