@@ -24,7 +24,8 @@ export type StandardReportType =
   | 'contribution_room'
   | 'dividend_forecast'
   | 'retirement'
-  | 'cash_flow_forecast';
+  | 'cash_flow_forecast'
+  | 'tax';
 
 export type StandardGroupBy = 'day' | 'week' | 'month' | 'quarter' | 'year';
 export type SortDirection = 'asc' | 'desc';
@@ -325,6 +326,7 @@ const VALID_REPORT_TYPES = new Set<StandardReportType>([
   'dividend_forecast',
   'retirement',
   'cash_flow_forecast',
+  'tax',
 ]);
 const VALID_GROUP_BY = new Set<StandardGroupBy>(['day', 'week', 'month', 'quarter', 'year']);
 
@@ -759,6 +761,99 @@ export function buildIncomeExpenseReport(input: { query: NormalizedReportQuery; 
   return response;
 }
 
+/**
+ * Bucket labels for the cash-flow Sankey. `Category.bucketType` is a free-form
+ * column, not an enum, so anything outside these three values — including a row
+ * with no Category at all — flows into a single Uncategorized bucket.
+ */
+const SANKEY_BUCKET_LABELS: Record<string, string> = { needs: 'Needs', wants: 'Wants', savings: 'Savings' };
+const SANKEY_BUCKET_ORDER = ['Needs', 'Wants', 'Savings', 'Uncategorized'];
+
+function sankeyBucketLabel(bucketType: string | null | undefined): string {
+  return SANKEY_BUCKET_LABELS[(bucketType ?? '').trim().toLowerCase()] ?? 'Uncategorized';
+}
+
+/**
+ * Splits a row into the units the Sankey and the tax report attribute amounts by.
+ * A Split's own Category is the one that carries the Bucket and the tax flag; a
+ * Split with no Category falls back to the journal's Category.
+ */
+function attributionParts(row: StandardReportRow, query: NormalizedReportQuery): Array<{ amount: Decimal; category: StandardReportCategory | null }> {
+  if (query.includeSplits && row.isSplit && row.splits.length) {
+    return row.splits.map((split) => ({
+      amount: decimal(split.amountDecimal).abs(),
+      category: split.category ?? row.category,
+    }));
+  }
+  return [{ amount: rowAmount(row), category: row.category }];
+}
+
+/**
+ * Income Category -> total -> Bucket -> spending Category, matching the four
+ * columns ReportsSankeyChart already draws. Values are magnitudes: a Sankey
+ * cannot represent a negative flow.
+ */
+function cashFlowSankey(rows: StandardReportRow[], query: NormalizedReportQuery): SankeyChartSpec {
+  const incomeTotals = new Map<string, { label: string; amount: Decimal }>();
+  const spendingTotals = new Map<string, { label: string; bucket: string; amount: Decimal }>();
+
+  for (const row of rows) {
+    const signed = rowSignedAmount(row);
+    if (signed.isZero()) continue;
+    const direction = isPositive(signed) ? 'income' : 'expense';
+    for (const part of attributionParts(row, query)) {
+      const amount = part.amount.abs();
+      if (amount.isZero()) continue;
+      const id = part.category?.id ?? '__uncategorized__';
+      const label = part.category?.name ?? 'Uncategorized';
+      if (direction === 'income') {
+        const existing = incomeTotals.get(id) ?? { label, amount: ZERO };
+        existing.amount = existing.amount.plus(amount);
+        incomeTotals.set(id, existing);
+      } else {
+        const existing = spendingTotals.get(id) ?? { label, bucket: sankeyBucketLabel(part.category?.bucketType), amount: ZERO };
+        existing.amount = existing.amount.plus(amount);
+        spendingTotals.set(id, existing);
+      }
+    }
+  }
+
+  const incomeEntries = Array.from(incomeTotals.entries())
+    .filter(([, item]) => item.amount.gt(ZERO))
+    .sort(([, a], [, b]) => b.amount.comparedTo(a.amount));
+  const spendingEntries = Array.from(spendingTotals.entries())
+    .filter(([, item]) => item.amount.gt(ZERO))
+    .sort(([, a], [, b]) => b.amount.comparedTo(a.amount));
+
+  const bucketTotals = new Map<string, Decimal>();
+  for (const [, item] of spendingEntries) {
+    bucketTotals.set(item.bucket, (bucketTotals.get(item.bucket) ?? ZERO).plus(item.amount));
+  }
+  const bucketLabels = SANKEY_BUCKET_ORDER.filter((label) => bucketTotals.has(label));
+
+  const nodes: SankeyChartSpec['nodes'] = [
+    ...incomeEntries.map(([id, item]) => ({ id: `income:${id}`, label: item.label, column: 0, role: 'income' as const })),
+    { id: 'total', label: 'Total Income', column: 1, role: 'total' as const },
+    ...bucketLabels.map((label) => ({ id: `bucket:${label}`, label, column: 2, role: 'bucket' as const })),
+    ...spendingEntries.map(([id, item]) => ({ id: `category:${id}`, label: item.label, column: 3, role: 'category' as const })),
+  ];
+
+  const links: SankeyChartSpec['links'] = [
+    ...incomeEntries.map(([id, item]) => ({ source: `income:${id}`, target: 'total', value: Number(money(item.amount)) })),
+    ...bucketLabels.map((label) => ({ source: 'total', target: `bucket:${label}`, value: Number(money(bucketTotals.get(label) ?? ZERO)) })),
+    ...spendingEntries.map(([id, item]) => ({ source: `bucket:${item.bucket}`, target: `category:${id}`, value: Number(money(item.amount)) })),
+  ].filter((link) => link.value > 0);
+
+  return {
+    kind: 'sankey',
+    key: 'cashFlowSankey',
+    title: 'Where the Money Goes',
+    format: 'currency',
+    nodes,
+    links,
+  };
+}
+
 export function buildCashFlowReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; generatedAt?: Date }): StandardReportResponse {
   const filtered = baseRows(input.rows, input.query);
   const response = baseResponse({ ...input, filtered, title: 'Cash Flow Report' });
@@ -824,6 +919,7 @@ export function buildCashFlowReport(input: { query: NormalizedReportQuery; rows:
       data: periodsWithRate,
       reference: { value: 20, label: '20% target' },
     },
+    cashFlowSankey(filtered, input.query),
   ];
   response.tables = [{ key: 'cashFlowPeriods', title: 'Cash Flow by Period', columns: [{ key: 'period', label: 'Period' }, { key: 'income', label: 'Inflows' }, { key: 'expenses', label: 'Outflows' }, { key: 'net', label: 'Net' }], rows: periods }];
   return response;
@@ -1480,6 +1576,104 @@ export function buildBenchmarksReport(input: { query: NormalizedReportQuery; row
   return response;
 }
 
+/** True when the range is exactly one calendar year, e.g. 2026-01-01..2026-12-31. */
+function isWholeCalendarYear(startDate: string, endDate: string): boolean {
+  const year = startDate.slice(0, 4);
+  return startDate === `${year}-01-01` && endDate === `${year}-12-31`;
+}
+
+/**
+ * Tax-deductible spending, by Category. The classification is the whole of the
+ * legacy rule: keep spending rows whose Category has `isTaxDeductible`. Income
+ * is never a deduction, so deductible income Categories are dropped.
+ */
+export function buildTaxSummaryReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; generatedAt?: Date }): StandardReportResponse {
+  const filtered = baseRows(input.rows, input.query);
+  const response = baseResponse({ ...input, filtered, title: 'Tax Summary Report' });
+  const currencyCode = response.currencyCode;
+
+  const byCategory = new Map<string, { id: string; name: string; amount: Decimal; count: number }>();
+  const byPeriod = new Map<string, Decimal>();
+
+  for (const row of filtered) {
+    const signed = rowSignedAmount(row);
+    if (!isNegative(signed)) continue;
+    for (const part of attributionParts(row, input.query)) {
+      if (!part.category?.isTaxDeductible) continue;
+      const amount = part.amount.abs();
+      if (amount.isZero()) continue;
+      const existing = byCategory.get(part.category.id) ?? { id: part.category.id, name: part.category.name, amount: ZERO, count: 0 };
+      existing.amount = existing.amount.plus(amount);
+      existing.count += 1;
+      byCategory.set(part.category.id, existing);
+      const key = periodKey(row.date, input.query.groupBy);
+      byPeriod.set(key, (byPeriod.get(key) ?? ZERO).plus(amount));
+    }
+  }
+
+  const categories = Array.from(byCategory.values()).sort((a, b) => b.amount.comparedTo(a.amount));
+  const totalDeductible = categories.reduce((sum, item) => sum.plus(item.amount), ZERO);
+  const periods = Array.from(byPeriod.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([period, amount]) => ({ period, deductible: money(amount) }));
+
+  response.summaryCards = [card('totalDeductible', 'Total Deductible', totalDeductible, currencyCode)];
+
+  response.charts = [
+    {
+      kind: 'donut',
+      key: 'deductibleByCategory',
+      title: 'Deductible Expenses by Category',
+      nameKey: 'name',
+      valueKey: 'amount',
+      format: 'currency',
+      data: categories.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, amount: money(item.amount) })),
+    },
+    {
+      kind: 'bar',
+      key: 'deductibleByPeriod',
+      title: 'Deductible Expenses by Period',
+      x: PERIOD_AXIS,
+      series: [{ key: 'deductible', label: 'Deductible Expenses', format: 'currency', role: 'expense' }],
+      data: periods,
+    },
+  ];
+
+  response.tables = [{
+    key: 'deductibleCategories',
+    title: 'Tax-Deductible Categories',
+    columns: [
+      { key: 'name', label: 'Category' },
+      { key: 'count', label: 'Transactions' },
+      { key: 'amount', label: 'Amount' },
+    ],
+    rows: categories.map((item) => ({
+      id: item.id,
+      name: item.name,
+      count: item.count,
+      amount: money(item.amount),
+      formattedAmount: formatMoney(item.amount, currencyCode),
+    })),
+  }];
+
+  response.drilldowns = categories.map((item) => ({
+    key: `category-${item.id}`,
+    label: `View ${item.name} Transactions`,
+    params: { categoryId: item.id, startDate: input.query.startDate, endDate: input.query.endDate },
+  }));
+
+  response.metadata.calculationNotes.push(
+    'This report covers tax-deductible expenses only. Category.isTaxDeductible is the schema\'s only tax field, so taxable income and net taxable position are not modelled and are deliberately not reported.',
+  );
+  if (!isWholeCalendarYear(input.query.startDate, input.query.endDate)) {
+    response.metadata.calculationNotes.push(
+      `Totals cover ${input.query.startDate} to ${input.query.endDate}, which is not a whole calendar year. The Legacy Tax Summary tab always reported a calendar-year figure, so the two will differ.`,
+    );
+  }
+
+  return response;
+}
+
 type StandardReportGenerator = (input: {
   query: NormalizedReportQuery;
   rows: StandardReportRow[];
@@ -1513,6 +1707,7 @@ export const standardReportRegistry: Partial<Record<StandardReportType, Standard
   dividend_forecast: buildDividendForecastReport,
   retirement: buildRetirementReport,
   cash_flow_forecast: buildCashFlowForecastReport,
+  tax: buildTaxSummaryReport,
 };
 
 function reportAccountForJournal(journal: {

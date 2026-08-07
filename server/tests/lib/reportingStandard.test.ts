@@ -19,6 +19,7 @@ import {
   buildDividendForecastReport,
   buildRetirementReport,
   buildCashFlowForecastReport,
+  buildTaxSummaryReport,
   normalizeReportQuery,
   fetchStandardReportRows,
   type StandardReportCategory,
@@ -938,5 +939,121 @@ describe('cash flow forecast report', () => {
 
     expect(report.metadata.warnings).toContain('No cash flow forecast context was available.');
     expect(report.tables[0].rows).toEqual([]);
+  });
+});
+
+describe('cash flow sankey', () => {
+  const sankeyQuery = (overrides: Record<string, unknown> = {}) =>
+    normalizeReportQuery({ reportType: 'cash_flow', startDate: '2026-01-01', endDate: '2026-01-31', currencyCode: 'CAD', ...overrides });
+
+  const sankeyOf = (report: ReturnType<typeof buildCashFlowReport>) => {
+    const chart = report.charts.find((item) => item.key === 'cashFlowSankey');
+    if (!chart || chart.kind !== 'sankey') throw new Error('cashFlowSankey chart is missing');
+    return chart;
+  };
+
+  it('emits one total node, links that advance exactly one column, and no negative values', () => {
+    const report = buildCashFlowReport({
+      query: sankeyQuery(),
+      rows: [
+        row({ id: 'salary', transactionType: 'deposit', description: 'Salary', signedAmountDecimal: new Decimal('3000.00'), amountDecimal: new Decimal('3000.00'), category: category({ id: 'cat-salary', name: 'Salary', bucketType: 'needs' }) }),
+        row({ id: 'rent', signedAmountDecimal: new Decimal('-1200.00'), amountDecimal: new Decimal('1200.00'), category: category({ id: 'cat-rent', name: 'Rent', bucketType: 'needs' }) }),
+        row({ id: 'dining', signedAmountDecimal: new Decimal('-150.00'), amountDecimal: new Decimal('150.00'), category: category({ id: 'cat-dining', name: 'Dining', bucketType: 'wants' }) }),
+        row({ id: 'zero', signedAmountDecimal: new Decimal('0.00'), amountDecimal: new Decimal('0.00'), category: category({ id: 'cat-zero', name: 'Nothing', bucketType: 'wants' }) }),
+      ],
+    });
+    const sankey = sankeyOf(report);
+    const columnOf = new Map(sankey.nodes.map((node) => [node.id, node.column]));
+
+    expect(sankey.nodes.filter((node) => node.role === 'total')).toHaveLength(1);
+    expect(sankey.links.length).toBeGreaterThan(0);
+    for (const link of sankey.links) {
+      expect(link.value).toBeGreaterThanOrEqual(0);
+      expect(columnOf.get(link.target)! - columnOf.get(link.source)!).toBe(1);
+    }
+    expect(sankey.links.some((link) => link.value === 0)).toBe(false);
+    expect(sankey.nodes.some((node) => node.label === 'Nothing')).toBe(false);
+    expect(sankey.links.find((link) => link.source === 'income:cat-salary')).toMatchObject({ target: 'total', value: 3000 });
+    expect(sankey.links.find((link) => link.source === 'total' && link.target === 'bucket:Needs')?.value).toBe(1200);
+  });
+
+  it('sends an unrecognised bucketType to Uncategorized rather than creating a fifth bucket', () => {
+    const report = buildCashFlowReport({
+      query: sankeyQuery(),
+      rows: [
+        row({ id: 'weird', signedAmountDecimal: new Decimal('-50.00'), amountDecimal: new Decimal('50.00'), category: category({ id: 'cat-weird', name: 'Weird', bucketType: 'sinking_fund' }) }),
+        row({ id: 'none', signedAmountDecimal: new Decimal('-25.00'), amountDecimal: new Decimal('25.00'), category: null }),
+      ],
+    });
+    const sankey = sankeyOf(report);
+    const buckets = sankey.nodes.filter((node) => node.role === 'bucket');
+
+    expect(buckets.map((node) => node.label)).toEqual(['Uncategorized']);
+    expect(sankey.links.find((link) => link.source === 'total' && link.target === 'bucket:Uncategorized')?.value).toBe(75);
+    expect(sankey.links.find((link) => link.target === 'category:__uncategorized__')?.value).toBe(25);
+  });
+
+  it('attributes a split to the split Category Bucket, not the journal Bucket, when includeSplits is on', () => {
+    const report = buildCashFlowReport({
+      query: sankeyQuery({ includeSplits: 'true' }),
+      rows: [
+        row({
+          id: 'split',
+          isSplit: true,
+          signedAmountDecimal: new Decimal('-100.00'),
+          amountDecimal: new Decimal('100.00'),
+          category: category({ id: 'cat-rent', name: 'Rent', bucketType: 'needs' }),
+          splits: [
+            { id: 'split-savings', amountDecimal: new Decimal('70.00'), category: category({ id: 'cat-savings', name: 'Savings', bucketType: 'savings' }) },
+            { id: 'split-fallback', amountDecimal: new Decimal('30.00'), category: null },
+          ],
+        }),
+      ],
+    });
+    const sankey = sankeyOf(report);
+
+    expect(sankey.links.find((link) => link.source === 'bucket:Savings' && link.target === 'category:cat-savings')?.value).toBe(70);
+    expect(sankey.links.find((link) => link.source === 'bucket:Needs' && link.target === 'category:cat-rent')?.value).toBe(30);
+  });
+});
+
+describe('tax summary report', () => {
+  const taxQuery = (overrides: Record<string, unknown> = {}) =>
+    normalizeReportQuery({ reportType: 'tax', startDate: '2026-01-01', endDate: '2026-12-31', currencyCode: 'CAD', ...overrides });
+
+  it('keeps only tax-deductible spending and never counts deductible income as a deduction', () => {
+    const report = buildTaxSummaryReport({
+      query: taxQuery(),
+      rows: [
+        row({ id: 'accounting', signedAmountDecimal: new Decimal('-400.00'), amountDecimal: new Decimal('400.00'), category: category({ id: 'cat-accounting', name: 'Accounting', isTaxDeductible: true }) }),
+        row({ id: 'accounting-2', signedAmountDecimal: new Decimal('-100.00'), amountDecimal: new Decimal('100.00'), category: category({ id: 'cat-accounting', name: 'Accounting', isTaxDeductible: true }) }),
+        row({ id: 'groceries', signedAmountDecimal: new Decimal('-250.00'), amountDecimal: new Decimal('250.00'), category: category({ id: 'cat-food', name: 'Food', isTaxDeductible: false }) }),
+        row({ id: 'refund', transactionType: 'deposit', signedAmountDecimal: new Decimal('900.00'), amountDecimal: new Decimal('900.00'), category: category({ id: 'cat-grant', name: 'Grant', isTaxDeductible: true }) }),
+      ],
+      generatedAt: new Date('2026-12-31T12:00:00.000Z'),
+    });
+
+    expect(report.reportType).toBe('tax');
+    expect(report.summaryCards).toHaveLength(1);
+    expect(report.summaryCards[0]).toMatchObject({ key: 'totalDeductible', value: '500.00' });
+    expect(report.tables[0].rows).toEqual([
+      expect.objectContaining({ id: 'cat-accounting', name: 'Accounting', count: 2, amount: '500.00' }),
+    ]);
+    expect(report.charts.find((chart) => chart.key === 'deductibleByCategory')?.kind).toBe('donut');
+    expect(report.charts.find((chart) => chart.key === 'deductibleByPeriod')?.kind).toBe('bar');
+    expect(report.metadata.calculationNotes.some((note) => note.includes('tax-deductible expenses only'))).toBe(true);
+  });
+
+  it('notes that the range is not a whole calendar year, and stays silent when it is', () => {
+    const partial = buildTaxSummaryReport({ query: taxQuery({ startDate: '2026-03-01', endDate: '2026-09-30' }), rows: [] });
+    const whole = buildTaxSummaryReport({ query: taxQuery(), rows: [] });
+
+    expect(partial.metadata.calculationNotes.some((note) => note.includes('not a whole calendar year'))).toBe(true);
+    expect(whole.metadata.calculationNotes.some((note) => note.includes('not a whole calendar year'))).toBe(false);
+  });
+
+  it('accepts tax as a report type and still rejects an unknown one', () => {
+    expect(normalizeReportQuery({ reportType: 'tax', startDate: '2026-01-01', endDate: '2026-12-31' })).toMatchObject({ reportType: 'tax' });
+    expect(() => normalizeReportQuery({ reportType: 'report_v2', startDate: '2026-01-01', endDate: '2026-12-31' })).toThrow('reportType is not supported');
   });
 });
