@@ -53,6 +53,7 @@ const STANDARD_TABS = new Set<ReportTab>([
   "dividendforecast",
   "retirementsimulation",
   "forecast",
+  "tax",
 ]);
 
 function csv(value: string | null): string[] {

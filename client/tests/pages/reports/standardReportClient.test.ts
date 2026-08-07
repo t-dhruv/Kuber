@@ -253,4 +253,12 @@ describe("standard report client helpers", () => {
   it("maps the absorbed forecast tab onto the cash flow forecast report type", () => {
     expect(mapReportTabToType("forecast")).toBe("cash_flow_forecast");
   });
+
+  it("maps the absorbed tax tab onto the tax report type", () => {
+    expect(mapReportTabToType("tax")).toBe("tax");
+  });
+
+  it("resolves the tax report type back onto the tax tab", () => {
+    expect(normalizeSavedReportFilters({ reportType: "tax" })).toMatchObject({ tab: "tax" });
+  });
 });

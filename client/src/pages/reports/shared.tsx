@@ -205,6 +205,7 @@ export const TAB_GROUPS: {
       { value: "merchant", label: "Merchants" },
       { value: "audit", label: "Audit" },
       { value: "benchmarks", label: "Benchmarks" },
+      { value: "tax", label: "Tax Summary" },
     ],
   },
   {
@@ -223,9 +224,9 @@ export const TAB_GROUPS: {
   {
     id: "advanced",
     label: "Legacy",
-    tabs: [
-      { value: "tax", label: "Tax Summary" },
-    ],
+    // Empty since plan 010 moved Tax Summary into Core. The group itself is
+    // plan 008's to delete; groups with no tabs are not offered in the picker.
+    tabs: [],
   },
 ];
 
@@ -445,7 +446,7 @@ export function TabBar({
     }
   }, [tab, activeGroup]);
 
-  const groupOptions = TAB_GROUPS.map((g) => ({
+  const groupOptions = TAB_GROUPS.filter((g) => g.tabs.length > 0).map((g) => ({
     value: g.id,
     label: g.label,
   }));
@@ -453,7 +454,7 @@ export function TabBar({
 
   const handleGroupChange = (groupId: ReportTabGroup) => {
     const group = TAB_GROUPS.find((g) => g.id === groupId);
-    if (!group) return;
+    if (!group || group.tabs.length === 0) return;
     setActiveGroup(groupId);
     onChange(group.tabs[0].value);
   };

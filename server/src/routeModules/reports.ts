@@ -161,6 +161,7 @@ const STANDARD_REPORT_LABELS: Record<StandardReportType, string> = {
   dividend_forecast: 'Dividend Forecast Report',
   retirement: 'Retirement Simulation Report',
   cash_flow_forecast: 'Cash Flow Forecast Report',
+  tax: 'Tax Summary Report',
 };
 
 router.get('/standard/options', async (req: AuthRequest, res: Response) => {
