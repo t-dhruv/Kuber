@@ -17,7 +17,8 @@ export type StandardReportType =
   | "allocation"
   | "contribution_room"
   | "dividend_forecast"
-  | "retirement";
+  | "retirement"
+  | "cash_flow_forecast";
 
 export type StandardGroupBy = "day" | "week" | "month" | "quarter" | "year";
 export type StandardReportTab = ReportTab | "category" | "budget" | "tag" | "account" | "merchant" | "audit";
@@ -225,6 +226,7 @@ const TAB_TO_TYPE: Partial<Record<StandardReportTab, StandardReportType>> = {
   contributionroom: "contribution_room",
   dividendforecast: "dividend_forecast",
   retirementsimulation: "retirement",
+  forecast: "cash_flow_forecast",
 };
 
 const TYPE_TO_TAB: Partial<Record<StandardReportType, StandardReportTab>> = {
@@ -244,6 +246,7 @@ const TYPE_TO_TAB: Partial<Record<StandardReportType, StandardReportTab>> = {
   contribution_room: "contributionroom",
   dividend_forecast: "dividendforecast",
   retirement: "retirementsimulation",
+  cash_flow_forecast: "forecast",
 };
 
 export function mapReportTabToType(tab: StandardReportTab): StandardReportType {

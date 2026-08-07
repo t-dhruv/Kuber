@@ -30,6 +30,7 @@ import {
   fetchStandardContributionRoomContext,
   fetchStandardDividendForecastContext,
   fetchStandardRetirementContext,
+  fetchStandardCashFlowForecastContext,
   fetchStandardReportRows,
   normalizeReportQuery,
   standardReportRegistry,
@@ -159,6 +160,7 @@ const STANDARD_REPORT_LABELS: Record<StandardReportType, string> = {
   contribution_room: 'Contribution Room Report',
   dividend_forecast: 'Dividend Forecast Report',
   retirement: 'Retirement Simulation Report',
+  cash_flow_forecast: 'Cash Flow Forecast Report',
 };
 
 router.get('/standard/options', async (req: AuthRequest, res: Response) => {
@@ -261,7 +263,11 @@ async function buildStandardReportForRequest(req: AuthRequest): Promise<Standard
   const retirement = query.reportType === 'retirement'
     ? await fetchStandardRetirementContext({ householdId: req.householdId! })
     : undefined;
-  return generator({ query, rows, budgets, audit, wealth, investments, allocation, contributionRoom, dividendForecast, retirement });
+  const cashFlowForecast = query.reportType === 'cash_flow_forecast'
+    ? await fetchStandardCashFlowForecastContext({ householdId: req.householdId!, endDate: query.endDate })
+    : undefined;
+
+  return generator({ query, rows, budgets, audit, wealth, investments, allocation, contributionRoom, dividendForecast, retirement, cashFlowForecast });
 }
 
 router.get('/standard/generate', async (req: AuthRequest, res: Response) => {

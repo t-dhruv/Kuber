@@ -5,6 +5,7 @@ import { BENCHMARK_SOURCE_WARNING, benchmarkEntries, benchmarkMonths, mapBenchma
 import { getQuotes } from '../priceCache';
 import { calculateRrspRoom, calculateTfsaRoom } from '../taxRoomCalculator';
 import { getAllocation, getDividendForecast } from '../../services/investmentService';
+import { computeCashFlowForecast, type CashFlowForecastResult } from '../cashFlowForecast';
 
 export type StandardReportType =
   | 'overview'
@@ -22,7 +23,8 @@ export type StandardReportType =
   | 'allocation'
   | 'contribution_room'
   | 'dividend_forecast'
-  | 'retirement';
+  | 'retirement'
+  | 'cash_flow_forecast';
 
 export type StandardGroupBy = 'day' | 'week' | 'month' | 'quarter' | 'year';
 export type SortDirection = 'asc' | 'desc';
@@ -180,6 +182,14 @@ export interface StandardRetirementInput {
   note: string;
 }
 
+export interface StandardCashFlowForecastInput {
+  /** The 30/60/90 window the projection was actually run over. */
+  days: number;
+  /** Days between today and the requested endDate, before clamping. */
+  requestedDays: number;
+  forecast: CashFlowForecastResult;
+}
+
 export interface StandardInvestmentInput {
   holdings: Array<{
     id: string;
@@ -314,6 +324,7 @@ const VALID_REPORT_TYPES = new Set<StandardReportType>([
   'contribution_room',
   'dividend_forecast',
   'retirement',
+  'cash_flow_forecast',
 ]);
 const VALID_GROUP_BY = new Set<StandardGroupBy>(['day', 'week', 'month', 'quarter', 'year']);
 
@@ -1480,6 +1491,7 @@ type StandardReportGenerator = (input: {
   contributionRoom?: StandardContributionRoomInput;
   dividendForecast?: StandardDividendForecastInput;
   retirement?: StandardRetirementInput;
+  cashFlowForecast?: StandardCashFlowForecastInput;
   generatedAt?: Date;
 }) => StandardReportResponse;
 
@@ -1500,6 +1512,7 @@ export const standardReportRegistry: Partial<Record<StandardReportType, Standard
   contribution_room: buildContributionRoomReport,
   dividend_forecast: buildDividendForecastReport,
   retirement: buildRetirementReport,
+  cash_flow_forecast: buildCashFlowForecastReport,
 };
 
 function reportAccountForJournal(journal: {
@@ -2248,5 +2261,92 @@ export async function fetchStandardRetirementContext(
       endingBalance: portfolioValue.times(decimal(1 + scenario.returnRate).pow(RETIREMENT_PROJECTION_YEARS)),
     })),
     note: 'Deterministic projections of your current portfolio value compounded at fixed assumed annual return rates over 30 years. Assumes no future contributions or withdrawals. These are illustrative scenarios, not predictions or probabilities.',
+  };
+}
+
+/**
+ * Cash Flow Forecast, absorbed from the Legacy Forecast tab
+ * (client/src/pages/reports/components/CashFlowForecast.tsx). The projection itself
+ * lives in server/src/lib/cashFlowForecast.ts and is shared verbatim with
+ * GET /api/v1/cashflow/forecast — this builder only shapes it into the standard
+ * contract, so the two can never disagree.
+ */
+export function buildCashFlowForecastReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; cashFlowForecast?: StandardCashFlowForecastInput; generatedAt?: Date }): StandardReportResponse {
+  const response = baseResponse({ ...input, filtered: [], title: 'Cash Flow Forecast Report' });
+  const context = input.cashFlowForecast;
+  const forecast = context?.forecast;
+  const days = context?.days ?? 0;
+  const projections = forecast?.projections ?? [];
+  const currentBalance = decimal(forecast?.currentBalance ?? 0);
+  const projectedEndBalance = decimal(forecast?.summary.projectedEndBalance ?? 0);
+  const avgMonthlyIncome = decimal(forecast?.summary.avgMonthlyIncome ?? 0);
+  const avgMonthlyExpense = decimal(forecast?.summary.avgMonthlyExpense ?? 0);
+  const knownRecurringTotal = decimal(forecast?.summary.knownRecurringTotal ?? 0);
+
+  response.summaryCards = [
+    card('currentBalance', 'Current Balance', currentBalance, response.currencyCode),
+    card('projectedEndBalance', `Projected Balance in ${days} Days`, projectedEndBalance, response.currencyCode),
+    card('avgMonthlyNet', 'Average Monthly Net', avgMonthlyIncome.minus(avgMonthlyExpense), response.currencyCode),
+    card('knownRecurringTotal', 'Known Recurring Total', knownRecurringTotal, response.currencyCode),
+  ];
+
+  response.charts = [{
+    kind: 'line',
+    key: 'cashFlowForecast',
+    title: `Projected Balance over the Next ${days} Days`,
+    x: { key: 'date', label: 'Date', format: 'date' },
+    series: [{ key: 'projected', label: 'Projected Balance', format: 'currency', role: 'net' }],
+    data: projections.map((point) => ({ date: point.date, projected: money(decimal(point.projected)) })),
+  }];
+
+  response.tables = [{
+    key: 'cashFlowProjections',
+    title: 'Daily Projections',
+    columns: [
+      { key: 'date', label: 'Date' },
+      { key: 'dailyNet', label: 'Daily Net' },
+      { key: 'projected', label: 'Projected Balance' },
+    ],
+    rows: projections.map((point) => ({
+      id: point.date,
+      date: point.date,
+      dailyNet: money(decimal(point.dailyNet)),
+      projected: money(decimal(point.projected)),
+      formattedDailyNet: formatMoney(decimal(point.dailyNet), response.currencyCode),
+      formattedProjected: formatMoney(decimal(point.projected), response.currencyCode),
+    })),
+  }];
+
+  if (!forecast) {
+    response.metadata.warnings.push('No cash flow forecast context was available.');
+  } else {
+    response.metadata.calculationNotes.push(`Projected over a ${days}-day window. The forecast supports 30, 60 and 90 day windows only, so the selected date range (${context?.requestedDays ?? 0} days forward from today) was clamped to the nearest of those.`);
+    response.metadata.calculationNotes.push('Daily net is the average daily income minus average daily expense over the last 90 days, plus any RecurringItem falling due that day. Recurring Journals are excluded from the average so they are not counted twice.');
+  }
+  noteWealthOnlyFilters(response, input.query, 'Account balance and RecurringItem data');
+
+  return response;
+}
+
+/** The windows the projection supports. Not a query parameter on the standard contract. */
+const CASH_FLOW_FORECAST_WINDOWS = [30, 60, 90] as const;
+
+export async function fetchStandardCashFlowForecastContext(
+  input: { householdId: string; endDate: string; now?: Date },
+  prisma: Pick<PrismaClient, 'account' | 'transactionJournal' | 'recurringItem'> = defaultPrisma,
+): Promise<StandardCashFlowForecastInput> {
+  const now = input.now ?? new Date();
+  const end = new Date(`${input.endDate}T00:00:00Z`);
+  const requestedDays = Number.isNaN(end.getTime())
+    ? CASH_FLOW_FORECAST_WINDOWS[0]
+    : Math.max(0, Math.round((end.getTime() - now.getTime()) / 86_400_000));
+  const days = CASH_FLOW_FORECAST_WINDOWS.reduce((nearest, window) =>
+    Math.abs(window - requestedDays) < Math.abs(nearest - requestedDays) ? window : nearest,
+  CASH_FLOW_FORECAST_WINDOWS[0] as 30 | 60 | 90);
+
+  return {
+    days,
+    requestedDays,
+    forecast: await computeCashFlowForecast({ householdId: input.householdId, days, now }, prisma),
   };
 }

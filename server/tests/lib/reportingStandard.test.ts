@@ -18,6 +18,7 @@ import {
   buildContributionRoomReport,
   buildDividendForecastReport,
   buildRetirementReport,
+  buildCashFlowForecastReport,
   normalizeReportQuery,
   fetchStandardReportRows,
   type StandardReportCategory,
@@ -872,5 +873,70 @@ describe('standard reporting module', () => {
     expect(rows[0].category?.isTaxDeductible).not.toBeUndefined();
     expect(rows[0].splits[0].category?.bucketType).toBe('wants');
     expect(rows[0].splits[0].category?.isTaxDeductible).toBe(false);
+  });
+});
+
+describe('cash flow forecast report', () => {
+  const forecastQuery = normalizeReportQuery({ reportType: 'cash_flow_forecast', startDate: '2026-06-15', endDate: '2026-07-15', currencyCode: 'CAD' });
+
+  const forecastContext = {
+    days: 30,
+    requestedDays: 31,
+    forecast: {
+      currentBalance: 1000,
+      projections: [
+        { date: '2026-06-16', projected: 1010, dailyNet: 10 },
+        { date: '2026-06-17', projected: 950, dailyNet: -60 },
+      ],
+      summary: {
+        days: 30,
+        projectedEndBalance: 950,
+        avgMonthlyIncome: 600,
+        avgMonthlyExpense: 300,
+        knownRecurringTotal: -70,
+      },
+    },
+  };
+
+  it('emits the four summary cards, the projection line chart and the projections table', () => {
+    const report = buildCashFlowForecastReport({ query: forecastQuery, rows: [], cashFlowForecast: forecastContext });
+
+    expect(report.reportType).toBe('cash_flow_forecast');
+    expect(report.summaryCards.map((item) => [item.key, item.value])).toEqual([
+      ['currentBalance', '1000.00'],
+      ['projectedEndBalance', '950.00'],
+      ['avgMonthlyNet', '300.00'],
+      ['knownRecurringTotal', '-70.00'],
+    ]);
+
+    const chart = report.charts.find((item) => item.key === 'cashFlowForecast');
+    expect(chart?.kind).toBe('line');
+    expect(chart && 'data' in chart ? chart.data : []).toEqual([
+      { date: '2026-06-16', projected: '1010.00' },
+      { date: '2026-06-17', projected: '950.00' },
+    ]);
+
+    const table = report.tables.find((item) => item.key === 'cashFlowProjections');
+    expect(table?.rows).toHaveLength(2);
+    expect(table?.rows[0]).toEqual(expect.objectContaining({ date: '2026-06-16', dailyNet: '10.00', projected: '1010.00' }));
+  });
+
+  it('states the clamped window and that the filter set does not apply', () => {
+    const report = buildCashFlowForecastReport({
+      query: normalizeReportQuery({ reportType: 'cash_flow_forecast', startDate: '2026-06-15', endDate: '2026-07-15', categoryIds: 'cat-food' }),
+      rows: [],
+      cashFlowForecast: forecastContext,
+    });
+
+    expect(report.metadata.calculationNotes.some((note) => note.includes('30-day window'))).toBe(true);
+    expect(report.metadata.calculationNotes.some((note) => note.includes('Account balance and RecurringItem data'))).toBe(true);
+    expect(report.metadata.warnings).toContain('Some active filters do not apply to this report and were ignored.');
+  });
+
+  it('warns rather than throwing when no forecast context was fetched', () => {
+    const report = buildCashFlowForecastReport({ query: forecastQuery, rows: [] });
+
+    expect(report.metadata.warnings).toContain('No cash flow forecast context was available.');
+    expect(report.tables[0].rows).toEqual([]);
   });
 });
