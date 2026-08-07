@@ -19,8 +19,21 @@ import {
   buildDividendForecastReport,
   buildRetirementReport,
   normalizeReportQuery,
+  fetchStandardReportRows,
+  type StandardReportCategory,
   type StandardReportRow,
 } from '../../src/lib/reporting/standard';
+
+const category = (overrides: Partial<StandardReportCategory> = {}): StandardReportCategory => ({
+  id: 'cat-food',
+  name: 'Food',
+  groupId: 'group-living',
+  groupName: 'Living',
+  excludeFromReports: false,
+  bucketType: 'wants',
+  isTaxDeductible: false,
+  ...overrides,
+});
 
 const row = (overrides: Partial<StandardReportRow>): StandardReportRow => ({
   id: 'journal-1',
@@ -35,7 +48,7 @@ const row = (overrides: Partial<StandardReportRow>): StandardReportRow => ({
   isDeleted: false,
   isSplit: false,
   isTransfer: false,
-  category: { id: 'cat-food', name: 'Food', groupId: 'group-living', groupName: 'Living', excludeFromReports: false },
+  category: category(),
   merchant: { id: 'merchant-market', name: 'Market' },
   account: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false, excludeFromNetWorth: false, isHidden: false, isDeleted: false },
   tags: [],
@@ -103,8 +116,8 @@ describe('standard reporting module', () => {
           signedAmountDecimal: new Decimal('-100.00'),
           amountDecimal: new Decimal('100.00'),
           splits: [
-            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: { id: 'cat-food', name: 'Food', groupId: null, groupName: null, excludeFromReports: false } },
-            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: { id: 'cat-home', name: 'Home', groupId: null, groupName: null, excludeFromReports: false } },
+            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: category({ groupId: null, groupName: null }) },
+            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: category({ id: 'cat-home', name: 'Home', groupId: null, groupName: null }) },
           ],
         }),
       ],
@@ -176,8 +189,8 @@ describe('standard reporting module', () => {
           isSplit: true,
           tags: [{ id: 'tag-home', name: 'Home', color: null }],
           splits: [
-            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: { id: 'cat-food', name: 'Food', groupId: 'group-living', groupName: 'Living', excludeFromReports: false } },
-            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: { id: 'cat-home', name: 'Home', groupId: 'group-living', groupName: 'Living', excludeFromReports: false } },
+            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: category() },
+            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: category({ id: 'cat-home', name: 'Home' }) },
           ],
         }),
         row({ id: 'filtered-account', account: { id: 'acct-other', name: 'Other', type: 'bank', excludeFromReports: false, excludeFromNetWorth: false, isHidden: false, isDeleted: false } }),
@@ -203,10 +216,10 @@ describe('standard reporting module', () => {
         row({
           id: 'split',
           isSplit: true,
-          category: { id: 'cat-food', name: 'Food', groupId: null, groupName: null, excludeFromReports: false },
+          category: category({ groupId: null, groupName: null }),
           splits: [
-            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: { id: 'cat-food', name: 'Food', groupId: null, groupName: null, excludeFromReports: false } },
-            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: { id: 'cat-home', name: 'Home', groupId: null, groupName: null, excludeFromReports: false } },
+            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: category({ groupId: null, groupName: null }) },
+            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: category({ id: 'cat-home', name: 'Home', groupId: null, groupName: null }) },
           ],
         }),
       ],
@@ -504,12 +517,12 @@ describe('standard reporting module', () => {
     const report = buildCategoryReport({
       query,
       rows: [
-        row({ id: 'categorized', category: { id: 'cat-food', name: 'Food', groupId: 'group-living', groupName: 'Living', excludeFromReports: false } }),
+        row({ id: 'categorized', category: category() }),
         row({
           id: 'split-categorized',
           category: null,
           isSplit: true,
-          splits: [{ id: 'split-a', amountDecimal: new Decimal('100.00'), category: { id: 'cat-home', name: 'Home', groupId: null, groupName: null, excludeFromReports: false } }],
+          splits: [{ id: 'split-a', amountDecimal: new Decimal('100.00'), category: category({ id: 'cat-home', name: 'Home', groupId: null, groupName: null }) }],
         }),
         row({ id: 'uncategorized', category: null }),
       ],
@@ -590,7 +603,7 @@ describe('standard reporting module', () => {
           id: 'rent',
           amountDecimal: new Decimal('2025.00'),
           signedAmountDecimal: new Decimal('-2025.00'),
-          category: { id: 'cat-rent', name: 'Rent', groupId: null, groupName: null, excludeFromReports: false },
+          category: category({ id: 'cat-rent', name: 'Rent', groupId: null, groupName: null }),
         }),
       ],
     });
@@ -768,5 +781,96 @@ describe('standard reporting module', () => {
     const chart = report.charts.find((item) => item.key === 'assetsVsLiabilities');
     expect(chart?.kind).toBe('groupedBar');
     expect(chart && 'data' in chart ? chart.data : []).toHaveLength(6);
+  });
+
+  const prismaCategory = (overrides: Record<string, unknown> = {}) => ({
+    id: 'cat-food',
+    name: 'Food',
+    groupId: 'group-living',
+    excludeFromReports: false,
+    bucketType: 'needs',
+    isTaxDeductible: true,
+    group: { id: 'group-living', name: 'Living' },
+    ...overrides,
+  });
+
+  const fakePrisma = (journals: unknown[]) =>
+    ({
+      transactionJournal: { findMany: async () => journals },
+    }) as unknown as Parameters<typeof fetchStandardReportRows>[1];
+
+  const prismaJournal = (overrides: Record<string, unknown> = {}) => ({
+    id: 'journal-1',
+    date: new Date('2026-01-10T00:00:00.000Z'),
+    description: 'Grocer',
+    transactionType: 'withdrawal',
+    amountDecimal: new Decimal('100.00'),
+    currencyCode: 'CAD',
+    isPending: false,
+    isHidden: false,
+    isDeleted: false,
+    isSplit: false,
+    isReconciled: false,
+    category: prismaCategory(),
+    merchant: { id: 'merchant-market', displayName: 'Market' },
+    entries: [
+      {
+        accountId: 'acct-checking',
+        amountDecimal: new Decimal('-100.00'),
+        account: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false, excludeFromNetWorth: false, isHidden: false, isDeleted: false },
+      },
+    ],
+    tags: [],
+    transactionTags: [],
+    splits: [],
+    ...overrides,
+  });
+
+  it('carries bucketType and isTaxDeductible onto both the journal Category and a split Category', async () => {
+    const rows = await fetchStandardReportRows(
+      { householdId: 'hh-1', startDate: '2026-01-01', endDate: '2026-01-31' },
+      fakePrisma([
+        prismaJournal({
+          isSplit: true,
+          splits: [
+            {
+              id: 'split-savings',
+              amountDecimal: new Decimal('100.00'),
+              category: prismaCategory({ id: 'cat-rrsp', name: 'RRSP', bucketType: 'savings', isTaxDeductible: false }),
+            },
+          ],
+        }),
+      ]),
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].category).toMatchObject({ id: 'cat-food', bucketType: 'needs', isTaxDeductible: true });
+    expect(rows[0].splits[0].category).toMatchObject({ id: 'cat-rrsp', bucketType: 'savings', isTaxDeductible: false });
+  });
+
+  it('surfaces the schema defaults as values rather than undefined', async () => {
+    const rows = await fetchStandardReportRows(
+      { householdId: 'hh-1', startDate: '2026-01-01', endDate: '2026-01-31' },
+      fakePrisma([
+        prismaJournal({
+          isSplit: true,
+          category: prismaCategory({ bucketType: 'wants', isTaxDeductible: false }),
+          splits: [
+            {
+              id: 'split-default',
+              amountDecimal: new Decimal('100.00'),
+              category: prismaCategory({ id: 'cat-home', name: 'Home', bucketType: 'wants', isTaxDeductible: false }),
+            },
+          ],
+        }),
+      ]),
+    );
+
+    expect(rows[0].category?.bucketType).toBe('wants');
+    expect(rows[0].category?.isTaxDeductible).toBe(false);
+    expect(rows[0].category?.bucketType).not.toBeUndefined();
+    expect(rows[0].category?.isTaxDeductible).not.toBeUndefined();
+    expect(rows[0].splits[0].category?.bucketType).toBe('wants');
+    expect(rows[0].splits[0].category?.isTaxDeductible).toBe(false);
   });
 });

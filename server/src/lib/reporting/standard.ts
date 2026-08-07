@@ -70,6 +70,9 @@ export interface StandardReportCategory {
   groupId: string | null;
   groupName: string | null;
   excludeFromReports: boolean;
+  /** The Category's 50/30/20 Bucket assignment: 'needs' | 'wants' | 'savings'. */
+  bucketType: string;
+  isTaxDeductible: boolean;
 }
 
 export interface StandardReportRow {
@@ -1543,7 +1546,7 @@ export async function fetchStandardReportRows(
     },
     orderBy: [{ date: 'asc' }, { id: 'asc' }],
     include: {
-      category: { select: { id: true, name: true, groupId: true, excludeFromReports: true, group: { select: { id: true, name: true } } } },
+      category: { select: { id: true, name: true, groupId: true, excludeFromReports: true, bucketType: true, isTaxDeductible: true, group: { select: { id: true, name: true } } } },
       merchant: { select: { id: true, displayName: true } },
       entries: {
         include: {
@@ -1564,7 +1567,7 @@ export async function fetchStandardReportRows(
       transactionTags: { include: { tag: { select: { id: true, name: true, color: true } } } },
       splits: {
         include: {
-          category: { select: { id: true, name: true, groupId: true, excludeFromReports: true, group: { select: { id: true, name: true } } } },
+          category: { select: { id: true, name: true, groupId: true, excludeFromReports: true, bucketType: true, isTaxDeductible: true, group: { select: { id: true, name: true } } } },
         },
       },
     },
@@ -1578,6 +1581,8 @@ export async function fetchStandardReportRows(
           groupId: journal.category.groupId ?? null,
           groupName: journal.category.group?.name ?? null,
           excludeFromReports: Boolean(journal.category.excludeFromReports),
+          bucketType: journal.category.bucketType,
+          isTaxDeductible: Boolean(journal.category.isTaxDeductible),
         }
       : null;
     return {
@@ -1607,6 +1612,8 @@ export async function fetchStandardReportRows(
               groupId: split.category.groupId ?? null,
               groupName: split.category.group?.name ?? null,
               excludeFromReports: Boolean(split.category.excludeFromReports),
+              bucketType: split.category.bucketType,
+              isTaxDeductible: Boolean(split.category.isTaxDeductible),
             }
           : null,
       })),
