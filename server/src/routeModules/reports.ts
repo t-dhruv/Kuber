@@ -32,41 +32,10 @@ import {
   type StandardReportResponse,
   type StandardReportType,
 } from '../lib/reporting/standard';
+import { benchmarkEntries, mapBenchmarkCategory } from '../lib/reporting/benchmarks';
 
 const router = Router();
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-const BLS_BENCHMARKS: Record<string, { label: string; monthlyAvg: number; pctOfIncome: number }> = {
-  housing: { label: 'Housing', monthlyAvg: 2025, pctOfIncome: 33.0 },
-  transportation: { label: 'Transportation', monthlyAvg: 985, pctOfIncome: 16.1 },
-  food: { label: 'Food', monthlyAvg: 770, pctOfIncome: 12.6 },
-  healthcare: { label: 'Healthcare', monthlyAvg: 470, pctOfIncome: 7.7 },
-  entertainment: { label: 'Entertainment', monthlyAvg: 270, pctOfIncome: 4.4 },
-  personal: { label: 'Personal Care', monthlyAvg: 75, pctOfIncome: 1.2 },
-  education: { label: 'Education', monthlyAvg: 115, pctOfIncome: 1.9 },
-  clothing: { label: 'Clothing', monthlyAvg: 130, pctOfIncome: 2.1 },
-  utilities: { label: 'Utilities', monthlyAvg: 370, pctOfIncome: 6.0 },
-  misc: { label: 'Miscellaneous', monthlyAvg: 175, pctOfIncome: 2.9 },
-};
-
-const CATEGORY_MAP: [RegExp, string][] = [
-  [/hous|rent|mortg/i, 'housing'],
-  [/transport|auto|car|gas|fuel|parking|uber|lyft|rideshare/i, 'transportation'],
-  [/food|grocer|restaur|dining|fast.?food|coffee|cafe/i, 'food'],
-  [/health|medical|pharma|drug|dental|vision|doctor/i, 'healthcare'],
-  [/entertain|netflix|spotify|hulu|subscri|stream|movie|theater/i, 'entertainment'],
-  [/personal|hair|salon|gym|fitness/i, 'personal'],
-  [/educat|tuition|school|book/i, 'education'],
-  [/cloth|apparel|fashion/i, 'clothing'],
-  [/util|electric|water|internet|phone|cable/i, 'utilities'],
-];
-
-function mapCategory(name: string): string {
-  for (const [re, key] of CATEGORY_MAP) {
-    if (re.test(name)) return key;
-  }
-  return 'misc';
-}
 
 // ─── GET /api/v1/reports/overview ────────────────────────────────────────────
 
@@ -181,6 +150,7 @@ const STANDARD_REPORT_LABELS: Record<StandardReportType, string> = {
   audit: 'Audit / Data Quality Report',
   net_worth: 'Net Worth Report',
   investment: 'Investment Report',
+  benchmarks: 'Benchmarks Report',
 };
 
 router.get('/standard/options', async (req: AuthRequest, res: Response) => {
@@ -559,20 +529,20 @@ router.get('/benchmarks', async (req: AuthRequest, res: Response) => {
     });
     const actuals: Record<string, number> = {};
     for (const item of spending.items) {
-      const key = mapCategory(item.name);
+      const key = mapBenchmarkCategory(item.name);
       actuals[key] = (actuals[key] ?? 0) + item.amount;
     }
     return res.json({
       startDate,
       endDate,
       months,
-      categories: Object.entries(BLS_BENCHMARKS).map(([key, bls]) => ({
-        key,
-        label: bls.label,
-        blsMonthlyAvg: bls.monthlyAvg,
-        blsPctOfIncome: bls.pctOfIncome,
-        actualTotal: Math.round((actuals[key] ?? 0) * 100) / 100,
-        actualMonthlyAvg: Math.round(((actuals[key] ?? 0) / months) * 100) / 100,
+      categories: benchmarkEntries().map((entry) => ({
+        key: entry.key,
+        label: entry.label,
+        blsMonthlyAvg: entry.monthlyAvg,
+        blsPctOfIncome: entry.pctOfIncome,
+        actualTotal: Math.round((actuals[entry.key] ?? 0) * 100) / 100,
+        actualMonthlyAvg: Math.round(((actuals[entry.key] ?? 0) / months) * 100) / 100,
       })),
     });
   } catch (err) {

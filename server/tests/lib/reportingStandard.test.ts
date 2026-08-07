@@ -10,6 +10,7 @@ import {
   buildAuditDataQualityReport,
   buildInvestmentReport,
   buildNetWorthReport,
+  buildBenchmarksReport,
   buildOverviewReport,
   buildReportDrilldown,
   buildTagReport,
@@ -552,5 +553,54 @@ describe('standard reporting module', () => {
     const report = buildOverviewReport({ query, rows: [row({ id: 'no-match', description: 'Groceries' })] });
 
     expect(report.metadata.warnings).toContain('Results are limited to rows matching "insurance".');
+  });
+
+  it('emits a savings rate trend on the cash flow report and never divides by zero income', () => {
+    const query = normalizeReportQuery({ reportType: 'cash_flow', startDate: '2026-01-01', endDate: '2026-02-28', groupBy: 'month' });
+    const report = buildCashFlowReport({
+      query,
+      rows: [
+        row({ id: 'jan-income', date: new Date('2026-01-05T00:00:00.000Z'), transactionType: 'deposit', amountDecimal: new Decimal('1000.00'), signedAmountDecimal: new Decimal('1000.00') }),
+        row({ id: 'jan-spend', date: new Date('2026-01-10T00:00:00.000Z'), amountDecimal: new Decimal('600.00'), signedAmountDecimal: new Decimal('-600.00') }),
+        row({ id: 'feb-spend', date: new Date('2026-02-10T00:00:00.000Z'), amountDecimal: new Decimal('250.00'), signedAmountDecimal: new Decimal('-250.00') }),
+      ],
+    });
+
+    const chart = report.charts.find((item) => item.key === 'savingsRateTrend');
+    expect(chart).toBeDefined();
+    expect(chart?.kind).toBe('line');
+    const data = (chart as { data: Array<Record<string, unknown>> }).data;
+    expect(data[0]).toMatchObject({ period: '2026-01', savingsRate: 40 });
+    const zeroIncomePeriod = data.find((item) => item.period === '2026-02');
+    expect(zeroIncomePeriod?.savingsRate).toBe(0);
+    expect(Number.isFinite(Number(zeroIncomePeriod?.savingsRate))).toBe(true);
+    expect(report.summaryCards.find((item) => item.key === 'savingsRate')?.formattedValue).toBe('15.0%');
+  });
+
+  it('produces one benchmark comparison row per benchmark key with a zero variance on an exact match', () => {
+    const query = normalizeReportQuery({ reportType: 'benchmarks', startDate: '2026-01-01', endDate: '2026-01-31', groupBy: 'month' });
+    const report = buildBenchmarksReport({
+      query,
+      rows: [
+        row({
+          id: 'rent',
+          amountDecimal: new Decimal('2025.00'),
+          signedAmountDecimal: new Decimal('-2025.00'),
+          category: { id: 'cat-rent', name: 'Rent', groupId: null, groupName: null, excludeFromReports: false },
+        }),
+      ],
+    });
+
+    const table = report.tables.find((item) => item.key === 'benchmarkComparison');
+    expect(table?.rows).toHaveLength(10);
+    expect(table?.rows.find((item) => item.key === 'housing')).toMatchObject({ yours: '2025.00', benchmark: '2025.00', variance: '0.00' });
+    expect(table?.rows.find((item) => item.key === 'food')).toMatchObject({ yours: '0.00', variance: '-770.00' });
+    expect(report.charts.map((item) => item.key)).toEqual(['benchmarkComparison', 'benchmarkVariance']);
+    expect(report.metadata.warnings.some((item) => item.includes('Bureau of Labor Statistics'))).toBe(true);
+  });
+
+  it('accepts the benchmarks report type and still rejects an unknown one', () => {
+    expect(normalizeReportQuery({ reportType: 'benchmarks', startDate: '2026-01-01', endDate: '2026-01-31' }).reportType).toBe('benchmarks');
+    expect(() => normalizeReportQuery({ reportType: 'nonsense', startDate: '2026-01-01', endDate: '2026-01-31' })).toThrow('reportType is not supported');
   });
 });

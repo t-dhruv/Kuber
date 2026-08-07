@@ -219,4 +219,14 @@ describe("standard report client helpers", () => {
       normalizeSavedReportFilters({ tab: "category", reconciledState: "maybe" }),
     ).toMatchObject({ reconciledState: "any" });
   });
+
+  it("maps the absorbed benchmarks tab onto its standard report type", () => {
+    expect(mapReportTabToType("benchmarks")).toBe("benchmarks");
+  });
+
+  it("still resolves the retired Legacy tab values", () => {
+    expect(mapReportTabToType("savings")).toBe("cash_flow");
+    expect(mapReportTabToType("spending")).toBe("category");
+    expect(mapReportTabToType("variance")).toBe("budget");
+  });
 });

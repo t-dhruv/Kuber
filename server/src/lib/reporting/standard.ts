@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma as defaultPrisma } from '../prisma';
+import { BENCHMARK_SOURCE_WARNING, benchmarkEntries, benchmarkMonths, mapBenchmarkCategory } from './benchmarks';
 
 export type StandardReportType =
   | 'overview'
@@ -13,7 +14,8 @@ export type StandardReportType =
   | 'merchant'
   | 'audit'
   | 'net_worth'
-  | 'investment';
+  | 'investment'
+  | 'benchmarks';
 
 export type StandardGroupBy = 'day' | 'week' | 'month' | 'quarter' | 'year';
 export type SortDirection = 'asc' | 'desc';
@@ -249,6 +251,7 @@ const VALID_REPORT_TYPES = new Set<StandardReportType>([
   'audit',
   'net_worth',
   'investment',
+  'benchmarks',
 ]);
 const VALID_GROUP_BY = new Set<StandardGroupBy>(['day', 'week', 'month', 'quarter', 'year']);
 
@@ -638,6 +641,16 @@ function periodBuckets(rows: StandardReportRow[], query: NormalizedReportQuery) 
   }));
 }
 
+/**
+ * Savings rate for one period, as a percentage rounded to two decimals.
+ * A period with no income has a rate of 0 rather than NaN or Infinity.
+ */
+function savingsRateOf(income: Decimal.Value, net: Decimal.Value): number {
+  const incomeValue = decimal(income);
+  if (!incomeValue.gt(ZERO)) return 0;
+  return Number(decimal(net).div(incomeValue).times(HUNDRED).toDecimalPlaces(2).toFixed(2));
+}
+
 export function buildIncomeExpenseReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; generatedAt?: Date }): StandardReportResponse {
   const filtered = baseRows(input.rows, input.query);
   const response = baseResponse({ ...input, filtered, title: 'Income vs Expense Report' });
@@ -677,15 +690,25 @@ export function buildCashFlowReport(input: { query: NormalizedReportQuery; rows:
   const filtered = baseRows(input.rows, input.query);
   const response = baseResponse({ ...input, filtered, title: 'Cash Flow Report' });
   const periods = periodBuckets(filtered, input.query);
+  const periodsWithRate = periods.map((period) => ({ ...period, savingsRate: savingsRateOf(period.income, period.net) }));
   let running = ZERO;
   const runningData = periods.map((period) => {
     running = running.plus(period.net);
     return { period: period.period, net: period.net, runningBalance: money(running) };
   });
+  const totalIncome = periods.reduce((sum, row) => sum.plus(row.income), ZERO);
+  const totalExpenses = periods.reduce((sum, row) => sum.plus(row.expenses), ZERO);
+  const overallSavingsRate = totalIncome.gt(ZERO) ? totalIncome.minus(totalExpenses).div(totalIncome).times(HUNDRED) : ZERO;
   response.summaryCards = [
-    card('inflows', 'Inflows', periods.reduce((sum, row) => sum.plus(row.income), ZERO), response.currencyCode),
-    card('outflows', 'Outflows', periods.reduce((sum, row) => sum.plus(row.expenses), ZERO), response.currencyCode),
+    card('inflows', 'Inflows', totalIncome, response.currencyCode),
+    card('outflows', 'Outflows', totalExpenses, response.currencyCode),
     card('netCashFlow', 'Net Cash Flow', running, response.currencyCode),
+    {
+      key: 'savingsRate',
+      label: 'Savings Rate',
+      value: overallSavingsRate.toDecimalPlaces(2).toFixed(2),
+      formattedValue: `${overallSavingsRate.toDecimalPlaces(1).toFixed(1)}%`,
+    },
   ];
   response.charts = [
     {
@@ -718,6 +741,15 @@ export function buildCashFlowReport(input: { query: NormalizedReportQuery; rows:
       series: [MONEY_SERIES.net],
       data: runningData,
       reference: { value: 0, label: 'Break even' },
+    },
+    {
+      kind: 'line',
+      key: 'savingsRateTrend',
+      title: 'Savings Rate',
+      x: PERIOD_AXIS,
+      series: [{ key: 'savingsRate', label: 'Savings Rate', format: 'percent', role: 'net' }],
+      data: periodsWithRate,
+      reference: { value: 20, label: '20% target' },
     },
   ];
   response.tables = [{ key: 'cashFlowPeriods', title: 'Cash Flow by Period', columns: [{ key: 'period', label: 'Period' }, { key: 'income', label: 'Inflows' }, { key: 'expenses', label: 'Outflows' }, { key: 'net', label: 'Net' }], rows: periods }];
@@ -1248,6 +1280,86 @@ function drilldownRow(row: StandardReportRow, params: Record<string, string | un
   };
 }
 
+export function buildBenchmarksReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; generatedAt?: Date }): StandardReportResponse {
+  const filtered = baseRows(input.rows, input.query);
+  const response = baseResponse({ ...input, filtered, title: 'Benchmarks Report' });
+  const currencyCode = response.currencyCode;
+  const months = benchmarkMonths(input.query.startDate, input.query.endDate);
+
+  const actuals = new Map<string, Decimal>();
+  for (const item of categoryAmounts(filtered, true, input.query)) {
+    const key = mapBenchmarkCategory(item.name);
+    actuals.set(key, (actuals.get(key) ?? ZERO).plus(item.amount));
+  }
+
+  const comparisons = benchmarkEntries().map((entry) => {
+    const yours = actuals.get(entry.key) ?? ZERO;
+    const benchmark = new Decimal(entry.monthlyAvg).times(months);
+    return { entry, yours, benchmark, variance: yours.minus(benchmark) };
+  });
+
+  const totalYours = comparisons.reduce((sum, item) => sum.plus(item.yours), ZERO);
+  const totalBenchmark = comparisons.reduce((sum, item) => sum.plus(item.benchmark), ZERO);
+
+  response.summaryCards = [
+    card('householdSpending', 'Your Spending', totalYours, currencyCode),
+    card('benchmarkSpending', 'Benchmark Spending', totalBenchmark, currencyCode),
+    card('benchmarkDifference', 'Difference', totalYours.minus(totalBenchmark), currencyCode),
+  ];
+
+  const comparisonRows = comparisons.map((item) => ({
+    key: item.entry.key,
+    label: item.entry.label,
+    yours: money(item.yours),
+    yoursMonthlyAvg: money(item.yours.div(months)),
+    benchmark: money(item.benchmark),
+    benchmarkMonthlyAvg: money(new Decimal(item.entry.monthlyAvg)),
+    benchmarkPctOfIncome: item.entry.pctOfIncome,
+    variance: money(item.variance),
+  }));
+
+  response.charts = [
+    {
+      kind: 'groupedBar',
+      key: 'benchmarkComparison',
+      title: 'Your Spending vs Benchmark',
+      x: { key: 'label', label: 'Benchmark', format: 'date' },
+      series: [
+        { key: 'yours', label: 'Yours', format: 'currency', role: 'actual' },
+        { key: 'benchmark', label: 'Benchmark', format: 'currency', role: 'budget' },
+      ],
+      data: comparisonRows,
+    },
+    {
+      kind: 'bar',
+      key: 'benchmarkVariance',
+      title: 'Variance vs Benchmark',
+      x: { key: 'label', label: 'Benchmark', format: 'date' },
+      series: [{ key: 'variance', label: 'Variance', format: 'currency', role: 'net' }],
+      data: comparisonRows,
+      reference: { value: 0, label: 'On benchmark' },
+    },
+  ];
+
+  response.tables = [{
+    key: 'benchmarkComparison',
+    title: 'Benchmark Comparison',
+    columns: [
+      { key: 'label', label: 'Benchmark' },
+      { key: 'yours', label: 'Your Total' },
+      { key: 'yoursMonthlyAvg', label: 'Your Monthly Average' },
+      { key: 'benchmark', label: 'Benchmark Total' },
+      { key: 'benchmarkMonthlyAvg', label: 'Benchmark Monthly Average' },
+      { key: 'variance', label: 'Variance' },
+    ],
+    rows: comparisonRows,
+  }];
+
+  response.metadata.warnings.push(BENCHMARK_SOURCE_WARNING);
+  response.metadata.calculationNotes.push(`Benchmark totals cover ${months} month${months === 1 ? '' : 's'} of the selected date range.`);
+  return response;
+}
+
 type StandardReportGenerator = (input: {
   query: NormalizedReportQuery;
   rows: StandardReportRow[];
@@ -1270,6 +1382,7 @@ export const standardReportRegistry: Partial<Record<StandardReportType, Standard
   audit: buildAuditDataQualityReport,
   net_worth: buildNetWorthReport,
   investment: buildInvestmentReport,
+  benchmarks: buildBenchmarksReport,
 };
 
 function reportAccountForJournal(journal: {
