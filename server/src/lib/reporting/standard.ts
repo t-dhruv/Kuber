@@ -43,6 +43,16 @@ export interface NormalizedReportQuery {
   limit: number;
   page: number;
   pageSize: number;
+  /** Inclusive lower bound on the absolute Transaction amount. */
+  minAmount?: number;
+  /** Inclusive upper bound on the absolute Transaction amount. */
+  maxAmount?: number;
+  /** Case-insensitive substring match against description and merchant name. */
+  searchText?: string;
+  /** Keep only rows with no Category on the Transaction and none on any Split. */
+  onlyUncategorized: boolean;
+  /** 'any' applies no reconciliation filter. */
+  reconciledState: 'any' | 'reconciled' | 'unreconciled';
 }
 
 export interface StandardReportCategory {
@@ -288,6 +298,13 @@ function intInRange(value: unknown, fallback: number, min: number, max: number):
   return Math.max(min, Math.min(max, parsed));
 }
 
+function optionalNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${field} must be a non-negative number`);
+  return parsed;
+}
+
 function isoDate(value: unknown, field: string): string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new Error(`${field} is required in YYYY-MM-DD format`);
@@ -307,6 +324,11 @@ export function normalizeReportQuery(input: Record<string, unknown>): Normalized
   }
   const groupBy = String(input.groupBy ?? 'month') as StandardGroupBy;
   if (!VALID_GROUP_BY.has(groupBy)) throw new Error('groupBy must be one of: day, week, month, quarter, year');
+  const minAmount = optionalNumber(input.minAmount, 'minAmount');
+  const maxAmount = optionalNumber(input.maxAmount, 'maxAmount');
+  if (minAmount !== undefined && maxAmount !== undefined && maxAmount < minAmount) {
+    throw new Error('maxAmount must be greater than or equal to minAmount');
+  }
 
   return {
     reportType,
@@ -333,6 +355,14 @@ export function normalizeReportQuery(input: Record<string, unknown>): Normalized
     limit: intInRange(input.limit, 25, 1, 500),
     page: intInRange(input.page, 1, 1, 100000),
     pageSize: intInRange(input.pageSize, 50, 1, 200),
+    minAmount,
+    maxAmount,
+    searchText: typeof input.searchText === 'string' && input.searchText.trim() ? input.searchText.trim() : undefined,
+    onlyUncategorized: bool(input.onlyUncategorized, false),
+    reconciledState:
+      input.reconciledState === 'reconciled' || input.reconciledState === 'unreconciled'
+        ? input.reconciledState
+        : 'any',
   };
 }
 
@@ -375,6 +405,20 @@ function baseRows(rows: StandardReportRow[], query: NormalizedReportQuery): Stan
     if (query.tagIds.length && !row.tags.some((tag) => query.tagIds.includes(tag.id))) return false;
     if (query.merchantIds.length && (!row.merchant || !query.merchantIds.includes(row.merchant.id))) return false;
     if (query.transactionTypes.length && !query.transactionTypes.includes(row.transactionType)) return false;
+    const magnitude = rowAmount(row);
+    if (query.minAmount !== undefined && magnitude.lt(query.minAmount)) return false;
+    if (query.maxAmount !== undefined && magnitude.gt(query.maxAmount)) return false;
+    if (query.reconciledState === 'reconciled' && !row.reconciled) return false;
+    if (query.reconciledState === 'unreconciled' && row.reconciled) return false;
+    if (query.onlyUncategorized) {
+      const hasCategory = Boolean(row.category) || row.splits.some((split) => Boolean(split.category));
+      if (hasCategory) return false;
+    }
+    if (query.searchText) {
+      const needle = query.searchText.toLowerCase();
+      const haystack = `${row.description} ${row.merchant?.name ?? ''}`.toLowerCase();
+      if (!haystack.includes(needle)) return false;
+    }
     return true;
   });
 }
@@ -388,6 +432,12 @@ function metadata(query: NormalizedReportQuery, rows: StandardReportRow[], filte
   if (!query.includeHidden && excludedHidden) warnings.push(`${excludedHidden} hidden transaction${excludedHidden === 1 ? ' is' : 's are'} excluded. Enable includeHidden to include ${excludedHidden === 1 ? 'it' : 'them'}.`);
   if (currencies.size > 1 && !query.currencyCode) warnings.push('Multiple currencies are present. Totals are grouped by source currency unless a currency filter is applied.');
   if (filtered.some((row) => row.tags.length > 1)) warnings.push('Tag totals may exceed total spending because one transaction can have multiple tags.');
+  if (query.searchText) warnings.push(`Results are limited to rows matching "${query.searchText}".`);
+  if (query.onlyUncategorized) warnings.push('Results are limited to uncategorized Transactions.');
+  if (query.minAmount !== undefined || query.maxAmount !== undefined) {
+    warnings.push('Results are limited by an amount range.');
+  }
+  if (query.reconciledState !== 'any') warnings.push(`Results are limited to ${query.reconciledState} Transactions.`);
   return {
     generatedAt: (generatedAt ?? new Date()).toISOString(),
     filtersApplied: query,

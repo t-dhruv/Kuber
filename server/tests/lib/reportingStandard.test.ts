@@ -445,4 +445,112 @@ describe('standard reporting module', () => {
     expect(auditReport.charts.length).toBeGreaterThan(0);
     expect(investmentReport.charts.length).toBeGreaterThan(0);
   });
+
+  it('applies an inclusive amount range', () => {
+    const query = normalizeReportQuery({
+      reportType: 'overview',
+      startDate: '2026-01-01',
+      endDate: '2026-01-31',
+      minAmount: '100',
+      maxAmount: '500',
+    });
+    const report = buildOverviewReport({
+      query,
+      rows: [
+        row({ id: 'low', amountDecimal: new Decimal('50.00'), signedAmountDecimal: new Decimal('-50.00') }),
+        row({ id: 'mid', amountDecimal: new Decimal('100.00'), signedAmountDecimal: new Decimal('-100.00') }),
+        row({ id: 'high', amountDecimal: new Decimal('500.00'), signedAmountDecimal: new Decimal('-500.00') }),
+      ],
+    });
+
+    const total = report.tables.find((table) => table.key === 'topSpendingCategories')?.rows.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+    expect(total).toBe(2);
+  });
+
+  it('rejects an inverted amount range', () => {
+    expect(() =>
+      normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', minAmount: '500', maxAmount: '100' }),
+    ).toThrow();
+  });
+
+  it('rejects a negative amount bound', () => {
+    expect(() =>
+      normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', minAmount: '-1' }),
+    ).toThrow();
+  });
+
+  it('matches search text against description and merchant name', () => {
+    const query = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', searchText: 'insurance' });
+    const report = buildOverviewReport({
+      query,
+      rows: [
+        row({ id: 'desc-match', description: 'Car Insurance Payment', merchant: { id: 'merchant-market', name: 'Market' } }),
+        row({ id: 'merchant-match', description: 'Monthly Bill', merchant: { id: 'merchant-insurance', name: 'Insurance Co' } }),
+        row({ id: 'no-match', description: 'Groceries', merchant: { id: 'merchant-market', name: 'Market' } }),
+      ],
+    });
+
+    const total = report.tables.find((table) => table.key === 'topSpendingCategories')?.rows.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+    expect(total).toBe(2);
+  });
+
+  it('keeps only rows with no Category on the Transaction or its Splits', () => {
+    const query = normalizeReportQuery({ reportType: 'category', startDate: '2026-01-01', endDate: '2026-01-31', onlyUncategorized: 'true' });
+    const report = buildCategoryReport({
+      query,
+      rows: [
+        row({ id: 'categorized', category: { id: 'cat-food', name: 'Food', groupId: 'group-living', groupName: 'Living', excludeFromReports: false } }),
+        row({
+          id: 'split-categorized',
+          category: null,
+          isSplit: true,
+          splits: [{ id: 'split-a', amountDecimal: new Decimal('100.00'), category: { id: 'cat-home', name: 'Home', groupId: null, groupName: null, excludeFromReports: false } }],
+        }),
+        row({ id: 'uncategorized', category: null }),
+      ],
+    });
+
+    expect(report.tables.find((table) => table.key === 'categoryTotals')?.rows).toEqual([
+      expect.objectContaining({ id: '__uncategorized__', count: 1 }),
+    ]);
+  });
+
+  it('filters by reconciliation state', () => {
+    const rows = [
+      row({ id: 'reconciled', reconciled: true }),
+      row({ id: 'unreconciled', reconciled: false }),
+    ];
+
+    const reconciledQuery = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', reconciledState: 'reconciled' });
+    const unreconciledQuery = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', reconciledState: 'unreconciled' });
+    const anyQuery = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31' });
+
+    const reconciledTotal = buildOverviewReport({ query: reconciledQuery, rows }).tables
+      .find((table) => table.key === 'topSpendingCategories')?.rows.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+    const unreconciledTotal = buildOverviewReport({ query: unreconciledQuery, rows }).tables
+      .find((table) => table.key === 'topSpendingCategories')?.rows.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+    const anyTotal = buildOverviewReport({ query: anyQuery, rows }).tables
+      .find((table) => table.key === 'topSpendingCategories')?.rows.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+
+    expect(reconciledTotal).toBe(1);
+    expect(unreconciledTotal).toBe(1);
+    expect(anyTotal).toBe(2);
+  });
+
+  it('defaults every new predicate to inert', () => {
+    const query = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31' });
+
+    expect(query.minAmount).toBeUndefined();
+    expect(query.maxAmount).toBeUndefined();
+    expect(query.searchText).toBeUndefined();
+    expect(query.onlyUncategorized).toBe(false);
+    expect(query.reconciledState).toBe('any');
+  });
+
+  it('warns when a predicate narrows the result set', () => {
+    const query = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', searchText: 'insurance' });
+    const report = buildOverviewReport({ query, rows: [row({ id: 'no-match', description: 'Groceries' })] });
+
+    expect(report.metadata.warnings).toContain('Results are limited to rows matching "insurance".');
+  });
 });
