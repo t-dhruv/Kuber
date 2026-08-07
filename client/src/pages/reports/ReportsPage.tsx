@@ -49,6 +49,7 @@ const STANDARD_TABS = new Set<ReportTab>([
   "audit",
   "networth",
   "investmentperformance",
+  "benchmarks",
 ]);
 
 type SelectOption = {

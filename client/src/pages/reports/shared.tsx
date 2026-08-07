@@ -203,6 +203,7 @@ export const TAB_GROUPS: {
       { value: "account", label: "Accounts" },
       { value: "merchant", label: "Merchants" },
       { value: "audit", label: "Audit" },
+      { value: "benchmarks", label: "Benchmarks" },
     ],
   },
   {
@@ -217,12 +218,8 @@ export const TAB_GROUPS: {
     id: "advanced",
     label: "Legacy",
     tabs: [
-      { value: "savings", label: "Savings" },
-      { value: "spending", label: "Spending" },
-      { value: "variance", label: "Variance" },
       { value: "forecast", label: "Forecast" },
       { value: "tax", label: "Tax Summary" },
-      { value: "benchmarks", label: "Benchmarks" },
       { value: "assetsliabilities", label: "Assets / Liabilities" },
       { value: "allocationdrift", label: "Allocation & Drift" },
       { value: "contributionroom", label: "Contribution Room" },

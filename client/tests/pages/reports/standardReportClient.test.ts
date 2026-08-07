@@ -100,4 +100,14 @@ describe("standard report client helpers", () => {
       "/reports/standard/export/json?reportType=merchant&startDate=2026-01-01&endDate=2026-01-31&groupBy=month&includePending=false&includeTransfers=false",
     );
   });
+
+  it("maps the absorbed benchmarks tab onto its standard report type", () => {
+    expect(mapReportTabToType("benchmarks")).toBe("benchmarks");
+  });
+
+  it("still resolves the retired Legacy tab values", () => {
+    expect(mapReportTabToType("savings")).toBe("cash_flow");
+    expect(mapReportTabToType("spending")).toBe("category");
+    expect(mapReportTabToType("variance")).toBe("budget");
+  });
 });
