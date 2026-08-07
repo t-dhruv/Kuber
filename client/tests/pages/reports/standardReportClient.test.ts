@@ -249,4 +249,8 @@ describe("standard report client helpers", () => {
     expect(mapReportTabToType("spending")).toBe("category");
     expect(mapReportTabToType("variance")).toBe("budget");
   });
+
+  it("maps the absorbed forecast tab onto the cash flow forecast report type", () => {
+    expect(mapReportTabToType("forecast")).toBe("cash_flow_forecast");
+  });
 });

@@ -197,6 +197,7 @@ export const TAB_GROUPS: {
       { value: "overview", label: "Overview" },
       { value: "income", label: "Income vs Expense" },
       { value: "cashflow", label: "Cash Flow" },
+      { value: "forecast", label: "Forecast" },
       { value: "category", label: "Categories" },
       { value: "budget", label: "Budgets" },
       { value: "tag", label: "Tags" },
@@ -223,7 +224,6 @@ export const TAB_GROUPS: {
     id: "advanced",
     label: "Legacy",
     tabs: [
-      { value: "forecast", label: "Forecast" },
       { value: "tax", label: "Tax Summary" },
     ],
   },
