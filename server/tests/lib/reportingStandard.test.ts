@@ -13,6 +13,10 @@ import {
   buildOverviewReport,
   buildReportDrilldown,
   buildTagReport,
+  buildAllocationReport,
+  buildContributionRoomReport,
+  buildDividendForecastReport,
+  buildRetirementReport,
   normalizeReportQuery,
   type StandardReportRow,
 } from '../../src/lib/reporting/standard';
@@ -552,5 +556,167 @@ describe('standard reporting module', () => {
     const report = buildOverviewReport({ query, rows: [row({ id: 'no-match', description: 'Groceries' })] });
 
     expect(report.metadata.warnings).toContain('Results are limited to rows matching "insurance".');
+  });
+
+  const wealthQuery = (reportType: string) =>
+    normalizeReportQuery({ reportType, startDate: '2026-01-01', endDate: '2026-01-31', currencyCode: 'CAD' });
+
+  const allocationContext = {
+    totalValue: new Decimal('10000.00'),
+    byAssetClass: [
+      { assetClass: 'US Stocks', value: new Decimal('6000.00'), percent: new Decimal('60'), targetPercent: new Decimal('50') },
+      { assetClass: 'Bonds', value: new Decimal('4000.00'), percent: new Decimal('40'), targetPercent: new Decimal('30') },
+    ],
+  };
+
+  const contributionRoomContext = {
+    accounts: [
+      { id: 'tax-1', name: 'TFSA', type: 'TFSA', memberName: 'Ada', contributionsYtd: new Decimal('5000.00'), totalRoomEver: new Decimal('88000.00'), roomRemaining: new Decimal('83000.00'), overContribution: new Decimal('0'), pctUsed: 6, alert: 'ok' as const },
+      { id: 'tax-2', name: 'RRSP', type: 'RRSP', memberName: null, contributionsYtd: new Decimal('2000.00'), totalRoomEver: new Decimal('32490.00'), roomRemaining: new Decimal('30490.00'), overContribution: new Decimal('0'), pctUsed: 6, alert: 'ok' as const },
+    ],
+  };
+
+  const dividendForecastContext = {
+    years: 5,
+    forecast: [
+      { year: 2026, income: new Decimal('120.00') },
+      { year: 2027, income: new Decimal('120.00') },
+    ],
+    byHolding: [
+      { symbol: 'ABC', name: 'ABC Fund', annualIncome: new Decimal('80.00') },
+      { symbol: 'XYZ', name: 'XYZ Fund', annualIncome: new Decimal('40.00') },
+    ],
+    basedOn: '2 holdings, live prices + dividend yields',
+  };
+
+  const retirementContext = {
+    portfolioValue: new Decimal('100000.00'),
+    projectionYears: 30,
+    scenarios: [
+      { label: 'Conservative', returnRate: 0.05, endingBalance: new Decimal('432194.24') },
+      { label: 'Base case', returnRate: 0.07, endingBalance: new Decimal('761225.50') },
+    ],
+    note: 'Deterministic projections.',
+  };
+
+  it('builds an allocation and drift report from an investment allocation context', () => {
+    const report = buildAllocationReport({ query: wealthQuery('allocation'), rows: [], allocation: allocationContext });
+
+    expect(report.summaryCards.length).toBeGreaterThan(0);
+    expect(report.charts.length).toBeGreaterThan(0);
+    expect(report.summaryCards.find((item) => item.key === 'totalValue')?.value).toBe('10000.00');
+    const drift = report.charts.find((chart) => chart.key === 'allocationDrift');
+    expect(drift?.kind).toBe('bar');
+    expect(drift && 'reference' in drift ? drift.reference : undefined).toEqual({ value: 0, label: 'On target' });
+    expect(drift && 'data' in drift ? drift.data : []).toEqual([
+      { assetClass: 'US Stocks', drift: 10 },
+      { assetClass: 'Bonds', drift: 10 },
+    ]);
+  });
+
+  it('builds a contribution room report with stacked contributed and remaining series', () => {
+    const report = buildContributionRoomReport({ query: wealthQuery('contribution_room'), rows: [], contributionRoom: contributionRoomContext });
+
+    expect(report.summaryCards.find((item) => item.key === 'totalRoom')?.value).toBe('120490.00');
+    expect(report.summaryCards.find((item) => item.key === 'totalContributed')?.value).toBe('7000.00');
+    expect(report.summaryCards.find((item) => item.key === 'totalRemaining')?.value).toBe('113490.00');
+    const chart = report.charts.find((item) => item.key === 'contributionRoomByType');
+    expect(chart && 'series' in chart ? chart.series.map((series) => series.stack) : []).toEqual(['room', 'room']);
+    expect(report.tables.find((table) => table.key === 'contributionRoom')?.rows).toHaveLength(2);
+  });
+
+  it('builds a dividend forecast report over the default five-year horizon', () => {
+    const report = buildDividendForecastReport({ query: wealthQuery('dividend_forecast'), rows: [], dividendForecast: dividendForecastContext });
+
+    expect(report.summaryCards.find((item) => item.key === 'firstYearIncome')?.value).toBe('120.00');
+    expect(report.summaryCards.find((item) => item.key === 'horizonIncome')?.value).toBe('240.00');
+    expect(report.charts.map((chart) => chart.key)).toEqual(['dividendByYear', 'dividendByHolding']);
+    expect(report.metadata.calculationNotes).toContain('2 holdings, live prices + dividend yields');
+    expect(report.metadata.calculationNotes).toContain('The forecast horizon is fixed at 5 years and is not derived from the report date range.');
+  });
+
+  it('builds a retirement simulation report with one line series per scenario', () => {
+    const report = buildRetirementReport({ query: wealthQuery('retirement'), rows: [], retirement: retirementContext });
+
+    expect(report.summaryCards.find((item) => item.key === 'portfolioValue')?.value).toBe('100000.00');
+    const chart = report.charts.find((item) => item.key === 'retirementProjection');
+    expect(chart?.kind).toBe('line');
+    expect(chart && 'series' in chart ? chart.series.map((series) => series.label) : []).toEqual(['Conservative', 'Base case']);
+    expect(chart && 'series' in chart ? chart.series.every((series) => series.format === 'currency') : false).toBe(true);
+    // 30 projection years plus year zero.
+    expect(chart && 'data' in chart ? chart.data.length : 0).toBe(31);
+    expect(chart && 'data' in chart ? chart.data[0] : {}).toEqual({ year: '0', conservative: '100000.00', base_case: '100000.00' });
+  });
+
+  it('returns wealth-backed reports without throwing when the context is missing', () => {
+    const reports = [
+      buildAllocationReport({ query: wealthQuery('allocation'), rows: [] }),
+      buildContributionRoomReport({ query: wealthQuery('contribution_room'), rows: [] }),
+      buildDividendForecastReport({ query: wealthQuery('dividend_forecast'), rows: [] }),
+      buildRetirementReport({ query: wealthQuery('retirement'), rows: [] }),
+    ];
+
+    for (const report of reports) {
+      expect(report.metadata.warnings.length).toBeGreaterThan(0);
+      expect(report.charts.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('warns that inapplicable filters were ignored on wealth-backed reports', () => {
+    const filtered = normalizeReportQuery({ reportType: 'allocation', startDate: '2026-01-01', endDate: '2026-01-31', categoryIds: 'cat-food' });
+    const report = buildAllocationReport({ query: filtered, rows: [], allocation: allocationContext });
+
+    expect(report.metadata.warnings).toContain('Some active filters do not apply to this report and were ignored.');
+    expect(report.metadata.calculationNotes).toContain('This report reads Account and investment holding data. Category, tag, merchant, amount and search filters do not apply to it.');
+    expect(buildAllocationReport({ query: wealthQuery('allocation'), rows: [], allocation: allocationContext }).metadata.warnings)
+      .not.toContain('Some active filters do not apply to this report and were ignored.');
+  });
+
+  it('keeps wealth-backed partition charts free of negative slices', () => {
+    const reports = [
+      buildAllocationReport({ query: wealthQuery('allocation'), rows: [], allocation: allocationContext }),
+      buildDividendForecastReport({ query: wealthQuery('dividend_forecast'), rows: [], dividendForecast: dividendForecastContext }),
+      buildContributionRoomReport({ query: wealthQuery('contribution_room'), rows: [], contributionRoom: contributionRoomContext }),
+      buildRetirementReport({ query: wealthQuery('retirement'), rows: [], retirement: retirementContext }),
+    ];
+
+    for (const report of reports) {
+      for (const chart of report.charts) {
+        if (!('valueKey' in chart)) continue;
+        for (const dataRow of chart.data) {
+          expect(Number(dataRow[chart.valueKey])).toBeGreaterThanOrEqual(0);
+        }
+      }
+    }
+  });
+
+  it('adds the assets and liabilities breakdown to the net worth report', () => {
+    const report = buildNetWorthReport({
+      query: wealthQuery('net_worth'),
+      rows: [],
+      wealth: {
+        cashValue: new Decimal('1000.00'),
+        investmentValue: new Decimal('2500.00'),
+        manualAssetValue: new Decimal('750.00'),
+        manualLiabilityValue: new Decimal('300.00'),
+        accountContributions: [],
+        snapshots: [],
+        liabilityBreakdown: [
+          { key: 'mortgage', label: 'Mortgage', value: new Decimal('200.00') },
+          { key: 'creditCard', label: 'Credit cards', value: new Decimal('100.00') },
+          { key: 'other', label: 'Other liabilities', value: new Decimal('0') },
+        ],
+      },
+    });
+
+    expect(report.tables.find((table) => table.key === 'assetBreakdown')?.rows).toEqual([
+      expect.objectContaining({ id: 'cash', label: 'Cash & bank', value: '1000.00' }),
+      expect.objectContaining({ id: 'investments', label: 'Investments', value: '2500.00' }),
+      expect.objectContaining({ id: 'manualAssets', label: 'Other assets', value: '750.00' }),
+    ]);
+    expect(report.tables.find((table) => table.key === 'liabilityBreakdown')?.rows).toHaveLength(3);
+    const chart = report.charts.find((item) => item.key === 'assetsVsLiabilities');
+    expect(chart?.kind).toBe('groupedBar');
+    expect(chart && 'data' in chart ? chart.data : []).toHaveLength(6);
   });
 });

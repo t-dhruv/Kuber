@@ -12,7 +12,11 @@ export type StandardReportType =
   | "merchant"
   | "audit"
   | "net_worth"
-  | "investment";
+  | "investment"
+  | "allocation"
+  | "contribution_room"
+  | "dividend_forecast"
+  | "retirement";
 
 export type StandardGroupBy = "day" | "week" | "month" | "quarter" | "year";
 export type StandardReportTab = ReportTab | "category" | "budget" | "tag" | "account" | "merchant" | "audit";
@@ -164,6 +168,11 @@ const TAB_TO_TYPE: Partial<Record<StandardReportTab, StandardReportType>> = {
   audit: "audit",
   networth: "net_worth",
   investmentperformance: "investment",
+  assetsliabilities: "net_worth",
+  allocationdrift: "allocation",
+  contributionroom: "contribution_room",
+  dividendforecast: "dividend_forecast",
+  retirementsimulation: "retirement",
 };
 
 const TYPE_TO_TAB: Partial<Record<StandardReportType, StandardReportTab>> = {
@@ -178,6 +187,10 @@ const TYPE_TO_TAB: Partial<Record<StandardReportType, StandardReportTab>> = {
   audit: "audit",
   net_worth: "networth",
   investment: "investmentperformance",
+  allocation: "allocationdrift",
+  contribution_room: "contributionroom",
+  dividend_forecast: "dividendforecast",
+  retirement: "retirementsimulation",
 };
 
 export function mapReportTabToType(tab: StandardReportTab): StandardReportType {

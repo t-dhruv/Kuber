@@ -49,6 +49,11 @@ const STANDARD_TABS = new Set<ReportTab>([
   "audit",
   "networth",
   "investmentperformance",
+  "assetsliabilities",
+  "allocationdrift",
+  "contributionroom",
+  "dividendforecast",
+  "retirementsimulation",
 ]);
 
 type SelectOption = {

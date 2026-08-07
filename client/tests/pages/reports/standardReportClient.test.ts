@@ -18,6 +18,26 @@ describe("standard report client helpers", () => {
     expect(mapReportTabToType("investmentperformance")).toBe("investment");
   });
 
+  it("maps the absorbed wealth tabs to their standardized report types", () => {
+    expect(mapReportTabToType("assetsliabilities")).toBe("net_worth");
+    expect(mapReportTabToType("allocationdrift")).toBe("allocation");
+    expect(mapReportTabToType("contributionroom")).toBe("contribution_room");
+    expect(mapReportTabToType("dividendforecast")).toBe("dividend_forecast");
+    expect(mapReportTabToType("retirementsimulation")).toBe("retirement");
+  });
+
+  it("maps the absorbed wealth report types back to their tabs", () => {
+    const roundTrip = (reportType: string) =>
+      normalizeSavedReportFilters({ reportType, startDate: "2026-01-01", endDate: "2026-01-31" }).tab;
+
+    expect(roundTrip("allocation")).toBe("allocationdrift");
+    expect(roundTrip("contribution_room")).toBe("contributionroom");
+    expect(roundTrip("dividend_forecast")).toBe("dividendforecast");
+    expect(roundTrip("retirement")).toBe("retirementsimulation");
+    // assetsliabilities folds into net_worth, so net_worth maps back to networth.
+    expect(roundTrip("net_worth")).toBe("networth");
+  });
+
   it("builds stable standard report query params from filters", () => {
     const filters: StandardReportFilters = {
       tab: "spending",

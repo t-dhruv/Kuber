@@ -1,6 +1,9 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma as defaultPrisma } from '../prisma';
+import { getQuotes } from '../priceCache';
+import { calculateRrspRoom, calculateTfsaRoom } from '../taxRoomCalculator';
+import { getAllocation, getDividendForecast } from '../../services/investmentService';
 
 export type StandardReportType =
   | 'overview'
@@ -13,7 +16,11 @@ export type StandardReportType =
   | 'merchant'
   | 'audit'
   | 'net_worth'
-  | 'investment';
+  | 'investment'
+  | 'allocation'
+  | 'contribution_room'
+  | 'dividend_forecast'
+  | 'retirement';
 
 export type StandardGroupBy = 'day' | 'week' | 'month' | 'quarter' | 'year';
 export type SortDirection = 'asc' | 'desc';
@@ -118,6 +125,54 @@ export interface StandardWealthInput {
   manualLiabilityValue: Decimal;
   accountContributions: Array<{ id: string; name: string; value: Decimal }>;
   snapshots: Array<{ date: string; assets: Decimal; liabilities: Decimal; netWorth: Decimal }>;
+  /**
+   * Manual liabilities split by ManualLiability.type, so the Net Worth report can
+   * show the Mortgage / Credit cards / Other liabilities lines the Assets /
+   * Liabilities Legacy tab shows. Optional: an older caller that omits it still
+   * gets the single manualLiabilityValue total.
+   */
+  liabilityBreakdown?: Array<{ key: string; label: string; value: Decimal }>;
+}
+
+export interface StandardAllocationInput {
+  totalValue: Decimal;
+  byAssetClass: Array<{
+    assetClass: string;
+    value: Decimal;
+    /** Current weight in percentage points, e.g. 42.5 for 42.5%. */
+    percent: Decimal;
+    /** Target weight in percentage points. */
+    targetPercent: Decimal;
+  }>;
+}
+
+export interface StandardContributionRoomInput {
+  accounts: Array<{
+    id: string;
+    name: string;
+    type: string;
+    memberName: string | null;
+    contributionsYtd: Decimal;
+    totalRoomEver: Decimal;
+    roomRemaining: Decimal;
+    overContribution: Decimal;
+    pctUsed: number;
+    alert: 'ok' | 'warning' | 'over';
+  }>;
+}
+
+export interface StandardDividendForecastInput {
+  years: number;
+  forecast: Array<{ year: number; income: Decimal }>;
+  byHolding: Array<{ symbol: string; name: string; annualIncome: Decimal }>;
+  basedOn: string;
+}
+
+export interface StandardRetirementInput {
+  portfolioValue: Decimal;
+  projectionYears: number;
+  scenarios: Array<{ label: string; returnRate: number; endingBalance: Decimal }>;
+  note: string;
 }
 
 export interface StandardInvestmentInput {
@@ -249,6 +304,10 @@ const VALID_REPORT_TYPES = new Set<StandardReportType>([
   'audit',
   'net_worth',
   'investment',
+  'allocation',
+  'contribution_room',
+  'dividend_forecast',
+  'retirement',
 ]);
 const VALID_GROUP_BY = new Set<StandardGroupBy>(['day', 'week', 'month', 'quarter', 'year']);
 
@@ -1119,14 +1178,61 @@ export function buildNetWorthReport(input: { query: NormalizedReportQuery; rows:
       ],
     },
   ];
+  // Assets / Liabilities breakdown, absorbed from the Legacy Assets / Liabilities
+  // tab (client/src/pages/reports/components/AssetsLiabilitiesSection.tsx).
+  const assetBreakdown = [
+    { key: 'cash', label: 'Cash & bank', value: wealth?.cashValue ?? ZERO },
+    { key: 'investments', label: 'Investments', value: wealth?.investmentValue ?? ZERO },
+    { key: 'manualAssets', label: 'Other assets', value: wealth?.manualAssetValue ?? ZERO },
+  ];
+  const liabilityBreakdown = wealth?.liabilityBreakdown?.length
+    ? wealth.liabilityBreakdown
+    : [{ key: 'other', label: 'Other liabilities', value: totalLiabilities }];
+  response.charts.push({
+    kind: 'groupedBar',
+    key: 'assetsVsLiabilities',
+    title: 'Assets vs Liabilities by Account Category',
+    x: { key: 'category', label: 'Category', format: 'number' },
+    series: [
+      { key: 'assets', label: 'Assets', format: 'currency', role: 'income' },
+      { key: 'liabilities', label: 'Liabilities', format: 'currency', role: 'expense' },
+    ],
+    data: [
+      ...assetBreakdown.map((item) => ({ category: item.label, assets: money(item.value), liabilities: money(ZERO) })),
+      ...liabilityBreakdown.map((item) => ({ category: item.label, assets: money(ZERO), liabilities: money(item.value) })),
+    ],
+  });
   response.tables = [{
     key: 'accountContribution',
     title: 'Account Contribution to Net Worth',
     columns: [{ key: 'name', label: 'Account' }, { key: 'value', label: 'Value' }],
     rows: (wealth?.accountContributions ?? []).map((item) => ({ id: item.id, name: item.name, value: money(item.value), formattedValue: formatMoney(item.value, response.currencyCode) })),
+  }, {
+    key: 'assetBreakdown',
+    title: 'Assets',
+    columns: [{ key: 'label', label: 'Asset' }, { key: 'value', label: 'Value' }],
+    rows: assetBreakdown.map((item) => ({ id: item.key, label: item.label, value: money(item.value), formattedValue: formatMoney(item.value, response.currencyCode) })),
+  }, {
+    key: 'liabilityBreakdown',
+    title: 'Liabilities',
+    columns: [{ key: 'label', label: 'Liability' }, { key: 'value', label: 'Value' }],
+    rows: liabilityBreakdown.map((item) => ({ id: item.key, label: item.label, value: money(item.value), formattedValue: formatMoney(item.value, response.currencyCode) })),
   }];
   if (!wealth) response.metadata.warnings.push('No net worth snapshot or wealth context was available for the selected period.');
+  noteWealthOnlyFilters(response, input.query, 'Account, Snapshot, manual asset and manual liability data');
   return response;
+}
+
+/**
+ * These reports are not functions of StandardReportRow[], so most of the standard
+ * filter set cannot touch them. Say so, and warn when the request carries a filter
+ * that was ignored, rather than silently dropping it.
+ */
+function noteWealthOnlyFilters(response: StandardReportResponse, query: NormalizedReportQuery, sources: string) {
+  response.metadata.calculationNotes.push(`This report reads ${sources}. Category, tag, merchant, amount and search filters do not apply to it.`);
+  if (query.categoryIds.length || query.categoryGroupIds.length || query.tagIds.length || query.merchantIds.length || query.searchText) {
+    response.metadata.warnings.push('Some active filters do not apply to this report and were ignored.');
+  }
 }
 
 export function buildInvestmentReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; investments?: StandardInvestmentInput; generatedAt?: Date }): StandardReportResponse {
@@ -1255,6 +1361,10 @@ type StandardReportGenerator = (input: {
   audit?: StandardAuditContextInput;
   wealth?: StandardWealthInput;
   investments?: StandardInvestmentInput;
+  allocation?: StandardAllocationInput;
+  contributionRoom?: StandardContributionRoomInput;
+  dividendForecast?: StandardDividendForecastInput;
+  retirement?: StandardRetirementInput;
   generatedAt?: Date;
 }) => StandardReportResponse;
 
@@ -1270,6 +1380,10 @@ export const standardReportRegistry: Partial<Record<StandardReportType, Standard
   audit: buildAuditDataQualityReport,
   net_worth: buildNetWorthReport,
   investment: buildInvestmentReport,
+  allocation: buildAllocationReport,
+  contribution_room: buildContributionRoomReport,
+  dividend_forecast: buildDividendForecastReport,
+  retirement: buildRetirementReport,
 };
 
 function reportAccountForJournal(journal: {
@@ -1468,7 +1582,7 @@ export async function fetchStandardWealthContext(
       select: { id: true, name: true, type: true, balance: true, balanceDecimal: true },
     }),
     prisma.manualAsset.findMany({ where: { householdId: input.householdId, isDeleted: false }, select: { currentValue: true, currentValueDecimal: true } }),
-    prisma.manualLiability.findMany({ where: { householdId: input.householdId, isDeleted: false }, select: { currentBalance: true, currentBalanceDecimal: true } }),
+    prisma.manualLiability.findMany({ where: { householdId: input.householdId, isDeleted: false }, select: { type: true, currentBalance: true, currentBalanceDecimal: true } }),
     prisma.investmentHolding.findMany({
       where: {
         isDeleted: false,
@@ -1498,12 +1612,37 @@ export async function fetchStandardWealthContext(
     name: account.name,
     value: decimal(account.balance ?? 0),
   }));
+  // Mirrors the Mortgage / Credit cards / Other liabilities lines the Legacy
+  // Assets / Liabilities tab shows. ManualLiability.type is one of
+  // mortgage | auto_loan | student_loan | credit_card | other.
+  const liabilityGroups: Array<{ key: string; label: string; types: string[] }> = [
+    { key: 'mortgage', label: 'Mortgage', types: ['mortgage'] },
+    { key: 'creditCard', label: 'Credit cards', types: ['credit_card'] },
+  ];
+  const groupedTypes = new Set(liabilityGroups.flatMap((group) => group.types));
+  const liabilityBreakdown = [
+    ...liabilityGroups.map((group) => ({
+      key: group.key,
+      label: group.label,
+      value: manualLiabilities
+        .filter((liability) => group.types.includes(liability.type))
+        .reduce((sum, liability) => sum.plus(decimal(liability.currentBalance ?? 0)), ZERO),
+    })),
+    {
+      key: 'other',
+      label: 'Other liabilities',
+      value: manualLiabilities
+        .filter((liability) => !groupedTypes.has(liability.type))
+        .reduce((sum, liability) => sum.plus(decimal(liability.currentBalance ?? 0)), ZERO),
+    },
+  ];
   return {
     cashValue,
     investmentValue,
     manualAssetValue,
     manualLiabilityValue,
     accountContributions,
+    liabilityBreakdown,
     // NetWorthSnapshot intentionally still prefers the Decimal column. These
     // rows are immutable history: once written they are never updated, so the
     // Decimal and the Float agree by construction and cannot drift.
@@ -1568,5 +1707,426 @@ export async function fetchStandardInvestmentContext(
     }),
     dividendTotal: holdings.reduce((sum, holding) => sum.plus(holding.dividends.reduce((inner, dividend) => inner.plus(decimal(dividend.amountDecimal)), ZERO)), ZERO),
     recurringInvestmentCount: holdings.reduce((sum, holding) => sum + holding.recurringInvestments.length, 0),
+  };
+}
+
+// ─── Wealth-backed report builders (absorbed Legacy tabs) ─────────────────────
+//
+// These four report types are not functions of StandardReportRow[]. They follow
+// the established buildNetWorthReport / buildInvestmentReport pattern: a context
+// object is fetched separately in buildStandardReportForRequest and `filtered: []`
+// is passed to baseResponse.
+
+export function buildAllocationReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; allocation?: StandardAllocationInput; generatedAt?: Date }): StandardReportResponse {
+  const response = baseResponse({ ...input, filtered: [], title: 'Allocation & Drift Report' });
+  const allocation = input.allocation;
+  const byAssetClass = allocation?.byAssetClass ?? [];
+  const totalValue = allocation?.totalValue ?? ZERO;
+  const largestDrift = byAssetClass.reduce((worst, item) => {
+    const drift = item.percent.minus(item.targetPercent);
+    return drift.abs().gt(worst.abs()) ? drift : worst;
+  }, ZERO);
+
+  response.summaryCards = [
+    card('totalValue', 'Portfolio Value', totalValue, response.currencyCode),
+    { key: 'assetClassCount', label: 'Asset Classes', value: String(byAssetClass.length), formattedValue: String(byAssetClass.length) },
+    { key: 'largestDrift', label: 'Largest Drift', value: largestDrift.toDecimalPlaces(2).toFixed(2), formattedValue: `${largestDrift.gte(ZERO) ? '+' : ''}${largestDrift.toDecimalPlaces(1).toFixed(1)}%` },
+  ];
+
+  response.charts = [
+    {
+      kind: 'donut',
+      key: 'allocationByAssetClass',
+      title: 'Current Allocation by Asset Class',
+      nameKey: 'name',
+      valueKey: 'value',
+      format: 'currency',
+      data: byAssetClass.map((item) => ({ name: item.assetClass, value: money(item.value) })),
+    },
+    {
+      kind: 'groupedBar',
+      key: 'allocationTargetVsCurrent',
+      title: 'Target vs Current Weight',
+      x: { key: 'assetClass', label: 'Asset Class', format: 'number' },
+      series: [
+        { key: 'current', label: 'Current', format: 'percent', role: 'actual' },
+        { key: 'target', label: 'Target', format: 'percent', role: 'budget' },
+      ],
+      data: byAssetClass.map((item) => ({
+        assetClass: item.assetClass,
+        current: item.percent.toDecimalPlaces(2).toNumber(),
+        target: item.targetPercent.toDecimalPlaces(2).toNumber(),
+      })),
+    },
+    {
+      kind: 'bar',
+      key: 'allocationDrift',
+      title: 'Drift from Target (percentage points)',
+      x: { key: 'assetClass', label: 'Asset Class', format: 'number' },
+      series: [{ key: 'drift', label: 'Drift', format: 'percent', role: 'net' }],
+      data: byAssetClass.map((item) => ({
+        assetClass: item.assetClass,
+        drift: item.percent.minus(item.targetPercent).toDecimalPlaces(2).toNumber(),
+      })),
+      reference: { value: 0, label: 'On target' },
+    },
+  ];
+
+  response.tables = [{
+    key: 'allocationDrift',
+    title: 'Allocation & Drift',
+    columns: [
+      { key: 'assetClass', label: 'Asset Class' },
+      { key: 'value', label: 'Value' },
+      { key: 'current', label: 'Current %' },
+      { key: 'target', label: 'Target %' },
+      { key: 'drift', label: 'Drift' },
+    ],
+    rows: byAssetClass.map((item) => ({
+      id: item.assetClass,
+      assetClass: item.assetClass,
+      value: money(item.value),
+      formattedValue: formatMoney(item.value, response.currencyCode),
+      current: item.percent.toDecimalPlaces(2).toFixed(2),
+      target: item.targetPercent.toDecimalPlaces(2).toFixed(2),
+      drift: item.percent.minus(item.targetPercent).toDecimalPlaces(2).toFixed(2),
+    })),
+  }];
+
+  if (!allocation) response.metadata.warnings.push('No investment allocation context was available.');
+  else if (!byAssetClass.length) response.metadata.warnings.push('No investment holdings were found. Add holdings to see allocation drift.');
+  response.metadata.calculationNotes.push('Target weights are the built-in defaults (US Stocks 50%, Bonds 30%, International Stocks 15%, Cash 5%); asset classes without a default target compare against 0%.');
+  noteWealthOnlyFilters(response, input.query, 'Account and investment holding data');
+  return response;
+}
+
+export function buildContributionRoomReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; contributionRoom?: StandardContributionRoomInput; generatedAt?: Date }): StandardReportResponse {
+  const response = baseResponse({ ...input, filtered: [], title: 'Contribution Room Report' });
+  const accounts = input.contributionRoom?.accounts ?? [];
+  const totalRoom = accounts.reduce((sum, account) => sum.plus(account.totalRoomEver), ZERO);
+  const totalContributed = accounts.reduce((sum, account) => sum.plus(account.contributionsYtd), ZERO);
+  const totalRemaining = accounts.reduce((sum, account) => sum.plus(account.roomRemaining), ZERO);
+  const totalOver = accounts.reduce((sum, account) => sum.plus(account.overContribution), ZERO);
+
+  response.summaryCards = [
+    card('totalRoom', 'Total Room', totalRoom, response.currencyCode),
+    card('totalContributed', 'Total Contributed', totalContributed, response.currencyCode),
+    card('totalRemaining', 'Remaining Room', totalRemaining, response.currencyCode),
+    card('totalOverContribution', 'Over-contribution', totalOver, response.currencyCode),
+  ];
+
+  const byType = new Map<string, { contributed: Decimal; remaining: Decimal }>();
+  for (const account of accounts) {
+    const existing = byType.get(account.type) ?? { contributed: ZERO, remaining: ZERO };
+    existing.contributed = existing.contributed.plus(account.contributionsYtd);
+    existing.remaining = existing.remaining.plus(account.roomRemaining);
+    byType.set(account.type, existing);
+  }
+
+  response.charts = [{
+    kind: 'groupedBar',
+    key: 'contributionRoomByType',
+    title: 'Contributed vs Remaining Room by Account Type',
+    x: { key: 'accountType', label: 'Account Type', format: 'number' },
+    series: [
+      // Shared stack group, so the full bar height reads as the total room.
+      { key: 'contributed', label: 'Contributed', format: 'currency', role: 'actual', stack: 'room' },
+      { key: 'remaining', label: 'Remaining', format: 'currency', role: 'budget', stack: 'room' },
+    ],
+    data: Array.from(byType.entries()).map(([accountType, totals]) => ({
+      accountType,
+      contributed: money(totals.contributed),
+      remaining: money(totals.remaining),
+    })),
+  }];
+
+  response.tables = [{
+    key: 'contributionRoom',
+    title: 'Contribution Room by Account',
+    columns: [
+      { key: 'type', label: 'Type' },
+      { key: 'name', label: 'Account' },
+      { key: 'memberName', label: 'Member' },
+      { key: 'contributionsYtd', label: 'Contributed YTD' },
+      { key: 'roomRemaining', label: 'Room Remaining' },
+      { key: 'overContribution', label: 'Over-contribution' },
+      { key: 'pctUsed', label: '% Used' },
+      { key: 'alert', label: 'Status' },
+    ],
+    rows: accounts.map((account) => ({
+      id: account.id,
+      type: account.type,
+      name: account.name,
+      memberName: account.memberName,
+      contributionsYtd: money(account.contributionsYtd),
+      roomRemaining: money(account.roomRemaining),
+      overContribution: money(account.overContribution),
+      pctUsed: account.pctUsed,
+      alert: account.alert,
+    })),
+  }];
+
+  if (!input.contributionRoom) response.metadata.warnings.push('No tax account context was available.');
+  else if (!accounts.length) response.metadata.warnings.push('No tax-advantaged accounts have been configured yet.');
+  if (totalOver.gt(ZERO)) response.metadata.warnings.push('One or more tax accounts are over-contributed.');
+  noteWealthOnlyFilters(response, input.query, 'TaxAccount contribution and room data');
+  return response;
+}
+
+export function buildDividendForecastReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; dividendForecast?: StandardDividendForecastInput; generatedAt?: Date }): StandardReportResponse {
+  const response = baseResponse({ ...input, filtered: [], title: 'Dividend Forecast Report' });
+  const forecast = input.dividendForecast?.forecast ?? [];
+  const byHolding = (input.dividendForecast?.byHolding ?? []).filter((item) => item.annualIncome.gt(ZERO));
+  const firstYear = forecast[0]?.income ?? ZERO;
+  const horizonTotal = forecast.reduce((sum, point) => sum.plus(point.income), ZERO);
+
+  response.summaryCards = [
+    card('firstYearIncome', 'Projected Income (Year 1)', firstYear, response.currencyCode),
+    card('horizonIncome', `Projected Income (${input.dividendForecast?.years ?? forecast.length} Years)`, horizonTotal, response.currencyCode),
+    { key: 'payingHoldings', label: 'Dividend-paying Holdings', value: String(byHolding.length), formattedValue: String(byHolding.length) },
+  ];
+
+  response.charts = [
+    {
+      kind: 'bar',
+      key: 'dividendByYear',
+      title: 'Projected Dividend Income by Year',
+      x: { key: 'year', label: 'Year', format: 'number' },
+      series: [{ key: 'income', label: 'Projected Income', format: 'currency', role: 'income' }],
+      data: forecast.map((point) => ({ year: String(point.year), income: money(point.income) })),
+    },
+    {
+      kind: 'donut',
+      key: 'dividendByHolding',
+      title: 'Projected Dividends by Holding',
+      nameKey: 'name',
+      valueKey: 'value',
+      format: 'currency',
+      data: byHolding.map((item) => ({ name: item.symbol, value: money(item.annualIncome) })),
+    },
+  ];
+
+  response.tables = [{
+    key: 'dividendForecast',
+    title: 'Dividend Forecast',
+    columns: [{ key: 'year', label: 'Year' }, { key: 'income', label: 'Projected Income' }],
+    rows: forecast.map((point) => ({
+      id: String(point.year),
+      year: point.year,
+      income: money(point.income),
+      formattedIncome: formatMoney(point.income, response.currencyCode),
+    })),
+  }];
+
+  if (!input.dividendForecast) response.metadata.warnings.push('No dividend forecast context was available.');
+  else if (!forecast.length || horizonTotal.eq(ZERO)) response.metadata.warnings.push('No dividend-paying holdings were found. Add investments to see a dividend forecast.');
+  if (input.dividendForecast?.basedOn) response.metadata.calculationNotes.push(input.dividendForecast.basedOn);
+  response.metadata.calculationNotes.push(`The forecast horizon is fixed at ${input.dividendForecast?.years ?? 5} years and is not derived from the report date range.`);
+  noteWealthOnlyFilters(response, input.query, 'investment holding and live dividend-yield data');
+  return response;
+}
+
+export function buildRetirementReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; retirement?: StandardRetirementInput; generatedAt?: Date }): StandardReportResponse {
+  const response = baseResponse({ ...input, filtered: [], title: 'Retirement Simulation Report' });
+  const retirement = input.retirement;
+  const scenarios = retirement?.scenarios ?? [];
+  const projectionYears = retirement?.projectionYears ?? 30;
+  const portfolioValue = retirement?.portfolioValue ?? ZERO;
+
+  response.summaryCards = [
+    card('portfolioValue', 'Portfolio Value', portfolioValue, response.currencyCode),
+    { key: 'projectionYears', label: 'Projection Horizon', value: String(projectionYears), formattedValue: `${projectionYears} years` },
+    ...scenarios.map((scenario) => card(`scenario_${scenario.label.replace(/\s+/g, '_').toLowerCase()}`, `${scenario.label} (${(scenario.returnRate * 100).toFixed(0)}%/yr)`, scenario.endingBalance, response.currencyCode)),
+  ];
+
+  // One series per scenario, sampled yearly, so the report draws the growth paths
+  // the Legacy tab only stated as ending balances.
+  const years = Array.from({ length: projectionYears + 1 }, (_, index) => index);
+  response.charts = [{
+    kind: 'line',
+    key: 'retirementProjection',
+    title: 'Projected Portfolio Value by Scenario',
+    x: { key: 'year', label: 'Years from now', format: 'number' },
+    series: scenarios.map((scenario) => ({
+      key: scenario.label.replace(/\s+/g, '_').toLowerCase(),
+      label: scenario.label,
+      format: 'currency' as const,
+      role: 'categorical' as const,
+    })),
+    data: years.map((year) => {
+      const point: ChartRow = { year: String(year) };
+      for (const scenario of scenarios) {
+        point[scenario.label.replace(/\s+/g, '_').toLowerCase()] = money(portfolioValue.times(decimal(1 + scenario.returnRate).pow(year)));
+      }
+      return point;
+    }),
+  }];
+
+  response.tables = [{
+    key: 'retirementScenarios',
+    title: 'Scenarios',
+    columns: [
+      { key: 'label', label: 'Scenario' },
+      { key: 'returnRate', label: 'Assumed Annual Return' },
+      { key: 'endingBalance', label: `Projected Balance After ${projectionYears} Years` },
+    ],
+    rows: scenarios.map((scenario) => ({
+      id: scenario.label,
+      label: scenario.label,
+      returnRate: `${(scenario.returnRate * 100).toFixed(0)}%`,
+      endingBalance: money(scenario.endingBalance),
+      formattedEndingBalance: formatMoney(scenario.endingBalance, response.currencyCode),
+    })),
+  }];
+
+  if (!retirement) response.metadata.warnings.push('No retirement simulation context was available.');
+  else if (!scenarios.length || portfolioValue.eq(ZERO)) response.metadata.warnings.push('No portfolio data is available. Add investments to run retirement simulations.');
+  if (retirement?.note) response.metadata.calculationNotes.push(retirement.note);
+  noteWealthOnlyFilters(response, input.query, 'investment holding data');
+  return response;
+}
+
+// ─── Wealth-backed context fetchers ──────────────────────────────────────────
+
+/**
+ * Default target weights. Absorbed from TARGET_ALLOCATION in the Legacy
+ * client/src/pages/reports/components/AllocationDriftSection.tsx, which hardcoded
+ * them client-side. Asset classes with no entry target 0%.
+ */
+const DEFAULT_TARGET_ALLOCATION: Record<string, number> = {
+  'US Stocks': 50,
+  Bonds: 30,
+  'International Stocks': 15,
+  Cash: 5,
+};
+
+export async function fetchStandardAllocationContext(input: { householdId: string }): Promise<StandardAllocationInput> {
+  // Shares getAllocation with GET /api/v1/investments/allocation; changing the
+  // allocation maths there changes this report too, by design.
+  const allocation = await getAllocation(input.householdId);
+  return {
+    totalValue: decimal(allocation.totalValue),
+    byAssetClass: allocation.byAssetClass.map((item) => ({
+      assetClass: item.assetClass,
+      value: decimal(item.value),
+      percent: decimal(item.percent),
+      targetPercent: decimal(DEFAULT_TARGET_ALLOCATION[item.assetClass] ?? 0),
+    })),
+  };
+}
+
+export async function fetchStandardContributionRoomContext(
+  input: { householdId: string },
+  prisma: Pick<PrismaClient, 'taxAccount'> = defaultPrisma,
+): Promise<StandardContributionRoomInput> {
+  // Reproduces the per-account mapping in GET /api/v1/tax-accounts/household-summary
+  // (server/src/routes/taxAccounts.ts). The CRA room rules themselves are shared:
+  // both callers use calculateTfsaRoom / calculateRrspRoom from lib/taxRoomCalculator.
+  // If that route's mapping changes, change it here too.
+  const accounts = await prisma.taxAccount.findMany({ where: { householdId: input.householdId } });
+  const currentYear = new Date().getFullYear();
+  return {
+    accounts: accounts.map((account) => {
+      let roomRemaining = 0;
+      let overContribution = 0;
+      if (account.type === 'TFSA' && account.birthYear) {
+        const calc = calculateTfsaRoom(account.birthYear, currentYear, account.contributionsYtd, account.withdrawalsYtd);
+        roomRemaining = calc.roomRemaining;
+        overContribution = calc.overContribution;
+      } else if (account.type === 'RRSP') {
+        const calc = calculateRrspRoom(currentYear, account.contributionsYtd, account.totalRoomEver);
+        roomRemaining = calc.roomRemaining;
+        overContribution = calc.overContribution;
+      } else {
+        roomRemaining = Math.max(0, account.totalRoomEver - account.contributionsYtd);
+      }
+      const pctUsed = account.totalRoomEver > 0 ? (account.contributionsYtd / account.totalRoomEver) * 100 : 0;
+      return {
+        id: account.id,
+        name: account.name,
+        type: account.type,
+        memberName: account.memberName,
+        contributionsYtd: decimal(account.contributionsYtd),
+        totalRoomEver: decimal(account.totalRoomEver),
+        roomRemaining: decimal(roomRemaining),
+        overContribution: decimal(overContribution),
+        pctUsed: Math.min(100, Math.round(pctUsed)),
+        alert: overContribution > 0 ? 'over' : pctUsed > 90 ? 'warning' : 'ok',
+      };
+    }),
+  };
+}
+
+/** The Legacy Dividend Forecast tab hardcoded years=5; keep five years as the default. */
+const DIVIDEND_FORECAST_YEARS = 5;
+
+export async function fetchStandardDividendForecastContext(
+  input: { householdId: string },
+  prisma: Pick<PrismaClient, 'investmentHolding'> = defaultPrisma,
+): Promise<StandardDividendForecastInput> {
+  // The yearly totals come from getDividendForecast, shared with
+  // GET /api/v1/investments/dividend-forecast. That function returns no
+  // per-holding split, so the donut recomputes shares * price * dividendYield
+  // per holding with the same inputs.
+  const [summary, holdings] = await Promise.all([
+    getDividendForecast(input.householdId, DIVIDEND_FORECAST_YEARS),
+    prisma.investmentHolding.findMany({
+      where: { isDeleted: false, account: { householdId: input.householdId, isDeleted: false } },
+      select: { symbol: true, name: true, shares: true, currentPrice: true },
+    }),
+  ]);
+  const quotes = await getQuotes(holdings.map((holding) => holding.symbol));
+  return {
+    years: DIVIDEND_FORECAST_YEARS,
+    forecast: summary.forecast.map((point) => ({ year: point.year, income: decimal(point.income) })),
+    byHolding: holdings.map((holding) => {
+      const quote = quotes.get(holding.symbol.toUpperCase());
+      const price = quote?.price ?? holding.currentPrice ?? 0;
+      const dividendYield = quote?.dividendYield ?? 0;
+      return {
+        symbol: holding.symbol,
+        name: holding.name,
+        annualIncome: decimal(holding.shares).times(decimal(price)).times(decimal(dividendYield)),
+      };
+    }),
+    basedOn: summary.basedOn,
+  };
+}
+
+/**
+ * Deterministic compound-growth projections, reproducing the ~30 lines inside
+ * GET /api/v1/investments/retirement-simulation (server/src/routeModules/investments.ts).
+ * There is no Monte Carlo and no per-request iteration, so this is cheap enough to
+ * re-run on every filter change. If that route gains real probabilistic modelling,
+ * extract it into server/src/lib/ and have both callers share it.
+ */
+const RETIREMENT_PROJECTION_YEARS = 30;
+const RETIREMENT_SCENARIOS: Array<{ label: string; returnRate: number }> = [
+  { label: 'Conservative', returnRate: 0.05 },
+  { label: 'Base case', returnRate: 0.07 },
+  { label: 'Growth', returnRate: 0.09 },
+];
+
+export async function fetchStandardRetirementContext(
+  input: { householdId: string },
+  prisma: Pick<PrismaClient, 'investmentHolding'> = defaultPrisma,
+): Promise<StandardRetirementInput> {
+  const holdings = await prisma.investmentHolding.findMany({
+    where: { isDeleted: false, account: { householdId: input.householdId, isDeleted: false } },
+    select: { shares: true, currentPrice: true, costBasis: true },
+  });
+  const portfolioValue = holdings.reduce(
+    (sum, holding) => sum.plus(decimal(holding.shares ?? 0).times(decimal(holding.currentPrice ?? holding.costBasis ?? 0))),
+    ZERO,
+  );
+  return {
+    portfolioValue,
+    projectionYears: RETIREMENT_PROJECTION_YEARS,
+    scenarios: RETIREMENT_SCENARIOS.map((scenario) => ({
+      label: scenario.label,
+      returnRate: scenario.returnRate,
+      endingBalance: portfolioValue.times(decimal(1 + scenario.returnRate).pow(RETIREMENT_PROJECTION_YEARS)),
+    })),
+    note: 'Deterministic projections of your current portfolio value compounded at fixed assumed annual return rates over 30 years. Assumes no future contributions or withdrawals. These are illustrative scenarios, not predictions or probabilities.',
   };
 }
