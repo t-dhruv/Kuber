@@ -26,6 +26,10 @@ import {
   fetchStandardBudgetLimits,
   fetchStandardInvestmentContext,
   fetchStandardWealthContext,
+  fetchStandardAllocationContext,
+  fetchStandardContributionRoomContext,
+  fetchStandardDividendForecastContext,
+  fetchStandardRetirementContext,
   fetchStandardReportRows,
   normalizeReportQuery,
   standardReportRegistry,
@@ -151,6 +155,10 @@ const STANDARD_REPORT_LABELS: Record<StandardReportType, string> = {
   net_worth: 'Net Worth Report',
   investment: 'Investment Report',
   benchmarks: 'Benchmarks Report',
+  allocation: 'Allocation & Drift Report',
+  contribution_room: 'Contribution Room Report',
+  dividend_forecast: 'Dividend Forecast Report',
+  retirement: 'Retirement Simulation Report',
 };
 
 router.get('/standard/options', async (req: AuthRequest, res: Response) => {
@@ -241,7 +249,19 @@ async function buildStandardReportForRequest(req: AuthRequest): Promise<Standard
   const investments = query.reportType === 'investment'
     ? await fetchStandardInvestmentContext({ householdId: req.householdId!, startDate: query.startDate, endDate: query.endDate })
     : undefined;
-  return generator({ query, rows, budgets, audit, wealth, investments });
+  const allocation = query.reportType === 'allocation'
+    ? await fetchStandardAllocationContext({ householdId: req.householdId! })
+    : undefined;
+  const contributionRoom = query.reportType === 'contribution_room'
+    ? await fetchStandardContributionRoomContext({ householdId: req.householdId! })
+    : undefined;
+  const dividendForecast = query.reportType === 'dividend_forecast'
+    ? await fetchStandardDividendForecastContext({ householdId: req.householdId! })
+    : undefined;
+  const retirement = query.reportType === 'retirement'
+    ? await fetchStandardRetirementContext({ householdId: req.householdId! })
+    : undefined;
+  return generator({ query, rows, budgets, audit, wealth, investments, allocation, contributionRoom, dividendForecast, retirement });
 }
 
 router.get('/standard/generate', async (req: AuthRequest, res: Response) => {

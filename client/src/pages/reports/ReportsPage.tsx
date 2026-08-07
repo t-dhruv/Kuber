@@ -47,6 +47,11 @@ const STANDARD_TABS = new Set<ReportTab>([
   "networth",
   "investmentperformance",
   "benchmarks",
+  "assetsliabilities",
+  "allocationdrift",
+  "contributionroom",
+  "dividendforecast",
+  "retirementsimulation",
 ]);
 
 function csv(value: string | null): string[] {

@@ -212,6 +212,11 @@ export const TAB_GROUPS: {
     tabs: [
       { value: "networth", label: "Net Worth" },
       { value: "investmentperformance", label: "Investment Performance" },
+      { value: "assetsliabilities", label: "Assets / Liabilities" },
+      { value: "allocationdrift", label: "Allocation & Drift" },
+      { value: "contributionroom", label: "Contribution Room" },
+      { value: "dividendforecast", label: "Dividend Forecast" },
+      { value: "retirementsimulation", label: "Retirement Simulation" },
     ],
   },
   {
@@ -220,11 +225,6 @@ export const TAB_GROUPS: {
     tabs: [
       { value: "forecast", label: "Forecast" },
       { value: "tax", label: "Tax Summary" },
-      { value: "assetsliabilities", label: "Assets / Liabilities" },
-      { value: "allocationdrift", label: "Allocation & Drift" },
-      { value: "contributionroom", label: "Contribution Room" },
-      { value: "dividendforecast", label: "Dividend Forecast" },
-      { value: "retirementsimulation", label: "Retirement Simulation" },
     ],
   },
 ];
