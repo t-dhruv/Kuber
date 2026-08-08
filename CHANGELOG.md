@@ -6,6 +6,54 @@ Kuber uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0-beta] - 2026-08-08
+
+A Reports release. The page used to be a row of hand-built tabs, each with its
+own endpoint, its own filters and its own idea of what a chart is. Everything
+those tabs did is now expressed through one contract — `reportType` plus
+filters — and drawn from a typed chart spec, so a new report is a server-side
+description rather than a new React component.
+
+**Installing:** pin the version, because a pre-release never moves `latest`.
+
+```bash
+echo 'IMAGE_TAG=1.2.0-beta' >> .env
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Added
+
+- **Charts cross-filter the report.** Clicking a slice, bar or point narrows the
+  report to that selection instead of only highlighting it, and the selection
+  joins the filter chips so it can be read and removed like any other filter.
+- **A cash-flow Sankey and a dedicated tax report type**, both served by the
+  standard contract.
+- **A chip-based filter bar with an advanced panel.** Active filters render as
+  removable chips; the panel exposes the parameters the old tabs had wired up
+  but never surfaced.
+- **Four filter predicates the contract could not previously express**, plus
+  `bucketType` and `isTaxDeductible` on every report row, so tax and
+  bucket-aware reports need no side channel.
+- **Savings-rate, benchmark, net-worth and other wealth-backed views** are now
+  report types rather than bespoke tabs.
+
+### Changed
+
+- The cash-flow forecast moved out of the client and into
+  `server/src/lib/cashFlowForecast.ts`, with an equivalence suite pinning it to
+  the behaviour of the Forecast tab it replaces.
+- Report charts are drawn from typed chart specs instead of key/value tables.
+
+### Removed
+
+- Retired the legacy Reports tabs and the endpoints behind them. `GET /reports/trends`,
+  `/reports/benchmarks`, `/reports/tax-summary`, `/reports/tags`, `/reports/drill`,
+  `/reports/no-category`, `/reports/spending/compare`, `/reports/income/compare`,
+  `/reports/spending/monthly` and `/reports/income/monthly` no longer exist. Everything they
+  returned is available from `GET /reports/standard/generate` with the matching `reportType`,
+  and row-level detail from `GET /reports/standard/drilldown`. Scripts calling the removed
+  paths must be updated.
+
 ## [1.1.0-beta] - 2026-08-06
 
 A theming release. 1.0.0-beta shipped six accents and a dark mode that large
@@ -163,6 +211,7 @@ Application surface, as shipped:
 - GitHub Actions CI on every pull request; tagging publishes images and a Release
 - Node 24 LTS across the images, CI, and every manifest
 
-[Unreleased]: https://github.com/t-dhruv/Kuber/compare/v1.1.0-beta...HEAD
+[Unreleased]: https://github.com/t-dhruv/Kuber/compare/v1.2.0-beta...HEAD
+[1.2.0-beta]: https://github.com/t-dhruv/Kuber/compare/v1.1.0-beta...v1.2.0-beta
 [1.1.0-beta]: https://github.com/t-dhruv/Kuber/compare/v1.0.0-beta...v1.1.0-beta
 [1.0.0-beta]: https://github.com/t-dhruv/Kuber/releases/tag/v1.0.0-beta

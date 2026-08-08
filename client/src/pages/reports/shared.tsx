@@ -28,132 +28,7 @@ export type ReportTab =
   | "contributionroom"
   | "dividendforecast"
   | "retirementsimulation";
-export type ChartType = "donut" | "pie" | "bar" | "line";
-export type GroupBy = "category" | "merchant" | "account";
-export type ReportTabGroup = "core" | "wealth" | "advanced";
-
-export interface CategoryBreakdown {
-  id: string;
-  name: string;
-  icon?: string;
-  amount: number;
-  percent: number;
-  transactionCount: number;
-}
-
-export interface SpendingReport {
-  total: number;
-  largest?: { merchantName: string; amount: number; date: string };
-  average: number;
-  transactionCount: number;
-  startDate: string;
-  endDate: string;
-  firstDate: string | null;
-  lastDate: string | null;
-  items: CategoryBreakdown[];
-}
-
-export interface IncomeReport {
-  total: number;
-  largest?: { merchantName: string; amount: number; date: string };
-  average: number;
-  transactionCount: number;
-  startDate: string;
-  endDate: string;
-  firstDate: string | null;
-  lastDate: string | null;
-  items: CategoryBreakdown[];
-}
-
-export interface CashFlowMonth {
-  month: number;
-  income: number;
-  expenses: number;
-  net: number;
-}
-
-export interface CashFlowMonthly {
-  month: string; // e.g. "Jan 2025"
-  income: number;
-  expenses: number;
-  net: number;
-}
-
-export interface SavingsMonthly extends CashFlowMonthly {
-  savingsRate: number;
-}
-
-export interface CashFlowReport {
-  income: number;
-  expenses: number;
-  net: number;
-  savingsRate: number;
-  byMonth: CashFlowMonth[];
-  monthly: CashFlowMonthly[];
-}
-
-export interface CompareItem {
-  id: string;
-  name: string;
-  icon: string | null;
-  current: number;
-  prior: number;
-  delta: number;
-  deltaPercent: number;
-}
-
-export interface CompareReport {
-  items: CompareItem[];
-  currentTotal: number;
-  priorTotal: number;
-  totalDelta: number;
-}
-
-export interface MonthlySeriesItem {
-  id: string;
-  name: string;
-  icon: string | null;
-  data: number[];
-}
-
-export interface MonthlyReport {
-  months: string[];
-  series: MonthlySeriesItem[];
-}
-
-export interface ReportTransaction {
-  id: string;
-  merchantName: string;
-  merchant?: string;
-  categoryName: string | null;
-  categoryIcon?: string | null;
-  categoryColor?: string | null;
-  accountName: string;
-  amount: number;
-  date: string;
-}
-
-export interface TransactionsResponse {
-  transactions: ReportTransaction[];
-  total: number;
-  page: number;
-  totalPages: number;
-}
-
-export interface SavedReport {
-  id: string;
-  name: string;
-  filters: {
-    tab?: ReportTab;
-    datePreset?: DatePreset;
-    startDate?: string;
-    endDate?: string;
-    excludeCategoryIds?: string[];
-    excludeAccountIds?: string[];
-  };
-  createdAt: string;
-  updatedAt: string;
-}
+export type ReportTabGroup = "core" | "wealth";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -197,12 +72,15 @@ export const TAB_GROUPS: {
       { value: "overview", label: "Overview" },
       { value: "income", label: "Income vs Expense" },
       { value: "cashflow", label: "Cash Flow" },
+      { value: "forecast", label: "Forecast" },
       { value: "category", label: "Categories" },
       { value: "budget", label: "Budgets" },
       { value: "tag", label: "Tags" },
       { value: "account", label: "Accounts" },
       { value: "merchant", label: "Merchants" },
       { value: "audit", label: "Audit" },
+      { value: "benchmarks", label: "Benchmarks" },
+      { value: "tax", label: "Tax Summary" },
     ],
   },
   {
@@ -211,18 +89,6 @@ export const TAB_GROUPS: {
     tabs: [
       { value: "networth", label: "Net Worth" },
       { value: "investmentperformance", label: "Investment Performance" },
-    ],
-  },
-  {
-    id: "advanced",
-    label: "Legacy",
-    tabs: [
-      { value: "savings", label: "Savings" },
-      { value: "spending", label: "Spending" },
-      { value: "variance", label: "Variance" },
-      { value: "forecast", label: "Forecast" },
-      { value: "tax", label: "Tax Summary" },
-      { value: "benchmarks", label: "Benchmarks" },
       { value: "assetsliabilities", label: "Assets / Liabilities" },
       { value: "allocationdrift", label: "Allocation & Drift" },
       { value: "contributionroom", label: "Contribution Room" },
@@ -448,7 +314,7 @@ export function TabBar({
     }
   }, [tab, activeGroup]);
 
-  const groupOptions = TAB_GROUPS.map((g) => ({
+  const groupOptions = TAB_GROUPS.filter((g) => g.tabs.length > 0).map((g) => ({
     value: g.id,
     label: g.label,
   }));
@@ -456,7 +322,7 @@ export function TabBar({
 
   const handleGroupChange = (groupId: ReportTabGroup) => {
     const group = TAB_GROUPS.find((g) => g.id === groupId);
-    if (!group) return;
+    if (!group || group.tabs.length === 0) return;
     setActiveGroup(groupId);
     onChange(group.tabs[0].value);
   };

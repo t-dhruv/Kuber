@@ -1,6 +1,11 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { prisma as defaultPrisma } from '../prisma';
+import { BENCHMARK_SOURCE_WARNING, benchmarkEntries, benchmarkMonths, mapBenchmarkCategory } from './benchmarks'
+import { getQuotes } from '../priceCache';
+import { calculateRrspRoom, calculateTfsaRoom } from '../taxRoomCalculator';
+import { getAllocation, getDividendForecast } from '../../services/investmentService';
+import { computeCashFlowForecast, type CashFlowForecastResult } from '../cashFlowForecast';
 
 export type StandardReportType =
   | 'overview'
@@ -13,7 +18,14 @@ export type StandardReportType =
   | 'merchant'
   | 'audit'
   | 'net_worth'
-  | 'investment';
+  | 'investment'
+  | 'benchmarks'
+  | 'allocation'
+  | 'contribution_room'
+  | 'dividend_forecast'
+  | 'retirement'
+  | 'cash_flow_forecast'
+  | 'tax';
 
 export type StandardGroupBy = 'day' | 'week' | 'month' | 'quarter' | 'year';
 export type SortDirection = 'asc' | 'desc';
@@ -43,6 +55,16 @@ export interface NormalizedReportQuery {
   limit: number;
   page: number;
   pageSize: number;
+  /** Inclusive lower bound on the absolute Transaction amount. */
+  minAmount?: number;
+  /** Inclusive upper bound on the absolute Transaction amount. */
+  maxAmount?: number;
+  /** Case-insensitive substring match against description and merchant name. */
+  searchText?: string;
+  /** Keep only rows with no Category on the Transaction and none on any Split. */
+  onlyUncategorized: boolean;
+  /** 'any' applies no reconciliation filter. */
+  reconciledState: 'any' | 'reconciled' | 'unreconciled';
 }
 
 export interface StandardReportCategory {
@@ -51,6 +73,9 @@ export interface StandardReportCategory {
   groupId: string | null;
   groupName: string | null;
   excludeFromReports: boolean;
+  /** The Category's 50/30/20 Bucket assignment: 'needs' | 'wants' | 'savings'. */
+  bucketType: string;
+  isTaxDeductible: boolean;
 }
 
 export interface StandardReportRow {
@@ -108,6 +133,62 @@ export interface StandardWealthInput {
   manualLiabilityValue: Decimal;
   accountContributions: Array<{ id: string; name: string; value: Decimal }>;
   snapshots: Array<{ date: string; assets: Decimal; liabilities: Decimal; netWorth: Decimal }>;
+  /**
+   * Manual liabilities split by ManualLiability.type, so the Net Worth report can
+   * show the Mortgage / Credit cards / Other liabilities lines the Assets /
+   * Liabilities Legacy tab shows. Optional: an older caller that omits it still
+   * gets the single manualLiabilityValue total.
+   */
+  liabilityBreakdown?: Array<{ key: string; label: string; value: Decimal }>;
+}
+
+export interface StandardAllocationInput {
+  totalValue: Decimal;
+  byAssetClass: Array<{
+    assetClass: string;
+    value: Decimal;
+    /** Current weight in percentage points, e.g. 42.5 for 42.5%. */
+    percent: Decimal;
+    /** Target weight in percentage points. */
+    targetPercent: Decimal;
+  }>;
+}
+
+export interface StandardContributionRoomInput {
+  accounts: Array<{
+    id: string;
+    name: string;
+    type: string;
+    memberName: string | null;
+    contributionsYtd: Decimal;
+    totalRoomEver: Decimal;
+    roomRemaining: Decimal;
+    overContribution: Decimal;
+    pctUsed: number;
+    alert: 'ok' | 'warning' | 'over';
+  }>;
+}
+
+export interface StandardDividendForecastInput {
+  years: number;
+  forecast: Array<{ year: number; income: Decimal }>;
+  byHolding: Array<{ symbol: string; name: string; annualIncome: Decimal }>;
+  basedOn: string;
+}
+
+export interface StandardRetirementInput {
+  portfolioValue: Decimal;
+  projectionYears: number;
+  scenarios: Array<{ label: string; returnRate: number; endingBalance: Decimal }>;
+  note: string;
+}
+
+export interface StandardCashFlowForecastInput {
+  /** The 30/60/90 window the projection was actually run over. */
+  days: number;
+  /** Days between today and the requested endDate, before clamping. */
+  requestedDays: number;
+  forecast: CashFlowForecastResult;
 }
 
 export interface StandardInvestmentInput {
@@ -127,6 +208,74 @@ export interface StandardInvestmentInput {
   recurringInvestmentCount: number;
 }
 
+export type ChartValueFormat = 'currency' | 'percent' | 'number' | 'date';
+
+export interface ChartSeries {
+  /** Key into each data row. */
+  key: string;
+  /** Human label shown in legend and tooltip. */
+  label: string;
+  format: ChartValueFormat;
+  /** Semantic colour role; the client maps these to CSS custom properties. */
+  role: 'income' | 'expense' | 'net' | 'budget' | 'actual' | 'neutral' | 'categorical';
+  /** Stack group name. Series sharing a group stack together. */
+  stack?: string;
+}
+
+export interface ChartAxis {
+  key: string;
+  label: string;
+  format: ChartValueFormat;
+}
+
+/** Rows for cartesian charts: one object per x-axis position. */
+export type ChartRow = Record<string, string | number | null>;
+
+export interface CartesianChartSpec {
+  kind: 'line' | 'area' | 'bar' | 'stackedBar' | 'groupedBar' | 'waterfall';
+  key: string;
+  title: string;
+  x: ChartAxis;
+  series: ChartSeries[];
+  data: ChartRow[];
+  /** Optional reference line, e.g. a zero baseline or a budget limit. */
+  reference?: { value: number; label: string };
+}
+
+export interface PartitionChartSpec {
+  kind: 'pie' | 'donut' | 'treemap';
+  key: string;
+  title: string;
+  /** Row key holding the slice label. */
+  nameKey: string;
+  /** Row key holding the slice magnitude. Always non-negative. */
+  valueKey: string;
+  format: ChartValueFormat;
+  data: ChartRow[];
+}
+
+export interface SankeyChartSpec {
+  kind: 'sankey';
+  key: string;
+  title: string;
+  format: ChartValueFormat;
+  nodes: Array<{ id: string; label: string; column: number; role: 'income' | 'total' | 'bucket' | 'category' }>;
+  links: Array<{ source: string; target: string; value: number }>;
+}
+
+export interface HeatmapChartSpec {
+  kind: 'heatmap';
+  key: string;
+  title: string;
+  xKey: string;
+  yKey: string;
+  valueKey: string;
+  format: ChartValueFormat;
+  data: ChartRow[];
+}
+
+export type ChartSpec = CartesianChartSpec | PartitionChartSpec | SankeyChartSpec | HeatmapChartSpec;
+
 export interface StandardReportResponse {
   reportType: StandardReportType;
   title: string;
@@ -140,7 +289,7 @@ export interface StandardReportResponse {
     change?: { value: number; direction: 'up' | 'down' | 'flat'; label: string };
     drilldown?: Record<string, string>;
   }>;
-  charts: Array<{ key: string; title: string; type: 'line' | 'bar' | 'table'; data: Array<Record<string, string | number | null>> }>;
+  charts: ChartSpec[];
   tables: Array<{
     key: string;
     title: string;
@@ -171,6 +320,13 @@ const VALID_REPORT_TYPES = new Set<StandardReportType>([
   'audit',
   'net_worth',
   'investment',
+  'benchmarks',
+  'allocation',
+  'contribution_room',
+  'dividend_forecast',
+  'retirement',
+  'cash_flow_forecast',
+  'tax',
 ]);
 const VALID_GROUP_BY = new Set<StandardGroupBy>(['day', 'week', 'month', 'quarter', 'year']);
 
@@ -220,6 +376,13 @@ function intInRange(value: unknown, fallback: number, min: number, max: number):
   return Math.max(min, Math.min(max, parsed));
 }
 
+function optionalNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${field} must be a non-negative number`);
+  return parsed;
+}
+
 function isoDate(value: unknown, field: string): string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new Error(`${field} is required in YYYY-MM-DD format`);
@@ -239,6 +402,11 @@ export function normalizeReportQuery(input: Record<string, unknown>): Normalized
   }
   const groupBy = String(input.groupBy ?? 'month') as StandardGroupBy;
   if (!VALID_GROUP_BY.has(groupBy)) throw new Error('groupBy must be one of: day, week, month, quarter, year');
+  const minAmount = optionalNumber(input.minAmount, 'minAmount');
+  const maxAmount = optionalNumber(input.maxAmount, 'maxAmount');
+  if (minAmount !== undefined && maxAmount !== undefined && maxAmount < minAmount) {
+    throw new Error('maxAmount must be greater than or equal to minAmount');
+  }
 
   return {
     reportType,
@@ -265,6 +433,14 @@ export function normalizeReportQuery(input: Record<string, unknown>): Normalized
     limit: intInRange(input.limit, 25, 1, 500),
     page: intInRange(input.page, 1, 1, 100000),
     pageSize: intInRange(input.pageSize, 50, 1, 200),
+    minAmount,
+    maxAmount,
+    searchText: typeof input.searchText === 'string' && input.searchText.trim() ? input.searchText.trim() : undefined,
+    onlyUncategorized: bool(input.onlyUncategorized, false),
+    reconciledState:
+      input.reconciledState === 'reconciled' || input.reconciledState === 'unreconciled'
+        ? input.reconciledState
+        : 'any',
   };
 }
 
@@ -307,6 +483,20 @@ function baseRows(rows: StandardReportRow[], query: NormalizedReportQuery): Stan
     if (query.tagIds.length && !row.tags.some((tag) => query.tagIds.includes(tag.id))) return false;
     if (query.merchantIds.length && (!row.merchant || !query.merchantIds.includes(row.merchant.id))) return false;
     if (query.transactionTypes.length && !query.transactionTypes.includes(row.transactionType)) return false;
+    const magnitude = rowAmount(row);
+    if (query.minAmount !== undefined && magnitude.lt(query.minAmount)) return false;
+    if (query.maxAmount !== undefined && magnitude.gt(query.maxAmount)) return false;
+    if (query.reconciledState === 'reconciled' && !row.reconciled) return false;
+    if (query.reconciledState === 'unreconciled' && row.reconciled) return false;
+    if (query.onlyUncategorized) {
+      const hasCategory = Boolean(row.category) || row.splits.some((split) => Boolean(split.category));
+      if (hasCategory) return false;
+    }
+    if (query.searchText) {
+      const needle = query.searchText.toLowerCase();
+      const haystack = `${row.description} ${row.merchant?.name ?? ''}`.toLowerCase();
+      if (!haystack.includes(needle)) return false;
+    }
     return true;
   });
 }
@@ -320,6 +510,12 @@ function metadata(query: NormalizedReportQuery, rows: StandardReportRow[], filte
   if (!query.includeHidden && excludedHidden) warnings.push(`${excludedHidden} hidden transaction${excludedHidden === 1 ? ' is' : 's are'} excluded. Enable includeHidden to include ${excludedHidden === 1 ? 'it' : 'them'}.`);
   if (currencies.size > 1 && !query.currencyCode) warnings.push('Multiple currencies are present. Totals are grouped by source currency unless a currency filter is applied.');
   if (filtered.some((row) => row.tags.length > 1)) warnings.push('Tag totals may exceed total spending because one transaction can have multiple tags.');
+  if (query.searchText) warnings.push(`Results are limited to rows matching "${query.searchText}".`);
+  if (query.onlyUncategorized) warnings.push('Results are limited to uncategorized Transactions.');
+  if (query.minAmount !== undefined || query.maxAmount !== undefined) {
+    warnings.push('Results are limited by an amount range.');
+  }
+  if (query.reconciledState !== 'any') warnings.push(`Results are limited to ${query.reconciledState} Transactions.`);
   return {
     generatedAt: (generatedAt ?? new Date()).toISOString(),
     filtersApplied: query,
@@ -418,7 +614,39 @@ export function buildOverviewReport(input: { query: NormalizedReportQuery; rows:
   ];
 
   const trend = periodBuckets(filtered, input.query);
-  response.charts = [{ key: 'incomeExpenseTrend', title: 'Income vs Expenses', type: 'line', data: trend }];
+  const spendingByCategory = categoryAmounts(filtered, true, input.query);
+  response.charts = [
+    {
+      kind: 'area',
+      key: 'incomeExpenseTrend',
+      title: 'Income vs Expenses',
+      x: PERIOD_AXIS,
+      series: [MONEY_SERIES.income, MONEY_SERIES.expenses],
+      data: trend,
+    },
+    {
+      kind: 'donut',
+      key: 'spendingByCategory',
+      title: 'Spending by Category',
+      nameKey: 'name',
+      valueKey: 'amount',
+      format: 'currency',
+      data: spendingByCategory.slice(0, input.query.limit).map((item) => ({
+        id: item.id,
+        name: item.name,
+        amount: money(item.amount),
+      })),
+    },
+    {
+      kind: 'bar',
+      key: 'netByPeriod',
+      title: 'Net by Period',
+      x: PERIOD_AXIS,
+      series: [MONEY_SERIES.net],
+      data: trend,
+      reference: { value: 0, label: 'Break even' },
+    },
+  ];
   response.tables = [
     {
       key: 'topSpendingCategories',
@@ -450,6 +678,14 @@ export function buildOverviewReport(input: { query: NormalizedReportQuery; rows:
   return response;
 }
 
+const MONEY_SERIES: Record<'income' | 'expenses' | 'net', ChartSeries> = {
+  income: { key: 'income', label: 'Income', format: 'currency', role: 'income' },
+  expenses: { key: 'expenses', label: 'Expenses', format: 'currency', role: 'expense' },
+  net: { key: 'net', label: 'Net', format: 'currency', role: 'net' },
+};
+
+const PERIOD_AXIS: ChartAxis = { key: 'period', label: 'Period', format: 'date' };
+
 function groupedBy(rows: StandardReportRow[], idFor: (row: StandardReportRow) => string, nameFor: (row: StandardReportRow) => string) {
   const map = new Map<string, { id: string; name: string; amount: Decimal; count: number }>();
   for (const row of rows) {
@@ -480,6 +716,16 @@ function periodBuckets(rows: StandardReportRow[], query: NormalizedReportQuery) 
   }));
 }
 
+/**
+ * Savings rate for one period, as a percentage rounded to two decimals.
+ * A period with no income has a rate of 0 rather than NaN or Infinity.
+ */
+function savingsRateOf(income: Decimal.Value, net: Decimal.Value): number {
+  const incomeValue = decimal(income);
+  if (!incomeValue.gt(ZERO)) return 0;
+  return Number(decimal(net).div(incomeValue).times(HUNDRED).toDecimalPlaces(2).toFixed(2));
+}
+
 export function buildIncomeExpenseReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; generatedAt?: Date }): StandardReportResponse {
   const filtered = baseRows(input.rows, input.query);
   const response = baseResponse({ ...input, filtered, title: 'Income vs Expense Report' });
@@ -491,29 +737,189 @@ export function buildIncomeExpenseReport(input: { query: NormalizedReportQuery; 
     card('totalExpenses', 'Total Expenses', expenses, response.currencyCode),
     card('netAmount', 'Net Amount', income.minus(expenses), response.currencyCode),
   ];
-  response.charts = [{ key: 'incomeExpenseTrend', title: 'Income vs Expenses', type: 'line', data: periods }];
+  response.charts = [
+    {
+      kind: 'groupedBar',
+      key: 'incomeExpenseTrend',
+      title: 'Income vs Expenses',
+      x: PERIOD_AXIS,
+      series: [MONEY_SERIES.income, MONEY_SERIES.expenses],
+      data: periods,
+    },
+    {
+      kind: 'line',
+      key: 'netTrend',
+      title: 'Net Trend',
+      x: PERIOD_AXIS,
+      series: [MONEY_SERIES.net],
+      data: periods,
+      reference: { value: 0, label: 'Break even' },
+    },
+  ];
   response.tables = [{ key: 'periods', title: 'Period Totals', columns: [{ key: 'period', label: 'Period' }, { key: 'income', label: 'Income' }, { key: 'expenses', label: 'Expenses' }, { key: 'net', label: 'Net' }], rows: periods }];
   response.drilldowns = periods.map((period) => ({ key: `period-${period.period}`, label: `View ${period.period} Transactions`, params: { period: String(period.period) } }));
   return response;
+}
+
+/**
+ * Bucket labels for the cash-flow Sankey. `Category.bucketType` is a free-form
+ * column, not an enum, so anything outside these three values — including a row
+ * with no Category at all — flows into a single Uncategorized bucket.
+ */
+const SANKEY_BUCKET_LABELS: Record<string, string> = { needs: 'Needs', wants: 'Wants', savings: 'Savings' };
+const SANKEY_BUCKET_ORDER = ['Needs', 'Wants', 'Savings', 'Uncategorized'];
+
+function sankeyBucketLabel(bucketType: string | null | undefined): string {
+  return SANKEY_BUCKET_LABELS[(bucketType ?? '').trim().toLowerCase()] ?? 'Uncategorized';
+}
+
+/**
+ * Splits a row into the units the Sankey and the tax report attribute amounts by.
+ * A Split's own Category is the one that carries the Bucket and the tax flag; a
+ * Split with no Category falls back to the journal's Category.
+ */
+function attributionParts(row: StandardReportRow, query: NormalizedReportQuery): Array<{ amount: Decimal; category: StandardReportCategory | null }> {
+  if (query.includeSplits && row.isSplit && row.splits.length) {
+    return row.splits.map((split) => ({
+      amount: decimal(split.amountDecimal).abs(),
+      category: split.category ?? row.category,
+    }));
+  }
+  return [{ amount: rowAmount(row), category: row.category }];
+}
+
+/**
+ * Income Category -> total -> Bucket -> spending Category, matching the four
+ * columns ReportsSankeyChart already draws. Values are magnitudes: a Sankey
+ * cannot represent a negative flow.
+ */
+function cashFlowSankey(rows: StandardReportRow[], query: NormalizedReportQuery): SankeyChartSpec {
+  const incomeTotals = new Map<string, { label: string; amount: Decimal }>();
+  const spendingTotals = new Map<string, { label: string; bucket: string; amount: Decimal }>();
+
+  for (const row of rows) {
+    const signed = rowSignedAmount(row);
+    if (signed.isZero()) continue;
+    const direction = isPositive(signed) ? 'income' : 'expense';
+    for (const part of attributionParts(row, query)) {
+      const amount = part.amount.abs();
+      if (amount.isZero()) continue;
+      const id = part.category?.id ?? '__uncategorized__';
+      const label = part.category?.name ?? 'Uncategorized';
+      if (direction === 'income') {
+        const existing = incomeTotals.get(id) ?? { label, amount: ZERO };
+        existing.amount = existing.amount.plus(amount);
+        incomeTotals.set(id, existing);
+      } else {
+        const existing = spendingTotals.get(id) ?? { label, bucket: sankeyBucketLabel(part.category?.bucketType), amount: ZERO };
+        existing.amount = existing.amount.plus(amount);
+        spendingTotals.set(id, existing);
+      }
+    }
+  }
+
+  const incomeEntries = Array.from(incomeTotals.entries())
+    .filter(([, item]) => item.amount.gt(ZERO))
+    .sort(([, a], [, b]) => b.amount.comparedTo(a.amount));
+  const spendingEntries = Array.from(spendingTotals.entries())
+    .filter(([, item]) => item.amount.gt(ZERO))
+    .sort(([, a], [, b]) => b.amount.comparedTo(a.amount));
+
+  const bucketTotals = new Map<string, Decimal>();
+  for (const [, item] of spendingEntries) {
+    bucketTotals.set(item.bucket, (bucketTotals.get(item.bucket) ?? ZERO).plus(item.amount));
+  }
+  const bucketLabels = SANKEY_BUCKET_ORDER.filter((label) => bucketTotals.has(label));
+
+  const nodes: SankeyChartSpec['nodes'] = [
+    ...incomeEntries.map(([id, item]) => ({ id: `income:${id}`, label: item.label, column: 0, role: 'income' as const })),
+    { id: 'total', label: 'Total Income', column: 1, role: 'total' as const },
+    ...bucketLabels.map((label) => ({ id: `bucket:${label}`, label, column: 2, role: 'bucket' as const })),
+    ...spendingEntries.map(([id, item]) => ({ id: `category:${id}`, label: item.label, column: 3, role: 'category' as const })),
+  ];
+
+  const links: SankeyChartSpec['links'] = [
+    ...incomeEntries.map(([id, item]) => ({ source: `income:${id}`, target: 'total', value: Number(money(item.amount)) })),
+    ...bucketLabels.map((label) => ({ source: 'total', target: `bucket:${label}`, value: Number(money(bucketTotals.get(label) ?? ZERO)) })),
+    ...spendingEntries.map(([id, item]) => ({ source: `bucket:${item.bucket}`, target: `category:${id}`, value: Number(money(item.amount)) })),
+  ].filter((link) => link.value > 0);
+
+  return {
+    kind: 'sankey',
+    key: 'cashFlowSankey',
+    title: 'Where the Money Goes',
+    format: 'currency',
+    nodes,
+    links,
+  };
 }
 
 export function buildCashFlowReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; generatedAt?: Date }): StandardReportResponse {
   const filtered = baseRows(input.rows, input.query);
   const response = baseResponse({ ...input, filtered, title: 'Cash Flow Report' });
   const periods = periodBuckets(filtered, input.query);
+  const periodsWithRate = periods.map((period) => ({ ...period, savingsRate: savingsRateOf(period.income, period.net) }));
   let running = ZERO;
   const runningData = periods.map((period) => {
     running = running.plus(period.net);
     return { period: period.period, net: period.net, runningBalance: money(running) };
   });
+  const totalIncome = periods.reduce((sum, row) => sum.plus(row.income), ZERO);
+  const totalExpenses = periods.reduce((sum, row) => sum.plus(row.expenses), ZERO);
+  const overallSavingsRate = totalIncome.gt(ZERO) ? totalIncome.minus(totalExpenses).div(totalIncome).times(HUNDRED) : ZERO;
   response.summaryCards = [
-    card('inflows', 'Inflows', periods.reduce((sum, row) => sum.plus(row.income), ZERO), response.currencyCode),
-    card('outflows', 'Outflows', periods.reduce((sum, row) => sum.plus(row.expenses), ZERO), response.currencyCode),
+    card('inflows', 'Inflows', totalIncome, response.currencyCode),
+    card('outflows', 'Outflows', totalExpenses, response.currencyCode),
     card('netCashFlow', 'Net Cash Flow', running, response.currencyCode),
+    {
+      key: 'savingsRate',
+      label: 'Savings Rate',
+      value: overallSavingsRate.toDecimalPlaces(2).toFixed(2),
+      formattedValue: `${overallSavingsRate.toDecimalPlaces(1).toFixed(1)}%`,
+    },
   ];
   response.charts = [
-    { key: 'cashFlowByPeriod', title: 'Cash Flow by Period', type: 'bar', data: periods },
-    { key: 'runningCashFlow', title: 'Running Cash Flow', type: 'line', data: runningData },
+    {
+      kind: 'stackedBar',
+      key: 'cashFlowByPeriod',
+      title: 'Cash Flow by Period',
+      x: PERIOD_AXIS,
+      series: [
+        { ...MONEY_SERIES.income, stack: 'flow' },
+        { ...MONEY_SERIES.expenses, stack: 'flow' },
+      ],
+      data: periods,
+    },
+    {
+      kind: 'line',
+      key: 'runningCashFlow',
+      title: 'Running Cash Flow',
+      x: PERIOD_AXIS,
+      series: [
+        MONEY_SERIES.net,
+        { key: 'runningBalance', label: 'Running Balance', format: 'currency', role: 'neutral' },
+      ],
+      data: runningData,
+    },
+    {
+      kind: 'waterfall',
+      key: 'cashFlowWaterfall',
+      title: 'Cash Flow Waterfall',
+      x: PERIOD_AXIS,
+      series: [MONEY_SERIES.net],
+      data: runningData,
+      reference: { value: 0, label: 'Break even' },
+    },
+    {
+      kind: 'line',
+      key: 'savingsRateTrend',
+      title: 'Savings Rate',
+      x: PERIOD_AXIS,
+      series: [{ key: 'savingsRate', label: 'Savings Rate', format: 'percent', role: 'net' }],
+      data: periodsWithRate,
+      reference: { value: 20, label: '20% target' },
+    },
+    cashFlowSankey(filtered, input.query),
   ];
   response.tables = [{ key: 'cashFlowPeriods', title: 'Cash Flow by Period', columns: [{ key: 'period', label: 'Period' }, { key: 'income', label: 'Inflows' }, { key: 'expenses', label: 'Outflows' }, { key: 'net', label: 'Net' }], rows: periods }];
   return response;
@@ -543,7 +949,37 @@ export function buildCategoryReport(input: { query: NormalizedReportQuery; rows:
     card('categoryIncome', 'Category Income', totalIncome, response.currencyCode),
     { key: 'uncategorizedCount', label: 'Uncategorized', value: String(spending.find((item) => item.id === '__uncategorized__')?.count ?? 0), formattedValue: String(spending.find((item) => item.id === '__uncategorized__')?.count ?? 0) },
   ];
-  response.charts = [{ key: 'categoryTrend', title: 'Category Trend', type: 'bar', data: periodBuckets(filtered, input.query) }];
+  response.charts = [
+    {
+      kind: 'stackedBar',
+      key: 'categoryTrend',
+      title: 'Category Trend',
+      x: PERIOD_AXIS,
+      series: [
+        { ...MONEY_SERIES.income, stack: 'flow' },
+        { ...MONEY_SERIES.expenses, stack: 'flow' },
+      ],
+      data: periodBuckets(filtered, input.query),
+    },
+    {
+      kind: 'treemap',
+      key: 'categorySpendingShare',
+      title: 'Spending Share by Category',
+      nameKey: 'name',
+      valueKey: 'amount',
+      format: 'currency',
+      data: spending.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, amount: money(item.amount) })),
+    },
+    {
+      kind: 'donut',
+      key: 'categoryIncomeShare',
+      title: 'Income Share by Category',
+      nameKey: 'name',
+      valueKey: 'amount',
+      format: 'currency',
+      data: income.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, amount: money(item.amount) })),
+    },
+  ];
   response.tables = [
     {
       key: 'categoryTotals',
@@ -618,7 +1054,28 @@ export function buildBudgetReport(input: { query: NormalizedReportQuery; rows: S
     columns: [{ key: 'name', label: 'Budget' }, { key: 'budgeted', label: 'Budgeted' }, { key: 'actualSpent', label: 'Actual' }, { key: 'remaining', label: 'Remaining' }, { key: 'utilizationPercent', label: 'Utilization' }],
     rows,
   }];
-  response.charts = [{ key: 'budgetVsActual', title: 'Budget vs Actual', type: 'bar', data: rows.map((item) => ({ name: item.name, budgeted: item.budgeted, actualSpent: item.actualSpent })) }];
+  response.charts = [
+    {
+      kind: 'groupedBar',
+      key: 'budgetVsActual',
+      title: 'Budget vs Actual',
+      x: { key: 'name', label: 'Budget', format: 'number' },
+      series: [
+        { key: 'budgeted', label: 'Budgeted', format: 'currency', role: 'budget' },
+        { key: 'actualSpent', label: 'Actual', format: 'currency', role: 'actual' },
+      ],
+      data: rows.map((item) => ({ id: item.id, name: item.name, budgeted: item.budgeted, actualSpent: item.actualSpent })),
+    },
+    {
+      kind: 'bar',
+      key: 'budgetUtilization',
+      title: 'Budget Utilization',
+      x: { key: 'name', label: 'Budget', format: 'number' },
+      series: [{ key: 'utilizationPercent', label: 'Utilization', format: 'percent', role: 'categorical' }],
+      data: rows.map((item) => ({ id: item.id, name: item.name, utilizationPercent: item.utilizationPercent })),
+      reference: { value: 100, label: 'Limit' },
+    },
+  ];
   response.metadata.calculationNotes.push('Budget report uses existing BudgetLimit values when provided.');
   if (!budgets.length) response.metadata.warnings.push('No BudgetLimit records were found for the selected period. Live budget calculations are not included in this response.');
   return response;
@@ -649,7 +1106,29 @@ export function buildTagReport(input: { query: NormalizedReportQuery; rows: Stan
     columns: [{ key: 'name', label: 'Tag' }, { key: 'spending', label: 'Spending' }, { key: 'income', label: 'Income' }, { key: 'count', label: 'Transactions' }],
     rows: rows.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, color: item.color, spending: money(item.spending), income: money(item.income), count: item.count })),
   }];
-  response.charts = [{ key: 'tagTrend', title: 'Tag Trend', type: 'bar', data: periodBuckets(filtered, input.query) }];
+  response.charts = [
+    {
+      kind: 'stackedBar',
+      key: 'tagTrend',
+      title: 'Tag Trend',
+      x: PERIOD_AXIS,
+      series: [
+        { ...MONEY_SERIES.income, stack: 'flow' },
+        { ...MONEY_SERIES.expenses, stack: 'flow' },
+      ],
+      data: periodBuckets(filtered, input.query),
+    },
+    {
+      kind: 'donut',
+      key: 'tagSpendingShare',
+      title: 'Spending Share by Tag',
+      nameKey: 'name',
+      valueKey: 'spending',
+      format: 'currency',
+      data: rows.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, spending: money(item.spending) })),
+    },
+  ];
+  response.metadata.calculationNotes.push('Tag share percentages can exceed 100% because one Transaction can carry several tags.');
   return response;
 }
 
@@ -678,7 +1157,28 @@ export function buildAccountReport(input: { query: NormalizedReportQuery; rows: 
     columns: [{ key: 'name', label: 'Account' }, { key: 'inflow', label: 'Inflow' }, { key: 'outflow', label: 'Outflow' }, { key: 'netChange', label: 'Net Change' }],
     rows: rows.map((item) => ({ id: item.id, name: item.name, type: item.type, inflow: money(item.inflow), outflow: money(item.outflow), netChange: money(item.inflow.minus(item.outflow)), count: item.count })),
   }];
-  response.charts = [{ key: 'accountComparison', title: 'Account Comparison', type: 'bar', data: response.tables[0].rows }];
+  response.charts = [
+    {
+      kind: 'groupedBar',
+      key: 'accountComparison',
+      title: 'Account Comparison',
+      x: { key: 'name', label: 'Account', format: 'number' },
+      series: [
+        { key: 'inflow', label: 'Inflow', format: 'currency', role: 'income' },
+        { key: 'outflow', label: 'Outflow', format: 'currency', role: 'expense' },
+      ],
+      data: response.tables[0].rows,
+    },
+    {
+      kind: 'bar',
+      key: 'accountNetChange',
+      title: 'Net Change by Account',
+      x: { key: 'name', label: 'Account', format: 'number' },
+      series: [{ key: 'netChange', label: 'Net Change', format: 'currency', role: 'net' }],
+      data: response.tables[0].rows,
+      reference: { value: 0, label: 'No change' },
+    },
+  ];
   return response;
 }
 
@@ -696,7 +1196,27 @@ export function buildMerchantReport(input: { query: NormalizedReportQuery; rows:
     columns: [{ key: 'name', label: 'Merchant' }, { key: 'spending', label: 'Spending' }, { key: 'count', label: 'Transactions' }],
     rows: merchants.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, spending: money(item.amount), formattedSpending: formatMoney(item.amount, response.currencyCode), count: item.count })),
   }];
-  response.charts = [{ key: 'merchantTrend', title: 'Merchant Trend', type: 'bar', data: periodBuckets(filtered, input.query) }];
+  response.charts = [
+    {
+      kind: 'stackedBar',
+      key: 'merchantTrend',
+      title: 'Merchant Trend',
+      x: PERIOD_AXIS,
+      series: [
+        { ...MONEY_SERIES.income, stack: 'flow' },
+        { ...MONEY_SERIES.expenses, stack: 'flow' },
+      ],
+      data: periodBuckets(filtered, input.query),
+    },
+    {
+      kind: 'bar',
+      key: 'topMerchants',
+      title: 'Top Merchants',
+      x: { key: 'name', label: 'Merchant', format: 'number' },
+      series: [{ key: 'spending', label: 'Spending', format: 'currency', role: 'expense' }],
+      data: merchants.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, spending: money(item.amount) })),
+    },
+  ];
   return response;
 }
 
@@ -726,6 +1246,16 @@ export function buildAuditDataQualityReport(input: { query: NormalizedReportQuer
   response.summaryCards = [
     { key: 'totalIssues', label: 'Total Issues', value: String(totalIssues), formattedValue: String(totalIssues) },
     { key: 'actionableIssueTypes', label: 'Issue Types', value: String(issueRows.length), formattedValue: String(issueRows.length) },
+  ];
+  response.charts = [
+    {
+      kind: 'bar',
+      key: 'auditIssueCounts',
+      title: 'Issues by Type',
+      x: { key: 'label', label: 'Issue', format: 'number' },
+      series: [{ key: 'count', label: 'Count', format: 'number', role: 'categorical' }],
+      data: issueRows.map((item) => ({ id: item.issueType, label: item.label, count: item.count })),
+    },
   ];
   response.tables = [{
     key: 'auditIssues',
@@ -757,25 +1287,94 @@ export function buildNetWorthReport(input: { query: NormalizedReportQuery; rows:
     card('manualAssetValue', 'Manual Assets', wealth?.manualAssetValue ?? ZERO, response.currencyCode),
     card('manualLiabilityValue', 'Manual Liabilities', wealth?.manualLiabilityValue ?? ZERO, response.currencyCode),
   ];
-  response.charts = [{
-    key: 'netWorthTrend',
-    title: 'Net Worth Trend',
-    type: 'line',
-    data: (wealth?.snapshots ?? []).map((snapshot) => ({
-      date: snapshot.date,
-      assets: money(snapshot.assets),
-      liabilities: money(snapshot.liabilities),
-      netWorth: money(snapshot.netWorth),
-    })),
-  }];
+  const snapshots = (wealth?.snapshots ?? []).map((snapshot) => ({
+    date: snapshot.date,
+    assets: money(snapshot.assets),
+    liabilities: money(snapshot.liabilities),
+    netWorth: money(snapshot.netWorth),
+  }));
+  response.charts = [
+    {
+      kind: 'area',
+      key: 'netWorthTrend',
+      title: 'Net Worth Trend',
+      x: { key: 'date', label: 'Date', format: 'date' },
+      series: [
+        { key: 'assets', label: 'Assets', format: 'currency', role: 'income' },
+        { key: 'liabilities', label: 'Liabilities', format: 'currency', role: 'expense' },
+        { key: 'netWorth', label: 'Net Worth', format: 'currency', role: 'net' },
+      ],
+      data: snapshots,
+    },
+    {
+      kind: 'donut',
+      key: 'netWorthComposition',
+      title: 'Net Worth Composition',
+      nameKey: 'name',
+      valueKey: 'value',
+      format: 'currency',
+      data: [
+        { name: 'Cash', value: money(wealth?.cashValue ?? ZERO) },
+        { name: 'Investments', value: money(wealth?.investmentValue ?? ZERO) },
+        { name: 'Manual Assets', value: money(wealth?.manualAssetValue ?? ZERO) },
+      ],
+    },
+  ];
+  // Assets / Liabilities breakdown, absorbed from the Legacy Assets / Liabilities
+  // tab (client/src/pages/reports/components/AssetsLiabilitiesSection.tsx).
+  const assetBreakdown = [
+    { key: 'cash', label: 'Cash & bank', value: wealth?.cashValue ?? ZERO },
+    { key: 'investments', label: 'Investments', value: wealth?.investmentValue ?? ZERO },
+    { key: 'manualAssets', label: 'Other assets', value: wealth?.manualAssetValue ?? ZERO },
+  ];
+  const liabilityBreakdown = wealth?.liabilityBreakdown?.length
+    ? wealth.liabilityBreakdown
+    : [{ key: 'other', label: 'Other liabilities', value: totalLiabilities }];
+  response.charts.push({
+    kind: 'groupedBar',
+    key: 'assetsVsLiabilities',
+    title: 'Assets vs Liabilities by Account Category',
+    x: { key: 'category', label: 'Category', format: 'number' },
+    series: [
+      { key: 'assets', label: 'Assets', format: 'currency', role: 'income' },
+      { key: 'liabilities', label: 'Liabilities', format: 'currency', role: 'expense' },
+    ],
+    data: [
+      ...assetBreakdown.map((item) => ({ category: item.label, assets: money(item.value), liabilities: money(ZERO) })),
+      ...liabilityBreakdown.map((item) => ({ category: item.label, assets: money(ZERO), liabilities: money(item.value) })),
+    ],
+  });
   response.tables = [{
     key: 'accountContribution',
     title: 'Account Contribution to Net Worth',
     columns: [{ key: 'name', label: 'Account' }, { key: 'value', label: 'Value' }],
     rows: (wealth?.accountContributions ?? []).map((item) => ({ id: item.id, name: item.name, value: money(item.value), formattedValue: formatMoney(item.value, response.currencyCode) })),
+  }, {
+    key: 'assetBreakdown',
+    title: 'Assets',
+    columns: [{ key: 'label', label: 'Asset' }, { key: 'value', label: 'Value' }],
+    rows: assetBreakdown.map((item) => ({ id: item.key, label: item.label, value: money(item.value), formattedValue: formatMoney(item.value, response.currencyCode) })),
+  }, {
+    key: 'liabilityBreakdown',
+    title: 'Liabilities',
+    columns: [{ key: 'label', label: 'Liability' }, { key: 'value', label: 'Value' }],
+    rows: liabilityBreakdown.map((item) => ({ id: item.key, label: item.label, value: money(item.value), formattedValue: formatMoney(item.value, response.currencyCode) })),
   }];
   if (!wealth) response.metadata.warnings.push('No net worth snapshot or wealth context was available for the selected period.');
+  noteWealthOnlyFilters(response, input.query, 'Account, Snapshot, manual asset and manual liability data');
   return response;
+}
+
+/**
+ * These reports are not functions of StandardReportRow[], so most of the standard
+ * filter set cannot touch them. Say so, and warn when the request carries a filter
+ * that was ignored, rather than silently dropping it.
+ */
+function noteWealthOnlyFilters(response: StandardReportResponse, query: NormalizedReportQuery, sources: string) {
+  response.metadata.calculationNotes.push(`This report reads ${sources}. Category, tag, merchant, amount and search filters do not apply to it.`);
+  if (query.categoryIds.length || query.categoryGroupIds.length || query.tagIds.length || query.merchantIds.length || query.searchText) {
+    response.metadata.warnings.push('Some active filters do not apply to this report and were ignored.');
+  }
 }
 
 export function buildInvestmentReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; investments?: StandardInvestmentInput; generatedAt?: Date }): StandardReportResponse {
@@ -811,6 +1410,36 @@ export function buildInvestmentReport(input: { query: NormalizedReportQuery; row
       realizedGainLoss: money(item.realizedGainLoss ?? ZERO),
     })),
   }];
+  const holdings = investments?.holdings ?? [];
+  response.charts = [
+    {
+      kind: 'donut',
+      key: 'allocationByAssetClass',
+      title: 'Allocation by Asset Class',
+      nameKey: 'name',
+      valueKey: 'value',
+      format: 'currency',
+      data: Array.from(
+        holdings.reduce((map, holding) => {
+          const current = map.get(holding.assetClass) ?? ZERO;
+          return map.set(holding.assetClass, current.plus(holding.currentValue));
+        }, new Map<string, Decimal>()),
+      ).map(([name, value]) => ({ name, value: money(value) })),
+    },
+    {
+      kind: 'bar',
+      key: 'holdingGainLoss',
+      title: 'Unrealized Gain/Loss by Holding',
+      x: { key: 'symbol', label: 'Symbol', format: 'number' },
+      series: [{ key: 'unrealizedGainLoss', label: 'Unrealized Gain/Loss', format: 'currency', role: 'net' }],
+      data: holdings.map((holding) => ({
+        id: holding.id,
+        symbol: holding.symbol,
+        unrealizedGainLoss: money(holding.currentValue.minus(holding.costBasis)),
+      })),
+      reference: { value: 0, label: 'Break even' },
+    },
+  ];
   response.metadata.warnings.push('Investment performance excludes TWR/MWR return calculations until portfolio cash-flow timing is audited.');
   response.metadata.calculationNotes.push('Realized gain/loss uses confirmed sell lots with stored realizedGainDecimal in the selected date range.');
   return response;
@@ -867,6 +1496,184 @@ function drilldownRow(row: StandardReportRow, params: Record<string, string | un
   };
 }
 
+export function buildBenchmarksReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; generatedAt?: Date }): StandardReportResponse {
+  const filtered = baseRows(input.rows, input.query);
+  const response = baseResponse({ ...input, filtered, title: 'Benchmarks Report' });
+  const currencyCode = response.currencyCode;
+  const months = benchmarkMonths(input.query.startDate, input.query.endDate);
+
+  const actuals = new Map<string, Decimal>();
+  for (const item of categoryAmounts(filtered, true, input.query)) {
+    const key = mapBenchmarkCategory(item.name);
+    actuals.set(key, (actuals.get(key) ?? ZERO).plus(item.amount));
+  }
+
+  const comparisons = benchmarkEntries().map((entry) => {
+    const yours = actuals.get(entry.key) ?? ZERO;
+    const benchmark = new Decimal(entry.monthlyAvg).times(months);
+    return { entry, yours, benchmark, variance: yours.minus(benchmark) };
+  });
+
+  const totalYours = comparisons.reduce((sum, item) => sum.plus(item.yours), ZERO);
+  const totalBenchmark = comparisons.reduce((sum, item) => sum.plus(item.benchmark), ZERO);
+
+  response.summaryCards = [
+    card('householdSpending', 'Your Spending', totalYours, currencyCode),
+    card('benchmarkSpending', 'Benchmark Spending', totalBenchmark, currencyCode),
+    card('benchmarkDifference', 'Difference', totalYours.minus(totalBenchmark), currencyCode),
+  ];
+
+  const comparisonRows = comparisons.map((item) => ({
+    key: item.entry.key,
+    label: item.entry.label,
+    yours: money(item.yours),
+    yoursMonthlyAvg: money(item.yours.div(months)),
+    benchmark: money(item.benchmark),
+    benchmarkMonthlyAvg: money(new Decimal(item.entry.monthlyAvg)),
+    benchmarkPctOfIncome: item.entry.pctOfIncome,
+    variance: money(item.variance),
+  }));
+
+  response.charts = [
+    {
+      kind: 'groupedBar',
+      key: 'benchmarkComparison',
+      title: 'Your Spending vs Benchmark',
+      x: { key: 'label', label: 'Benchmark', format: 'date' },
+      series: [
+        { key: 'yours', label: 'Yours', format: 'currency', role: 'actual' },
+        { key: 'benchmark', label: 'Benchmark', format: 'currency', role: 'budget' },
+      ],
+      data: comparisonRows,
+    },
+    {
+      kind: 'bar',
+      key: 'benchmarkVariance',
+      title: 'Variance vs Benchmark',
+      x: { key: 'label', label: 'Benchmark', format: 'date' },
+      series: [{ key: 'variance', label: 'Variance', format: 'currency', role: 'net' }],
+      data: comparisonRows,
+      reference: { value: 0, label: 'On benchmark' },
+    },
+  ];
+
+  response.tables = [{
+    key: 'benchmarkComparison',
+    title: 'Benchmark Comparison',
+    columns: [
+      { key: 'label', label: 'Benchmark' },
+      { key: 'yours', label: 'Your Total' },
+      { key: 'yoursMonthlyAvg', label: 'Your Monthly Average' },
+      { key: 'benchmark', label: 'Benchmark Total' },
+      { key: 'benchmarkMonthlyAvg', label: 'Benchmark Monthly Average' },
+      { key: 'variance', label: 'Variance' },
+    ],
+    rows: comparisonRows,
+  }];
+
+  response.metadata.warnings.push(BENCHMARK_SOURCE_WARNING);
+  response.metadata.calculationNotes.push(`Benchmark totals cover ${months} month${months === 1 ? '' : 's'} of the selected date range.`);
+  return response;
+}
+
+/** True when the range is exactly one calendar year, e.g. 2026-01-01..2026-12-31. */
+function isWholeCalendarYear(startDate: string, endDate: string): boolean {
+  const year = startDate.slice(0, 4);
+  return startDate === `${year}-01-01` && endDate === `${year}-12-31`;
+}
+
+/**
+ * Tax-deductible spending, by Category. The classification is the whole of the
+ * legacy rule: keep spending rows whose Category has `isTaxDeductible`. Income
+ * is never a deduction, so deductible income Categories are dropped.
+ */
+export function buildTaxSummaryReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; generatedAt?: Date }): StandardReportResponse {
+  const filtered = baseRows(input.rows, input.query);
+  const response = baseResponse({ ...input, filtered, title: 'Tax Summary Report' });
+  const currencyCode = response.currencyCode;
+
+  const byCategory = new Map<string, { id: string; name: string; amount: Decimal; count: number }>();
+  const byPeriod = new Map<string, Decimal>();
+
+  for (const row of filtered) {
+    const signed = rowSignedAmount(row);
+    if (!isNegative(signed)) continue;
+    for (const part of attributionParts(row, input.query)) {
+      if (!part.category?.isTaxDeductible) continue;
+      const amount = part.amount.abs();
+      if (amount.isZero()) continue;
+      const existing = byCategory.get(part.category.id) ?? { id: part.category.id, name: part.category.name, amount: ZERO, count: 0 };
+      existing.amount = existing.amount.plus(amount);
+      existing.count += 1;
+      byCategory.set(part.category.id, existing);
+      const key = periodKey(row.date, input.query.groupBy);
+      byPeriod.set(key, (byPeriod.get(key) ?? ZERO).plus(amount));
+    }
+  }
+
+  const categories = Array.from(byCategory.values()).sort((a, b) => b.amount.comparedTo(a.amount));
+  const totalDeductible = categories.reduce((sum, item) => sum.plus(item.amount), ZERO);
+  const periods = Array.from(byPeriod.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([period, amount]) => ({ period, deductible: money(amount) }));
+
+  response.summaryCards = [card('totalDeductible', 'Total Deductible', totalDeductible, currencyCode)];
+
+  response.charts = [
+    {
+      kind: 'donut',
+      key: 'deductibleByCategory',
+      title: 'Deductible Expenses by Category',
+      nameKey: 'name',
+      valueKey: 'amount',
+      format: 'currency',
+      data: categories.slice(0, input.query.limit).map((item) => ({ id: item.id, name: item.name, amount: money(item.amount) })),
+    },
+    {
+      kind: 'bar',
+      key: 'deductibleByPeriod',
+      title: 'Deductible Expenses by Period',
+      x: PERIOD_AXIS,
+      series: [{ key: 'deductible', label: 'Deductible Expenses', format: 'currency', role: 'expense' }],
+      data: periods,
+    },
+  ];
+
+  response.tables = [{
+    key: 'deductibleCategories',
+    title: 'Tax-Deductible Categories',
+    columns: [
+      { key: 'name', label: 'Category' },
+      { key: 'count', label: 'Transactions' },
+      { key: 'amount', label: 'Amount' },
+    ],
+    rows: categories.map((item) => ({
+      id: item.id,
+      name: item.name,
+      count: item.count,
+      amount: money(item.amount),
+      formattedAmount: formatMoney(item.amount, currencyCode),
+    })),
+  }];
+
+  response.drilldowns = categories.map((item) => ({
+    key: `category-${item.id}`,
+    label: `View ${item.name} Transactions`,
+    params: { categoryId: item.id, startDate: input.query.startDate, endDate: input.query.endDate },
+  }));
+
+  response.metadata.calculationNotes.push(
+    'This report covers tax-deductible expenses only. Category.isTaxDeductible is the schema\'s only tax field, so taxable income and net taxable position are not modelled and are deliberately not reported.',
+  );
+  if (!isWholeCalendarYear(input.query.startDate, input.query.endDate)) {
+    response.metadata.calculationNotes.push(
+      `Totals cover ${input.query.startDate} to ${input.query.endDate}, which is not a whole calendar year. The Legacy Tax Summary tab always reported a calendar-year figure, so the two will differ.`,
+    );
+  }
+
+  return response;
+}
+
 type StandardReportGenerator = (input: {
   query: NormalizedReportQuery;
   rows: StandardReportRow[];
@@ -874,6 +1681,11 @@ type StandardReportGenerator = (input: {
   audit?: StandardAuditContextInput;
   wealth?: StandardWealthInput;
   investments?: StandardInvestmentInput;
+  allocation?: StandardAllocationInput;
+  contributionRoom?: StandardContributionRoomInput;
+  dividendForecast?: StandardDividendForecastInput;
+  retirement?: StandardRetirementInput;
+  cashFlowForecast?: StandardCashFlowForecastInput;
   generatedAt?: Date;
 }) => StandardReportResponse;
 
@@ -889,6 +1701,13 @@ export const standardReportRegistry: Partial<Record<StandardReportType, Standard
   audit: buildAuditDataQualityReport,
   net_worth: buildNetWorthReport,
   investment: buildInvestmentReport,
+  benchmarks: buildBenchmarksReport,
+  allocation: buildAllocationReport,
+  contribution_room: buildContributionRoomReport,
+  dividend_forecast: buildDividendForecastReport,
+  retirement: buildRetirementReport,
+  cash_flow_forecast: buildCashFlowForecastReport,
+  tax: buildTaxSummaryReport,
 };
 
 function reportAccountForJournal(journal: {
@@ -935,7 +1754,7 @@ export async function fetchStandardReportRows(
     },
     orderBy: [{ date: 'asc' }, { id: 'asc' }],
     include: {
-      category: { select: { id: true, name: true, groupId: true, excludeFromReports: true, group: { select: { id: true, name: true } } } },
+      category: { select: { id: true, name: true, groupId: true, excludeFromReports: true, bucketType: true, isTaxDeductible: true, group: { select: { id: true, name: true } } } },
       merchant: { select: { id: true, displayName: true } },
       entries: {
         include: {
@@ -956,7 +1775,7 @@ export async function fetchStandardReportRows(
       transactionTags: { include: { tag: { select: { id: true, name: true, color: true } } } },
       splits: {
         include: {
-          category: { select: { id: true, name: true, groupId: true, excludeFromReports: true, group: { select: { id: true, name: true } } } },
+          category: { select: { id: true, name: true, groupId: true, excludeFromReports: true, bucketType: true, isTaxDeductible: true, group: { select: { id: true, name: true } } } },
         },
       },
     },
@@ -970,6 +1789,8 @@ export async function fetchStandardReportRows(
           groupId: journal.category.groupId ?? null,
           groupName: journal.category.group?.name ?? null,
           excludeFromReports: Boolean(journal.category.excludeFromReports),
+          bucketType: journal.category.bucketType,
+          isTaxDeductible: Boolean(journal.category.isTaxDeductible),
         }
       : null;
     return {
@@ -999,6 +1820,8 @@ export async function fetchStandardReportRows(
               groupId: split.category.groupId ?? null,
               groupName: split.category.group?.name ?? null,
               excludeFromReports: Boolean(split.category.excludeFromReports),
+              bucketType: split.category.bucketType,
+              isTaxDeductible: Boolean(split.category.isTaxDeductible),
             }
           : null,
       })),
@@ -1087,7 +1910,7 @@ export async function fetchStandardWealthContext(
       select: { id: true, name: true, type: true, balance: true, balanceDecimal: true },
     }),
     prisma.manualAsset.findMany({ where: { householdId: input.householdId, isDeleted: false }, select: { currentValue: true, currentValueDecimal: true } }),
-    prisma.manualLiability.findMany({ where: { householdId: input.householdId, isDeleted: false }, select: { currentBalance: true, currentBalanceDecimal: true } }),
+    prisma.manualLiability.findMany({ where: { householdId: input.householdId, isDeleted: false }, select: { type: true, currentBalance: true, currentBalanceDecimal: true } }),
     prisma.investmentHolding.findMany({
       where: {
         isDeleted: false,
@@ -1117,12 +1940,37 @@ export async function fetchStandardWealthContext(
     name: account.name,
     value: decimal(account.balance ?? 0),
   }));
+  // Mirrors the Mortgage / Credit cards / Other liabilities lines the Legacy
+  // Assets / Liabilities tab shows. ManualLiability.type is one of
+  // mortgage | auto_loan | student_loan | credit_card | other.
+  const liabilityGroups: Array<{ key: string; label: string; types: string[] }> = [
+    { key: 'mortgage', label: 'Mortgage', types: ['mortgage'] },
+    { key: 'creditCard', label: 'Credit cards', types: ['credit_card'] },
+  ];
+  const groupedTypes = new Set(liabilityGroups.flatMap((group) => group.types));
+  const liabilityBreakdown = [
+    ...liabilityGroups.map((group) => ({
+      key: group.key,
+      label: group.label,
+      value: manualLiabilities
+        .filter((liability) => group.types.includes(liability.type))
+        .reduce((sum, liability) => sum.plus(decimal(liability.currentBalance ?? 0)), ZERO),
+    })),
+    {
+      key: 'other',
+      label: 'Other liabilities',
+      value: manualLiabilities
+        .filter((liability) => !groupedTypes.has(liability.type))
+        .reduce((sum, liability) => sum.plus(decimal(liability.currentBalance ?? 0)), ZERO),
+    },
+  ];
   return {
     cashValue,
     investmentValue,
     manualAssetValue,
     manualLiabilityValue,
     accountContributions,
+    liabilityBreakdown,
     // NetWorthSnapshot intentionally still prefers the Decimal column. These
     // rows are immutable history: once written they are never updated, so the
     // Decimal and the Float agree by construction and cannot drift.
@@ -1187,5 +2035,513 @@ export async function fetchStandardInvestmentContext(
     }),
     dividendTotal: holdings.reduce((sum, holding) => sum.plus(holding.dividends.reduce((inner, dividend) => inner.plus(decimal(dividend.amountDecimal)), ZERO)), ZERO),
     recurringInvestmentCount: holdings.reduce((sum, holding) => sum + holding.recurringInvestments.length, 0),
+  };
+}
+
+// ─── Wealth-backed report builders (absorbed Legacy tabs) ─────────────────────
+//
+// These four report types are not functions of StandardReportRow[]. They follow
+// the established buildNetWorthReport / buildInvestmentReport pattern: a context
+// object is fetched separately in buildStandardReportForRequest and `filtered: []`
+// is passed to baseResponse.
+
+export function buildAllocationReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; allocation?: StandardAllocationInput; generatedAt?: Date }): StandardReportResponse {
+  const response = baseResponse({ ...input, filtered: [], title: 'Allocation & Drift Report' });
+  const allocation = input.allocation;
+  const byAssetClass = allocation?.byAssetClass ?? [];
+  const totalValue = allocation?.totalValue ?? ZERO;
+  const largestDrift = byAssetClass.reduce((worst, item) => {
+    const drift = item.percent.minus(item.targetPercent);
+    return drift.abs().gt(worst.abs()) ? drift : worst;
+  }, ZERO);
+
+  response.summaryCards = [
+    card('totalValue', 'Portfolio Value', totalValue, response.currencyCode),
+    { key: 'assetClassCount', label: 'Asset Classes', value: String(byAssetClass.length), formattedValue: String(byAssetClass.length) },
+    { key: 'largestDrift', label: 'Largest Drift', value: largestDrift.toDecimalPlaces(2).toFixed(2), formattedValue: `${largestDrift.gte(ZERO) ? '+' : ''}${largestDrift.toDecimalPlaces(1).toFixed(1)}%` },
+  ];
+
+  response.charts = [
+    {
+      kind: 'donut',
+      key: 'allocationByAssetClass',
+      title: 'Current Allocation by Asset Class',
+      nameKey: 'name',
+      valueKey: 'value',
+      format: 'currency',
+      data: byAssetClass.map((item) => ({ name: item.assetClass, value: money(item.value) })),
+    },
+    {
+      kind: 'groupedBar',
+      key: 'allocationTargetVsCurrent',
+      title: 'Target vs Current Weight',
+      x: { key: 'assetClass', label: 'Asset Class', format: 'number' },
+      series: [
+        { key: 'current', label: 'Current', format: 'percent', role: 'actual' },
+        { key: 'target', label: 'Target', format: 'percent', role: 'budget' },
+      ],
+      data: byAssetClass.map((item) => ({
+        assetClass: item.assetClass,
+        current: item.percent.toDecimalPlaces(2).toNumber(),
+        target: item.targetPercent.toDecimalPlaces(2).toNumber(),
+      })),
+    },
+    {
+      kind: 'bar',
+      key: 'allocationDrift',
+      title: 'Drift from Target (percentage points)',
+      x: { key: 'assetClass', label: 'Asset Class', format: 'number' },
+      series: [{ key: 'drift', label: 'Drift', format: 'percent', role: 'net' }],
+      data: byAssetClass.map((item) => ({
+        assetClass: item.assetClass,
+        drift: item.percent.minus(item.targetPercent).toDecimalPlaces(2).toNumber(),
+      })),
+      reference: { value: 0, label: 'On target' },
+    },
+  ];
+
+  response.tables = [{
+    key: 'allocationDrift',
+    title: 'Allocation & Drift',
+    columns: [
+      { key: 'assetClass', label: 'Asset Class' },
+      { key: 'value', label: 'Value' },
+      { key: 'current', label: 'Current %' },
+      { key: 'target', label: 'Target %' },
+      { key: 'drift', label: 'Drift' },
+    ],
+    rows: byAssetClass.map((item) => ({
+      id: item.assetClass,
+      assetClass: item.assetClass,
+      value: money(item.value),
+      formattedValue: formatMoney(item.value, response.currencyCode),
+      current: item.percent.toDecimalPlaces(2).toFixed(2),
+      target: item.targetPercent.toDecimalPlaces(2).toFixed(2),
+      drift: item.percent.minus(item.targetPercent).toDecimalPlaces(2).toFixed(2),
+    })),
+  }];
+
+  if (!allocation) response.metadata.warnings.push('No investment allocation context was available.');
+  else if (!byAssetClass.length) response.metadata.warnings.push('No investment holdings were found. Add holdings to see allocation drift.');
+  response.metadata.calculationNotes.push('Target weights are the built-in defaults (US Stocks 50%, Bonds 30%, International Stocks 15%, Cash 5%); asset classes without a default target compare against 0%.');
+  noteWealthOnlyFilters(response, input.query, 'Account and investment holding data');
+  return response;
+}
+
+export function buildContributionRoomReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; contributionRoom?: StandardContributionRoomInput; generatedAt?: Date }): StandardReportResponse {
+  const response = baseResponse({ ...input, filtered: [], title: 'Contribution Room Report' });
+  const accounts = input.contributionRoom?.accounts ?? [];
+  const totalRoom = accounts.reduce((sum, account) => sum.plus(account.totalRoomEver), ZERO);
+  const totalContributed = accounts.reduce((sum, account) => sum.plus(account.contributionsYtd), ZERO);
+  const totalRemaining = accounts.reduce((sum, account) => sum.plus(account.roomRemaining), ZERO);
+  const totalOver = accounts.reduce((sum, account) => sum.plus(account.overContribution), ZERO);
+
+  response.summaryCards = [
+    card('totalRoom', 'Total Room', totalRoom, response.currencyCode),
+    card('totalContributed', 'Total Contributed', totalContributed, response.currencyCode),
+    card('totalRemaining', 'Remaining Room', totalRemaining, response.currencyCode),
+    card('totalOverContribution', 'Over-contribution', totalOver, response.currencyCode),
+  ];
+
+  const byType = new Map<string, { contributed: Decimal; remaining: Decimal }>();
+  for (const account of accounts) {
+    const existing = byType.get(account.type) ?? { contributed: ZERO, remaining: ZERO };
+    existing.contributed = existing.contributed.plus(account.contributionsYtd);
+    existing.remaining = existing.remaining.plus(account.roomRemaining);
+    byType.set(account.type, existing);
+  }
+
+  response.charts = [{
+    kind: 'groupedBar',
+    key: 'contributionRoomByType',
+    title: 'Contributed vs Remaining Room by Account Type',
+    x: { key: 'accountType', label: 'Account Type', format: 'number' },
+    series: [
+      // Shared stack group, so the full bar height reads as the total room.
+      { key: 'contributed', label: 'Contributed', format: 'currency', role: 'actual', stack: 'room' },
+      { key: 'remaining', label: 'Remaining', format: 'currency', role: 'budget', stack: 'room' },
+    ],
+    data: Array.from(byType.entries()).map(([accountType, totals]) => ({
+      accountType,
+      contributed: money(totals.contributed),
+      remaining: money(totals.remaining),
+    })),
+  }];
+
+  response.tables = [{
+    key: 'contributionRoom',
+    title: 'Contribution Room by Account',
+    columns: [
+      { key: 'type', label: 'Type' },
+      { key: 'name', label: 'Account' },
+      { key: 'memberName', label: 'Member' },
+      { key: 'contributionsYtd', label: 'Contributed YTD' },
+      { key: 'roomRemaining', label: 'Room Remaining' },
+      { key: 'overContribution', label: 'Over-contribution' },
+      { key: 'pctUsed', label: '% Used' },
+      { key: 'alert', label: 'Status' },
+    ],
+    rows: accounts.map((account) => ({
+      id: account.id,
+      type: account.type,
+      name: account.name,
+      memberName: account.memberName,
+      contributionsYtd: money(account.contributionsYtd),
+      roomRemaining: money(account.roomRemaining),
+      overContribution: money(account.overContribution),
+      pctUsed: account.pctUsed,
+      alert: account.alert,
+    })),
+  }];
+
+  if (!input.contributionRoom) response.metadata.warnings.push('No tax account context was available.');
+  else if (!accounts.length) response.metadata.warnings.push('No tax-advantaged accounts have been configured yet.');
+  if (totalOver.gt(ZERO)) response.metadata.warnings.push('One or more tax accounts are over-contributed.');
+  noteWealthOnlyFilters(response, input.query, 'TaxAccount contribution and room data');
+  return response;
+}
+
+export function buildDividendForecastReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; dividendForecast?: StandardDividendForecastInput; generatedAt?: Date }): StandardReportResponse {
+  const response = baseResponse({ ...input, filtered: [], title: 'Dividend Forecast Report' });
+  const forecast = input.dividendForecast?.forecast ?? [];
+  const byHolding = (input.dividendForecast?.byHolding ?? []).filter((item) => item.annualIncome.gt(ZERO));
+  const firstYear = forecast[0]?.income ?? ZERO;
+  const horizonTotal = forecast.reduce((sum, point) => sum.plus(point.income), ZERO);
+
+  response.summaryCards = [
+    card('firstYearIncome', 'Projected Income (Year 1)', firstYear, response.currencyCode),
+    card('horizonIncome', `Projected Income (${input.dividendForecast?.years ?? forecast.length} Years)`, horizonTotal, response.currencyCode),
+    { key: 'payingHoldings', label: 'Dividend-paying Holdings', value: String(byHolding.length), formattedValue: String(byHolding.length) },
+  ];
+
+  response.charts = [
+    {
+      kind: 'bar',
+      key: 'dividendByYear',
+      title: 'Projected Dividend Income by Year',
+      x: { key: 'year', label: 'Year', format: 'number' },
+      series: [{ key: 'income', label: 'Projected Income', format: 'currency', role: 'income' }],
+      data: forecast.map((point) => ({ year: String(point.year), income: money(point.income) })),
+    },
+    {
+      kind: 'donut',
+      key: 'dividendByHolding',
+      title: 'Projected Dividends by Holding',
+      nameKey: 'name',
+      valueKey: 'value',
+      format: 'currency',
+      data: byHolding.map((item) => ({ name: item.symbol, value: money(item.annualIncome) })),
+    },
+  ];
+
+  response.tables = [{
+    key: 'dividendForecast',
+    title: 'Dividend Forecast',
+    columns: [{ key: 'year', label: 'Year' }, { key: 'income', label: 'Projected Income' }],
+    rows: forecast.map((point) => ({
+      id: String(point.year),
+      year: point.year,
+      income: money(point.income),
+      formattedIncome: formatMoney(point.income, response.currencyCode),
+    })),
+  }];
+
+  if (!input.dividendForecast) response.metadata.warnings.push('No dividend forecast context was available.');
+  else if (!forecast.length || horizonTotal.eq(ZERO)) response.metadata.warnings.push('No dividend-paying holdings were found. Add investments to see a dividend forecast.');
+  if (input.dividendForecast?.basedOn) response.metadata.calculationNotes.push(input.dividendForecast.basedOn);
+  response.metadata.calculationNotes.push(`The forecast horizon is fixed at ${input.dividendForecast?.years ?? 5} years and is not derived from the report date range.`);
+  noteWealthOnlyFilters(response, input.query, 'investment holding and live dividend-yield data');
+  return response;
+}
+
+export function buildRetirementReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; retirement?: StandardRetirementInput; generatedAt?: Date }): StandardReportResponse {
+  const response = baseResponse({ ...input, filtered: [], title: 'Retirement Simulation Report' });
+  const retirement = input.retirement;
+  const scenarios = retirement?.scenarios ?? [];
+  const projectionYears = retirement?.projectionYears ?? 30;
+  const portfolioValue = retirement?.portfolioValue ?? ZERO;
+
+  response.summaryCards = [
+    card('portfolioValue', 'Portfolio Value', portfolioValue, response.currencyCode),
+    { key: 'projectionYears', label: 'Projection Horizon', value: String(projectionYears), formattedValue: `${projectionYears} years` },
+    ...scenarios.map((scenario) => card(`scenario_${scenario.label.replace(/\s+/g, '_').toLowerCase()}`, `${scenario.label} (${(scenario.returnRate * 100).toFixed(0)}%/yr)`, scenario.endingBalance, response.currencyCode)),
+  ];
+
+  // One series per scenario, sampled yearly, so the report draws the growth paths
+  // the Legacy tab only stated as ending balances.
+  const years = Array.from({ length: projectionYears + 1 }, (_, index) => index);
+  response.charts = [{
+    kind: 'line',
+    key: 'retirementProjection',
+    title: 'Projected Portfolio Value by Scenario',
+    x: { key: 'year', label: 'Years from now', format: 'number' },
+    series: scenarios.map((scenario) => ({
+      key: scenario.label.replace(/\s+/g, '_').toLowerCase(),
+      label: scenario.label,
+      format: 'currency' as const,
+      role: 'categorical' as const,
+    })),
+    data: years.map((year) => {
+      const point: ChartRow = { year: String(year) };
+      for (const scenario of scenarios) {
+        point[scenario.label.replace(/\s+/g, '_').toLowerCase()] = money(portfolioValue.times(decimal(1 + scenario.returnRate).pow(year)));
+      }
+      return point;
+    }),
+  }];
+
+  response.tables = [{
+    key: 'retirementScenarios',
+    title: 'Scenarios',
+    columns: [
+      { key: 'label', label: 'Scenario' },
+      { key: 'returnRate', label: 'Assumed Annual Return' },
+      { key: 'endingBalance', label: `Projected Balance After ${projectionYears} Years` },
+    ],
+    rows: scenarios.map((scenario) => ({
+      id: scenario.label,
+      label: scenario.label,
+      returnRate: `${(scenario.returnRate * 100).toFixed(0)}%`,
+      endingBalance: money(scenario.endingBalance),
+      formattedEndingBalance: formatMoney(scenario.endingBalance, response.currencyCode),
+    })),
+  }];
+
+  if (!retirement) response.metadata.warnings.push('No retirement simulation context was available.');
+  else if (!scenarios.length || portfolioValue.eq(ZERO)) response.metadata.warnings.push('No portfolio data is available. Add investments to run retirement simulations.');
+  if (retirement?.note) response.metadata.calculationNotes.push(retirement.note);
+  noteWealthOnlyFilters(response, input.query, 'investment holding data');
+  return response;
+}
+
+// ─── Wealth-backed context fetchers ──────────────────────────────────────────
+
+/**
+ * Default target weights. Absorbed from TARGET_ALLOCATION in the Legacy
+ * client/src/pages/reports/components/AllocationDriftSection.tsx, which hardcoded
+ * them client-side. Asset classes with no entry target 0%.
+ */
+const DEFAULT_TARGET_ALLOCATION: Record<string, number> = {
+  'US Stocks': 50,
+  Bonds: 30,
+  'International Stocks': 15,
+  Cash: 5,
+};
+
+export async function fetchStandardAllocationContext(input: { householdId: string }): Promise<StandardAllocationInput> {
+  // Shares getAllocation with GET /api/v1/investments/allocation; changing the
+  // allocation maths there changes this report too, by design.
+  const allocation = await getAllocation(input.householdId);
+  return {
+    totalValue: decimal(allocation.totalValue),
+    byAssetClass: allocation.byAssetClass.map((item) => ({
+      assetClass: item.assetClass,
+      value: decimal(item.value),
+      percent: decimal(item.percent),
+      targetPercent: decimal(DEFAULT_TARGET_ALLOCATION[item.assetClass] ?? 0),
+    })),
+  };
+}
+
+export async function fetchStandardContributionRoomContext(
+  input: { householdId: string },
+  prisma: Pick<PrismaClient, 'taxAccount'> = defaultPrisma,
+): Promise<StandardContributionRoomInput> {
+  // Reproduces the per-account mapping in GET /api/v1/tax-accounts/household-summary
+  // (server/src/routes/taxAccounts.ts). The CRA room rules themselves are shared:
+  // both callers use calculateTfsaRoom / calculateRrspRoom from lib/taxRoomCalculator.
+  // If that route's mapping changes, change it here too.
+  const accounts = await prisma.taxAccount.findMany({ where: { householdId: input.householdId } });
+  const currentYear = new Date().getFullYear();
+  return {
+    accounts: accounts.map((account) => {
+      let roomRemaining = 0;
+      let overContribution = 0;
+      if (account.type === 'TFSA' && account.birthYear) {
+        const calc = calculateTfsaRoom(account.birthYear, currentYear, account.contributionsYtd, account.withdrawalsYtd);
+        roomRemaining = calc.roomRemaining;
+        overContribution = calc.overContribution;
+      } else if (account.type === 'RRSP') {
+        const calc = calculateRrspRoom(currentYear, account.contributionsYtd, account.totalRoomEver);
+        roomRemaining = calc.roomRemaining;
+        overContribution = calc.overContribution;
+      } else {
+        roomRemaining = Math.max(0, account.totalRoomEver - account.contributionsYtd);
+      }
+      const pctUsed = account.totalRoomEver > 0 ? (account.contributionsYtd / account.totalRoomEver) * 100 : 0;
+      return {
+        id: account.id,
+        name: account.name,
+        type: account.type,
+        memberName: account.memberName,
+        contributionsYtd: decimal(account.contributionsYtd),
+        totalRoomEver: decimal(account.totalRoomEver),
+        roomRemaining: decimal(roomRemaining),
+        overContribution: decimal(overContribution),
+        pctUsed: Math.min(100, Math.round(pctUsed)),
+        alert: overContribution > 0 ? 'over' : pctUsed > 90 ? 'warning' : 'ok',
+      };
+    }),
+  };
+}
+
+/** The Legacy Dividend Forecast tab hardcoded years=5; keep five years as the default. */
+const DIVIDEND_FORECAST_YEARS = 5;
+
+export async function fetchStandardDividendForecastContext(
+  input: { householdId: string },
+  prisma: Pick<PrismaClient, 'investmentHolding'> = defaultPrisma,
+): Promise<StandardDividendForecastInput> {
+  // The yearly totals come from getDividendForecast, shared with
+  // GET /api/v1/investments/dividend-forecast. That function returns no
+  // per-holding split, so the donut recomputes shares * price * dividendYield
+  // per holding with the same inputs.
+  const [summary, holdings] = await Promise.all([
+    getDividendForecast(input.householdId, DIVIDEND_FORECAST_YEARS),
+    prisma.investmentHolding.findMany({
+      where: { isDeleted: false, account: { householdId: input.householdId, isDeleted: false } },
+      select: { symbol: true, name: true, shares: true, currentPrice: true },
+    }),
+  ]);
+  const quotes = await getQuotes(holdings.map((holding) => holding.symbol));
+  return {
+    years: DIVIDEND_FORECAST_YEARS,
+    forecast: summary.forecast.map((point) => ({ year: point.year, income: decimal(point.income) })),
+    byHolding: holdings.map((holding) => {
+      const quote = quotes.get(holding.symbol.toUpperCase());
+      const price = quote?.price ?? holding.currentPrice ?? 0;
+      const dividendYield = quote?.dividendYield ?? 0;
+      return {
+        symbol: holding.symbol,
+        name: holding.name,
+        annualIncome: decimal(holding.shares).times(decimal(price)).times(decimal(dividendYield)),
+      };
+    }),
+    basedOn: summary.basedOn,
+  };
+}
+
+/**
+ * Deterministic compound-growth projections, reproducing the ~30 lines inside
+ * GET /api/v1/investments/retirement-simulation (server/src/routeModules/investments.ts).
+ * There is no Monte Carlo and no per-request iteration, so this is cheap enough to
+ * re-run on every filter change. If that route gains real probabilistic modelling,
+ * extract it into server/src/lib/ and have both callers share it.
+ */
+const RETIREMENT_PROJECTION_YEARS = 30;
+const RETIREMENT_SCENARIOS: Array<{ label: string; returnRate: number }> = [
+  { label: 'Conservative', returnRate: 0.05 },
+  { label: 'Base case', returnRate: 0.07 },
+  { label: 'Growth', returnRate: 0.09 },
+];
+
+export async function fetchStandardRetirementContext(
+  input: { householdId: string },
+  prisma: Pick<PrismaClient, 'investmentHolding'> = defaultPrisma,
+): Promise<StandardRetirementInput> {
+  const holdings = await prisma.investmentHolding.findMany({
+    where: { isDeleted: false, account: { householdId: input.householdId, isDeleted: false } },
+    select: { shares: true, currentPrice: true, costBasis: true },
+  });
+  const portfolioValue = holdings.reduce(
+    (sum, holding) => sum.plus(decimal(holding.shares ?? 0).times(decimal(holding.currentPrice ?? holding.costBasis ?? 0))),
+    ZERO,
+  );
+  return {
+    portfolioValue,
+    projectionYears: RETIREMENT_PROJECTION_YEARS,
+    scenarios: RETIREMENT_SCENARIOS.map((scenario) => ({
+      label: scenario.label,
+      returnRate: scenario.returnRate,
+      endingBalance: portfolioValue.times(decimal(1 + scenario.returnRate).pow(RETIREMENT_PROJECTION_YEARS)),
+    })),
+    note: 'Deterministic projections of your current portfolio value compounded at fixed assumed annual return rates over 30 years. Assumes no future contributions or withdrawals. These are illustrative scenarios, not predictions or probabilities.',
+  };
+}
+
+/**
+ * Cash Flow Forecast, absorbed from the Legacy Forecast tab
+ * (client/src/pages/reports/components/CashFlowForecast.tsx). The projection itself
+ * lives in server/src/lib/cashFlowForecast.ts and is shared verbatim with
+ * GET /api/v1/cashflow/forecast — this builder only shapes it into the standard
+ * contract, so the two can never disagree.
+ */
+export function buildCashFlowForecastReport(input: { query: NormalizedReportQuery; rows: StandardReportRow[]; cashFlowForecast?: StandardCashFlowForecastInput; generatedAt?: Date }): StandardReportResponse {
+  const response = baseResponse({ ...input, filtered: [], title: 'Cash Flow Forecast Report' });
+  const context = input.cashFlowForecast;
+  const forecast = context?.forecast;
+  const days = context?.days ?? 0;
+  const projections = forecast?.projections ?? [];
+  const currentBalance = decimal(forecast?.currentBalance ?? 0);
+  const projectedEndBalance = decimal(forecast?.summary.projectedEndBalance ?? 0);
+  const avgMonthlyIncome = decimal(forecast?.summary.avgMonthlyIncome ?? 0);
+  const avgMonthlyExpense = decimal(forecast?.summary.avgMonthlyExpense ?? 0);
+  const knownRecurringTotal = decimal(forecast?.summary.knownRecurringTotal ?? 0);
+
+  response.summaryCards = [
+    card('currentBalance', 'Current Balance', currentBalance, response.currencyCode),
+    card('projectedEndBalance', `Projected Balance in ${days} Days`, projectedEndBalance, response.currencyCode),
+    card('avgMonthlyNet', 'Average Monthly Net', avgMonthlyIncome.minus(avgMonthlyExpense), response.currencyCode),
+    card('knownRecurringTotal', 'Known Recurring Total', knownRecurringTotal, response.currencyCode),
+  ];
+
+  response.charts = [{
+    kind: 'line',
+    key: 'cashFlowForecast',
+    title: `Projected Balance over the Next ${days} Days`,
+    x: { key: 'date', label: 'Date', format: 'date' },
+    series: [{ key: 'projected', label: 'Projected Balance', format: 'currency', role: 'net' }],
+    data: projections.map((point) => ({ date: point.date, projected: money(decimal(point.projected)) })),
+  }];
+
+  response.tables = [{
+    key: 'cashFlowProjections',
+    title: 'Daily Projections',
+    columns: [
+      { key: 'date', label: 'Date' },
+      { key: 'dailyNet', label: 'Daily Net' },
+      { key: 'projected', label: 'Projected Balance' },
+    ],
+    rows: projections.map((point) => ({
+      id: point.date,
+      date: point.date,
+      dailyNet: money(decimal(point.dailyNet)),
+      projected: money(decimal(point.projected)),
+      formattedDailyNet: formatMoney(decimal(point.dailyNet), response.currencyCode),
+      formattedProjected: formatMoney(decimal(point.projected), response.currencyCode),
+    })),
+  }];
+
+  if (!forecast) {
+    response.metadata.warnings.push('No cash flow forecast context was available.');
+  } else {
+    response.metadata.calculationNotes.push(`Projected over a ${days}-day window. The forecast supports 30, 60 and 90 day windows only, so the selected date range (${context?.requestedDays ?? 0} days forward from today) was clamped to the nearest of those.`);
+    response.metadata.calculationNotes.push('Daily net is the average daily income minus average daily expense over the last 90 days, plus any RecurringItem falling due that day. Recurring Journals are excluded from the average so they are not counted twice.');
+  }
+  noteWealthOnlyFilters(response, input.query, 'Account balance and RecurringItem data');
+
+  return response;
+}
+
+/** The windows the projection supports. Not a query parameter on the standard contract. */
+const CASH_FLOW_FORECAST_WINDOWS = [30, 60, 90] as const;
+
+export async function fetchStandardCashFlowForecastContext(
+  input: { householdId: string; endDate: string; now?: Date },
+  prisma: Pick<PrismaClient, 'account' | 'transactionJournal' | 'recurringItem'> = defaultPrisma,
+): Promise<StandardCashFlowForecastInput> {
+  const now = input.now ?? new Date();
+  const end = new Date(`${input.endDate}T00:00:00Z`);
+  const requestedDays = Number.isNaN(end.getTime())
+    ? CASH_FLOW_FORECAST_WINDOWS[0]
+    : Math.max(0, Math.round((end.getTime() - now.getTime()) / 86_400_000));
+  const days = CASH_FLOW_FORECAST_WINDOWS.reduce((nearest, window) =>
+    Math.abs(window - requestedDays) < Math.abs(nearest - requestedDays) ? window : nearest,
+  CASH_FLOW_FORECAST_WINDOWS[0] as 30 | 60 | 90);
+
+  return {
+    days,
+    requestedDays,
+    forecast: await computeCashFlowForecast({ householdId: input.householdId, days, now }, prisma),
   };
 }

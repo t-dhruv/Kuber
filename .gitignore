@@ -93,3 +93,7 @@ graphify-out/graph.json
 .env
 .env.local
 .env.*.local
+
+# Local planning notes and skill lockfile
+plans/
+skills-lock.json
