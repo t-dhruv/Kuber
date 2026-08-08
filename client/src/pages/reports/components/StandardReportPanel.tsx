@@ -9,6 +9,8 @@ import {
   type StandardReportFilters,
   type StandardReportResponse,
 } from "../standardReportClient";
+import { ReportChart } from "./ReportChart";
+import { chartSelectionToFilter } from "../chartSelectionToFilter";
 
 interface DrilldownResponse {
   total: number;
@@ -36,7 +38,13 @@ function valueLabel(value: unknown): string {
   return String(value);
 }
 
-export function StandardReportPanel({ filters }: { filters: StandardReportFilters }) {
+export function StandardReportPanel({
+  filters,
+  onFiltersChange,
+}: {
+  filters: StandardReportFilters;
+  onFiltersChange?: (next: StandardReportFilters) => void;
+}) {
   const [drilldown, setDrilldown] = useState<{ label: string; params: Record<string, string> } | null>(null);
   const reportQuery = useQuery<StandardReportResponse>({
     queryKey: ["reports", "standard", filters],
@@ -112,26 +120,17 @@ export function StandardReportPanel({ filters }: { filters: StandardReportFilter
       {report.charts.map((chart) => (
         <Card key={chart.key} style={{ padding: "1rem" }}>
           <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>{chart.title}</h2>
-          {chart.data.length === 0 ? (
-            <p style={{ color: "var(--color-text-secondary)", margin: 0 }}>No chart data for this range.</p>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
-                <tbody>
-                  {chart.data.slice(0, 12).map((row, index) => (
-                    <tr key={`${chart.key}-${index}`}>
-                      {Object.entries(row).map(([key, value]) => (
-                        <td key={key} style={{ padding: "0.5rem", borderBottom: "1px solid var(--color-border)" }}>
-                          <span style={{ color: "var(--color-text-secondary)" }}>{key}: </span>
-                          {valueLabel(value)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <ReportChart
+            spec={chart}
+            onSelect={
+              onFiltersChange
+                ? (selection) => {
+                    const next = chartSelectionToFilter(filters, selection);
+                    if (next) onFiltersChange(next);
+                  }
+                : undefined
+            }
+          />
         </Card>
       ))}
 

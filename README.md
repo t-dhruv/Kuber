@@ -22,7 +22,7 @@ Kuber is a full-featured personal finance web app you run on your own server. Tr
 - **Transactions** — Full CRUD with search, filters, bulk edit, category management, and a rules engine for auto-categorization
 - **Cash Flow** — Monthly and yearly income vs. expenses with interactive charts
 - **Budgets** — Category-based budgets with inline editing and real-time progress tracking
-- **Reports** — Spending and income breakdowns with donut charts and flexible date ranges
+- **Reports** — One report engine covering spending, income, cash flow, budgets, tags, net worth, investments, tax and benchmarks, with cross-filtering charts, drill-down, saved reports and CSV/JSON export
 - **Recurring Bills** — Track bills with paid/upcoming status and monthly summaries
 - **Goals** — Savings goals with contribution tracking and progress rings
 - **Investments** — Holdings tracking, allocation breakdown, and performance over time

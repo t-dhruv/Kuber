@@ -10,12 +10,32 @@ import {
   buildAuditDataQualityReport,
   buildInvestmentReport,
   buildNetWorthReport,
+  buildBenchmarksReport,
   buildOverviewReport,
   buildReportDrilldown,
   buildTagReport,
+  buildAllocationReport,
+  buildContributionRoomReport,
+  buildDividendForecastReport,
+  buildRetirementReport,
+  buildCashFlowForecastReport,
+  buildTaxSummaryReport,
   normalizeReportQuery,
+  fetchStandardReportRows,
+  type StandardReportCategory,
   type StandardReportRow,
 } from '../../src/lib/reporting/standard';
+
+const category = (overrides: Partial<StandardReportCategory> = {}): StandardReportCategory => ({
+  id: 'cat-food',
+  name: 'Food',
+  groupId: 'group-living',
+  groupName: 'Living',
+  excludeFromReports: false,
+  bucketType: 'wants',
+  isTaxDeductible: false,
+  ...overrides,
+});
 
 const row = (overrides: Partial<StandardReportRow>): StandardReportRow => ({
   id: 'journal-1',
@@ -30,7 +50,7 @@ const row = (overrides: Partial<StandardReportRow>): StandardReportRow => ({
   isDeleted: false,
   isSplit: false,
   isTransfer: false,
-  category: { id: 'cat-food', name: 'Food', groupId: 'group-living', groupName: 'Living', excludeFromReports: false },
+  category: category(),
   merchant: { id: 'merchant-market', name: 'Market' },
   account: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false, excludeFromNetWorth: false, isHidden: false, isDeleted: false },
   tags: [],
@@ -98,8 +118,8 @@ describe('standard reporting module', () => {
           signedAmountDecimal: new Decimal('-100.00'),
           amountDecimal: new Decimal('100.00'),
           splits: [
-            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: { id: 'cat-food', name: 'Food', groupId: null, groupName: null, excludeFromReports: false } },
-            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: { id: 'cat-home', name: 'Home', groupId: null, groupName: null, excludeFromReports: false } },
+            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: category({ groupId: null, groupName: null }) },
+            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: category({ id: 'cat-home', name: 'Home', groupId: null, groupName: null }) },
           ],
         }),
       ],
@@ -171,8 +191,8 @@ describe('standard reporting module', () => {
           isSplit: true,
           tags: [{ id: 'tag-home', name: 'Home', color: null }],
           splits: [
-            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: { id: 'cat-food', name: 'Food', groupId: 'group-living', groupName: 'Living', excludeFromReports: false } },
-            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: { id: 'cat-home', name: 'Home', groupId: 'group-living', groupName: 'Living', excludeFromReports: false } },
+            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: category() },
+            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: category({ id: 'cat-home', name: 'Home' }) },
           ],
         }),
         row({ id: 'filtered-account', account: { id: 'acct-other', name: 'Other', type: 'bank', excludeFromReports: false, excludeFromNetWorth: false, isHidden: false, isDeleted: false } }),
@@ -198,10 +218,10 @@ describe('standard reporting module', () => {
         row({
           id: 'split',
           isSplit: true,
-          category: { id: 'cat-food', name: 'Food', groupId: null, groupName: null, excludeFromReports: false },
+          category: category({ groupId: null, groupName: null }),
           splits: [
-            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: { id: 'cat-food', name: 'Food', groupId: null, groupName: null, excludeFromReports: false } },
-            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: { id: 'cat-home', name: 'Home', groupId: null, groupName: null, excludeFromReports: false } },
+            { id: 'split-food', amountDecimal: new Decimal('40.00'), category: category({ groupId: null, groupName: null }) },
+            { id: 'split-home', amountDecimal: new Decimal('60.00'), category: category({ id: 'cat-home', name: 'Home', groupId: null, groupName: null }) },
           ],
         }),
       ],
@@ -362,5 +382,678 @@ describe('standard reporting module', () => {
     expect(report.tables.find((table) => table.key === 'holdings')?.rows).toEqual([
       expect.objectContaining({ id: 'holding-1', currentValue: '1200.00', costBasis: '1000.00', unrealizedGainLoss: '200.00' }),
     ]);
+  });
+
+  it('emits a donut spec whose slice values are all non-negative', () => {
+    const report = buildOverviewReport({
+      query: normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31' }),
+      rows: [
+        row({ id: 'income', transactionType: 'deposit', signedAmountDecimal: new Decimal('1000.00'), amountDecimal: new Decimal('1000.00') }),
+        row({ id: 'expense', signedAmountDecimal: new Decimal('-200.25'), amountDecimal: new Decimal('200.25') }),
+      ],
+    });
+
+    const chart = report.charts.find((item) => item.key === 'spendingByCategory');
+    expect(chart?.kind).toBe('donut');
+    expect(chart && 'data' in chart ? chart.data : []).not.toHaveLength(0);
+    if (chart && 'valueKey' in chart) {
+      for (const dataRow of chart.data) {
+        expect(Number(dataRow[chart.valueKey])).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it('marks stacked series with a shared stack group', () => {
+    const query = normalizeReportQuery({ reportType: 'cash_flow', startDate: '2026-01-01', endDate: '2026-01-31' });
+    const report = buildCashFlowReport({
+      query,
+      rows: [
+        row({ id: 'income', transactionType: 'deposit', signedAmountDecimal: new Decimal('500.00'), amountDecimal: new Decimal('500.00') }),
+        row({ id: 'expense', signedAmountDecimal: new Decimal('-100.00'), amountDecimal: new Decimal('100.00') }),
+      ],
+    });
+
+    const chart = report.charts.find((item) => item.key === 'cashFlowByPeriod');
+    expect(chart && 'series' in chart ? chart.series.map((series) => series.stack) : []).toEqual(['flow', 'flow']);
+  });
+
+  it('keeps net worth composition free of negative slices', () => {
+    const report = buildNetWorthReport({
+      query: normalizeReportQuery({ reportType: 'net_worth', startDate: '2026-01-01', endDate: '2026-01-31', currencyCode: 'CAD' }),
+      rows: [],
+      wealth: {
+        cashValue: new Decimal('1000.00'),
+        investmentValue: new Decimal('2500.00'),
+        manualAssetValue: new Decimal('750.00'),
+        manualLiabilityValue: new Decimal('300.00'),
+        accountContributions: [],
+        snapshots: [],
+      },
+    });
+
+    const chart = report.charts.find((item) => item.key === 'netWorthComposition');
+    expect(chart?.kind).toBe('donut');
+    const data = chart && 'data' in chart ? chart.data : [];
+    expect(data).toEqual([
+      { name: 'Cash', value: '1000.00' },
+      { name: 'Investments', value: '2500.00' },
+      { name: 'Manual Assets', value: '750.00' },
+    ]);
+    for (const dataRow of data) {
+      expect(Number(dataRow.value)).toBeGreaterThanOrEqual(0);
+    }
+    expect(data.some((dataRow) => dataRow.name === 'Manual Liabilities')).toBe(false);
+  });
+
+  it('emits a chart for the audit and investment reports', () => {
+    const auditReport = buildAuditDataQualityReport({
+      query: normalizeReportQuery({ reportType: 'audit', startDate: '2026-01-01', endDate: '2026-01-31' }),
+      rows: [row({ id: 'uncategorized', category: null, merchant: null, tags: [], reconciled: false })],
+    });
+    const investmentReport = buildInvestmentReport({
+      query: normalizeReportQuery({ reportType: 'investment', startDate: '2026-01-01', endDate: '2026-01-31' }),
+      rows: [],
+      investments: {
+        holdings: [
+          { id: 'holding-1', accountId: 'acct-invest', accountName: 'Investing', symbol: 'ABC', name: 'ABC Fund', shares: new Decimal('10'), currentValue: new Decimal('1200.00'), costBasis: new Decimal('1000.00'), realizedGainLoss: new Decimal('0'), assetClass: 'equity' },
+        ],
+        dividendTotal: new Decimal('25.00'),
+        recurringInvestmentCount: 2,
+      },
+    });
+
+    expect(auditReport.charts.length).toBeGreaterThan(0);
+    expect(investmentReport.charts.length).toBeGreaterThan(0);
+  });
+
+  it('applies an inclusive amount range', () => {
+    const query = normalizeReportQuery({
+      reportType: 'overview',
+      startDate: '2026-01-01',
+      endDate: '2026-01-31',
+      minAmount: '100',
+      maxAmount: '500',
+    });
+    const report = buildOverviewReport({
+      query,
+      rows: [
+        row({ id: 'low', amountDecimal: new Decimal('50.00'), signedAmountDecimal: new Decimal('-50.00') }),
+        row({ id: 'mid', amountDecimal: new Decimal('100.00'), signedAmountDecimal: new Decimal('-100.00') }),
+        row({ id: 'high', amountDecimal: new Decimal('500.00'), signedAmountDecimal: new Decimal('-500.00') }),
+      ],
+    });
+
+    const total = report.tables.find((table) => table.key === 'topSpendingCategories')?.rows.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+    expect(total).toBe(2);
+  });
+
+  it('rejects an inverted amount range', () => {
+    expect(() =>
+      normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', minAmount: '500', maxAmount: '100' }),
+    ).toThrow();
+  });
+
+  it('rejects a negative amount bound', () => {
+    expect(() =>
+      normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', minAmount: '-1' }),
+    ).toThrow();
+  });
+
+  it('matches search text against description and merchant name', () => {
+    const query = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', searchText: 'insurance' });
+    const report = buildOverviewReport({
+      query,
+      rows: [
+        row({ id: 'desc-match', description: 'Car Insurance Payment', merchant: { id: 'merchant-market', name: 'Market' } }),
+        row({ id: 'merchant-match', description: 'Monthly Bill', merchant: { id: 'merchant-insurance', name: 'Insurance Co' } }),
+        row({ id: 'no-match', description: 'Groceries', merchant: { id: 'merchant-market', name: 'Market' } }),
+      ],
+    });
+
+    const total = report.tables.find((table) => table.key === 'topSpendingCategories')?.rows.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+    expect(total).toBe(2);
+  });
+
+  it('keeps only rows with no Category on the Transaction or its Splits', () => {
+    const query = normalizeReportQuery({ reportType: 'category', startDate: '2026-01-01', endDate: '2026-01-31', onlyUncategorized: 'true' });
+    const report = buildCategoryReport({
+      query,
+      rows: [
+        row({ id: 'categorized', category: category() }),
+        row({
+          id: 'split-categorized',
+          category: null,
+          isSplit: true,
+          splits: [{ id: 'split-a', amountDecimal: new Decimal('100.00'), category: category({ id: 'cat-home', name: 'Home', groupId: null, groupName: null }) }],
+        }),
+        row({ id: 'uncategorized', category: null }),
+      ],
+    });
+
+    expect(report.tables.find((table) => table.key === 'categoryTotals')?.rows).toEqual([
+      expect.objectContaining({ id: '__uncategorized__', count: 1 }),
+    ]);
+  });
+
+  it('filters by reconciliation state', () => {
+    const rows = [
+      row({ id: 'reconciled', reconciled: true }),
+      row({ id: 'unreconciled', reconciled: false }),
+    ];
+
+    const reconciledQuery = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', reconciledState: 'reconciled' });
+    const unreconciledQuery = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', reconciledState: 'unreconciled' });
+    const anyQuery = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31' });
+
+    const reconciledTotal = buildOverviewReport({ query: reconciledQuery, rows }).tables
+      .find((table) => table.key === 'topSpendingCategories')?.rows.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+    const unreconciledTotal = buildOverviewReport({ query: unreconciledQuery, rows }).tables
+      .find((table) => table.key === 'topSpendingCategories')?.rows.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+    const anyTotal = buildOverviewReport({ query: anyQuery, rows }).tables
+      .find((table) => table.key === 'topSpendingCategories')?.rows.reduce((sum, item) => sum + Number(item.count ?? 0), 0);
+
+    expect(reconciledTotal).toBe(1);
+    expect(unreconciledTotal).toBe(1);
+    expect(anyTotal).toBe(2);
+  });
+
+  it('defaults every new predicate to inert', () => {
+    const query = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31' });
+
+    expect(query.minAmount).toBeUndefined();
+    expect(query.maxAmount).toBeUndefined();
+    expect(query.searchText).toBeUndefined();
+    expect(query.onlyUncategorized).toBe(false);
+    expect(query.reconciledState).toBe('any');
+  });
+
+  it('warns when a predicate narrows the result set', () => {
+    const query = normalizeReportQuery({ reportType: 'overview', startDate: '2026-01-01', endDate: '2026-01-31', searchText: 'insurance' });
+    const report = buildOverviewReport({ query, rows: [row({ id: 'no-match', description: 'Groceries' })] });
+
+    expect(report.metadata.warnings).toContain('Results are limited to rows matching "insurance".');
+  });
+
+  it('emits a savings rate trend on the cash flow report and never divides by zero income', () => {
+    const query = normalizeReportQuery({ reportType: 'cash_flow', startDate: '2026-01-01', endDate: '2026-02-28', groupBy: 'month' });
+    const report = buildCashFlowReport({
+      query,
+      rows: [
+        row({ id: 'jan-income', date: new Date('2026-01-05T00:00:00.000Z'), transactionType: 'deposit', amountDecimal: new Decimal('1000.00'), signedAmountDecimal: new Decimal('1000.00') }),
+        row({ id: 'jan-spend', date: new Date('2026-01-10T00:00:00.000Z'), amountDecimal: new Decimal('600.00'), signedAmountDecimal: new Decimal('-600.00') }),
+        row({ id: 'feb-spend', date: new Date('2026-02-10T00:00:00.000Z'), amountDecimal: new Decimal('250.00'), signedAmountDecimal: new Decimal('-250.00') }),
+      ],
+    });
+
+    const chart = report.charts.find((item) => item.key === 'savingsRateTrend');
+    expect(chart).toBeDefined();
+    expect(chart?.kind).toBe('line');
+    const data = (chart as { data: Array<Record<string, unknown>> }).data;
+    expect(data[0]).toMatchObject({ period: '2026-01', savingsRate: 40 });
+    const zeroIncomePeriod = data.find((item) => item.period === '2026-02');
+    expect(zeroIncomePeriod?.savingsRate).toBe(0);
+    expect(Number.isFinite(Number(zeroIncomePeriod?.savingsRate))).toBe(true);
+    expect(report.summaryCards.find((item) => item.key === 'savingsRate')?.formattedValue).toBe('15.0%');
+  });
+
+  it('produces one benchmark comparison row per benchmark key with a zero variance on an exact match', () => {
+    const query = normalizeReportQuery({ reportType: 'benchmarks', startDate: '2026-01-01', endDate: '2026-01-31', groupBy: 'month' });
+    const report = buildBenchmarksReport({
+      query,
+      rows: [
+        row({
+          id: 'rent',
+          amountDecimal: new Decimal('2025.00'),
+          signedAmountDecimal: new Decimal('-2025.00'),
+          category: category({ id: 'cat-rent', name: 'Rent', groupId: null, groupName: null }),
+        }),
+      ],
+    });
+
+    const table = report.tables.find((item) => item.key === 'benchmarkComparison');
+    expect(table?.rows).toHaveLength(10);
+    expect(table?.rows.find((item) => item.key === 'housing')).toMatchObject({ yours: '2025.00', benchmark: '2025.00', variance: '0.00' });
+    expect(table?.rows.find((item) => item.key === 'food')).toMatchObject({ yours: '0.00', variance: '-770.00' });
+    expect(report.charts.map((item) => item.key)).toEqual(['benchmarkComparison', 'benchmarkVariance']);
+    expect(report.metadata.warnings.some((item) => item.includes('Bureau of Labor Statistics'))).toBe(true);
+  });
+
+  it('accepts the benchmarks report type and still rejects an unknown one', () => {
+    expect(normalizeReportQuery({ reportType: 'benchmarks', startDate: '2026-01-01', endDate: '2026-01-31' }).reportType).toBe('benchmarks');
+    expect(() => normalizeReportQuery({ reportType: 'nonsense', startDate: '2026-01-01', endDate: '2026-01-31' })).toThrow('reportType is not supported');
+  });
+
+  const wealthQuery = (reportType: string) =>
+    normalizeReportQuery({ reportType, startDate: '2026-01-01', endDate: '2026-01-31', currencyCode: 'CAD' });
+
+  const allocationContext = {
+    totalValue: new Decimal('10000.00'),
+    byAssetClass: [
+      { assetClass: 'US Stocks', value: new Decimal('6000.00'), percent: new Decimal('60'), targetPercent: new Decimal('50') },
+      { assetClass: 'Bonds', value: new Decimal('4000.00'), percent: new Decimal('40'), targetPercent: new Decimal('30') },
+    ],
+  };
+
+  const contributionRoomContext = {
+    accounts: [
+      { id: 'tax-1', name: 'TFSA', type: 'TFSA', memberName: 'Ada', contributionsYtd: new Decimal('5000.00'), totalRoomEver: new Decimal('88000.00'), roomRemaining: new Decimal('83000.00'), overContribution: new Decimal('0'), pctUsed: 6, alert: 'ok' as const },
+      { id: 'tax-2', name: 'RRSP', type: 'RRSP', memberName: null, contributionsYtd: new Decimal('2000.00'), totalRoomEver: new Decimal('32490.00'), roomRemaining: new Decimal('30490.00'), overContribution: new Decimal('0'), pctUsed: 6, alert: 'ok' as const },
+    ],
+  };
+
+  const dividendForecastContext = {
+    years: 5,
+    forecast: [
+      { year: 2026, income: new Decimal('120.00') },
+      { year: 2027, income: new Decimal('120.00') },
+    ],
+    byHolding: [
+      { symbol: 'ABC', name: 'ABC Fund', annualIncome: new Decimal('80.00') },
+      { symbol: 'XYZ', name: 'XYZ Fund', annualIncome: new Decimal('40.00') },
+    ],
+    basedOn: '2 holdings, live prices + dividend yields',
+  };
+
+  const retirementContext = {
+    portfolioValue: new Decimal('100000.00'),
+    projectionYears: 30,
+    scenarios: [
+      { label: 'Conservative', returnRate: 0.05, endingBalance: new Decimal('432194.24') },
+      { label: 'Base case', returnRate: 0.07, endingBalance: new Decimal('761225.50') },
+    ],
+    note: 'Deterministic projections.',
+  };
+
+  it('builds an allocation and drift report from an investment allocation context', () => {
+    const report = buildAllocationReport({ query: wealthQuery('allocation'), rows: [], allocation: allocationContext });
+
+    expect(report.summaryCards.length).toBeGreaterThan(0);
+    expect(report.charts.length).toBeGreaterThan(0);
+    expect(report.summaryCards.find((item) => item.key === 'totalValue')?.value).toBe('10000.00');
+    const drift = report.charts.find((chart) => chart.key === 'allocationDrift');
+    expect(drift?.kind).toBe('bar');
+    expect(drift && 'reference' in drift ? drift.reference : undefined).toEqual({ value: 0, label: 'On target' });
+    expect(drift && 'data' in drift ? drift.data : []).toEqual([
+      { assetClass: 'US Stocks', drift: 10 },
+      { assetClass: 'Bonds', drift: 10 },
+    ]);
+  });
+
+  it('builds a contribution room report with stacked contributed and remaining series', () => {
+    const report = buildContributionRoomReport({ query: wealthQuery('contribution_room'), rows: [], contributionRoom: contributionRoomContext });
+
+    expect(report.summaryCards.find((item) => item.key === 'totalRoom')?.value).toBe('120490.00');
+    expect(report.summaryCards.find((item) => item.key === 'totalContributed')?.value).toBe('7000.00');
+    expect(report.summaryCards.find((item) => item.key === 'totalRemaining')?.value).toBe('113490.00');
+    const chart = report.charts.find((item) => item.key === 'contributionRoomByType');
+    expect(chart && 'series' in chart ? chart.series.map((series) => series.stack) : []).toEqual(['room', 'room']);
+    expect(report.tables.find((table) => table.key === 'contributionRoom')?.rows).toHaveLength(2);
+  });
+
+  it('builds a dividend forecast report over the default five-year horizon', () => {
+    const report = buildDividendForecastReport({ query: wealthQuery('dividend_forecast'), rows: [], dividendForecast: dividendForecastContext });
+
+    expect(report.summaryCards.find((item) => item.key === 'firstYearIncome')?.value).toBe('120.00');
+    expect(report.summaryCards.find((item) => item.key === 'horizonIncome')?.value).toBe('240.00');
+    expect(report.charts.map((chart) => chart.key)).toEqual(['dividendByYear', 'dividendByHolding']);
+    expect(report.metadata.calculationNotes).toContain('2 holdings, live prices + dividend yields');
+    expect(report.metadata.calculationNotes).toContain('The forecast horizon is fixed at 5 years and is not derived from the report date range.');
+  });
+
+  it('builds a retirement simulation report with one line series per scenario', () => {
+    const report = buildRetirementReport({ query: wealthQuery('retirement'), rows: [], retirement: retirementContext });
+
+    expect(report.summaryCards.find((item) => item.key === 'portfolioValue')?.value).toBe('100000.00');
+    const chart = report.charts.find((item) => item.key === 'retirementProjection');
+    expect(chart?.kind).toBe('line');
+    expect(chart && 'series' in chart ? chart.series.map((series) => series.label) : []).toEqual(['Conservative', 'Base case']);
+    expect(chart && 'series' in chart ? chart.series.every((series) => series.format === 'currency') : false).toBe(true);
+    // 30 projection years plus year zero.
+    expect(chart && 'data' in chart ? chart.data.length : 0).toBe(31);
+    expect(chart && 'data' in chart ? chart.data[0] : {}).toEqual({ year: '0', conservative: '100000.00', base_case: '100000.00' });
+  });
+
+  it('returns wealth-backed reports without throwing when the context is missing', () => {
+    const reports = [
+      buildAllocationReport({ query: wealthQuery('allocation'), rows: [] }),
+      buildContributionRoomReport({ query: wealthQuery('contribution_room'), rows: [] }),
+      buildDividendForecastReport({ query: wealthQuery('dividend_forecast'), rows: [] }),
+      buildRetirementReport({ query: wealthQuery('retirement'), rows: [] }),
+    ];
+
+    for (const report of reports) {
+      expect(report.metadata.warnings.length).toBeGreaterThan(0);
+      expect(report.charts.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('warns that inapplicable filters were ignored on wealth-backed reports', () => {
+    const filtered = normalizeReportQuery({ reportType: 'allocation', startDate: '2026-01-01', endDate: '2026-01-31', categoryIds: 'cat-food' });
+    const report = buildAllocationReport({ query: filtered, rows: [], allocation: allocationContext });
+
+    expect(report.metadata.warnings).toContain('Some active filters do not apply to this report and were ignored.');
+    expect(report.metadata.calculationNotes).toContain('This report reads Account and investment holding data. Category, tag, merchant, amount and search filters do not apply to it.');
+    expect(buildAllocationReport({ query: wealthQuery('allocation'), rows: [], allocation: allocationContext }).metadata.warnings)
+      .not.toContain('Some active filters do not apply to this report and were ignored.');
+  });
+
+  it('keeps wealth-backed partition charts free of negative slices', () => {
+    const reports = [
+      buildAllocationReport({ query: wealthQuery('allocation'), rows: [], allocation: allocationContext }),
+      buildDividendForecastReport({ query: wealthQuery('dividend_forecast'), rows: [], dividendForecast: dividendForecastContext }),
+      buildContributionRoomReport({ query: wealthQuery('contribution_room'), rows: [], contributionRoom: contributionRoomContext }),
+      buildRetirementReport({ query: wealthQuery('retirement'), rows: [], retirement: retirementContext }),
+    ];
+
+    for (const report of reports) {
+      for (const chart of report.charts) {
+        if (!('valueKey' in chart)) continue;
+        for (const dataRow of chart.data) {
+          expect(Number(dataRow[chart.valueKey])).toBeGreaterThanOrEqual(0);
+        }
+      }
+    }
+  });
+
+  it('adds the assets and liabilities breakdown to the net worth report', () => {
+    const report = buildNetWorthReport({
+      query: wealthQuery('net_worth'),
+      rows: [],
+      wealth: {
+        cashValue: new Decimal('1000.00'),
+        investmentValue: new Decimal('2500.00'),
+        manualAssetValue: new Decimal('750.00'),
+        manualLiabilityValue: new Decimal('300.00'),
+        accountContributions: [],
+        snapshots: [],
+        liabilityBreakdown: [
+          { key: 'mortgage', label: 'Mortgage', value: new Decimal('200.00') },
+          { key: 'creditCard', label: 'Credit cards', value: new Decimal('100.00') },
+          { key: 'other', label: 'Other liabilities', value: new Decimal('0') },
+        ],
+      },
+    });
+
+    expect(report.tables.find((table) => table.key === 'assetBreakdown')?.rows).toEqual([
+      expect.objectContaining({ id: 'cash', label: 'Cash & bank', value: '1000.00' }),
+      expect.objectContaining({ id: 'investments', label: 'Investments', value: '2500.00' }),
+      expect.objectContaining({ id: 'manualAssets', label: 'Other assets', value: '750.00' }),
+    ]);
+    expect(report.tables.find((table) => table.key === 'liabilityBreakdown')?.rows).toHaveLength(3);
+    const chart = report.charts.find((item) => item.key === 'assetsVsLiabilities');
+    expect(chart?.kind).toBe('groupedBar');
+    expect(chart && 'data' in chart ? chart.data : []).toHaveLength(6);
+  });
+
+  const prismaCategory = (overrides: Record<string, unknown> = {}) => ({
+    id: 'cat-food',
+    name: 'Food',
+    groupId: 'group-living',
+    excludeFromReports: false,
+    bucketType: 'needs',
+    isTaxDeductible: true,
+    group: { id: 'group-living', name: 'Living' },
+    ...overrides,
+  });
+
+  const fakePrisma = (journals: unknown[]) =>
+    ({
+      transactionJournal: { findMany: async () => journals },
+    }) as unknown as Parameters<typeof fetchStandardReportRows>[1];
+
+  const prismaJournal = (overrides: Record<string, unknown> = {}) => ({
+    id: 'journal-1',
+    date: new Date('2026-01-10T00:00:00.000Z'),
+    description: 'Grocer',
+    transactionType: 'withdrawal',
+    amountDecimal: new Decimal('100.00'),
+    currencyCode: 'CAD',
+    isPending: false,
+    isHidden: false,
+    isDeleted: false,
+    isSplit: false,
+    isReconciled: false,
+    category: prismaCategory(),
+    merchant: { id: 'merchant-market', displayName: 'Market' },
+    entries: [
+      {
+        accountId: 'acct-checking',
+        amountDecimal: new Decimal('-100.00'),
+        account: { id: 'acct-checking', name: 'Checking', type: 'bank', excludeFromReports: false, excludeFromNetWorth: false, isHidden: false, isDeleted: false },
+      },
+    ],
+    tags: [],
+    transactionTags: [],
+    splits: [],
+    ...overrides,
+  });
+
+  it('carries bucketType and isTaxDeductible onto both the journal Category and a split Category', async () => {
+    const rows = await fetchStandardReportRows(
+      { householdId: 'hh-1', startDate: '2026-01-01', endDate: '2026-01-31' },
+      fakePrisma([
+        prismaJournal({
+          isSplit: true,
+          splits: [
+            {
+              id: 'split-savings',
+              amountDecimal: new Decimal('100.00'),
+              category: prismaCategory({ id: 'cat-rrsp', name: 'RRSP', bucketType: 'savings', isTaxDeductible: false }),
+            },
+          ],
+        }),
+      ]),
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].category).toMatchObject({ id: 'cat-food', bucketType: 'needs', isTaxDeductible: true });
+    expect(rows[0].splits[0].category).toMatchObject({ id: 'cat-rrsp', bucketType: 'savings', isTaxDeductible: false });
+  });
+
+  it('surfaces the schema defaults as values rather than undefined', async () => {
+    const rows = await fetchStandardReportRows(
+      { householdId: 'hh-1', startDate: '2026-01-01', endDate: '2026-01-31' },
+      fakePrisma([
+        prismaJournal({
+          isSplit: true,
+          category: prismaCategory({ bucketType: 'wants', isTaxDeductible: false }),
+          splits: [
+            {
+              id: 'split-default',
+              amountDecimal: new Decimal('100.00'),
+              category: prismaCategory({ id: 'cat-home', name: 'Home', bucketType: 'wants', isTaxDeductible: false }),
+            },
+          ],
+        }),
+      ]),
+    );
+
+    expect(rows[0].category?.bucketType).toBe('wants');
+    expect(rows[0].category?.isTaxDeductible).toBe(false);
+    expect(rows[0].category?.bucketType).not.toBeUndefined();
+    expect(rows[0].category?.isTaxDeductible).not.toBeUndefined();
+    expect(rows[0].splits[0].category?.bucketType).toBe('wants');
+    expect(rows[0].splits[0].category?.isTaxDeductible).toBe(false);
+  });
+});
+
+describe('cash flow forecast report', () => {
+  const forecastQuery = normalizeReportQuery({ reportType: 'cash_flow_forecast', startDate: '2026-06-15', endDate: '2026-07-15', currencyCode: 'CAD' });
+
+  const forecastContext = {
+    days: 30,
+    requestedDays: 31,
+    forecast: {
+      currentBalance: 1000,
+      projections: [
+        { date: '2026-06-16', projected: 1010, dailyNet: 10 },
+        { date: '2026-06-17', projected: 950, dailyNet: -60 },
+      ],
+      summary: {
+        days: 30,
+        projectedEndBalance: 950,
+        avgMonthlyIncome: 600,
+        avgMonthlyExpense: 300,
+        knownRecurringTotal: -70,
+      },
+    },
+  };
+
+  it('emits the four summary cards, the projection line chart and the projections table', () => {
+    const report = buildCashFlowForecastReport({ query: forecastQuery, rows: [], cashFlowForecast: forecastContext });
+
+    expect(report.reportType).toBe('cash_flow_forecast');
+    expect(report.summaryCards.map((item) => [item.key, item.value])).toEqual([
+      ['currentBalance', '1000.00'],
+      ['projectedEndBalance', '950.00'],
+      ['avgMonthlyNet', '300.00'],
+      ['knownRecurringTotal', '-70.00'],
+    ]);
+
+    const chart = report.charts.find((item) => item.key === 'cashFlowForecast');
+    expect(chart?.kind).toBe('line');
+    expect(chart && 'data' in chart ? chart.data : []).toEqual([
+      { date: '2026-06-16', projected: '1010.00' },
+      { date: '2026-06-17', projected: '950.00' },
+    ]);
+
+    const table = report.tables.find((item) => item.key === 'cashFlowProjections');
+    expect(table?.rows).toHaveLength(2);
+    expect(table?.rows[0]).toEqual(expect.objectContaining({ date: '2026-06-16', dailyNet: '10.00', projected: '1010.00' }));
+  });
+
+  it('states the clamped window and that the filter set does not apply', () => {
+    const report = buildCashFlowForecastReport({
+      query: normalizeReportQuery({ reportType: 'cash_flow_forecast', startDate: '2026-06-15', endDate: '2026-07-15', categoryIds: 'cat-food' }),
+      rows: [],
+      cashFlowForecast: forecastContext,
+    });
+
+    expect(report.metadata.calculationNotes.some((note) => note.includes('30-day window'))).toBe(true);
+    expect(report.metadata.calculationNotes.some((note) => note.includes('Account balance and RecurringItem data'))).toBe(true);
+    expect(report.metadata.warnings).toContain('Some active filters do not apply to this report and were ignored.');
+  });
+
+  it('warns rather than throwing when no forecast context was fetched', () => {
+    const report = buildCashFlowForecastReport({ query: forecastQuery, rows: [] });
+
+    expect(report.metadata.warnings).toContain('No cash flow forecast context was available.');
+    expect(report.tables[0].rows).toEqual([]);
+  });
+});
+
+describe('cash flow sankey', () => {
+  const sankeyQuery = (overrides: Record<string, unknown> = {}) =>
+    normalizeReportQuery({ reportType: 'cash_flow', startDate: '2026-01-01', endDate: '2026-01-31', currencyCode: 'CAD', ...overrides });
+
+  const sankeyOf = (report: ReturnType<typeof buildCashFlowReport>) => {
+    const chart = report.charts.find((item) => item.key === 'cashFlowSankey');
+    if (!chart || chart.kind !== 'sankey') throw new Error('cashFlowSankey chart is missing');
+    return chart;
+  };
+
+  it('emits one total node, links that advance exactly one column, and no negative values', () => {
+    const report = buildCashFlowReport({
+      query: sankeyQuery(),
+      rows: [
+        row({ id: 'salary', transactionType: 'deposit', description: 'Salary', signedAmountDecimal: new Decimal('3000.00'), amountDecimal: new Decimal('3000.00'), category: category({ id: 'cat-salary', name: 'Salary', bucketType: 'needs' }) }),
+        row({ id: 'rent', signedAmountDecimal: new Decimal('-1200.00'), amountDecimal: new Decimal('1200.00'), category: category({ id: 'cat-rent', name: 'Rent', bucketType: 'needs' }) }),
+        row({ id: 'dining', signedAmountDecimal: new Decimal('-150.00'), amountDecimal: new Decimal('150.00'), category: category({ id: 'cat-dining', name: 'Dining', bucketType: 'wants' }) }),
+        row({ id: 'zero', signedAmountDecimal: new Decimal('0.00'), amountDecimal: new Decimal('0.00'), category: category({ id: 'cat-zero', name: 'Nothing', bucketType: 'wants' }) }),
+      ],
+    });
+    const sankey = sankeyOf(report);
+    const columnOf = new Map(sankey.nodes.map((node) => [node.id, node.column]));
+
+    expect(sankey.nodes.filter((node) => node.role === 'total')).toHaveLength(1);
+    expect(sankey.links.length).toBeGreaterThan(0);
+    for (const link of sankey.links) {
+      expect(link.value).toBeGreaterThanOrEqual(0);
+      expect(columnOf.get(link.target)! - columnOf.get(link.source)!).toBe(1);
+    }
+    expect(sankey.links.some((link) => link.value === 0)).toBe(false);
+    expect(sankey.nodes.some((node) => node.label === 'Nothing')).toBe(false);
+    expect(sankey.links.find((link) => link.source === 'income:cat-salary')).toMatchObject({ target: 'total', value: 3000 });
+    expect(sankey.links.find((link) => link.source === 'total' && link.target === 'bucket:Needs')?.value).toBe(1200);
+  });
+
+  it('sends an unrecognised bucketType to Uncategorized rather than creating a fifth bucket', () => {
+    const report = buildCashFlowReport({
+      query: sankeyQuery(),
+      rows: [
+        row({ id: 'weird', signedAmountDecimal: new Decimal('-50.00'), amountDecimal: new Decimal('50.00'), category: category({ id: 'cat-weird', name: 'Weird', bucketType: 'sinking_fund' }) }),
+        row({ id: 'none', signedAmountDecimal: new Decimal('-25.00'), amountDecimal: new Decimal('25.00'), category: null }),
+      ],
+    });
+    const sankey = sankeyOf(report);
+    const buckets = sankey.nodes.filter((node) => node.role === 'bucket');
+
+    expect(buckets.map((node) => node.label)).toEqual(['Uncategorized']);
+    expect(sankey.links.find((link) => link.source === 'total' && link.target === 'bucket:Uncategorized')?.value).toBe(75);
+    expect(sankey.links.find((link) => link.target === 'category:__uncategorized__')?.value).toBe(25);
+  });
+
+  it('attributes a split to the split Category Bucket, not the journal Bucket, when includeSplits is on', () => {
+    const report = buildCashFlowReport({
+      query: sankeyQuery({ includeSplits: 'true' }),
+      rows: [
+        row({
+          id: 'split',
+          isSplit: true,
+          signedAmountDecimal: new Decimal('-100.00'),
+          amountDecimal: new Decimal('100.00'),
+          category: category({ id: 'cat-rent', name: 'Rent', bucketType: 'needs' }),
+          splits: [
+            { id: 'split-savings', amountDecimal: new Decimal('70.00'), category: category({ id: 'cat-savings', name: 'Savings', bucketType: 'savings' }) },
+            { id: 'split-fallback', amountDecimal: new Decimal('30.00'), category: null },
+          ],
+        }),
+      ],
+    });
+    const sankey = sankeyOf(report);
+
+    expect(sankey.links.find((link) => link.source === 'bucket:Savings' && link.target === 'category:cat-savings')?.value).toBe(70);
+    expect(sankey.links.find((link) => link.source === 'bucket:Needs' && link.target === 'category:cat-rent')?.value).toBe(30);
+  });
+});
+
+describe('tax summary report', () => {
+  const taxQuery = (overrides: Record<string, unknown> = {}) =>
+    normalizeReportQuery({ reportType: 'tax', startDate: '2026-01-01', endDate: '2026-12-31', currencyCode: 'CAD', ...overrides });
+
+  it('keeps only tax-deductible spending and never counts deductible income as a deduction', () => {
+    const report = buildTaxSummaryReport({
+      query: taxQuery(),
+      rows: [
+        row({ id: 'accounting', signedAmountDecimal: new Decimal('-400.00'), amountDecimal: new Decimal('400.00'), category: category({ id: 'cat-accounting', name: 'Accounting', isTaxDeductible: true }) }),
+        row({ id: 'accounting-2', signedAmountDecimal: new Decimal('-100.00'), amountDecimal: new Decimal('100.00'), category: category({ id: 'cat-accounting', name: 'Accounting', isTaxDeductible: true }) }),
+        row({ id: 'groceries', signedAmountDecimal: new Decimal('-250.00'), amountDecimal: new Decimal('250.00'), category: category({ id: 'cat-food', name: 'Food', isTaxDeductible: false }) }),
+        row({ id: 'refund', transactionType: 'deposit', signedAmountDecimal: new Decimal('900.00'), amountDecimal: new Decimal('900.00'), category: category({ id: 'cat-grant', name: 'Grant', isTaxDeductible: true }) }),
+      ],
+      generatedAt: new Date('2026-12-31T12:00:00.000Z'),
+    });
+
+    expect(report.reportType).toBe('tax');
+    expect(report.summaryCards).toHaveLength(1);
+    expect(report.summaryCards[0]).toMatchObject({ key: 'totalDeductible', value: '500.00' });
+    expect(report.tables[0].rows).toEqual([
+      expect.objectContaining({ id: 'cat-accounting', name: 'Accounting', count: 2, amount: '500.00' }),
+    ]);
+    expect(report.charts.find((chart) => chart.key === 'deductibleByCategory')?.kind).toBe('donut');
+    expect(report.charts.find((chart) => chart.key === 'deductibleByPeriod')?.kind).toBe('bar');
+    expect(report.metadata.calculationNotes.some((note) => note.includes('tax-deductible expenses only'))).toBe(true);
+  });
+
+  it('notes that the range is not a whole calendar year, and stays silent when it is', () => {
+    const partial = buildTaxSummaryReport({ query: taxQuery({ startDate: '2026-03-01', endDate: '2026-09-30' }), rows: [] });
+    const whole = buildTaxSummaryReport({ query: taxQuery(), rows: [] });
+
+    expect(partial.metadata.calculationNotes.some((note) => note.includes('not a whole calendar year'))).toBe(true);
+    expect(whole.metadata.calculationNotes.some((note) => note.includes('not a whole calendar year'))).toBe(false);
+  });
+
+  it('accepts tax as a report type and still rejects an unknown one', () => {
+    expect(normalizeReportQuery({ reportType: 'tax', startDate: '2026-01-01', endDate: '2026-12-31' })).toMatchObject({ reportType: 'tax' });
+    expect(() => normalizeReportQuery({ reportType: 'report_v2', startDate: '2026-01-01', endDate: '2026-12-31' })).toThrow('reportType is not supported');
   });
 });
