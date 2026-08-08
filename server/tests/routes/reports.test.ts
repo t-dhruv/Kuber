@@ -182,19 +182,6 @@ describe('journal-backed report routes', () => {
     });
   });
 
-  it('returns journal drilldown rows for a report segment', async () => {
-    const res = await request(makeApp()).get('/reports/drill?startDate=2026-01-01&endDate=2026-01-31&groupBy=category&groupId=cat-food&mode=spending');
-
-    expect(res.status).toBe(200);
-    expect(res.body.total).toBe(1);
-    expect(res.body.transactions[0]).toMatchObject({
-      id: 'journal-food',
-      description: 'Market',
-      amount: -75,
-      account: { id: 'acct-checking', name: 'Checking' },
-    });
-  });
-
   it('exports journal-backed report CSV', async () => {
     const res = await request(makeApp()).get('/reports/export/csv?type=spending&startDate=2026-01-01&endDate=2026-01-31');
 

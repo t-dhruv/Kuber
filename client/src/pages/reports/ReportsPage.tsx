@@ -3,22 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkPlus, Download, Save, Star, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { ReportTab, TabBar } from "./shared";
-import { CashFlowTab } from "./tabs/CashFlowTab";
-import { SavingsTab } from "./tabs/SavingsTab";
-import { SpendingTab } from "./tabs/SpendingTab";
-import { BenchmarksTab } from "./tabs/BenchmarksTab";
 import { computeDateRange, type DatePreset } from "./dateRange";
 import { api } from "@/lib/api";
 import { Card, Modal, ModalFooter, Button, Input, notify, ConfirmDialog } from "@/components/ui";
-import { DrillPanel } from "./components/DrillPanel";
-import { BudgetVarianceChart } from "./components/BudgetVarianceChart";
-import { CashFlowForecast } from "./components/CashFlowForecast";
-import { AssetsLiabilitiesSection } from "./components/AssetsLiabilitiesSection";
-import { AllocationDriftSection } from "./components/AllocationDriftSection";
-import { ContributionRoomSection } from "./components/ContributionRoomSection";
-import { DividendForecastSection } from "./components/DividendForecastSection";
-import { RetirementSimulationSection } from "./components/RetirementSimulationSection";
-import { TaxSummaryTab } from "./components/TaxSummaryTab";
 import { StandardReportPanel } from "./components/StandardReportPanel";
 import { ReportFilterBar } from "./components/ReportFilterBar";
 import { FilterField, NativeSelect } from "./components/filterControls";
@@ -33,28 +20,6 @@ import {
 } from "./standardReportClient";
 
 type MutationError = { response?: { data?: { error?: string } } };
-
-const STANDARD_TABS = new Set<ReportTab>([
-  "overview",
-  "cashflow",
-  "category",
-  "income",
-  "budget",
-  "tag",
-  "account",
-  "merchant",
-  "audit",
-  "networth",
-  "investmentperformance",
-  "benchmarks",
-  "assetsliabilities",
-  "allocationdrift",
-  "contributionroom",
-  "dividendforecast",
-  "retirementsimulation",
-  "forecast",
-  "tax",
-]);
 
 function csv(value: string | null): string[] {
   return value
@@ -140,14 +105,6 @@ export default function ReportsPage() {
     ),
   }));
 
-  const [drillPanel, setDrillPanel] = useState<{
-    id: string;
-    name: string;
-    icon: string | null | undefined;
-    mode: "spending" | "income";
-    groupBy: string;
-  } | null>(null);
-
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveModalName, setSaveModalName] = useState("");
   const [selectedSavedViewId, setSelectedSavedViewId] = useState<string>("");
@@ -168,7 +125,6 @@ export default function ReportsPage() {
   const selectedSavedView = savedViewsQuery.data?.find((view) => view.id === selectedSavedViewId);
   const selectedSavedMeta = selectedSavedView ? normalizeSavedReportFilters(selectedSavedView.filters) : undefined;
   const isFavorite = Boolean(selectedSavedMeta?.isFavorite);
-  const isStandardTab = STANDARD_TABS.has(filters.tab as ReportTab);
 
   useEffect(() => {
     const next = new URLSearchParams();
@@ -307,11 +263,6 @@ export default function ReportsPage() {
     }));
   };
 
-  const extraParams = [
-    filters.categoryIds.length > 0 ? `&categoryIds=${filters.categoryIds.join(",")}` : "",
-    filters.accountIds.length > 0 ? `&accountIds=${filters.accountIds.join(",")}` : "",
-  ].join("");
-
   return (
     <div style={{ padding: "2rem", maxWidth: "1400px", margin: "0 auto" }}>
       <div style={{ marginBottom: "2rem" }}>
@@ -416,7 +367,7 @@ export default function ReportsPage() {
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <Button
                 onClick={() => exportMutation.mutate("csv")}
-                disabled={!isStandardTab || exportMutation.isPending}
+                disabled={exportMutation.isPending}
                 variant="secondary"
                 size="sm"
                 icon={<Download size={16} />}
@@ -426,7 +377,7 @@ export default function ReportsPage() {
 
               <Button
                 onClick={() => exportMutation.mutate("json")}
-                disabled={!isStandardTab || exportMutation.isPending}
+                disabled={exportMutation.isPending}
                 variant="secondary"
                 size="sm"
                 icon={<Download size={16} />}
@@ -438,21 +389,6 @@ export default function ReportsPage() {
         </div>
       </Card>
 
-      {drillPanel && (
-        <DrillPanel
-          filter={{
-            groupId: drillPanel.id,
-            groupName: drillPanel.name,
-            groupIcon: drillPanel.icon,
-            mode: drillPanel.mode,
-            groupBy: drillPanel.groupBy,
-            startDate: filters.startDate,
-            endDate: filters.endDate,
-          }}
-          onClose={() => setDrillPanel(null)}
-        />
-      )}
-
       <div style={{ marginBottom: "1.5rem" }}>
         <TabBar
           tab={filters.tab as ReportTab}
@@ -461,57 +397,7 @@ export default function ReportsPage() {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-        {isStandardTab && <StandardReportPanel filters={filters} onFiltersChange={setFilters} />}
-
-        {!isStandardTab && filters.tab === "savings" && (
-          <SavingsTab
-            startDate={filters.startDate}
-            endDate={filters.endDate}
-            extraParams={extraParams}
-          />
-        )}
-
-        {!isStandardTab && filters.tab === "spending" && (
-          <SpendingTab
-            mode="spending"
-            startDate={filters.startDate}
-            endDate={filters.endDate}
-            extraParams={extraParams}
-            onDrillClick={(id, name, icon, mode, groupBy) =>
-              setDrillPanel({ id, name, icon, mode, groupBy })
-            }
-          />
-        )}
-
-        {!isStandardTab && filters.tab === "variance" && (
-          <BudgetVarianceChart from={filters.startDate} to={filters.endDate} />
-        )}
-
-        {!isStandardTab && filters.tab === "forecast" && <CashFlowForecast />}
-
-        {!isStandardTab && filters.tab === "tax" && <TaxSummaryTab />}
-
-        {!isStandardTab && filters.tab === "benchmarks" && (
-          <BenchmarksTab startDate={filters.startDate} endDate={filters.endDate} />
-        )}
-
-        {!isStandardTab && filters.tab === "assetsliabilities" && <AssetsLiabilitiesSection />}
-
-        {!isStandardTab && filters.tab === "allocationdrift" && <AllocationDriftSection />}
-
-        {!isStandardTab && filters.tab === "contributionroom" && <ContributionRoomSection />}
-
-        {!isStandardTab && filters.tab === "dividendforecast" && <DividendForecastSection />}
-
-        {!isStandardTab && filters.tab === "retirementsimulation" && <RetirementSimulationSection />}
-
-        {!isStandardTab && filters.tab === "cashflow" && (
-          <CashFlowTab
-            startDate={filters.startDate}
-            endDate={filters.endDate}
-            extraParams={extraParams}
-          />
-        )}
+        <StandardReportPanel filters={filters} onFiltersChange={setFilters} />
       </div>
 
       {showSaveModal && (

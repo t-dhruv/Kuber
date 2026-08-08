@@ -12,9 +12,7 @@ import {
   buildJournalCashflowReport,
   buildJournalGroupedReport,
   buildJournalReportCatalog,
-  buildJournalReportDrilldown,
   buildJournalReportFilters,
-  buildJournalTagSummary,
   buildJournalTaxSummary,
   fetchJournalReportRows,
   type JournalReportGroupBy,
@@ -37,10 +35,8 @@ import {
   type StandardReportResponse,
   type StandardReportType,
 } from '../lib/reporting/standard';
-import { benchmarkEntries, mapBenchmarkCategory } from '../lib/reporting/benchmarks';
 
 const router = Router();
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // ─── GET /api/v1/reports/overview ────────────────────────────────────────────
 
@@ -376,84 +372,13 @@ async function handleJournalGroupedReport(req: AuthRequest, res: Response, mode:
   }));
 }
 
-async function handleJournalCompareReport(req: AuthRequest, res: Response, mode: JournalReportMode) {
-  const groupBy = (req.query.groupBy ?? 'category') as JournalReportGroupBy;
-  if (!['category', 'merchant', 'account', 'tag'].includes(groupBy)) {
-    return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
-  }
-  const range = parseDateRange(req.query.startDate, req.query.endDate);
-  if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
-
-  const durationMs = range.end.getTime() - range.start.getTime() + 86400000;
-  const priorEnd = new Date(range.start.getTime() - 86400000);
-  const priorStart = new Date(priorEnd.getTime() - durationMs + 86400000);
-  const filters = buildJournalReportFilters(req.query as Record<string, unknown>);
-  const rows = await fetchJournalReportRows({ householdId: req.householdId!, start: priorStart, end: range.end });
-  const current = buildJournalGroupedReport(rows, { ...range, ...filters, mode, groupBy });
-  const prior = buildJournalGroupedReport(rows, { start: priorStart, end: priorEnd, ...filters, mode, groupBy });
-  const priorById = new Map(prior.items.map((item) => [item.id, item]));
-  const allIds = new Set([...current.items.map((item) => item.id), ...prior.items.map((item) => item.id)]);
-  const items = Array.from(allIds).map((id) => {
-    const cur = current.items.find((item) => item.id === id);
-    const old = priorById.get(id);
-    const currentAmount = cur?.amount ?? 0;
-    const priorAmount = old?.amount ?? 0;
-    const delta = Math.round((currentAmount - priorAmount) * 100) / 100;
-    return {
-      id,
-      name: cur?.name ?? old?.name ?? id,
-      icon: cur?.icon ?? old?.icon ?? null,
-      current: currentAmount,
-      prior: priorAmount,
-      delta,
-      deltaPercent: priorAmount !== 0 ? Math.round((delta / priorAmount) * 10000) / 100 : 0,
-    };
-  }).sort((a, b) => b.current - a.current);
-
-  return res.json({
-    items,
-    currentTotal: current.total,
-    priorTotal: prior.total,
-    totalDelta: Math.round((current.total - prior.total) * 100) / 100,
-  });
-}
-
-async function handleJournalMonthlyReport(req: AuthRequest, res: Response, mode: JournalReportMode) {
-  const groupBy = (req.query.groupBy ?? 'category') as JournalReportGroupBy;
-  if (!['category', 'merchant', 'account', 'tag'].includes(groupBy)) {
-    return res.status(400).json({ error: 'groupBy must be one of: category, merchant, account, tag' });
-  }
-  const range = parseDateRange(req.query.startDate, req.query.endDate);
-  if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
-  const rows = await loadJournalRowsForRequest(req, range);
-  const filters = buildJournalReportFilters(req.query as Record<string, unknown>);
-  const months: string[] = [];
-  const cursor = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
-  while (cursor <= range.end) {
-    months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-  const series = new Map<string, { id: string; name: string; icon: string | null; data: number[] }>();
-  for (const month of months) {
-    const [year, monthNum] = month.split('-').map(Number);
-    const monthStart = new Date(year, monthNum - 1, 1);
-    const monthEnd = new Date(year, monthNum, 0, 23, 59, 59, 999);
-    const report = buildJournalGroupedReport(rows, { start: monthStart, end: monthEnd, ...filters, mode, groupBy });
-    report.items.forEach((item) => {
-      const existing = series.get(item.id) ?? { id: item.id, name: item.name, icon: item.icon, data: months.map(() => 0) };
-      existing.data[months.indexOf(month)] = item.amount;
-      series.set(item.id, existing);
-    });
-  }
-  return res.json({
-    months: months.map((month) => {
-      const [year, monthNum] = month.split('-').map(Number);
-      return `${MONTH_ABBR[monthNum - 1]} ${year}`;
-    }),
-    series: Array.from(series.values()).sort((a, b) => b.data.reduce((s, v) => s + v, 0) - a.data.reduce((s, v) => s + v, 0)),
-  });
-}
-
+/**
+ * Legacy journal-backed route. It survives only because the Dashboard's budget
+ * widget calls it; every reports-page consumer moved to
+ * /reports/standard/generate. Migrating that call site onto
+ * ?reportType=category retires this route and the journalReportingCore code
+ * behind it.
+ */
 router.get('/spending', async (req: AuthRequest, res: Response) => {
   try {
     return await handleJournalGroupedReport(req, res, 'spending');
@@ -487,156 +412,11 @@ router.get('/cashflow', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.get('/spending/compare', async (req: AuthRequest, res: Response) => {
-  try {
-    return await handleJournalCompareReport(req, res, 'spending');
-  } catch (err) {
-    req.log.error({ err }, 'reports/spending/compare journal');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.get('/income/compare', async (req: AuthRequest, res: Response) => {
-  try {
-    return await handleJournalCompareReport(req, res, 'income');
-  } catch (err) {
-    req.log.error({ err }, 'reports/income/compare journal');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.get('/spending/monthly', async (req: AuthRequest, res: Response) => {
-  try {
-    return await handleJournalMonthlyReport(req, res, 'spending');
-  } catch (err) {
-    req.log.error({ err }, 'reports/spending/monthly journal');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.get('/income/monthly', async (req: AuthRequest, res: Response) => {
-  try {
-    return await handleJournalMonthlyReport(req, res, 'income');
-  } catch (err) {
-    req.log.error({ err }, 'reports/income/monthly journal');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.get('/trends', async (req: AuthRequest, res: Response) => {
-  try {
-    const range = getJournalDateRange(req);
-    if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
-    const rows = await loadJournalRowsForRequest(req, range);
-    const cashflow = buildJournalCashflowReport(rows, {
-      ...range,
-      ...buildJournalReportFilters(req.query as Record<string, unknown>),
-    });
-    return res.json({ trends: cashflow.byMonth, monthly: cashflow.monthly });
-  } catch (err) {
-    req.log.error({ err }, 'reports/trends journal');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.get('/benchmarks', async (req: AuthRequest, res: Response) => {
-  try {
-    const now = new Date();
-    const startDate = (req.query.startDate as string) || new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10);
-    const endDate = (req.query.endDate as string) || now.toISOString().slice(0, 10);
-    const range = parseDateRange(startDate, endDate);
-    if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
-    const months = Math.max(1, Math.round((range.end.getTime() - range.start.getTime()) / (30 * 24 * 3600 * 1000)));
-    const rows = await loadJournalRowsForRequest(req, range);
-    const spending = buildJournalGroupedReport(rows, {
-      ...range,
-      mode: 'spending',
-      groupBy: 'category',
-      ...buildJournalReportFilters(req.query as Record<string, unknown>),
-    });
-    const actuals: Record<string, number> = {};
-    for (const item of spending.items) {
-      const key = mapBenchmarkCategory(item.name);
-      actuals[key] = (actuals[key] ?? 0) + item.amount;
-    }
-    return res.json({
-      startDate,
-      endDate,
-      months,
-      categories: benchmarkEntries().map((entry) => ({
-        key: entry.key,
-        label: entry.label,
-        blsMonthlyAvg: entry.monthlyAvg,
-        blsPctOfIncome: entry.pctOfIncome,
-        actualTotal: Math.round((actuals[entry.key] ?? 0) * 100) / 100,
-        actualMonthlyAvg: Math.round(((actuals[entry.key] ?? 0) / months) * 100) / 100,
-      })),
-    });
-  } catch (err) {
-    req.log.error({ err }, 'reports/benchmarks journal');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.get('/drill', async (req: AuthRequest, res: Response) => {
-  try {
-    const range = parseDateRange(req.query.startDate, req.query.endDate);
-    if (!range) return res.status(400).json({ error: 'startDate and endDate are required (ISO format)' });
-    const groupBy = (req.query.groupBy ?? 'category') as JournalReportGroupBy;
-    const mode = (req.query.mode ?? 'spending') as JournalReportMode;
-    const groupId = req.query.groupId as string | undefined;
-    if (!groupId) return res.status(400).json({ error: 'groupId is required' });
-    if (!['spending', 'income'].includes(mode)) return res.status(400).json({ error: 'mode must be spending or income' });
-    if (!['category', 'merchant', 'account', 'tag'].includes(groupBy)) {
-      return res.status(400).json({ error: 'groupBy must be category, merchant, account, or tag' });
-    }
-    const rows = await loadJournalRowsForRequest(req, range);
-    return res.json(buildJournalReportDrilldown(rows, {
-      ...range,
-      ...buildJournalReportFilters(req.query as Record<string, unknown>),
-      mode,
-      groupBy,
-      groupId,
-    }));
-  } catch (err) {
-    req.log.error({ err }, 'reports/drill journal');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.get('/tags', async (req: AuthRequest, res: Response) => {
-  try {
-    const range = getJournalDateRange(req);
-    if (!range) return res.json([]);
-    const rows = await loadJournalRowsForRequest(req, range);
-    return res.json(buildJournalTagSummary(rows, {
-      ...range,
-      ...buildJournalReportFilters(req.query as Record<string, unknown>),
-    }));
-  } catch (err) {
-    req.log.error({ err }, 'reports/tags journal');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.get('/tax-summary', async (req: AuthRequest, res: Response) => {
-  try {
-    const yearParam = req.query.year;
-    const year = yearParam ? parseInt(yearParam as string, 10) : new Date().getFullYear();
-    if (isNaN(year) || year < 2000 || year > 2100) {
-      return res.status(400).json({ error: 'year must be a valid 4-digit year' });
-    }
-    const rows = await loadJournalRowsForRequest(req, {
-      start: new Date(year, 0, 1),
-      end: new Date(year, 11, 31, 23, 59, 59, 999),
-    });
-    return res.json(buildJournalTaxSummary(rows, year, buildJournalReportFilters(req.query as Record<string, unknown>)));
-  } catch (err) {
-    req.log.error({ err }, 'reports/tax-summary journal');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
+/**
+ * Legacy journal-backed route. It survives only because the Transactions page's
+ * budget-variance widget calls it. Migrating that call site onto
+ * /reports/standard/generate?reportType=budget retires this route.
+ */
 router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
   try {
     const range = parseDateRange(req.query.from, req.query.to);
@@ -683,38 +463,6 @@ router.get('/budget-variance', async (req: AuthRequest, res: Response) => {
     });
   } catch (err) {
     req.log.error({ err }, 'reports/budget-variance journal');
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.get('/no-category', async (req: AuthRequest, res: Response) => {
-  try {
-    const range = getJournalDateRange(req);
-    const limit = Math.min(parseInt((req.query.limit as string) ?? '50', 10), 200);
-    const cursor = req.query.cursor as string | undefined;
-    const rows = await loadJournalRowsForRequest(req, range ?? undefined);
-    const filtered = rows
-      .filter((row) => !row.category && row.transactionType !== 'transfer')
-      .filter((row) => !parseCsvList(req.query.excludeAccountIds).includes(row.reportAccount?.id ?? ''))
-      .sort((a, b) => b.date.getTime() - a.date.getTime() || b.id.localeCompare(a.id));
-    const startIndex = cursor ? Math.max(0, filtered.findIndex((row) => row.id === cursor) + 1) : 0;
-    const page = filtered.slice(startIndex, startIndex + limit + 1);
-    const hasMore = page.length > limit;
-    const items = hasMore ? page.slice(0, limit) : page;
-    return res.json({
-      items: items.map((row) => ({
-        id: row.id,
-        date: row.date,
-        description: row.description,
-        amount: row.signedAmount,
-        account: { name: row.reportAccount?.name ?? 'Unknown' },
-        merchant: { displayName: row.description },
-      })),
-      nextCursor: hasMore ? items[items.length - 1].id : null,
-      total: filtered.length,
-    });
-  } catch (err) {
-    req.log.error({ err }, 'reports/no-category journal');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

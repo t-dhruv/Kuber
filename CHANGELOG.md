@@ -6,6 +6,16 @@ Kuber uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- Retired the legacy Reports tabs and the endpoints behind them. `GET /reports/trends`,
+  `/reports/benchmarks`, `/reports/tax-summary`, `/reports/tags`, `/reports/drill`,
+  `/reports/no-category`, `/reports/spending/compare`, `/reports/income/compare`,
+  `/reports/spending/monthly` and `/reports/income/monthly` no longer exist. Everything they
+  returned is available from `GET /reports/standard/generate` with the matching `reportType`,
+  and row-level detail from `GET /reports/standard/drilldown`. Scripts calling the removed
+  paths must be updated.
+
 ## [1.1.0-beta] - 2026-08-06
 
 A theming release. 1.0.0-beta shipped six accents and a dark mode that large
