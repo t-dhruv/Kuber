@@ -66,6 +66,57 @@ describe("ReportChart", () => {
     expect(html).toContain("$0.00");
   });
 
+  it("does not advertise a click affordance without onSelect", () => {
+    const spec: PartitionChartSpec = {
+      kind: "donut",
+      key: "spendingByCategory",
+      title: "Spending by category",
+      nameKey: "name",
+      valueKey: "amount",
+      format: "currency",
+      data: [{ name: "Groceries", amount: "120.50" }],
+    };
+
+    const html = renderToStaticMarkup(<ReportChart spec={spec} />);
+
+    expect(html).not.toContain("cursor:pointer");
+  });
+
+  it("marks a filterable chart as clickable when onSelect is supplied", () => {
+    const spec: PartitionChartSpec = {
+      kind: "donut",
+      key: "spendingByCategory",
+      title: "Spending by category",
+      nameKey: "name",
+      valueKey: "amount",
+      format: "currency",
+      data: [{ name: "Groceries", amount: "120.50" }],
+    };
+
+    const html = renderToStaticMarkup(<ReportChart spec={spec} onSelect={() => {}} />);
+
+    expect(html).toContain("cursor:pointer");
+    expect(html).toContain("Click to filter by");
+  });
+
+  it("leaves a chart the filter mapping does not cover unclickable", () => {
+    const spec: SankeyChartSpec = {
+      kind: "sankey",
+      key: "cashFlowSankey",
+      title: "Cash flow",
+      format: "currency",
+      nodes: [
+        { id: "salary", label: "Salary", column: 0, role: "income" },
+        { id: "total", label: "Total Income", column: 1, role: "total" },
+      ],
+      links: [{ source: "salary", target: "total", value: 5000 }],
+    };
+
+    const html = renderToStaticMarkup(<ReportChart spec={spec} onSelect={() => {}} />);
+
+    expect(html).not.toContain("cursor:pointer");
+  });
+
   it("renders the adapted sankey chart with an income-source label", () => {
     const spec: SankeyChartSpec = {
       kind: "sankey",

@@ -10,6 +10,7 @@ import {
   type StandardReportResponse,
 } from "../standardReportClient";
 import { ReportChart } from "./ReportChart";
+import { chartSelectionToFilter } from "../chartSelectionToFilter";
 
 interface DrilldownResponse {
   total: number;
@@ -37,7 +38,13 @@ function valueLabel(value: unknown): string {
   return String(value);
 }
 
-export function StandardReportPanel({ filters }: { filters: StandardReportFilters }) {
+export function StandardReportPanel({
+  filters,
+  onFiltersChange,
+}: {
+  filters: StandardReportFilters;
+  onFiltersChange?: (next: StandardReportFilters) => void;
+}) {
   const [drilldown, setDrilldown] = useState<{ label: string; params: Record<string, string> } | null>(null);
   const reportQuery = useQuery<StandardReportResponse>({
     queryKey: ["reports", "standard", filters],
@@ -113,7 +120,17 @@ export function StandardReportPanel({ filters }: { filters: StandardReportFilter
       {report.charts.map((chart) => (
         <Card key={chart.key} style={{ padding: "1rem" }}>
           <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>{chart.title}</h2>
-          <ReportChart spec={chart} />
+          <ReportChart
+            spec={chart}
+            onSelect={
+              onFiltersChange
+                ? (selection) => {
+                    const next = chartSelectionToFilter(filters, selection);
+                    if (next) onFiltersChange(next);
+                  }
+                : undefined
+            }
+          />
         </Card>
       ))}
 

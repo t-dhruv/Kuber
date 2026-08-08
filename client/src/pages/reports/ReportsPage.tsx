@@ -461,7 +461,7 @@ export default function ReportsPage() {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-        {isStandardTab && <StandardReportPanel filters={filters} />}
+        {isStandardTab && <StandardReportPanel filters={filters} onFiltersChange={setFilters} />}
 
         {!isStandardTab && filters.tab === "savings" && (
           <SavingsTab

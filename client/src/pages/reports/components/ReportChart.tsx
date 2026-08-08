@@ -28,6 +28,7 @@ import type {
 import { formatTick, formatValue, seriesColor, sliceColor } from "./chartTheme";
 import { sankeySpecToData } from "./sankeySpecAdapter";
 import { ReportsSankeyChart } from "./ReportsSankeyChart";
+import { chartKeyIsFilterable } from "../chartSelectionToFilter";
 
 export interface ChartSelection {
   chartKey: string;
@@ -267,7 +268,29 @@ function renderSankey(spec: SankeyChartSpec) {
   return <ReportsSankeyChart data={sankeySpecToData(spec)} />;
 }
 
+/** Kinds whose renderers wire a Recharts click handler. Treemap, heatmap and sankey do not. */
+const SELECTABLE_KINDS = new Set(["line", "area", "bar", "stackedBar", "groupedBar", "waterfall", "pie", "donut"]);
+
+/** What a click on this chart narrows by, or `null` when the chart is not clickable. */
+function selectionAffordance(spec: ChartSpec, onSelect?: (selection: ChartSelection) => void): string | null {
+  if (!onSelect || !SELECTABLE_KINDS.has(spec.kind) || !chartKeyIsFilterable(spec.key)) return null;
+  return "x" in spec ? spec.x.label : spec.title;
+}
+
 export function ReportChart({ spec, onSelect }: { spec: ChartSpec; onSelect?: (selection: ChartSelection) => void }) {
+  const affordance = selectionAffordance(spec, onSelect);
+  const chart = renderChart(spec, onSelect);
+
+  if (!affordance) return chart;
+
+  return (
+    <div style={{ cursor: "pointer" }} aria-label={`Click to filter by ${affordance}`}>
+      {chart}
+    </div>
+  );
+}
+
+function renderChart(spec: ChartSpec, onSelect?: (selection: ChartSelection) => void) {
   switch (spec.kind) {
     case "line":
     case "area":
