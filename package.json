@@ -44,7 +44,7 @@
     "path-to-regexp": "^0.1.13",
     "semver": "^7.7.4",
     "serialize-javascript": "^7.0.5",
-    "follow-redirects": "^1.16.0",
+    "follow-redirects": "^1.16.2",
     "postcss": "^8.5.10",
     "esbuild": "^0.28.1",
     "uuid": "^14.0.0",
